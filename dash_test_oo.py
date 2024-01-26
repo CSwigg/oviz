@@ -22,6 +22,7 @@ app.layout = html.Div([
         marks={str(age): str(age) for age in range(0, int(df['age_myr'].max()) + 1, 5)},
         step=None
     ),
+    dcc.Store(id='selected-data', storage_type='session')
 ])
 
 class ScatterPlot2D:
@@ -70,7 +71,6 @@ class ScatterPlot3D:
         Create a 3D scatter plot figure.
         """
         unique_times = sorted(self.df['time'].unique())
-        print(unique_times)
         data = []
         for time in unique_times:
             df_time = self.df[self.df['time'] == time]
@@ -123,24 +123,51 @@ class ScatterPlot3D:
 
 
 @app.callback(
-    [Output('2d-scatter', 'figure'),
-     Output('3d-scatter', 'figure')],
-    [Input('age-slider', 'value'),
-     Input('2d-scatter', 'selectedData')]
+    Output('selected-data', 'data'),
+    [Input('2d-scatter', 'selectedData')]
 )
-def update_plots(age_range, selectedData):
+def store_selected_data(selectedData):
     """
-    Update the 2D and 3D scatter plots based on the age range and selected data.
+    Store the selected data from the 2D scatter plot.
     """
-    filtered_df = df[(df['age_myr'] >= age_range[0]) & (df['age_myr'] <= age_range[1])]
     if selectedData:
         selected_points = [p['pointNumber'] for p in selectedData['points']]
+        return selected_points
+    return []
+
+@app.callback(
+    Output('2d-scatter', 'figure'),
+    [Input('age-slider', 'value'),
+     Input('selected-data', 'data')]
+)
+def update_2d_plot(age_range, selected_points):
+    """
+    Update the 2D scatter plot based on the age range and selected data.
+    """
+    filtered_df = df[(df['age_myr'] >= age_range[0]) & (df['age_myr'] <= age_range[1])]
+    if selected_points:
         filtered_df = filtered_df.iloc[selected_points]
 
     scatter_2d = ScatterPlot2D(filtered_df)
+
+    return scatter_2d.create_figure()
+
+@app.callback(
+    Output('3d-scatter', 'figure'),
+    [Input('age-slider', 'value'),
+     Input('selected-data', 'data')]
+)
+def update_3d_plot(age_range, selected_points):
+    """
+    Update the 3D scatter plot based on the age range and selected data.
+    """
+    filtered_df = df[(df['age_myr'] >= age_range[0]) & (df['age_myr'] <= age_range[1])]
+    if selected_points:
+        filtered_df = filtered_df.iloc[selected_points]
+
     scatter_3d = ScatterPlot3D(filtered_df)
 
-    return scatter_2d.create_figure(), scatter_3d.create_figure()
+    return scatter_3d.create_figure()
 
 
 if __name__ == '__main__':
