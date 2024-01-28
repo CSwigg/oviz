@@ -12,6 +12,7 @@ class StarClusterData:
     - data_name (str): Name of the star cluster data.
     - cluster_int_coords (tuple): Integrated coordinates of the star cluster.
     - coordinates (numpy.ndarray): Array of coordinates (x, y, z, U, V, W) of the star cluster.
+    - integrated (bool): Whether the star cluster has been integrated.
 
     Methods:
     - __init__(self, df, data_name): Initializes the StarClusterData object.
@@ -35,6 +36,7 @@ class StarClusterData:
         self.cluster_int_coords = None
         self.coordinates = None
         self.df_int = None
+        self.integrated = False
 
         try:
             # User input must contain the following columns
@@ -76,6 +78,7 @@ class StarClusterData:
         """
         self.cluster_int_coords = orbit_maker.create_orbit(self.coordinates, time)
         self.df_int = self.create_integrated_dataframe(time) # Create the integrated DataFrame
+        self.integrated = True
 
 
 class StarClusterCollection:
@@ -107,6 +110,7 @@ class StarClusterCollection:
                 if not isinstance(cluster, StarClusterData):
                     raise ValueError('Input must be a list of StarClusterData objects')
         self.clusters = clusters
+        self.time = None
 
     def add_cluster(self, cluster):
         """
@@ -161,9 +165,7 @@ class StarClusterCollection:
         Parameters:
         - time (float): The time at which the orbits are integrated.
         """
+        self.time = time # Makes sure each cluster group is integraetd with the same time array
         for cluster in self.clusters:
-            cluster.integrate_orbits(time)
+            cluster.integrate_orbits(self.time)
     
-    def integrate_all_orbits(self, time):
-        for cluster in self.clusters:
-            cluster.integrate_orbits(time)
