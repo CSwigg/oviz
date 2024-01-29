@@ -148,11 +148,19 @@ class StarClusters3DPlotter:
 
     def generate_3d_plot(self, collection, figure_layout = None, show = True, save = False, save_name = None):
         
-        self.time = collection.time # TODO: handle if star clusters haven't been integrated yet
+
+
+        if collection.time is None: # handles if star clusters haven't been integrated yet
+            print('Star clusters have not yet been integrated \n Integrating backwards 60 Myr with 1 Myr time steps...')
+            collection.integrate_clusters(np.arange(0,-60,-1))
+
+        #collection.set_all_cluster_sizes()
+
+        self.time = collection.time 
         if figure_layout is None:
             self.figure_layout = self.default_figure_layout()
         
-        
+
         '''
         The following nested loops are strucutred such that for each step in time,
         every star cluster across the entire collection is plotted.
@@ -164,21 +172,25 @@ class StarClusters3DPlotter:
             scatter_list = []
             for cluster_group in cluster_groups:
                 assert cluster_group.integrated == True # make sure that the integrated DataFrame is populated
-
+                cluster_group_marker_props = cluster_group.marker_props
                 frame = {'data': [], 'name': str(t)}
                 df_int = cluster_group.df_int
                 df_t = df_int[df_int['time'] == t]
-
                 scatter_cluster_group_t = go.Scatter3d(
                     x=df_t['x'],
                     y=df_t['y'],
                     z=df_t['z'],
                     mode='markers',
-                    marker=dict( # TODO: Make marker size, color, and opacity customizable
-                        size=5.,
-                        color='cyan', 
-                        opacity=1.
+                    marker = dict(
+                        size = df_t['size'],
+                        color = cluster_group_marker_props['color'],
+                        opacity = cluster_group_marker_props['opacity'],
+                        line = dict(
+                            color = 'black',
+                            width = 0.0
+                        )
                     ),
+                    hovertext = df_t['name'],
                     name=cluster_group.data_name
                 ) 
                 scatter_list.append(scatter_cluster_group_t)

@@ -1,7 +1,8 @@
 # Classes for storing user input data
 import numpy as np
 import pandas as pd
-from cluster_traces import orbit_maker
+from . import orbit_maker
+from . import point_sizes
 
 class StarClusterData:
     """
@@ -20,13 +21,14 @@ class StarClusterData:
     - integrate_orbits(self, time): Integrates the orbits of the star cluster.
     """
 
-    def __init__(self, df, data_name):
+    def __init__(self, df, data_name, marker_props = {'size': 3., 'color': 'cyan', 'opacity': 1.}):
         """
         Initialize the StarClusterData object.
 
         Parameters:
-        - df (pandas.DataFrame): Input data containing the following columns: x, y, z, U, V, W, name, age_myr.
+        - df (pandas.DataFrame): Input data containing the following columns: x, y, z, U, V, W, name, age_myr, n_stars.
         - data_name (str): Name of the star cluster data.
+        - marker_points (dict): Dictionary containing the marker size, color, and opacity.
 
         Raises:
         - ValueError: If the input data does not contain the required columns.
@@ -37,6 +39,7 @@ class StarClusterData:
         self.coordinates = None
         self.df_int = None
         self.integrated = False
+        self.marker_props = marker_props
 
         try:
             # User input must contain the following columns
@@ -63,10 +66,33 @@ class StarClusterData:
 
         xint, yint, zint = self.cluster_int_coords
         df_int = pd.DataFrame({'x': xint.flatten(), 'y': yint.flatten(), 'z': zint.flatten()})
-        df_int['name'] = np.tile(self.df['name'].values, len(time))
-        df_int['age_myr'] = np.tile(self.df['age_myr'].values, len(time))
+        # df_int['name'] = np.tile(self.df['name'].values, len(time))
+        # df_int['age_myr'] = np.tile(self.df['age_myr'].values, len(time))
+        df_int['age_myr'] = np.repeat(self.df['age_myr'].values, len(time))
+        df_int['name'] = np.repeat(self.df['name'].values, len(time))
         df_int['time'] = np.tile(time, len(self.df))
         return df_int
+    
+    def set_age_based_sizes(self, use_n_stars = False):
+        """
+        Set the point sizes for clusters based on the number of stars.
+
+        Parameters:
+        - df_int (pandas.DataFrame): Input dataframe containing cluster data.
+        - nstars_min (int): Minimum number of stars for scaling (default: None).
+        - nstars_max (int): Maximum number of stars for scaling (default: None).
+        - mass_sized (bool): Flag indicating whether to scale based on mass (default: False).
+        - constant_size (int): Constant size for clusters if not scaled (default: 5).
+
+        Returns:
+        - df_int (pandas.DataFrame): Updated dataframe with scaled point sizes.
+        """
+
+        df_int = self.df_int
+        marker_size = self.marker_props['size']
+        df_int_new_sizes = point_sizes.set_cluster_point_sizes(df_int, initial_size = marker_size)
+        self.df_int = df_int_new_sizes
+        
 
 
     def integrate_orbits(self, time):
@@ -157,7 +183,6 @@ class StarClusterCollection:
         """
         return self.clusters
 
-
     def integrate_all_orbits(self, time):
         """
         Integrate the orbits of all star clusters in the collection.
@@ -169,3 +194,9 @@ class StarClusterCollection:
         for cluster in self.clusters:
             cluster.integrate_orbits(self.time)
     
+    def set_all_cluster_sizes(self):
+        """
+        Set the point sizes for all clusters in the collection.
+        """
+        for cluster in self.clusters:
+            cluster.set_age_based_sizes()
