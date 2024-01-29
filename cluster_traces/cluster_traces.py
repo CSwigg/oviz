@@ -21,7 +21,7 @@ class StarClusterData:
     - integrate_orbits(self, time): Integrates the orbits of the star cluster.
     """
 
-    def __init__(self, df, data_name, marker_props = {'size': 3., 'color': 'cyan', 'opacity': 1.}):
+    def __init__(self, df, data_name, min_size = 1, max_size = 5, color = 'gray', opacity = 1.):
         """
         Initialize the StarClusterData object.
 
@@ -39,7 +39,10 @@ class StarClusterData:
         self.coordinates = None
         self.df_int = None
         self.integrated = False
-        self.marker_props = marker_props
+        self.color = color
+        self.opacity = opacity
+        self.min_size = min_size
+        self.max_size = max_size
 
         try:
             # User input must contain the following columns
@@ -66,8 +69,6 @@ class StarClusterData:
 
         xint, yint, zint = self.cluster_int_coords
         df_int = pd.DataFrame({'x': xint.flatten(), 'y': yint.flatten(), 'z': zint.flatten()})
-        # df_int['name'] = np.tile(self.df['name'].values, len(time))
-        # df_int['age_myr'] = np.tile(self.df['age_myr'].values, len(time))
         df_int['age_myr'] = np.repeat(self.df['age_myr'].values, len(time))
         df_int['name'] = np.repeat(self.df['name'].values, len(time))
         df_int['time'] = np.tile(time, len(self.df))
@@ -89,8 +90,7 @@ class StarClusterData:
         """
 
         df_int = self.df_int
-        marker_size = self.marker_props['size']
-        df_int_new_sizes = point_sizes.set_cluster_point_sizes(df_int, initial_size = marker_size)
+        df_int_new_sizes = point_sizes.set_cluster_point_sizes(df_int, min_size = self.min_size, max_size = self.max_size)
         self.df_int = df_int_new_sizes
         
 

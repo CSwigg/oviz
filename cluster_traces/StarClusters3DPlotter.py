@@ -32,7 +32,7 @@ class StarClusters3DPlotter:
                 xaxis=dict(
                     title='X\' (pc)', 
                     range = [-x_width, x_width],
-                    showgrid=False,
+                    showgrid=True,
                     zeroline=False,
                     showline = True,
                     mirror = True,
@@ -44,7 +44,7 @@ class StarClusters3DPlotter:
                 yaxis=dict(
                     title='Y\' (pc)', 
                     range = [-y_width, y_width],
-                    showgrid=False,
+                    showgrid=True,
                     zeroline=False,
                     showline = True,
                     mirror = True,
@@ -56,7 +56,7 @@ class StarClusters3DPlotter:
                 zaxis=dict(
                     title='Z\' (pc)', 
                     range = [-z_width, z_width],
-                    showgrid=False,
+                    showgrid=True,
                     zeroline=False,
                     showline = True,
                     showspikes = False,
@@ -154,7 +154,7 @@ class StarClusters3DPlotter:
             print('Star clusters have not yet been integrated \n Integrating backwards 60 Myr with 1 Myr time steps...')
             collection.integrate_clusters(np.arange(0,-60,-1))
 
-        #collection.set_all_cluster_sizes()
+        collection.set_all_cluster_sizes()
 
         self.time = collection.time 
         if figure_layout is None:
@@ -172,7 +172,6 @@ class StarClusters3DPlotter:
             scatter_list = []
             for cluster_group in cluster_groups:
                 assert cluster_group.integrated == True # make sure that the integrated DataFrame is populated
-                cluster_group_marker_props = cluster_group.marker_props
                 frame = {'data': [], 'name': str(t)}
                 df_int = cluster_group.df_int
                 df_t = df_int[df_int['time'] == t]
@@ -183,8 +182,8 @@ class StarClusters3DPlotter:
                     mode='markers',
                     marker = dict(
                         size = df_t['size'],
-                        color = cluster_group_marker_props['color'],
-                        opacity = cluster_group_marker_props['opacity'],
+                        color = cluster_group.color,
+                        opacity = cluster_group.opacity,
                         line = dict(
                             color = 'black',
                             width = 0.0
