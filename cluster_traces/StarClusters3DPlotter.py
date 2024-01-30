@@ -154,7 +154,7 @@ class StarClusters3DPlotter:
         ]
         return sliders
 
-    def generate_3d_plot(self, collection, figure_layout=None, show=True, save=False, save_name=None):
+    def generate_3d_plot(self, collection, figure_layout=None, show=True, save=False, save_name=None, return_fig=False):
         """
         Generates a 3D plot of star clusters over time.
 
@@ -228,3 +228,5 @@ class StarClusters3DPlotter:
             self.figure.show()
         if save:
             self.figure.write_html(save_name, auto_play = False)
+        if return_fig:
+            return self.figure
