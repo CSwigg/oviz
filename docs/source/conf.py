@@ -1,7 +1,7 @@
 import os
 import sys
 #sys.path.insert(0, os.path.abspath('/Users/cam/Desktop/software_project/dash_gaia_orbits/'))
-sys.path.insert(0, os.path.relpath('../../cluster_traces/'))
+sys.path.insert(0, os.path.relpath('../../dash_gaia_orbits/'))
 
 # Configuration file for the Sphinx documentation builder.
 #
