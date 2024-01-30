@@ -96,8 +96,8 @@ class StarClusters3DPlotter:
             scene = scene,
             template = 'plotly_dark', 
             dragmode = 'turntable',
-            # width = 1000,
-            # height = 1000,
+            width = 500,
+            height = 500
         )
         return layout
 
@@ -154,7 +154,7 @@ class StarClusters3DPlotter:
         ]
         return sliders
 
-    def generate_3d_plot(self, collection, figure_layout=None, show=True, save=False, save_name=None, return_fig=False):
+    def generate_3d_plot(self, collection, figure_layout=None, show=False, save=False, save_name=None):
         """
         Generates a 3D plot of star clusters over time.
 
@@ -192,6 +192,10 @@ class StarClusters3DPlotter:
                 assert cluster_group.integrated == True # make sure that the integrated DataFrame is populated
                 frame = {'data': [], 'name': str(t)}
                 df_int = cluster_group.df_int
+
+                if len(df_int) == 0:
+                    continue
+                
                 df_t = df_int[df_int['time'] == t]
                 scatter_cluster_group_t = go.Scatter3d(
                     x=df_t['x'],
@@ -228,5 +232,3 @@ class StarClusters3DPlotter:
             self.figure.show()
         if save:
             self.figure.write_html(save_name, auto_play = False)
-        if return_fig:
-            return self.figure

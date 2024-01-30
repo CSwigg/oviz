@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 
 def set_cluster_point_sizes(df_int, min_size, max_size):
+
+    if len(df_int) == 0:
+        return df_int
+
     def compute_size(group):
         age = group['age_myr'].mean()
         # size = np.where(group['time'] >= -age, initial_size, min_size)
