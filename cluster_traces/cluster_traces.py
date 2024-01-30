@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from . import orbit_maker
 from . import point_sizes
+import copy
 
 class StarClusterData:
     """
@@ -91,6 +92,10 @@ class StarClusterData:
         self.min_size = min_size
         self.max_size = max_size
 
+        # copies are made so that the original data is still stored with the limit_cluster_age method
+        #self.df_original = self.df.copy() # Save a copy of the original DataFrame
+        #self.df_int_original = self.df_int.copy()
+
         try:
             # User input must contain the following columns
             assert all(column in self.df.columns for column in ['x', 'y', 'z', 'U', 'V', 'W', 'name', 'age_myr'])
@@ -139,8 +144,7 @@ class StarClusterData:
         df_int : pandas.DataFrame
             Updated dataframe with scaled point sizes.
         """
-        df_int = self.df_int
-        df_int_new_sizes = point_sizes.set_cluster_point_sizes(df_int, min_size=self.min_size, max_size=self.max_size)
+        df_int_new_sizes = point_sizes.set_cluster_point_sizes(self.df_int, min_size=self.min_size, max_size=self.max_size)
         self.df_int = df_int_new_sizes
         
 
@@ -156,8 +160,50 @@ class StarClusterData:
         """
         self.cluster_int_coords = orbit_maker.create_orbit(self.coordinates, time)
         self.df_int = self.create_integrated_dataframe(time) # Create the integrated DataFrame
+        #self.df_int_original = self.df_int.copy()
         self.integrated = True
 
+    def limit_cluster_age(self, age_min, age_max):
+        """
+        Limit the age of the star cluster.
+
+        Parameters
+        ----------
+        age_min : float
+            Minimum age of the star cluster.
+        age_max : float
+            Maximum age of the star cluster.
+        """
+        #self.df = self.df_original.copy()
+        self.df = self.df[(self.df['age_myr'] >= age_min) & (self.df['age_myr'] <= age_max)]
+        self.coordinates = self.df[['x', 'y', 'z', 'U', 'V', 'W']].T.values
+
+        if self.integrated:
+            self.df_int = self.df_int.loc[(self.df_int['age_myr'] >= age_min) & (self.df_int['age_myr'] <= age_max)]
+            self.cluster_int_coords = (self.df_int['x'].values, self.df_int['y'].values, self.df_int['z'].values)
+    
+    def limit_cluster_by_name(self, names):
+        """
+        Limit the star cluster by name.
+
+        Parameters
+        ----------
+        names : list
+            List of names of the star clusters to keep.
+        """
+        self.df = self.df[self.df['name'].isin(names)]
+        self.coordinates = self.df[['x', 'y', 'z', 'U', 'V', 'W']].T.values
+
+        if self.integrated:
+            self.df_int = self.df_int[self.df_int['name'].isin(names)]
+            self.cluster_int_coords = (self.df_int['x'].values, self.df_int['y'].values, self.df_int['z'].values)
+
+
+    def copy(self):
+        '''
+        Returns a copy of the StarClusterData object
+        '''
+        return copy.deepcopy(self)
 
 class StarClusterCollection:
     """
@@ -277,3 +323,29 @@ class StarClusterCollection:
         """
         for cluster in self.clusters:
             cluster.set_age_based_sizes()
+
+    def limit_all_cluster_ages(self, age_min, age_max):
+        """
+        Limit the age of all star clusters in the collection.
+
+        Parameters
+        ----------
+        age_min : float
+            Minimum age of the star cluster.
+        age_max : float
+            Maximum age of the star cluster.
+        """
+        for cluster in self.clusters:
+            cluster.limit_cluster_age(age_min, age_max)
+    
+    def limit_all_cluster_names(self, names):
+        """
+        Limit the star clusters in the collection by name.
+
+        Parameters
+        ----------
+        names : list
+            List of names of the star clusters to keep.
+        """
+        for cluster in self.clusters:
+            cluster.limit_cluster_by_name(names)
