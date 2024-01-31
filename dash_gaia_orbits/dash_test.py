@@ -17,7 +17,7 @@ def layout_2d_plot():
         width=500,
         height=500,
         xaxis=dict(
-            range=[-2000, 2000],
+            range=[-1000, 1000],
             showgrid=True,
             gridwidth=0.5,
             gridcolor='gray',
@@ -27,7 +27,7 @@ def layout_2d_plot():
             dtick=500
         ),
         yaxis=dict(
-            range=[-2000, 2000],
+            range=[-1000, 1000],
             showgrid=True,
             gridwidth=0.5,
             gridcolor='gray',
