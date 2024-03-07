@@ -87,6 +87,7 @@ class StarClusterData:
         self.coordinates = None
         self.df_int = None
         self.integrated = False
+        self.sizes_set = False
         self.color = color
         self.opacity = opacity
         self.min_size = min_size
@@ -146,6 +147,7 @@ class StarClusterData:
         """
         df_int_new_sizes = point_sizes.set_cluster_point_sizes(self.df_int, min_size=self.min_size, max_size=self.max_size)
         self.df_int = df_int_new_sizes
+        self.sizes_set = True
         
 
 
@@ -322,7 +324,11 @@ class StarClusterCollection:
         Set the point sizes for all clusters in the collection.
         """
         for cluster in self.clusters:
-            cluster.set_age_based_sizes()
+            if cluster.sizes_set:
+                # don't reset the sizes if they've already been set
+                continue
+            else:
+                cluster.set_age_based_sizes()
 
     def limit_all_cluster_ages(self, age_min, age_max):
         """

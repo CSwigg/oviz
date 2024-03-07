@@ -117,7 +117,7 @@ class StarClusters3DPlotter:
                 borderwidth = 0.,
                 bordercolor = 'red',
                 bgcolor = "white",
-                pad = {"b": 0, "t": 10, "l": 190, "r": 250},
+                pad = {"b": 0, "t": 0, "l": 0, "r": 0},
                 len = 0.9,
                 x = 0.1,
                 y = 0.,  
@@ -154,7 +154,7 @@ class StarClusters3DPlotter:
         ]
         return sliders
 
-    def generate_3d_plot(self, collection, figure_layout=None, show=False, save=False, save_name=None):
+    def generate_3d_plot(self, collection, figure_layout=None, show=False, save_name=None):
         """
         Generates a 3D plot of star clusters over time.
 
@@ -178,6 +178,8 @@ class StarClusters3DPlotter:
         self.time = collection.time 
         if figure_layout is None:
             self.figure_layout = self.default_figure_layout()
+        else:
+            self.figure_layout = go.Layout(figure_layout)
 
         '''
         The following nested loops are strucutred such that for each step in time,
@@ -230,5 +232,5 @@ class StarClusters3DPlotter:
         self.figure = go.Figure(fig)
         if show:
             self.figure.show()
-        if save:
+        if save_name is not None:
             self.figure.write_html(save_name, auto_play = False)
