@@ -1,5 +1,5 @@
-import plotly.graph_objects as go
 import numpy as np
+import plotly.graph_objects as go
 
 class StarClusters3DPlotter:
     """
@@ -8,7 +8,6 @@ class StarClusters3DPlotter:
     Methods:
     - generate_3d_plot(self, collection): Generates a 3D plot for a StarClusterCollection.
     """
-
     def default_figure_layout(self):
         """
         Returns the default layout for the 3D plot figure.
@@ -29,7 +28,6 @@ class StarClusters3DPlotter:
         y_width = 1500
         z_width = 600
         z_aspect = 1.*(z_width/x_width)
-
         scene = dict(
             camera = camera,
             aspectmode = 'manual',
@@ -91,7 +89,6 @@ class StarClusters3DPlotter:
             itemsizing = 'constant',
             bgcolor = 'rgba(0,0,0,0)' # transparent legend
         )
-
         layout = go.Layout(
             scene = scene,
             template = 'plotly_dark', 
@@ -100,7 +97,7 @@ class StarClusters3DPlotter:
             height = 500
         )
         return layout
-
+    
     def generate_slider(self):
         """
         Generates a slider for controlling the animation of the plot.
@@ -153,8 +150,8 @@ class StarClusters3DPlotter:
             )
         ]
         return sliders
-
-    def generate_3d_plot(self, collection, figure_layout=None, show=False, save_name=None):
+    
+    def generate_3d_plot(self, collection, figure_layout=None, show=False, save_name=None, static_traces = None, static_traces_times = None):
         """
         Generates a 3D plot of star clusters over time.
 
@@ -172,15 +169,13 @@ class StarClusters3DPlotter:
         if collection.time is None: # handles if star clusters haven't been integrated yet
             print('Star clusters have not yet been integrated \n Integrating backwards 60 Myr with 1 Myr time steps...')
             collection.integrate_clusters(np.arange(0,-60,-1))
-
         collection.set_all_cluster_sizes()
-
         self.time = collection.time 
         if figure_layout is None:
             self.figure_layout = self.default_figure_layout()
         else:
             self.figure_layout = go.Layout(figure_layout)
-
+        
         '''
         The following nested loops are strucutred such that for each step in time,
         every star cluster across the entire collection is plotted.
@@ -194,7 +189,6 @@ class StarClusters3DPlotter:
                 assert cluster_group.integrated == True # make sure that the integrated DataFrame is populated
                 frame = {'data': [], 'name': str(t)}
                 df_int = cluster_group.df_int
-
                 if len(df_int) == 0:
                     continue
                 
@@ -218,19 +212,29 @@ class StarClusters3DPlotter:
                 ) 
                 scatter_list.append(scatter_cluster_group_t)
             frame['data'] = scatter_list 
-            frames.append(go.Frame(frame))
 
+            if static_traces is not None and static_traces_times is not None:
+                for i, st in enumerate(static_traces):
+                    if t in static_traces_times[i]:
+                        visible = True
+                    else:
+                        visible = False
+                        # place holder
+                        st = go.Scatter3d()
+                    st['visible'] = visible
+                    frame['data'].append(st)
+            frames.append(go.Frame(frame))
+            
         fig['data'] = frames[0]['data']
         fig['layout'] = self.figure_layout
-
         # Generate slider
         slider = self.generate_slider()
         fig['layout']['sliders'] = slider
-
         fig['frames'] = frames
-
+        self.fig_dict = fig
         self.figure = go.Figure(fig)
         if show:
             self.figure.show()
         if save_name is not None:
+            self.figure.update_layout(width = None, height = None)
             self.figure.write_html(save_name, auto_play = False)
