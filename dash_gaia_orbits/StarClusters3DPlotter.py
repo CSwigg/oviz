@@ -8,6 +8,28 @@ class StarClusters3DPlotter:
     Methods:
     - generate_3d_plot(self, collection): Generates a 3D plot for a StarClusterCollection.
     """
+
+
+    def __init__(self, data_collection, figure_theme = None, figure_layout = None, figure_layout_dict = None):
+        """
+        Initializes a StarClusters3DPlotter object.
+
+        Parameters:
+        - data_collection (StarClusterCollection): The collection of star clusters to be plotted.
+        - figure_theme (str): The theme of the plot. Options are 'light' and 'dark'.
+        - figure_layout (plotly.graph_objs.Layout): The layout of the plot.
+        - figure_layout_dict (dict): The layout of the plot as a dictionary.
+        """
+        self.data_collection = data_collection
+        self.figure_theme = figure_theme
+        self.figure_layout = figure_layout
+        self.figure_layout_dict = figure_layout_dict
+        self.time = None
+        self.fig_dict = None
+        self.figure = None
+
+
+
     def default_figure_layout(self):
         """
         Returns the default layout for the 3D plot figure.
@@ -157,7 +179,20 @@ class StarClusters3DPlotter:
         ]
         return sliders
     
-    def generate_3d_plot(self, collection, figure_layout=None, show=False, save_name=None, static_traces = None, static_traces_times = None, reference_frame_center = None):
+    
+    def set_focus(self, focus_group):
+        if focus_group is not None:
+            focus_group_data = self.data_collection.get_cluster(focus_group).df
+            focus_group_coords = focus_group_data[['x', 'y', 'z', 'U', 'V', 'W']].mean().values
+            return focus_group_coords
+        else:
+            return None
+
+
+
+
+
+    def generate_3d_plot(self, time = None, figure_layout=None, show=False, save_name=None, static_traces = None, static_traces_times = None, reference_frame_center = None, focus_group = None):
         """
         Generates a 3D plot of star clusters over time.
 
@@ -172,22 +207,26 @@ class StarClusters3DPlotter:
         None
         """
         
-        if collection.time is None: # handles if star clusters haven't been integrated yet
-            print('Star clusters have not yet been integrated \n Integrating backwards 60 Myr with 1 Myr time steps...')
-            collection.integrate_clusters(np.arange(0,-60,-1))
-        collection.set_all_cluster_sizes()
-        self.time = collection.time 
+        if reference_frame_center is not None:
+            reference_frame_center = self.set_focus(focus_group)
+        if self.data_collection.time is None: # handles if star clusters haven't been integrated yet
+            self.data_collection.integrate_all_orbits(time, reference_frame_center = reference_frame_center)
+        self.data_collection.set_all_cluster_sizes()
+
+        self.time = self.data_collection.time 
         if figure_layout is None:
             self.figure_layout = self.default_figure_layout()
         else:
             self.figure_layout = go.Layout(figure_layout)
             self.figure_layout_dict = figure_layout
+
         
+
         '''
         The following nested loops are strucutred such that for each step in time,
         every star cluster across the entire collection is plotted.
         '''
-        cluster_groups = collection.get_all_clusters()
+        cluster_groups = self.data_collection.get_all_clusters()
         fig = {}
         frames = []
         for t in self.time:
