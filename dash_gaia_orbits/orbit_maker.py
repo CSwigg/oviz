@@ -19,8 +19,9 @@ def center_orbit(coordinates_int, time, reference_frame_center):
     x_int, y_int, z_int = coordinates_int
 
     if reference_frame_center is None:
+        print('hello')
         # set moving reference frame to schoenrich lsr
-        rf_coords = [0, 0, 0, 11.1, 12.24, 7.25]
+        rf_coords = [0, 0, 0, -11.1, -12.24, -7.25]
     else:
         rf_coords = reference_frame_center
 
