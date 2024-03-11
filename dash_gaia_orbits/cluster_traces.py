@@ -151,7 +151,7 @@ class StarClusterData:
         
 
 
-    def integrate_orbits(self, time):
+    def integrate_orbits(self, time, reference_frame_center = None):
         """
         Integrate the orbits of the star cluster.
 
@@ -160,7 +160,7 @@ class StarClusterData:
         time : float
             The time at which the orbits are integrated.
         """
-        self.cluster_int_coords = orbit_maker.create_orbit(self.coordinates, time)
+        self.cluster_int_coords = orbit_maker.create_orbit(self.coordinates, time, reference_frame_center = reference_frame_center)
         self.df_int = self.create_integrated_dataframe(time) # Create the integrated DataFrame
         #self.df_int_original = self.df_int.copy()
         self.integrated = True
@@ -306,7 +306,7 @@ class StarClusterCollection:
         """
         return self.clusters
 
-    def integrate_all_orbits(self, time):
+    def integrate_all_orbits(self, time, reference_frame_center = None):
         """
         Integrate the orbits of all star clusters in the collection.
 
@@ -317,7 +317,7 @@ class StarClusterCollection:
         """
         self.time = time # Makes sure each cluster group is integraetd with the same time array
         for cluster in self.clusters:
-            cluster.integrate_orbits(self.time)
+            cluster.integrate_orbits(self.time, reference_frame_center = reference_frame_center)
     
     def set_all_cluster_sizes(self):
         """

@@ -151,7 +151,7 @@ class StarClusters3DPlotter:
         ]
         return sliders
     
-    def generate_3d_plot(self, collection, figure_layout=None, show=False, save_name=None, static_traces = None, static_traces_times = None):
+    def generate_3d_plot(self, collection, figure_layout=None, show=False, save_name=None, static_traces = None, static_traces_times = None, reference_frame_center = None):
         """
         Generates a 3D plot of star clusters over time.
 
@@ -215,6 +215,10 @@ class StarClusters3DPlotter:
 
             if static_traces is not None and static_traces_times is not None:
                 for i, st in enumerate(static_traces):
+                    if reference_frame_center is not None:
+                        st['x'] = st['x'] - reference_frame_center[0]
+                        st['y'] = st['y'] - reference_frame_center[1]
+                        st['z'] = st['z'] - reference_frame_center[2]
                     if t in static_traces_times[i]:
                         visible = True
                     else:
