@@ -83,7 +83,7 @@ class StarClusters3DPlotter:
             ),
             font = dict(
                 size = 14,
-                family = 'Arial',
+                family = 'helvetica',
                 color = 'white'
             ),
             itemsizing = 'constant',
@@ -96,6 +96,7 @@ class StarClusters3DPlotter:
             width = 500,
             height = 500
         )
+        #self.layout = layout
         return layout
     
     def generate_slider(self):
@@ -105,6 +106,11 @@ class StarClusters3DPlotter:
         Returns:
         list: A list containing the slider configuration.
         """
+        if self.figure_layout_dict['template'] == 'plotly_dark':
+            slider_color = 'white'
+        else:
+            slider_color = 'black'
+
         sliders = [
             dict(
                 active = len(self.time) - 1,
@@ -112,14 +118,14 @@ class StarClusters3DPlotter:
                 yanchor="top",
                 transition = {"duration": 300, "easing": "bounce-in"},
                 borderwidth = 0.,
-                bordercolor = 'red',
-                bgcolor = "white",
+                bordercolor = slider_color,
+                bgcolor = slider_color,
                 pad = {"b": 0, "t": 0, "l": 0, "r": 0},
                 len = 0.9,
                 x = 0.1,
                 y = 0.,  
                 currentvalue = {
-                    "font": {"size": 18, "color" : "white", 'family' : 'arial'},
+                    "font": {"size": 18, "color" : slider_color, 'family' : 'helvetica'},
                     #'prefix' : 'Time: ',
                     'visible' : True,
                     'xanchor':'center',
@@ -144,9 +150,9 @@ class StarClusters3DPlotter:
                         method = 'animate'
                     ) for t in np.flip(self.time)
                 ],
-                tickcolor = "white",
-                ticklen = 1,
-                font = dict(color = "black", size = 1)
+                tickcolor = slider_color,
+                ticklen = 10,
+                font = dict(color = 'rgba(0,0,0,0)', size = 1)
             )
         ]
         return sliders
@@ -175,6 +181,7 @@ class StarClusters3DPlotter:
             self.figure_layout = self.default_figure_layout()
         else:
             self.figure_layout = go.Layout(figure_layout)
+            self.figure_layout_dict = figure_layout
         
         '''
         The following nested loops are strucutred such that for each step in time,
@@ -204,7 +211,7 @@ class StarClusters3DPlotter:
                         opacity = cluster_group.opacity,
                         line = dict(
                             color = 'black',
-                            width = 0.0
+                            width = 0.0 if self.figure_layout_dict['template'] == 'plotly_dark' else 10.
                         )
                     ),
                     hovertext = df_t['name'],
