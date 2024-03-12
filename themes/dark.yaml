@@ -1,0 +1,76 @@
+#template: 'plotly_dark'
+template: 'plotly'
+paper_bgcolor: 'black'
+dragmode: 'turntable'
+width: 900
+height: 700
+
+
+scene:
+  camera:
+    up: {x: 0, y: 1, z: 0}
+    center: {x: 0, y: 0, z: 0}
+    eye: {x: 0.0, y: -0.8, z: 1.5}
+    projection: {type: 'perspective'}
+  bgcolor: 'black'
+  aspectmode: 'manual'
+  aspectratio: {x: 1, y: 1, z: 1}
+  xaxis:
+    title: "X' (pc)"
+    title_font: {size: 18, color: "gray", family: 'helvetica'}
+    tickfont: {size: 14, color: "gray", family: 'helvetica'}
+    showgrid: false
+    gridcolor: "gray"
+    zeroline: false
+    zerolinecolor: "gray"
+    zerolinewidth: 4.0
+    backgroundcolor: 'black'
+    showline: true
+    mirror: true
+    showspikes: false
+    nticks: 5
+    linecolor: "gray"
+    linewidth: 4.0
+  yaxis:
+    title: "Y' (pc)"
+    title_font: {size: 18, color: "gray", family: 'helvetica'}
+    tickfont: {size: 14, color: "gray", family: 'helvetica'}
+    showgrid: false
+    gridcolor: "gray"
+    zeroline: false
+    zerolinewidth: 4.0
+    zerolinecolor: "gray"
+    backgroundcolor: 'black'
+    showline: true
+    mirror: true
+    showspikes: false
+    nticks: 5
+    linecolor: "gray"
+    linewidth: 4.0
+  zaxis:
+    title: "Z' (pc)"
+    title_font: {size: 18, color: "gray", family: 'helvetica'}
+    tickfont: {size: 14, color: "gray", family: 'helvetica'}
+    showgrid: false
+    gridcolor: "gray"
+    zeroline: false
+    zerolinewidth: 4.0
+    zerolinecolor: "gray"
+    backgroundcolor: 'black'
+    showline: true
+    showspikes: false
+    mirror: true
+    nticks: 5
+    linecolor: "gray"
+    linewidth: 4.0
+
+legend:
+  x: 0
+  y: 1
+  title:
+    text: 'Click to toggle traces on/off'
+    font: {size: 18, color: "white"}
+    side: 'top'
+  font: {size: 14, family: 'Helvetica', color: "white"}
+  itemsizing: 'constant'
+  bgcolor: 'rgba(0,0,0,0)'
