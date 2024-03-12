@@ -168,7 +168,6 @@ class StarClusters3DPlotter:
                             #width = 0.0 if self.figure_theme == 'dark' else 3.
                         )
                     ),
-                    visible = True,
                     hovertext = df_t['name'],
                     name=cluster_group.data_name
                 ) 

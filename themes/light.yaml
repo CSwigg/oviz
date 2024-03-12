@@ -17,7 +17,7 @@ scene:
     tickfont: {size: 14, color: "black", family: 'helvetica'}
     showgrid: false
     gridcolor: "black"
-    zeroline: false
+    zeroline: true
     zerolinecolor: "black"
     showline: true
     mirror: true
@@ -31,7 +31,7 @@ scene:
     tickfont: {size: 14, color: "black", family: 'helvetica'}
     showgrid: false
     gridcolor: "black"
-    zeroline: false
+    zeroline: true
     zerolinecolor: "black"
     showline: true
     mirror: true
@@ -43,7 +43,7 @@ scene:
     title: "Z' (pc)"
     title_font: {size: 18, color: "black", family: 'helvetica'}
     tickfont: {size: 14, color: "black", family: 'helvetica'}
-    showgrid: false
+    showgrid: true
     gridcolor: "black"
     zeroline: false
     zerolinecolor: "black"
