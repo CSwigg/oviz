@@ -1,6 +1,13 @@
 LICENSE
 README.md
 pyproject.toml
+setup.py
+dash_gaia_orbits/StarClusters3DPlotter.py
+dash_gaia_orbits/__init__.py
+dash_gaia_orbits/cluster_traces.py
+dash_gaia_orbits/dash_test.py
+dash_gaia_orbits/orbit_maker.py
+dash_gaia_orbits/point_sizes.py
 dash_gaia_orbits.egg-info/PKG-INFO
 dash_gaia_orbits.egg-info/SOURCES.txt
 dash_gaia_orbits.egg-info/dependency_links.txt

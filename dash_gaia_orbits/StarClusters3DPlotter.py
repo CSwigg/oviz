@@ -243,6 +243,7 @@ class StarClusters3DPlotter:
         self.data_collection.set_all_cluster_sizes(fade_in_time, fade_in_and_out)
 
         self.time = self.data_collection.time
+        self.time = np.array(self.time, dtype=np.float64) # convert to float64 for slider
         self.figure_layout = go.Layout(self.figure_layout_dict)
         self.xyz_widths
         self.all_traces = []
