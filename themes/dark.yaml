@@ -10,7 +10,7 @@ scene:
   camera:
     up: {x: 0, y: 1, z: 0}
     center: {x: 0, y: 0, z: 0}
-    eye: {x: 0.0, y: -0.8, z: 1.5}
+    eye: {x: 0.0, y: -0.2, z: 1.5}
     projection: {type: 'perspective'}
   bgcolor: 'black'
   aspectmode: 'manual'

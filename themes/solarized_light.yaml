@@ -17,9 +17,9 @@ scene:
     backgroundcolor: 'rgb(253,246,227)'
     title_font: {size: 18, color: "black", family: 'helvetica'}
     tickfont: {size: 14, color: "black", family: 'helvetica'}
-    showgrid: true
+    showgrid: false
     gridcolor: 'rgb(88,110,117)'
-    zeroline: true
+    zeroline: false
     zerolinecolor: 'rgb(88,110,117)'
     showline: true
     mirror: true
@@ -32,9 +32,9 @@ scene:
     backgroundcolor: 'rgb(253,246,227)'
     title_font: {size: 18, color: "black", family: 'helvetica'}
     tickfont: {size: 14, color: "black", family: 'helvetica'}
-    showgrid: true
+    showgrid: false
     gridcolor: 'rgb(88,110,117)'
-    zeroline: true
+    zeroline: false
     zerolinecolor: 'rgb(88,110,117)'
     showline: true
     mirror: true
@@ -49,7 +49,7 @@ scene:
     tickfont: {size: 14, color: "black", family: 'helvetica'}
     showgrid: false
     gridcolor: 'rgb(88,110,117)'
-    zeroline: true
+    zeroline: false
     zerolinecolor: 'rgb(88,110,117)'
     showline: true
     showspikes: false
@@ -63,7 +63,7 @@ legend:
   y: 1
   title:
     text: 'Click to toggle traces on/off'
-    font: {size: 18, color: "black"}
+    font: {size: 14, color: "black"}
     side: 'top'
   font: {size: 14, family: 'Helvetica', color: "black"}
   itemsizing: 'constant'

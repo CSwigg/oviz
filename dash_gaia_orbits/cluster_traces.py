@@ -57,7 +57,7 @@ class StarClusterData:
         Integrates the orbits of the star cluster.
     """
 
-    def __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style = 'circle'):
+    def __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style = 'circle', show_tracks = False, size_by_n_stars = False):
         """
         Initialize the StarClusterData object.
 
@@ -93,16 +93,23 @@ class StarClusterData:
         self.marker_style = marker_style
         self.min_size = min_size
         self.max_size = max_size
+        self.show_tracks = show_tracks
+        self.size_by_n_stars = size_by_n_stars
 
         # copies are made so that the original data is still stored with the limit_cluster_age method
         #self.df_original = self.df.copy() # Save a copy of the original DataFrame
         #self.df_int_original = self.df_int.copy()
 
+        necessary_columns = ['x', 'y', 'z', 'U', 'V', 'W', 'name', 'age_myr']
+        if self.size_by_n_stars:
+            necessary_columns.extend(['n_stars'])
+
         try:
             # User input must contain the following columns
-            assert all(column in self.df.columns for column in ['x', 'y', 'z', 'U', 'V', 'W', 'name', 'age_myr'])
+            assert all(column in self.df.columns for column in necessary_columns)
         except AssertionError:
-            raise ValueError('User input data must contain the following columns: x, y, z, U, V, W, name, age_myr')
+            raise ValueError('User input data must contain the following columns: x, y, z, U, V, W, name, age_myr (and n_stars if size_by_n_stars = True)')
+
 
         self.coordinates = self.df[['x', 'y', 'z', 'U', 'V', 'W']].T.values
     
@@ -125,14 +132,39 @@ class StarClusterData:
             print('Clusters have not yet been integrated')
             return
 
-        xint, yint, zint = self.cluster_int_coords
-        df_int = pd.DataFrame({'x': xint.flatten(), 'y': yint.flatten(), 'z': zint.flatten()})
+        xint, yint, zint = self.cluster_int_coords[0] # contains the centered integrated coordinates
+        xint_helio, yint_helio, zint_helio = self.cluster_int_coords[1] # contains the heliocentric integrated coordinates
+        xint_gc, yint_gc, zint_gc = self.cluster_int_coords[2] # contains the galactocentric integrated coordinates
+
+        df_int = pd.DataFrame({
+            'x': xint.flatten(), 
+            'y': yint.flatten(), 
+            'z': zint.flatten(),
+            'x_helio': xint_helio.flatten(),
+            'y_helio': yint_helio.flatten(),
+            'z_helio': zint_helio.flatten(),
+            'x_gc': xint_gc.flatten(),
+            'y_gc': yint_gc.flatten(),
+            'z_gc': zint_gc.flatten(),
+            })
+        
+        if self.size_by_n_stars:
+            df_int['n_stars'] = np.repeat(self.df['n_stars'].values, len(time))
+
         df_int['age_myr'] = np.repeat(self.df['age_myr'].values, len(time))
         df_int['name'] = np.repeat(self.df['name'].values, len(time))
         df_int['time'] = np.tile(time, len(self.df))
+
+        # df_int = orbit_maker.coordFIX_to_coordROT(df_int)
+        # df_int['x'] = df_int['x_rot']
+        # df_int['y'] = df_int['y_rot']
+        # df_int['z'] = df_int['z_rot']
+
+        df_int.reset_index(drop=True, inplace=True)
+
         return df_int
     
-    def set_age_based_sizes(self, fade_in_time):
+    def set_age_based_sizes(self, fade_in_time, fade_in_and_out):
         """
         Set the point sizes for clusters based on the number of stars.
 
@@ -146,7 +178,7 @@ class StarClusterData:
         df_int : pandas.DataFrame
             Updated dataframe with scaled point sizes.
         """
-        df_int_new_sizes = point_sizes.set_cluster_point_sizes(self.df_int, min_size=self.min_size, max_size=self.max_size, fade_in_time = fade_in_time)
+        df_int_new_sizes = point_sizes.set_cluster_point_sizes(self.df_int, min_size=self.min_size, max_size=self.max_size, fade_in_time = fade_in_time, fade_in_and_out = fade_in_and_out, size_by_n_stars = self.size_by_n_stars)
         self.df_int = df_int_new_sizes
         self.sizes_set = True
         
@@ -319,7 +351,7 @@ class StarClusterCollection:
         for cluster in self.clusters:
             cluster.integrate_orbits(self.time, reference_frame_center = reference_frame_center)
     
-    def set_all_cluster_sizes(self, fade_in_time):
+    def set_all_cluster_sizes(self, fade_in_time, fade_in_and_out):
         """
         Set the point sizes for all clusters in the collection.
         """
@@ -328,7 +360,7 @@ class StarClusterCollection:
                 # don't reset the sizes if they've already been set
                 continue
             else:
-                cluster.set_age_based_sizes(fade_in_time)
+                cluster.set_age_based_sizes(fade_in_time, fade_in_and_out)
 
     def limit_all_cluster_ages(self, age_min, age_max):
         """
