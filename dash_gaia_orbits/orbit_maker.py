@@ -90,10 +90,10 @@ def create_orbit(coordinates, time, reference_frame_center=None):
     x_int_c, y_int_c, z_int_c = center_orbit((x_helio_int, y_helio_int, z_helio_int), time, reference_frame_center)
     centered_coords = (x_int_c, y_int_c, z_int_c)
 
+    # Construct galactocentric cylindrical coordinates, centered
     sc_centered = SkyCoord(
         u=x_int_c*u.pc, v=y_int_c*u.pc, w=z_int_c*u.pc, frame='galactic', representation_type='cartesian')
     R_gc_int_c, phi_gc_int_c, z_gc_int_c = sc_centered.galactocentric.represent_as('cylindrical').rho.value, sc_centered.galactocentric.represent_as('cylindrical').phi.value, sc_centered.galactocentric.represent_as('cylindrical').z.value
-
     gc_cylindcrical_centered_coords = (R_gc_int_c, phi_gc_int_c, z_gc_int_c)
 
     return (centered_coords, helio_coords, galactocentric_coords, gc_cylindcrical_centered_coords)

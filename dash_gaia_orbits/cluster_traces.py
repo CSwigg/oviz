@@ -121,6 +121,7 @@ class StarClusterData:
         xint, yint, zint = self.cluster_int_coords[0]
         xint_helio, yint_helio, zint_helio = self.cluster_int_coords[1]
         xint_gc, yint_gc, zint_gc = self.cluster_int_coords[2]
+        rint_gc, phiint_gc, zint_gc = self.cluster_int_coords[3]
 
         df_int = pd.DataFrame({
             'x': xint.flatten(), 
@@ -132,6 +133,9 @@ class StarClusterData:
             'x_gc': xint_gc.flatten(),
             'y_gc': yint_gc.flatten(),
             'z_gc': zint_gc.flatten(),
+            'r_gc': rint_gc.flatten(),
+            'phi_gc': np.rad2deg(phiint_gc.flatten()),
+            'z_gc_cyl': zint_gc.flatten()
         })
         
         if self.size_by_n_stars:

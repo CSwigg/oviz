@@ -14,7 +14,7 @@ class StarClusters3DPlotter:
     - generate_3d_plot(self, collection): Generates a 3D plot for a StarClusterCollection.
     """
 
-    def __init__(self, data_collection, xyz_widths=(1000, 1000, 300), xyz_ranges=None, figure_title=None, figure_theme=None, plotly_light_template=None, figure_layout=None, figure_layout_dict=None, trace_grouping_dict=None):
+    def __init__(self, data_collection, xyz_widths=(1000, 1000, 300), xyz_ranges=None,  figure_title=None, figure_theme=None, plotly_light_template=None, figure_layout=None, figure_layout_dict=None, trace_grouping_dict=None):
         """
         Initializes a StarClusters3DPlotter object.
 
@@ -48,6 +48,7 @@ class StarClusters3DPlotter:
             self.figure_layout_dict['title'] = dict(text=self.figure_title, x=0.5, font=dict(family='Helvetica', size=20, color='white'))
 
         self.trace_grouping_dict['All'] = [cluster.data_name for cluster in self.data_collection.get_all_clusters()]
+
 
     def rotating_gc_line(self, x_sub, y_sub):
         """
@@ -375,6 +376,7 @@ def plot_trace_tracks(sc):
     go.Scatter3d: A Plotly Scatter3d object representing the tracks of the star cluster.
     """
     df_int = sc.df_int
+    #df_int = df_int.loc[df_int['time'] > -1*df_int['age_myr']]
     tracks = go.Scatter3d(
         x=df_int['x'].iloc[::2],
         y=df_int['y'].iloc[::2],
