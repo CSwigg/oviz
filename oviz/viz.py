@@ -6,7 +6,7 @@ import astropy.units as u
 from . import orbit_maker
 import copy
 
-class StarClusters3DPlotter:
+class Animate3D:
     """
     Class for generating 3D plots of star clusters.
 
@@ -221,7 +221,7 @@ class StarClusters3DPlotter:
         )]
         return dropdown
 
-    def generate_3d_plot(self, time=None, figure_layout=None, show=False, save_name=None, static_traces=None, static_traces_times=None, static_traces_legendonly=False, reference_frame_center=None, focus_group=None, fade_in_time=5, fade_in_and_out=False, show_gc_line=True):
+    def make_plot(self, time=None, figure_layout=None, show=False, save_name=None, static_traces=None, static_traces_times=None, static_traces_legendonly=False, reference_frame_center=None, focus_group=None, fade_in_time=5, fade_in_and_out=False, show_gc_line=True):
         """
         Generates a 3D plot of star clusters over time.
 
@@ -416,7 +416,7 @@ def read_theme(plot):
     Returns:
     dict: The layout configuration.
     """
-    theme_dir = '/Users/cam/Desktop/astro_research/radcliffe/traceback_orbits_package/dash_gaia_orbits/themes'
+    theme_dir = './themes'
     with open(theme_dir + '/{}.yaml'.format(plot.figure_theme), 'r') as file:
         layout = yaml.safe_load(file)
 

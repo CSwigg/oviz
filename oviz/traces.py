@@ -5,7 +5,7 @@ from . import orbit_maker
 from . import point_sizes
 import copy
 
-class StarClusterData:
+class Trace:
     """
     Class for storing user input data of a star cluster.
 
@@ -223,7 +223,7 @@ class StarClusterData:
         """
         return copy.deepcopy(self)
 
-class StarClusterCollection:
+class TraceCollection:
     """
     Class for storing a collection of star clusters.
 
