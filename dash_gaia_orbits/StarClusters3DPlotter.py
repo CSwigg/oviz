@@ -45,7 +45,11 @@ class StarClusters3DPlotter:
         self.figure_layout_dict = read_theme(self)
 
         if self.figure_title:
-            self.figure_layout_dict['title'] = dict(text=self.figure_title, x=0.5, font=dict(family='Helvetica', size=20, color='white'))
+            if self.figure_theme == 'dark':
+                self.font_color = 'white'
+            else:
+                self.font_color = 'black'
+            self.figure_layout_dict['title'] = dict(text=self.figure_title, x=0.5, font=dict(family='Helvetica', size=20, color=self.font_color))
 
         self.trace_grouping_dict['All'] = [cluster.data_name for cluster in self.data_collection.get_all_clusters()]
 
@@ -158,9 +162,10 @@ class StarClusters3DPlotter:
         """
         if focus_group:
             focus_group_data = self.data_collection.get_cluster(focus_group).df
-            focus_group_coords = focus_group_data[['x', 'y', 'z', 'U', 'V', 'W']].mean().values
+            focus_group_coords = focus_group_data[['x', 'y', 'z', 'U', 'V', 'W']].median().values
             return focus_group_coords
-        return None
+        else:
+            return None
 
     def get_visibility(self, traces_list):
         """
@@ -247,6 +252,7 @@ class StarClusters3DPlotter:
         self.figure_layout = go.Layout(self.figure_layout_dict)
         x_rf_int, y_rf_int, z_rf_int = orbit_maker.get_center_orbit_coords(time, reference_frame_center)
         self.coords_center_int = (x_rf_int, y_rf_int, z_rf_int)
+        self.focus_group = focus_group
 
         cluster_groups = self.data_collection.get_all_clusters()
         self.fig = {}
@@ -281,10 +287,14 @@ class StarClusters3DPlotter:
             if 'n_stars' in df_t.columns:
                 hovertext += ', N = ' + df_t['n_stars'].astype(str)
                 
+            #df_t = orbit_maker.coordFIX_to_coordROT(df_t)
+            x = df_t['x'].values
+            y = df_t['y'].values
+            z = df_t['z'].values
             scatter_cluster_group_t = go.Scatter3d(
-                x=df_t['x'],
-                y=df_t['y'],
-                z=df_t['z'],
+                x=x,
+                y=y,
+                z=z,
                 mode='markers',
                 marker=dict(
                     size=df_t['size'],
@@ -318,12 +328,15 @@ class StarClusters3DPlotter:
 
         if static_traces and static_traces_times:
             for i, st in enumerate(static_traces):
-                st = copy.deepcopy(st)
-                self.static_trace_names.append(st['name'])
-                if reference_frame_center and not st['name'].endswith('Track'):
-                    st['x'] -= reference_frame_center[0]
-                    st['y'] -= reference_frame_center[1]
-                    st['z'] -= reference_frame_center[2]
+                st_copy = copy.deepcopy(st)
+                self.static_trace_names.append(st_copy['name'])
+                if self.focus_group is not None and not st_copy['name'].endswith('Track'):
+                    if st_copy['x'] is not None:
+                        st_copy['x'] = np.array(st_copy['x']) - reference_frame_center[0]
+                    if st_copy['y'] is not None:
+                        st_copy['y'] = np.array(st_copy['y']) - reference_frame_center[1]
+                    if st_copy['z'] is not None:
+                        st_copy['z'] = np.array(st_copy['z']) - reference_frame_center[2]
                 if t == 0 and not static_traces_legendonly:
                     visible = True
                 elif t == 0 and static_traces_legendonly:
@@ -332,9 +345,9 @@ class StarClusters3DPlotter:
                     visible = True
                 else:
                     visible = False
-                    st = go.Scatter3d()
-                st['visible'] = visible
-                frame['data'].append(st)
+                    st_copy = go.Scatter3d()
+                st_copy['visible'] = visible
+                frame['data'].append(st_copy)
 
     def _initialize_figure(self, frames, static_traces_legendonly):
         grouping_0 = list(self.trace_grouping_dict.values())[0]
@@ -376,14 +389,15 @@ def plot_trace_tracks(sc):
     go.Scatter3d: A Plotly Scatter3d object representing the tracks of the star cluster.
     """
     df_int = sc.df_int
-    #df_int = df_int.loc[df_int['time'] > -1*df_int['age_myr']]
+    df_int = df_int.loc[df_int['time'] > -1*df_int['age_myr']]
     tracks = go.Scatter3d(
-        x=df_int['x'].iloc[::2],
-        y=df_int['y'].iloc[::2],
-        z=df_int['z'].iloc[::2],
+        x=df_int['x'].iloc[::1],
+        y=df_int['y'].iloc[::1],
+        z=df_int['z'].iloc[::1],
         mode='markers',
         marker=dict(
             size=(sc.max_size/3)*(1 - np.abs(df_int['time'])/np.abs(df_int['time']).max()),
+            #size=(sc.max_size/3)*(1 - np.abs(df_int['time'])/df_int['age_myr']),
             color=sc.color,
             opacity=sc.opacity/1.5,
             line=dict(width=0)
@@ -402,7 +416,8 @@ def read_theme(plot):
     Returns:
     dict: The layout configuration.
     """
-    with open('../themes/{}.yaml'.format(plot.figure_theme), 'r') as file:
+    theme_dir = '/Users/cam/Desktop/astro_research/radcliffe/traceback_orbits_package/dash_gaia_orbits/themes'
+    with open(theme_dir + '/{}.yaml'.format(plot.figure_theme), 'r') as file:
         layout = yaml.safe_load(file)
 
     if plot.figure_theme == 'light':

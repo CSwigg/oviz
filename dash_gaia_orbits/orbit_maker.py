@@ -4,7 +4,10 @@ import astropy.units as u
 import math
 import numpy as np
 from galpy.orbit import Orbit 
-from galpy.potential import MWPotential2014, SpiralArmsPotential
+import warnings 
+warnings.filterwarnings("ignore")
+#from galpy.potential import MWPotential2014, SpiralArmsPotential
+from galpy.potential import MWPotential2014, DehnenBarPotential, SpiralArmsPotential
 
 def get_center_orbit_coords(time, reference_frame_center):
     """
@@ -73,7 +76,46 @@ def create_orbit(coordinates, time, reference_frame_center=None):
         frame='galactic', representation_type='cartesian', differential_type='cartesian'
     )
     orbit = Orbit(vxvv=sc, ro=8.122, vo=236, zo=0.0208, solarmotion='schoenrich')
-    pot = MWPotential2014 + SpiralArmsPotential(omega=13.5*u.km/u.s/u.kpc, amp=0.15)
+    #pot = MWPotential2014 + SpiralArmsPotential(omega=13.5*u.km/u.s/u.kpc, amp=0.15)
+
+
+    # Define the bar potential
+    # bar_potential = DehnenBarPotential(
+    #     omegab=37 * u.km/u.s/u.kpc,  # Pattern speed
+    #     rb=12 * u.kpc,               # Bar radius
+    #     barphi=28 * u.deg,           # Bar orientation angle
+    #     alpha=0.01                   # Relative bar strength
+    # )
+
+    # Define the m=2 spiral arms potential
+    spiral2_potential = SpiralArmsPotential(
+        amp=0.249,                    # Amplitude
+        N=2,                         # Number of spiral arms
+        alpha=8.1 * u.deg,           # Pitch angle
+        r_ref=6.6 * u.kpc,           # Reference radius
+        phi_ref=47.8 * u.deg,        # Reference angle
+        Rs=26.4 * u.kpc,             # Radial scale length
+        H=0.13 * u.kpc,              # Scale height
+        omega=13.1 * u.km/u.s/u.kpc, # Pattern speed
+        Cs=[1]                       # Coefficients for harmonic terms
+    )
+
+    # Define the m=3 spiral arms potential
+    spiral3_potential = SpiralArmsPotential(
+        amp=0.093,                    # Amplitude
+        N=3,                         # Number of spiral arms
+        alpha=13.7 * u.deg,          # Pitch angle
+        r_ref=8.0 * u.kpc,           # Reference radius
+        phi_ref=81.7 * u.deg,        # Reference angle
+        Rs=19.6 * u.kpc,             # Radial scale length
+        H=0.13 * u.kpc,              # Scale height
+        omega=16.4 * u.km/u.s/u.kpc, # Pattern speed
+        Cs=[1]                       # Coefficients for harmonic terms
+    )
+
+    # Combine with MWPotential2014
+    #pot = MWPotential2014 + [spiral2_potential, spiral3_potential]
+    pot = MWPotential2014
     orbit.integrate(time*u.Myr, pot)
     sc_int = orbit.SkyCoord(time*u.Myr)
 
