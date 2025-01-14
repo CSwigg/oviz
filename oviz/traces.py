@@ -60,7 +60,7 @@ class Trace:
     Methods
     -------
     __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False)
-        Initializes the StarClusterData object.
+        Initializes the Trace object.
     create_integrated_dataframe(self, time)
         Creates an integrated DataFrame of the star cluster.
     set_age_based_sizes(self, fade_in_time, fade_in_and_out)
@@ -72,7 +72,7 @@ class Trace:
     limit_cluster_by_name(self, names)
         Limit the star cluster by name.
     copy(self)
-        Returns a copy of the StarClusterData object.
+        Returns a copy of the Trace object.
     """
 
     def __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False):
@@ -214,12 +214,12 @@ class Trace:
 
     def copy(self):
         """
-        Returns a copy of the StarClusterData object.
+        Returns a copy of the Trace object.
 
         Returns
         -------
-        StarClusterData
-            A copy of the StarClusterData object.
+        Trace
+            A copy of the Trace object.
         """
         return copy.deepcopy(self)
 
@@ -230,12 +230,12 @@ class TraceCollection:
     Attributes
     ----------
     clusters : list
-        List of StarClusterData objects.
+        List of Trace objects.
 
     Methods
     -------
     __init__(self, clusters=[])
-        Initializes the StarClusterCollection object.
+        Initializes the TraceCollection object.
     add_cluster(self, cluster)
         Adds a star cluster to the collection.
     get_cluster(self, identifier)
@@ -254,17 +254,17 @@ class TraceCollection:
 
     def __init__(self, clusters=[]):
         """
-        Initialize the StarClusterCollection object.
+        Initialize the TraceCollection object.
 
         Parameters
         ----------
         clusters : list, optional
-            List of StarClusterData objects.
+            List of Trace objects.
 
         Raises
         ------
         ValueError
-            If any element in clusters is not a StarClusterData object.
+            If any element in clusters is not a Trace object.
         """
         self.clusters = []
         self.time = None
@@ -277,12 +277,12 @@ class TraceCollection:
         Parameters
         ----------
         clusters : list
-            List of StarClusterData objects.
+            List of Trace objects.
 
         Raises
         ------
         ValueError
-            If any element in clusters is not a StarClusterData object.
+            If any element in clusters is not a Trace object.
         """
         for cluster in clusters:
             self.add_cluster(cluster)
@@ -293,16 +293,16 @@ class TraceCollection:
 
         Parameters
         ----------
-        cluster : StarClusterData
-            StarClusterData object to be added.
+        cluster : Trace
+            Trace object to be added.
 
         Raises
         ------
         ValueError
-            If cluster is not a StarClusterData object.
+            If cluster is not a Trace object.
         """
-        if not isinstance(cluster, StarClusterData):
-            raise ValueError('Input must be an instance of StarClusterData')
+        if not isinstance(cluster, Trace):
+            raise ValueError('Input must be an instance of Trace')
         self.clusters.append(cluster)
 
     def get_cluster(self, identifier):
@@ -316,8 +316,8 @@ class TraceCollection:
 
         Returns
         -------
-        cluster : StarClusterData
-            StarClusterData object.
+        cluster : Trace
+            Trace object.
 
         Raises
         ------
@@ -340,7 +340,7 @@ class TraceCollection:
         Returns
         -------
         clusters : list
-            List of StarClusterData objects.
+            List of Trace objects.
         """
         return self.clusters
 

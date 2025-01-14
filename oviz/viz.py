@@ -3,6 +3,7 @@ import yaml
 import plotly.graph_objects as go
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+import importlib.resources
 from . import orbit_maker
 import copy
 
@@ -416,8 +417,10 @@ def read_theme(plot):
     Returns:
     dict: The layout configuration.
     """
-    theme_dir = './themes'
-    with open(theme_dir + '/{}.yaml'.format(plot.figure_theme), 'r') as file:
+    # theme_dir = './themes'
+    # with open(theme_dir + '/{}.yaml'.format(plot.figure_theme), 'r') as file:
+    #     layout = yaml.safe_load(file)
+    with importlib.resources.open_text("oviz.themes", f"{plot.figure_theme}.yaml") as file:
         layout = yaml.safe_load(file)
 
     if plot.figure_theme == 'light':
