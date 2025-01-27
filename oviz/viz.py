@@ -354,6 +354,7 @@ class Animate3D:
         grouping_0 = list(self.trace_grouping_dict.values())[0]
         starting_frame = copy.deepcopy(frames[0])
         data_updated = []
+
         for trace in starting_frame['data']:
             trace_name = trace['name']
             visible = True if trace_name in grouping_0 or trace_name in self.static_trace_names else False

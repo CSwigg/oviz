@@ -1,2 +1,6 @@
 .DS_Store
 notebooks/
+__pycache__/
+*.pyc
+build/
+dist/
