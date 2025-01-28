@@ -16,8 +16,10 @@ def size_easing(c, min_size, max_size, size_by_n_stars, fade_in_time=5, fade_in_
     Returns:
     pd.DataFrame: Data frame with updated 'size' column.
     """
-    t = -1 * c['time'].values
-    age = c['age_myr'].values[0]
+    #t = -1 * c['time'].values
+    t = c['time'].values
+    age = -c['age_myr'].values[0]
+    
 
     if size_by_n_stars:
         n_stars = c['n_stars'].values[0]
@@ -29,32 +31,41 @@ def size_easing(c, min_size, max_size, size_by_n_stars, fade_in_time=5, fade_in_
     a = min_size
     b = max_size
 
-    sizes = np.array([max_size] * len(c))
+    #sizes = np.array([max_size] * len(c))
+    ind_before_birth = np.where(t < age - fade_in_time)
+    ind_birth = np.where((t >= age - fade_in_time) & (t <= age))
+    ind_after_birth = np.where((t > age) & (t <= age + fade_in_time))
+    ind_future = np.where((t > age + fade_in_time))
 
-    t_older = t[(t > age) & (t <= age + fade_in_time)]
-    t_younger = t[t <= age]
-    sizes_younger = sizes[t <= age]
-    sizes_older = sizes[(t > age) & (t <= age + fade_in_time)]
-    sizes_oldest = sizes[t > age + fade_in_time]
-    sizes_oldest = [a] * len(sizes_oldest)
+
+    times_before= t[ind_before_birth]
+    times_birth = t[ind_birth]
+    times_after = t[ind_after_birth]
+    times_future = t[ind_future]
+
+    sizes_before = [a] * len(times_before)
+    sizes_future = [b] * len(times_future)
 
     w = 0.5
-    D = np.linspace(2, 0, len(t_older))
+    if all(t <= 0):
+        D = np.linspace(2, 0, len(times_birth))
+    else:
+        D = np.linspace(0, 2, len(times_birth))
     sigmaD = 1.0 / (1.0 + np.exp(-(1 - D) / w))
-    sizes_older = a + (b - a) * (1 - sigmaD)
+    sizes_birth = a + (b - a) * (1 - sigmaD)
 
     if fade_in_and_out:
-        sizes_oldest = [0] * len(sizes_oldest)
-        t_younger = t[(t <= age) & (t >= age - fade_in_time)]
-        t_youngest = t[t < age - fade_in_time]
-        D2 = np.linspace(0, 2, len(t_younger))
+        D2 = np.linspace(2, 0, len(times_after))
         sigmaD2 = 1.0 / (1.0 + np.exp(-(1 - D2) / w))
-        sizes_younger = a + (b - a) * (1 - sigmaD2)
-        sizes_youngest = [a] * len(t_youngest)
-        c['size'] = np.concatenate([sizes_youngest, sizes_younger, sizes_older, sizes_oldest])
+        sizes_after = a + (b - a) * (1 - sigmaD2)
+        sizes_future = [a] * len(times_future)
     else:
-        c['size'] = np.concatenate([sizes_younger, sizes_older, sizes_oldest])
+        sizes_after = [b] * len(times_after)
 
+    if all(t <= 0):
+        c['size'] = np.concatenate([sizes_future, sizes_after, sizes_birth, sizes_before])
+    else:
+        c['size'] = np.concatenate([sizes_before, sizes_birth, sizes_after, sizes_future])
     return c
 
 def set_cluster_point_sizes(df_int, min_size, max_size, fade_in_time, fade_in_and_out, size_by_n_stars):

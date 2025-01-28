@@ -1,6 +1,7 @@
 # Description: This file contains the functions to create the orbits of star clusters
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, concatenate
 import astropy.units as u
+from copy import deepcopy
 import math
 import numpy as np
 from galpy.orbit import Orbit 
@@ -25,16 +26,33 @@ def get_center_orbit_coords(time, reference_frame_center):
     else:
         rf_coords = reference_frame_center 
 
+
     rf_sc = SkyCoord(
         u=rf_coords[0]*u.pc, v=rf_coords[1]*u.pc, w=rf_coords[2]*u.pc,
         U=rf_coords[3]*u.km/u.s, V=rf_coords[4]*u.km/u.s, W=rf_coords[5]*u.km/u.s,
         frame='galactic', representation_type='cartesian', differential_type='cartesian'
     )
     rf_orbit = Orbit(vxvv=rf_sc, solarmotion='schoenrich', ro=8.122, vo=236., zo=0.0208)
-    rf_orbit.integrate(time*u.Myr, MWPotential2014)
-    x_rf_int = rf_orbit.SkyCoord(time*u.Myr).galactic.cartesian.x.value * 1000
-    y_rf_int = rf_orbit.SkyCoord(time*u.Myr).galactic.cartesian.y.value * 1000
-    z_rf_int = rf_orbit.SkyCoord(time*u.Myr).galactic.cartesian.z.value * 1000
+
+    if np.any(time > 0) and np.any(time < 0):
+        time_pos = time[time >= 0]
+        time_neg = np.flip(time[time <= 0])
+        rf_orbit_neg = deepcopy(rf_orbit)
+        rf_orbit_pos = deepcopy(rf_orbit)
+        rf_orbit_neg.integrate(time_neg*u.Myr, MWPotential2014)
+        sc_int_neg = rf_orbit_neg.SkyCoord(time_neg*u.Myr)
+        rf_orbit_pos.integrate(time_pos*u.Myr, MWPotential2014)
+        sc_int_pos = rf_orbit_pos.SkyCoord(time_pos*u.Myr)
+        x_rf_int = np.append(np.flip(sc_int_neg.galactic.cartesian.x.value[1:]), sc_int_pos.galactic.cartesian.x.value) * 1000
+        y_rf_int = np.append(np.flip(sc_int_neg.galactic.cartesian.y.value[1:]), sc_int_pos.galactic.cartesian.y.value) * 1000
+        z_rf_int = np.append(np.flip(sc_int_neg.galactic.cartesian.z.value[1:]), sc_int_pos.galactic.cartesian.z.value) * 1000
+    else:
+        rf_orbit.integrate(time*u.Myr, MWPotential2014)
+        sc_int = rf_orbit.SkyCoord(time*u.Myr)
+        x_rf_int = sc_int.galactic.cartesian.x.value * 1000
+        y_rf_int = sc_int.galactic.cartesian.y.value * 1000
+        z_rf_int = sc_int.galactic.cartesian.z.value * 1000
+
     return (x_rf_int, y_rf_int, z_rf_int)
 
 def center_orbit(coordinates_int, time, reference_frame_center):
@@ -75,61 +93,38 @@ def create_orbit(coordinates, time, reference_frame_center=None):
         u=x*u.pc, v=y*u.pc, w=z*u.pc, U=U*u.km/u.s, V=V*u.km/u.s, W=W*u.km/u.s,
         frame='galactic', representation_type='cartesian', differential_type='cartesian'
     )
-    orbit = Orbit(vxvv=sc, ro=8.122, vo=236, zo=0.0208, solarmotion='schoenrich')
-    #pot = MWPotential2014 + SpiralArmsPotential(omega=13.5*u.km/u.s/u.kpc, amp=0.15)
-
-
-    # Define the bar potential
-    # bar_potential = DehnenBarPotential(
-    #     omegab=37 * u.km/u.s/u.kpc,  # Pattern speed
-    #     rb=12 * u.kpc,               # Bar radius
-    #     barphi=28 * u.deg,           # Bar orientation angle
-    #     alpha=0.01                   # Relative bar strength
-    # )
-
-    # Define the m=2 spiral arms potential
-    spiral2_potential = SpiralArmsPotential(
-        amp=0.249,                    # Amplitude
-        N=2,                         # Number of spiral arms
-        alpha=8.1 * u.deg,           # Pitch angle
-        r_ref=6.6 * u.kpc,           # Reference radius
-        phi_ref=47.8 * u.deg,        # Reference angle
-        Rs=26.4 * u.kpc,             # Radial scale length
-        H=0.13 * u.kpc,              # Scale height
-        omega=13.1 * u.km/u.s/u.kpc, # Pattern speed
-        Cs=[1]                       # Coefficients for harmonic terms
-    )
-
-    # Define the m=3 spiral arms potential
-    spiral3_potential = SpiralArmsPotential(
-        amp=0.093,                    # Amplitude
-        N=3,                         # Number of spiral arms
-        alpha=13.7 * u.deg,          # Pitch angle
-        r_ref=8.0 * u.kpc,           # Reference radius
-        phi_ref=81.7 * u.deg,        # Reference angle
-        Rs=19.6 * u.kpc,             # Radial scale length
-        H=0.13 * u.kpc,              # Scale height
-        omega=16.4 * u.km/u.s/u.kpc, # Pattern speed
-        Cs=[1]                       # Coefficients for harmonic terms
-    )
-
-    # Combine with MWPotential2014
-    #pot = MWPotential2014 + [spiral2_potential, spiral3_potential]
     pot = MWPotential2014
-    orbit.integrate(time*u.Myr, pot)
-    sc_int = orbit.SkyCoord(time*u.Myr)
+    orbit = Orbit(vxvv=sc, ro=8.122, vo=236, zo=0.0208, solarmotion='schoenrich')
 
-    x_helio_int = sc_int.galactic.cartesian.x.value * 1000
-    y_helio_int = sc_int.galactic.cartesian.y.value * 1000
-    z_helio_int = sc_int.galactic.cartesian.z.value * 1000
+    if np.any(time > 0) and np.any(time < 0):
+        time_pos = time[time >= 0]
+        time_neg = np.flip(time[time <= 0])
+        orbit_pos = deepcopy(orbit)
+        orbit_neg = deepcopy(orbit)
+        orbit_pos.integrate(time_pos*u.Myr, pot)
+        sc_int_pos = orbit_pos.SkyCoord(time_pos*u.Myr)
+        orbit_neg.integrate(time_neg*u.Myr, pot)
+        sc_int_neg = orbit_neg.SkyCoord(time_neg*u.Myr)
+        x_helio_int = np.append(np.flip(sc_int_neg.galactic.cartesian.x.value[:, 1:], axis=1), sc_int_pos.galactic.cartesian.x.value, axis=1).reshape(len(x), len(time)) * 1000
+        y_helio_int = np.append(np.flip(sc_int_neg.galactic.cartesian.y.value[:, 1:], axis=1), sc_int_pos.galactic.cartesian.y.value, axis=1).reshape(len(x), len(time)) * 1000
+        z_helio_int = np.append(np.flip(sc_int_neg.galactic.cartesian.z.value[:, 1:], axis=1), sc_int_pos.galactic.cartesian.z.value, axis=1).reshape(len(x), len(time)) * 1000
+        x_gc_int = np.append(np.flip(sc_int_neg.galactocentric.cartesian.x.value[:, 1:], axis=1), sc_int_pos.galactocentric.cartesian.x.value, axis=1).reshape(len(x), len(time)) * 1000
+        y_gc_int = np.append(np.flip(sc_int_neg.galactocentric.cartesian.y.value[:, 1:], axis=1), sc_int_pos.galactocentric.cartesian.y.value, axis=1).reshape(len(x), len(time)) * 1000
+        z_gc_int = np.append(np.flip(sc_int_neg.galactocentric.cartesian.z.value[:, 1:], axis=1), sc_int_pos.galactocentric.cartesian.z.value, axis=1).reshape(len(x), len(time)) * 1000
+
+    else:
+        orbit.integrate(time*u.Myr, pot)
+        sc_int = orbit.SkyCoord(time*u.Myr)
+        x_helio_int = sc_int.galactic.cartesian.x.value * 1000
+        y_helio_int = sc_int.galactic.cartesian.y.value * 1000
+        z_helio_int = sc_int.galactic.cartesian.z.value * 1000
+        x_gc_int = sc_int.galactocentric.cartesian.x.value * 1000
+        y_gc_int = sc_int.galactocentric.cartesian.y.value * 1000
+        z_gc_int = sc_int.galactocentric.cartesian.z.value * 1000
+    
     helio_coords = (x_helio_int, y_helio_int, z_helio_int)
-
-    x_gc_int = sc_int.galactocentric.cartesian.x.value * 1000
-    y_gc_int = sc_int.galactocentric.cartesian.y.value * 1000
-    z_gc_int = sc_int.galactocentric.cartesian.z.value * 1000
     galactocentric_coords = (x_gc_int, y_gc_int, z_gc_int)
-
-    x_int_c, y_int_c, z_int_c = center_orbit((x_helio_int, y_helio_int, z_helio_int), time, reference_frame_center)
+    x_int_c, y_int_c, z_int_c = center_orbit(helio_coords, time, reference_frame_center)
     centered_coords = (x_int_c, y_int_c, z_int_c)
 
     # Construct galactocentric cylindrical coordinates, centered

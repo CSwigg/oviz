@@ -1,4 +1,4 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.1
 Name: oviz
 Version: 0.1.0
 Summary: A Python package for visualizing the 3D orbits of star clusters and associations.
@@ -17,15 +17,6 @@ Requires-Dist: astropy
 Requires-Dist: pandas
 Requires-Dist: plotly
 Requires-Dist: dash
-Dynamic: author
-Dynamic: author-email
-Dynamic: classifier
-Dynamic: description
-Dynamic: description-content-type
-Dynamic: home-page
-Dynamic: requires-dist
-Dynamic: requires-python
-Dynamic: summary
 
 # dash_gaia_orbits
 

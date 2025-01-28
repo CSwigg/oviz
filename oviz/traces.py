@@ -75,7 +75,7 @@ class Trace:
         Returns a copy of the Trace object.
     """
 
-    def __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False):
+    def __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False, shifted_rf = None):
         self.df = df
         self.data_name = data_name
         self.cluster_int_coords = None
@@ -90,6 +90,7 @@ class Trace:
         self.max_size = max_size
         self.show_tracks = show_tracks
         self.size_by_n_stars = size_by_n_stars
+        self.shifted_rf = shifted_rf
 
         necessary_columns = ['x', 'y', 'z', 'U', 'V', 'W', 'name', 'age_myr']
         if self.size_by_n_stars:
@@ -174,6 +175,10 @@ class Trace:
         reference_frame_center : tuple, optional
             Center of the reference frame.
         """
+
+        if self.shifted_rf is not None:
+            reference_frame_center = self.shifted_rf
+
         self.cluster_int_coords = orbit_maker.create_orbit(self.coordinates, time, reference_frame_center=reference_frame_center)
         self.df_int = self.create_integrated_dataframe(time)
         self.integrated = True

@@ -10,26 +10,20 @@ import copy
 class Animate3D:
     """
     Class for generating 3D plots of star clusters.
-
-    Methods:
-    - generate_3d_plot(self, collection): Generates a 3D plot for a StarClusterCollection.
     """
 
-    def __init__(self, data_collection, xyz_widths=(1000, 1000, 300), xyz_ranges=None,  figure_title=None, figure_theme=None, plotly_light_template=None, figure_layout=None, figure_layout_dict=None, trace_grouping_dict=None):
-        """
-        Initializes a StarClusters3DPlotter object.
-
-        Parameters:
-        - data_collection (StarClusterCollection): The collection of star clusters to be plotted.
-        - xyz_widths (tuple): Widths of the plot in x, y, and z directions.
-        - xyz_ranges (tuple): Ranges of the plot in x, y, and z directions.
-        - figure_title (str): The title of the plot.
-        - figure_theme (str): The theme of the plot. Options are 'light' and 'dark'.
-        - plotly_light_template (str): The Plotly template for light theme.
-        - figure_layout (plotly.graph_objs.Layout): The layout of the plot.
-        - figure_layout_dict (dict): The layout of the plot as a dictionary.
-        - trace_grouping_dict (dict): Dictionary for grouping traces.
-        """
+    def __init__(
+        self,
+        data_collection,
+        xyz_widths=(1000, 1000, 300),
+        xyz_ranges=None,
+        figure_title=None,
+        figure_theme=None,
+        plotly_light_template=None,
+        figure_layout=None,
+        figure_layout_dict=None,
+        trace_grouping_dict=None
+    ):
         self.data_collection = data_collection
         self.figure_theme = figure_theme
         self.figure_layout = figure_layout
@@ -43,28 +37,132 @@ class Animate3D:
         self.trace_grouping_dict = trace_grouping_dict or {}
         self.figure_title = figure_title
 
+        # Read in the layout from the theme
         self.figure_layout_dict = read_theme(self)
 
+        # Configure the main figure title if provided
         if self.figure_title:
-            if self.figure_theme == 'dark':
-                self.font_color = 'white'
-            else:
-                self.font_color = 'black'
-            self.figure_layout_dict['title'] = dict(text=self.figure_title, x=0.5, font=dict(family='Helvetica', size=20, color=self.font_color))
+            self.font_color = 'white' if self.figure_theme == 'dark' else 'black'
+            self.figure_layout_dict['title'] = dict(
+                text=self.figure_title,
+                x=0.5,
+                font=dict(family='Helvetica', size=20, color=self.font_color)
+            )
 
-        self.trace_grouping_dict['All'] = [cluster.data_name for cluster in self.data_collection.get_all_clusters()]
+        # Always include a default grouping "All"
+        self.trace_grouping_dict['All'] = [
+            cluster.data_name for cluster in self.data_collection.get_all_clusters()
+        ]
 
+    def make_plot(
+        self,
+        time=None,
+        figure_layout=None,
+        show=False,
+        save_name=None,
+        static_traces=None,
+        static_traces_times=None,
+        static_traces_legendonly=False,
+        reference_frame_center=None,
+        focus_group=None,
+        fade_in_time=5,
+        fade_in_and_out=False,
+        show_gc_line=True
+    ):
+        """
+        Main method to generate a 3D animated plot. Integrates orbits if necessary and
+        constructs frames for each time step. Optionally saves the figure to HTML.
+        """
+        # Ensure t=0 is present
+        if 0 not in time:
+            raise ValueError("The time array must include 0 for the present day.")
+
+        # Determine the reference frame center
+        if reference_frame_center is None:
+            reference_frame_center = self.set_focus(focus_group)
+
+        # Integrate orbits if not already integrated
+        if self.data_collection.time is None:
+            self.data_collection.integrate_all_orbits(
+                time, reference_frame_center=reference_frame_center
+            )
+        # Set cluster sizes for fade effects
+        self.data_collection.set_all_cluster_sizes(fade_in_time, fade_in_and_out)
+
+        # Prepare time arrays and figure layout
+        self.time = np.array(self.data_collection.time, dtype=np.float64)
+        self.figure_layout = go.Layout(self.figure_layout_dict)
+        self.focus_group = focus_group
+        self.static_traces_legendonly = static_traces_legendonly
+
+        x_rf_int, y_rf_int, z_rf_int = orbit_maker.get_center_orbit_coords(
+            time, reference_frame_center
+        )
+        self.coords_center_int = (x_rf_int, y_rf_int, z_rf_int)
+
+        # Initialize static traces if none given
+        if static_traces is None:
+            static_traces = []
+        if static_traces_times is None:
+            static_traces_times = []
+
+        # Store static trace names (for get_visibility)
+        self.static_trace_names = []
+
+        # Optionally add orbit tracks as "static"
+        for sc in self.data_collection.get_all_clusters():
+            if sc.show_tracks:
+                track = plot_trace_tracks(sc)
+                static_traces.append(track)
+                static_traces_times.append([0])  # Show only at t=0
+
+        # Build frames for each time step
+        cluster_groups = self.data_collection.get_all_clusters()
+        self.fig = {}
+        frames = []
+
+        for i, t_i in enumerate(self.time):
+            # Generate scatter traces for each cluster at time t_i
+            scatter_list = self._generate_scatter_list(
+                cluster_groups, t_i, x_rf_int[i], y_rf_int[i], show_gc_line
+            )
+            # Remove any 'visible' property so frames won't override grouping
+            for sc_tr in scatter_list:
+                sc_tr.pop('visible', None)
+
+            # Create the frame dict
+            frame_data = {'data': scatter_list, 'name': str(t_i)}
+
+            # Add static traces if they should appear at this time
+            self._add_static_traces(
+                frame_data, static_traces, static_traces_times,
+                reference_frame_center, t_i
+            )
+
+            # Remove 'visible' from static traces too, for the same reason
+            for item in frame_data['data']:
+                item.pop('visible', None)
+
+            frames.append(go.Frame(frame_data))
+
+        # Initialize the figure at t=0 (base data)
+        self._initialize_figure(frames)
+
+        # Add slider & dropdown, and finalize
+        self._add_slider_and_dropdown()
+
+        # Show or save
+        if show:
+            self.figure.show()
+        if save_name:
+            self.figure.update_layout(width=None, height=None)
+            self.figure.write_html(save_name, auto_play=False)
+
+        return self.figure
 
     def rotating_gc_line(self, x_sub, y_sub):
         """
-        Generates a rotating galactic center line.
-
-        Parameters:
-        - x_sub (float): X-coordinate subtraction value.
-        - y_sub (float): Y-coordinate subtraction value.
-
-        Returns:
-        go.Scatter3d: A Plotly Scatter3d object representing the galactic center line.
+        Generates a rotating galactic center line, displayed as a 3D line in the figure.
         """
         n_marks = 1000
         R = -8.122 * np.ones(n_marks)
@@ -73,17 +171,17 @@ class Animate3D:
         gc_line = SkyCoord(
             rho=R * u.kpc,
             phi=phi * u.deg,
-            z=[0.]*len(R) * u.pc,
+            z=[0.] * len(R) * u.pc,
             frame='galactocentric',
             representation_type='cylindrical'
         )
+
         x_corr = gc_line.galactic.cartesian.x.value * 1000 - x_sub
         y_corr = gc_line.galactic.cartesian.y.value * 1000 - y_sub
-        z_corr = [0.]*len(x_corr)
-        
-        line_color = 'gray' if self.figure_theme == 'dark' else 'black'
+        z_corr = [0.] * len(x_corr)
 
-        scatter_gc_line = go.Scatter3d(
+        line_color = 'gray' if self.figure_theme == 'dark' else 'black'
+        return go.Scatter3d(
             x=x_corr,
             y=y_corr,
             z=z_corr,
@@ -93,20 +191,75 @@ class Animate3D:
             name='R = 8.12 kpc',
             hovertext='R = 8.12 kpc'
         )
-        return scatter_gc_line
+
+    def generate_play_pause(self):
+        """
+        Generates play/pause buttons for the plot, used to control frame animation.
+        """
+        if self.figure_theme == 'dark':
+            button_color, text_color = 'gray', 'gray'
+        elif self.figure_theme == 'light':
+            button_color, text_color = 'black', 'black'
+        else:  # 'gray'
+            button_color, text_color = 'black', 'black'
+
+        button_color = 'gray' if self.figure_theme == 'dark' else 'black'
+        text_color = 'black'
+
+        return [
+            dict(
+                type='buttons',
+                showactive=False,
+                x=0.2,
+                y=-0.03,
+                xanchor='left',
+                yanchor='top',
+                direction='left',
+                pad={'r': 50, 't': 20, 'b': 20, 'l': 20},
+                bgcolor='rgba(0,0,0,0)',
+                bordercolor=button_color,
+                font=dict(color=text_color, size=20, family='helvetica'),
+                buttons=[
+                    dict(
+                        label='▶',
+                        method='animate',
+                        args=[
+                            None,
+                            dict(frame=dict(duration=500, redraw=True), fromcurrent=True)
+                        ]
+                    ),
+                    dict(
+                        label='⏸',
+                        method='animate',
+                        args=[[None], dict(frame=dict(duration=0, redraw=True), mode='immediate')]
+                    )
+                ]
+            )
+        ]
 
     def generate_slider(self):
         """
-        Generates a slider for controlling the animation of the plot.
-
-        Returns:
-        list: A list containing the slider configuration.
+        Generates a slider to control the animation across different time steps.
         """
         slider_color = 'gray' if self.figure_theme == 'dark' else 'black'
 
-        sliders = [
+        time_neg = self.time[self.time < 0]
+        time_pos = self.time[self.time >= 0]
+
+        # Sort out an order in which to present the slider times
+        if (len(time_neg) > 0) and (len(time_pos) > 1):
+            time_slider = np.append(time_neg, time_pos)
+        elif (len(time_neg) > 0) and (len(time_pos) == 1):
+            time_slider = np.flip(self.time)
+        else:
+            time_slider = self.time
+
+        # Locate the index where time is zero
+        zero_idx = np.where(time_slider == 0)[0][0]
+
+        return [
             dict(
-                active=len(self.time) - 1,
+                active=zero_idx,
                 xanchor="left",
                 yanchor="top",
                 transition={"duration": 300, "easing": "bounce-in"},
@@ -116,7 +269,7 @@ class Animate3D:
                 pad={"b": 0, "t": 0, "l": 0, "r": 0},
                 len=0.5,
                 x=0.27,
-                y=0.,  
+                y=0.,
                 currentvalue={
                     "font": {"size": 18, "color": slider_color, 'family': 'helvetica'},
                     'prefix': 'Time (Myr ago): ',
@@ -129,319 +282,244 @@ class Animate3D:
                         args=[
                             [str(t)],
                             dict(
-                                frame=dict(
-                                    duration=5,
-                                    easing='linear',
-                                    redraw=True
-                                ),
-                                transition=dict(
-                                    duration=0,
-                                    easing='linear'
-                                )
+                                frame=dict(duration=5, easing='linear', redraw=True),
+                                transition=dict(duration=0, easing='linear')
                             )
                         ],
-                        label=-1*t if t != 0 else 'Present Day',
+                        label=str(t),
                         method='animate'
-                    ) for t in np.flip(self.time)
+                    ) for t in time_slider
                 ],
                 tickcolor=slider_color,
                 ticklen=10,
                 font=dict(color='rgba(0,0,0,0)', size=8, family='helvetica')
             )
         ]
-        return sliders
-
-    def set_focus(self, focus_group):
-        """
-        Sets the focus on a specific group of star clusters.
-
-        Parameters:
-        - focus_group (str): The name of the focus group.
-
-        Returns:
-        np.ndarray: The mean coordinates of the focus group.
-        """
-        if focus_group:
-            focus_group_data = self.data_collection.get_cluster(focus_group).df
-            focus_group_coords = focus_group_data[['x', 'y', 'z', 'U', 'V', 'W']].median().values
-            return focus_group_coords
-        else:
-            return None
-
-    def get_visibility(self, traces_list):
-        """
-        Determines the visibility of traces in the plot.
-
-        Parameters:
-        - traces_list (list): List of trace names to be visible.
-
-        Returns:
-        list: A list of boolean values indicating the visibility of each trace.
-        """
-        visibility = []
-        for trace in self.fig['data']:
-            if trace['name'] in traces_list:
-                visibility.append(True)
-            elif trace['name'] in self.static_trace_names:
-                visibility.append(False)
-            elif trace['name'] == 'R = 8.12 kpc':
-                visibility.append(True)
-            else:
-                visibility.append(False)
-        return visibility
 
     def dropdown_menu(self):
         """
-        Creates a dropdown menu for selecting trace groups in a 3D plot.
-
-        Returns:
-        list: A list containing a dictionary that defines the dropdown menu configuration for Plotly.
+        Creates a dropdown menu for selecting trace groups in the 3D plot.
+        Uses 'method':'update' so the user’s grouping choice persists 
+        even when the slider returns to t=0.
         """
         buttons = []
         for key, traces_list in self.trace_grouping_dict.items():
-            visibility = self.get_visibility(traces_list)
-            buttons.append(dict(
-                args=[{'visible': visibility, 'frame': 0.}],
-                label=key,
-                method='restyle'
-            ))
+            # Build a visibility array for each trace in self.initial_data
+            visibility = []
+            for trace in self.initial_data:
+                is_visible = self.get_visibility(trace['name'], traces_list)
+                visibility.append(is_visible)
+
+            buttons.append(
+                dict(
+                    label=key,
+                    method='update',
+                    args=[
+                        {"visible": visibility},  # updates base data’s 'visible'
+                        {}
+                    ]
+                )
+            )
+
         bg_color = self.figure_layout_dict['scene']['xaxis']['backgroundcolor']
         text_color = 'black' if self.figure_theme != 'dark' else 'white'
-        dropdown = [dict(
-            buttons=buttons,
-            direction='down',
-            pad={'r': 10, 't': 10},
-            showactive=True,
-            x=0,
-            xanchor='left',
-            y=1.1,
-            bgcolor=bg_color,
-            font=dict(color=text_color, family='helvetica', size=14),
-            yanchor='top',
-            active=0
-        )]
-        return dropdown
 
-    def make_plot(self, time=None, figure_layout=None, show=False, save_name=None, static_traces=None, static_traces_times=None, static_traces_legendonly=False, reference_frame_center=None, focus_group=None, fade_in_time=5, fade_in_and_out=False, show_gc_line=True):
+        return [
+            dict(
+                buttons=buttons,
+                direction='down',
+                pad={'r': 10, 't': 10},
+                showactive=True,
+                x=0,
+                xanchor='left',
+                y=1.1,
+                yanchor='top',
+                bgcolor=bg_color,
+                font=dict(color=text_color, family='helvetica', size=14),
+                active=0
+            )
+        ]
+
+    def set_focus(self, focus_group):
         """
-        Generates a 3D plot of star clusters over time.
-
-        Parameters:
-        - time (list): List of time points for the animation.
-        - figure_layout (plotly.graph_objs.Layout): Optional layout for the plot.
-        - show (bool): Whether to display the plot.
-        - save_name (str): Optional name for saving the plot as an HTML file.
-        - static_traces (list): List of static traces to be included in the plot.
-        - static_traces_times (list): List of times for the static traces.
-        - static_traces_legendonly (bool): Whether to show static traces only in the legend.
-        - reference_frame_center (tuple): Center of the reference frame.
-        - focus_group (str): Name of the focus group.
-        - fade_in_time (int): Time for fading in the traces.
-        - fade_in_and_out (bool): Whether to fade in and out the traces.
-        - show_gc_line (bool): Whether to show the galactic center line.
-
-        Returns:
-        go.Figure: The generated 3D plot.
+        Returns median coordinates of a focus group if provided; otherwise returns None.
         """
-        if reference_frame_center is None:
-            reference_frame_center = self.set_focus(focus_group)
-        if self.data_collection.time is None:
-            self.data_collection.integrate_all_orbits(time, reference_frame_center=reference_frame_center)
-        self.data_collection.set_all_cluster_sizes(fade_in_time, fade_in_and_out)
+        if not focus_group:
+            return None
 
-        self.time = np.array(self.data_collection.time, dtype=np.float64)
-        self.figure_layout = go.Layout(self.figure_layout_dict)
-        x_rf_int, y_rf_int, z_rf_int = orbit_maker.get_center_orbit_coords(time, reference_frame_center)
-        self.coords_center_int = (x_rf_int, y_rf_int, z_rf_int)
-        self.focus_group = focus_group
+        focus_group_data = self.data_collection.get_cluster(focus_group).df
+        coords = focus_group_data[['x', 'y', 'z', 'U', 'V', 'W']].median().values
+        return coords
 
-        cluster_groups = self.data_collection.get_all_clusters()
-        self.fig = {}
-        frames = []
+    def get_visibility(self, trace_name: str, grouping: list):
+        """
+        Determines if a given trace_name should be visible under the current grouping.
+        Tracks are handled by checking if 'Track' is appended to the base cluster name.
+        """
+        if trace_name in self.static_trace_names and not self.static_traces_legendonly:
+            return True
+        elif trace_name == 'R = 8.12 kpc':
+            return True
+        elif trace_name in grouping:
+            return True
 
-        for i, t in enumerate(self.time):
-            scatter_list = self._generate_scatter_list(cluster_groups, t, x_rf_int[i], y_rf_int[i], show_gc_line)
-            frame = {'data': scatter_list, 'name': str(t)}
-            self._add_static_traces(frame, static_traces, static_traces_times, reference_frame_center, t, static_traces_legendonly)
-            frames.append(go.Frame(frame))
+        # Handle tracks: if the base name is in the grouping, show the track
+        if 'Track' in trace_name:
+            base_name = trace_name.replace(' Track', '')
+            return base_name in grouping
 
-        self._initialize_figure(frames, static_traces_legendonly)
-        self._add_slider_and_dropdown()
-
-        if show:
-            self.figure.show()
-        if save_name:
-            self.figure.update_layout(width=None, height=None)
-            self.figure.write_html(save_name, auto_play=False)
-        return self.figure
+        return False
 
     def _generate_scatter_list(self, cluster_groups, t, x_rf, y_rf, show_gc_line):
+        """
+        Generate the main cluster Scatter3d traces for a given time.
+        Optionally includes the rotating galactic center line if show_gc_line is True.
+        """
         scatter_list = []
         for cluster_group in cluster_groups:
             assert cluster_group.integrated
             df_int = cluster_group.df_int
-            if len(df_int) == 0:
+            if df_int.empty:
                 continue
 
             df_t = df_int[df_int['time'] == t]
-            hovertext = df_t['name'].astype(str) + ': ' + df_t['age_myr'].round(1).astype(str) + ' Myr'
+            hovertext = (
+                df_t['name'].astype(str)
+                + ': '
+                + df_t['age_myr'].round(1).astype(str)
+                + ' Myr'
+            )
             if 'n_stars' in df_t.columns:
                 hovertext += ', N = ' + df_t['n_stars'].astype(str)
-                
-            #df_t = orbit_maker.coordFIX_to_coordROT(df_t)
-            x = df_t['x'].values
-            y = df_t['y'].values
-            z = df_t['z'].values
-            scatter_cluster_group_t = go.Scatter3d(
-                x=x,
-                y=y,
-                z=z,
-                mode='markers',
-                marker=dict(
-                    size=df_t['size'],
-                    color=cluster_group.color,
-                    opacity=cluster_group.opacity,
-                    symbol=cluster_group.marker_style,
-                    line=dict(color='black', width=0.0)
-                ),
-                hovertext=hovertext,
-                name=cluster_group.data_name
+
+            scatter_list.append(
+                go.Scatter3d(
+                    x=df_t['x'].values,
+                    y=df_t['y'].values,
+                    z=df_t['z'].values,
+                    mode='markers',
+                    marker=dict(
+                        size=df_t['size'],
+                        color=cluster_group.color,
+                        opacity=cluster_group.opacity,
+                        symbol=cluster_group.marker_style,
+                        line=dict(color='black', width=0.0)
+                    ),
+                    hovertext=hovertext,
+                    name=cluster_group.data_name
+                )
             )
-            scatter_list.append(scatter_cluster_group_t)
 
         if show_gc_line:
             gc_line_t = self.rotating_gc_line(x_rf, y_rf)
             scatter_list.append(gc_line_t)
+
         return scatter_list
 
-    def _add_static_traces(self, frame, static_traces, static_traces_times, reference_frame_center, t, static_traces_legendonly):
+    def _add_static_traces(self, frame, static_traces, static_traces_times, reference_frame_center, t):
+        """
+        Adds static traces to the frame if the current time t is in static_traces_times[i].
+        If not, an empty Scatter3d is appended. Also re-centers if a focus group is set.
+        """
+        # Reinitialize static_trace_names each time to keep them up-to-date
         self.static_trace_names = []
 
-        if static_traces is None:
-            static_traces = []
-            static_traces_times = []
+        for i, st in enumerate(static_traces):
+            st_copy = copy.deepcopy(st)
+            if hasattr(st_copy, 'name') and st_copy.name:
+                self.static_trace_names.append(st_copy.name)
 
-        for sc in self.data_collection.get_all_clusters():
-            if sc.show_tracks:
-                track = plot_trace_tracks(sc)
-                static_traces.append(track)
-                static_traces_times.append([0])
+            # Re-center if focusing on a group (except for tracks)
+            if (self.focus_group is not None) and (st_copy.name) and not st_copy.name.endswith('Track'):
+                if st_copy.x is not None:
+                    st_copy.x = np.array(st_copy.x) - reference_frame_center[0]
+                if st_copy.y is not None:
+                    st_copy.y = np.array(st_copy.y) - reference_frame_center[1]
+                if st_copy.z is not None:
+                    st_copy.z = np.array(st_copy.z) - reference_frame_center[2]
 
-        if static_traces and static_traces_times:
-            for i, st in enumerate(static_traces):
-                st_copy = copy.deepcopy(st)
-                self.static_trace_names.append(st_copy['name'])
-                if self.focus_group is not None and not st_copy['name'].endswith('Track'):
-                    if st_copy['x'] is not None:
-                        st_copy['x'] = np.array(st_copy['x']) - reference_frame_center[0]
-                    if st_copy['y'] is not None:
-                        st_copy['y'] = np.array(st_copy['y']) - reference_frame_center[1]
-                    if st_copy['z'] is not None:
-                        st_copy['z'] = np.array(st_copy['z']) - reference_frame_center[2]
-                if t == 0 and not static_traces_legendonly:
-                    visible = True
-                elif t == 0 and static_traces_legendonly:
-                    visible = 'legendonly'
-                elif np.any(np.array(static_traces_times[i]) == t):
-                    visible = True
-                else:
-                    visible = False
-                    st_copy = go.Scatter3d()
-                st_copy['visible'] = visible
+            # Check if time t is in static_traces_times[i]
+            if t in static_traces_times[i]:
+                print('hit', t)
                 frame['data'].append(st_copy)
+            else:
+                frame['data'].append(go.Scatter3d())
 
-    def _initialize_figure(self, frames, static_traces_legendonly):
-        grouping_0 = list(self.trace_grouping_dict.values())[0]
-        starting_frame = copy.deepcopy(frames[0])
+    def _initialize_figure(self, frames):
+        """
+        Sets up the base figure at t=0 using the default grouping.
+        """
+        default_group_key = list(self.trace_grouping_dict.keys())[0]  # e.g. "All"
+        grouping_0 = self.trace_grouping_dict[default_group_key]
+
+        # Find the frame for t=0
+        idx_zero = np.where(self.time == 0)[0][0]
+        starting_frame = frames[idx_zero]
+
         data_updated = []
-
         for trace in starting_frame['data']:
-            trace_name = trace['name']
-            visible = True if trace_name in grouping_0 or trace_name in self.static_trace_names else False
-            visible = 'legendonly' if trace_name in self.static_trace_names and static_traces_legendonly else visible
-            visible = True if trace_name == 'R = 8.12 kpc' else visible
-            trace['visible'] = visible
+            # Determine if this trace is visible under the default grouping
+            visible_flag = self.get_visibility(trace['name'], grouping_0)
+            trace['visible'] = visible_flag
             data_updated.append(trace)
 
-        starting_frame['data'] = data_updated
-
-        self.fig['data'] = starting_frame['data']
-        self.fig['layout'] = self.figure_layout
-        self.fig['frames'] = frames
+        # Copy the starting frame data to define the base figure data
+        self.initial_data = copy.deepcopy(data_updated)
+        self.fig = {
+            'data': data_updated,
+            'layout': self.figure_layout,
+            'frames': frames
+        }
 
     def _add_slider_and_dropdown(self):
+        """
+        Adds the slider, play/pause buttons, and (if applicable) the dropdown menu to the layout.
+        """
         slider = self.generate_slider()
+        play_pause = self.generate_play_pause()
         self.fig['layout']['sliders'] = slider
 
+        # Build the final figure
+        self.figure = go.Figure(self.fig)
+
+        # If multiple groupings exist, add the dropdown
         if len(self.trace_grouping_dict) > 1:
             dropdown = self.dropdown_menu()
+            self.figure.update_layout(updatemenus=dropdown)
             self.fig['layout']['updatemenus'] = dropdown
 
         self.fig_dict = self.fig
-        self.figure = go.Figure(self.fig)
 
-def plot_trace_tracks(sc):
-    """
-    Plots the tracks of a star cluster.
 
-    Parameters:
-    - sc (StarCluster): The star cluster object.
 
-    Returns:
-    go.Scatter3d: A Plotly Scatter3d object representing the tracks of the star cluster.
-    """
-    df_int = sc.df_int
-    df_int = df_int.loc[df_int['time'] > -1*df_int['age_myr']]
-    tracks = go.Scatter3d(
-        x=df_int['x'].iloc[::1],
-        y=df_int['y'].iloc[::1],
-        z=df_int['z'].iloc[::1],
-        mode='markers',
-        marker=dict(
-            size=(sc.max_size/3)*(1 - np.abs(df_int['time'])/np.abs(df_int['time']).max()),
-            #size=(sc.max_size/3)*(1 - np.abs(df_int['time'])/df_int['age_myr']),
-            color=sc.color,
-            opacity=sc.opacity/1.5,
-            line=dict(width=0)
-        ),
-        name=sc.data_name + ' Track'
-    )
-    return tracks
-
+####################################################################################################
 def read_theme(plot):
     """
-    Reads the theme configuration from a YAML file.
-
-    Parameters:
-    - plot (StarClusters3DPlotter): The plotter object.
-
-    Returns:
-    dict: The layout configuration.
+    Reads the theme configuration from a YAML file and sets up figure layout based on
+    the provided figure_theme (e.g., 'light', 'dark', etc.).
     """
-    # theme_dir = './themes'
-    # with open(theme_dir + '/{}.yaml'.format(plot.figure_theme), 'r') as file:
-    #     layout = yaml.safe_load(file)
     with importlib.resources.open_text("oviz.themes", f"{plot.figure_theme}.yaml") as file:
         layout = yaml.safe_load(file)
 
     if plot.figure_theme == 'light':
-        layout['template'] = plot.plot_light_template if plot.plot_light_template else 'ggplot2'
+        layout['template'] = (
+            plot.plot_light_template if plot.plot_light_template else 'ggplot2'
+        )
 
+    # If explicit xyz_ranges are provided, use them; otherwise, use xyz_widths
     if plot.xyz_ranges:
-        x_ranges, y_ranges, z_ranges = plot.xyz_ranges
-        x_low, x_high = x_ranges
-        y_low, y_high = y_ranges
-        z_low, z_high = z_ranges
+        (x_low, x_high), (y_low, y_high), (z_low, z_high) = plot.xyz_ranges
         x_width = x_high - x_low
         y_width = y_high - y_low
         z_width = z_high - z_low
-        xy_aspect = y_width / x_width
-        z_aspect = z_width / x_width
     else:
         x_width, y_width, z_width = plot.xyz_widths
-        x_low, x_high, y_low, y_high, z_low, z_high = -x_width, x_width, -y_width, y_width, -z_width, z_width
-        xy_aspect = y_width / x_width
-        z_aspect = z_width / x_width
+        x_low, x_high = -x_width, x_width
+        y_low, y_high = -y_width, y_width
+        z_low, z_high = -z_width, z_width
+
+    xy_aspect = y_width / x_width
+    z_aspect = z_width / x_width
 
     layout['scene']['xaxis']['range'] = [x_low, x_high]
     layout['scene']['yaxis']['range'] = [y_low, y_high]
@@ -451,3 +529,29 @@ def read_theme(plot):
     layout['scene']['aspectratio']['z'] = z_aspect
 
     return layout
+
+
+def plot_trace_tracks(sc):
+    """
+    Plots the tracks of a star cluster over time < 0 in a Scatter3d trace.
+    The size of markers changes with time in proportion to the cluster's 'max_size'.
+    """
+    df_int = sc.df_int
+    df_int = df_int.loc[(df_int['time'] > -1 * df_int['age_myr']) & (df_int['time'] < 0)]
+
+    tracks = go.Scatter3d(
+        x=df_int['x'].iloc[::1],
+        y=df_int['y'].iloc[::1],
+        z=df_int['z'].iloc[::1],
+        mode='markers',
+        marker=dict(
+            size=(
+                sc.max_size / 3
+            ) * (1 - np.abs(df_int['time']) / np.abs(df_int['time']).max()),
+            color=sc.color,
+            opacity=sc.opacity / 1.5,
+            line=dict(width=0)
+        ),
+        name=sc.data_name + ' Track'
+    )
+    return tracks
