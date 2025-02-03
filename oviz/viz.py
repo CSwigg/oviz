@@ -261,40 +261,40 @@ class Animate3D:
 
         return [
             dict(
-                active=zero_idx,
-                xanchor="left",
-                yanchor="top",
-                transition={"duration": 300, "easing": "bounce-in"},
-                borderwidth=0.,
-                bordercolor=slider_color,
-                bgcolor=slider_color,
-                pad={"b": 0, "t": 0, "l": 0, "r": 0},
-                len=0.5,
-                x=0.27,
-                y=0.,
-                currentvalue={
-                    "font": {"size": 18, "color": slider_color, 'family': 'helvetica'},
-                    'prefix': 'Time (Myr): ',
-                    'visible': True,
-                    'xanchor': 'center',
-                    "offset": 20
-                },
-                steps=[
+            active=zero_idx,
+            xanchor="center",
+            yanchor="top",
+            transition={"duration": 300, "easing": "bounce-in"},
+            borderwidth=0.,
+            bordercolor=slider_color,
+            bgcolor=slider_color,
+            pad={"b": 0, "t": 0, "l": 0, "r": 0},
+            len=0.5,  # Adjusted the length to 0.5 for better centering
+            x=0.5,
+            y=0.,
+            currentvalue={
+                "font": {"size": 18, "color": slider_color, 'family': 'helvetica'},
+                'prefix': 'Time (Myr): ',
+                'visible': True,
+                'xanchor': 'center',
+                "offset": 20
+            },
+            steps=[
+                dict(
+                args=[
+                    [str(t)],
                     dict(
-                        args=[
-                            [str(t)],
-                            dict(
-                                frame=dict(duration=5, easing='linear', redraw=True),
-                                transition=dict(duration=0, easing='linear')
-                            )
-                        ],
-                        label=str(t),
-                        method='animate'
-                    ) for t in time_slider
+                    frame=dict(duration=5, easing='linear', redraw=True),
+                    transition=dict(duration=0, easing='linear')
+                    )
                 ],
-                tickcolor=slider_color,
-                ticklen=10,
-                font=dict(color='rgba(0,0,0,0)', size=8, family='helvetica')
+                label=str(t),
+                method='animate'
+                ) for t in time_slider
+            ],
+            tickcolor=slider_color,
+            ticklen=10,
+            font=dict(color='rgba(0,0,0,0)', size=8, family='helvetica')
             )
         ]
 

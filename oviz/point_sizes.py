@@ -62,7 +62,10 @@ def size_easing(c, min_size, max_size, size_by_n_stars, fade_in_time=5, fade_in_
     else:
         sizes_after = [b] * len(times_after)
 
-    if all(t <= 0):
+    if all(t <= 0) and fade_in_and_out:
+        sizes_after = np.flip(sizes_after)
+        c['size'] = np.concatenate([sizes_future, sizes_after, sizes_birth, sizes_before])
+    elif all(t <= 0) and not fade_in_and_out:
         c['size'] = np.concatenate([sizes_future, sizes_after, sizes_birth, sizes_before])
     else:
         c['size'] = np.concatenate([sizes_before, sizes_birth, sizes_after, sizes_future])
