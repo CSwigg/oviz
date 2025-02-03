@@ -106,15 +106,17 @@ class Animate3D:
         if static_traces_times is None:
             static_traces_times = []
 
-        # Store static trace names (for get_visibility)
-        self.static_trace_names = []
-
-        # Optionally add orbit tracks as "static"
+        # Record static traces – for example, add orbit tracks as static traces
         for sc in self.data_collection.get_all_clusters():
             if sc.show_tracks:
                 track = plot_trace_tracks(sc)
                 static_traces.append(track)
                 static_traces_times.append([0])  # Show only at t=0
+
+        # Save the names of all static traces (if they have a name)
+        self.base_static_trace_names = [
+            st.name for st in static_traces if hasattr(st, 'name') and st.name
+        ]
 
         # Build frames for each time step
         cluster_groups = self.data_collection.get_all_clusters()
@@ -133,7 +135,7 @@ class Animate3D:
             # Create the frame dict
             frame_data = {'data': scatter_list, 'name': str(t_i)}
 
-            # Add static traces if they should appear at this time
+            # Add static traces if they should appear at this time.
             self._add_static_traces(
                 frame_data, static_traces, static_traces_times,
                 reference_frame_center, t_i
@@ -272,7 +274,7 @@ class Animate3D:
                 y=0.,
                 currentvalue={
                     "font": {"size": 18, "color": slider_color, 'family': 'helvetica'},
-                    'prefix': 'Time (Myr ago): ',
+                    'prefix': 'Time (Myr): ',
                     'visible': True,
                     'xanchor': 'center',
                     "offset": 20
@@ -301,21 +303,22 @@ class Animate3D:
         Creates a dropdown menu for selecting trace groups in the 3D plot.
         Uses 'method':'update' so the user’s grouping choice persists 
         even when the slider returns to t=0.
+        In this update we ensure that if a static trace is a track (its name ends with ' Track'),
+        its visibility is determined by whether its base name is in the grouping.
         """
         buttons = []
         for key, traces_list in self.trace_grouping_dict.items():
-            # Build a visibility array for each trace in self.initial_data
             visibility = []
             for trace in self.initial_data:
-                is_visible = self.get_visibility(trace['name'], traces_list)
-                visibility.append(is_visible)
-
+                # Use our get_visibility function so that static tracks (and non‑track statics)
+                # obey the static_traces_legendonly flag.
+                visibility.append(self.get_visibility(trace['name'], traces_list))
             buttons.append(
                 dict(
                     label=key,
                     method='update',
                     args=[
-                        {"visible": visibility},  # updates base data’s 'visible'
+                        {"visible": visibility},
                         {}
                     ]
                 )
@@ -353,20 +356,40 @@ class Animate3D:
 
     def get_visibility(self, trace_name: str, grouping: list):
         """
-        Determines if a given trace_name should be visible under the current grouping.
-        Tracks are handled by checking if 'Track' is appended to the base cluster name.
+        Determines if a given trace (by name) should be visible under the current grouping.
+        
+        - For static non‑track traces (i.e. those in self.base_static_trace_names that do not end with ' Track'):
+          if static_traces_legendonly is True, return "legendonly", otherwise return True.
+        - For static track traces (names ending with ' Track'):
+          check if the corresponding base name is in grouping; if so, return "legendonly" when
+          static_traces_legendonly is True, otherwise return True; if not, return False.
+        - The galactic center line always returns True.
+        - For non‑static traces, return True if the trace name is in grouping.
         """
-        if trace_name in self.static_trace_names and not self.static_traces_legendonly:
+        # For static non-track traces:
+        if trace_name in self.base_static_trace_names and not trace_name.endswith(" Track"):
+            if self.static_traces_legendonly:
+                return "legendonly"
+            else:
+                return True
+
+        # For static track traces:
+        if trace_name.endswith(" Track"):
+            base_name = trace_name.replace(" Track", "")
+            if base_name in grouping:
+                if self.static_traces_legendonly:
+                    return "legendonly"
+                else:
+                    return True
+            else:
+                return False
+
+        # Special case for the galactic center line.
+        if trace_name == 'R = 8.12 kpc':
             return True
-        elif trace_name == 'R = 8.12 kpc':
-            return True
+        # For non-static traces:
         elif trace_name in grouping:
             return True
-
-        # Handle tracks: if the base name is in the grouping, show the track
-        if 'Track' in trace_name:
-            base_name = trace_name.replace(' Track', '')
-            return base_name in grouping
 
         return False
 
@@ -374,6 +397,7 @@ class Animate3D:
         """
         Generate the main cluster Scatter3d traces for a given time.
         Optionally includes the rotating galactic center line if show_gc_line is True.
+        Non-static traces need not be “marked” since the dropdown update will control them.
         """
         scatter_list = []
         for cluster_group in cluster_groups:
@@ -419,15 +443,13 @@ class Animate3D:
     def _add_static_traces(self, frame, static_traces, static_traces_times, reference_frame_center, t):
         """
         Adds static traces to the frame if the current time t is in static_traces_times[i].
-        If not, an empty Scatter3d is appended. Also re-centers if a focus group is set.
+        If not, an empty Scatter3d is appended to override any previously shown trace.
+        Also re-centers if a focus group is set.
+        Here we “mark” these traces as static by adding a meta field.
         """
-        # Reinitialize static_trace_names each time to keep them up-to-date
-        self.static_trace_names = []
-
         for i, st in enumerate(static_traces):
             st_copy = copy.deepcopy(st)
-            if hasattr(st_copy, 'name') and st_copy.name:
-                self.static_trace_names.append(st_copy.name)
+            st_copy['meta'] = {'static': True}
 
             # Re-center if focusing on a group (except for tracks)
             if (self.focus_group is not None) and (st_copy.name) and not st_copy.name.endswith('Track'):
@@ -438,12 +460,15 @@ class Animate3D:
                 if st_copy.z is not None:
                     st_copy.z = np.array(st_copy.z) - reference_frame_center[2]
 
-            # Check if time t is in static_traces_times[i]
             if t in static_traces_times[i]:
-                print('hit', t)
                 frame['data'].append(st_copy)
             else:
-                frame['data'].append(go.Scatter3d())
+                frame['data'].append(go.Scatter3d(
+                    x=[], y=[], z=[],
+                    name=st_copy.name,
+                    visible=False,
+                    meta={'static': True}
+                ))
 
     def _initialize_figure(self, frames):
         """
@@ -454,16 +479,14 @@ class Animate3D:
 
         # Find the frame for t=0
         idx_zero = np.where(self.time == 0)[0][0]
-        starting_frame = frames[idx_zero]
+        starting_frame = copy.deepcopy(frames[idx_zero])
 
         data_updated = []
         for trace in starting_frame['data']:
-            # Determine if this trace is visible under the default grouping
             visible_flag = self.get_visibility(trace['name'], grouping_0)
             trace['visible'] = visible_flag
             data_updated.append(trace)
 
-        # Copy the starting frame data to define the base figure data
         self.initial_data = copy.deepcopy(data_updated)
         self.fig = {
             'data': data_updated,
@@ -479,10 +502,8 @@ class Animate3D:
         play_pause = self.generate_play_pause()
         self.fig['layout']['sliders'] = slider
 
-        # Build the final figure
         self.figure = go.Figure(self.fig)
 
-        # If multiple groupings exist, add the dropdown
         if len(self.trace_grouping_dict) > 1:
             dropdown = self.dropdown_menu()
             self.figure.update_layout(updatemenus=dropdown)
@@ -506,7 +527,6 @@ def read_theme(plot):
             plot.plot_light_template if plot.plot_light_template else 'ggplot2'
         )
 
-    # If explicit xyz_ranges are provided, use them; otherwise, use xyz_widths
     if plot.xyz_ranges:
         (x_low, x_high), (y_low, y_high), (z_low, z_high) = plot.xyz_ranges
         x_width = x_high - x_low
@@ -545,9 +565,8 @@ def plot_trace_tracks(sc):
         z=df_int['z'].iloc[::1],
         mode='markers',
         marker=dict(
-            size=(
-                sc.max_size / 3
-            ) * (1 - np.abs(df_int['time']) / np.abs(df_int['time']).max()),
+            size=(sc.max_size / 3)
+                 * (1 - np.abs(df_int['time']) / np.abs(df_int['time']).max()),
             color=sc.color,
             opacity=sc.opacity / 1.5,
             line=dict(width=0)
