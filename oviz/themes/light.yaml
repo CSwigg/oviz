@@ -135,4 +135,4 @@ legend:
 #     side: 'top'
 #   font: {size: 14, family: 'Helvetica', color: "black"}
 #   itemsizing: 'constant'
-#   bgcolor: 'rgba(0,0,0,0
+#   bgcolor: 'rgba(0,0,0,0)'

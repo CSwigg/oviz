@@ -53,7 +53,7 @@ scene:
     tickfont: {size: 14, color: "gray", family: 'helvetica'}
     showgrid: false
     gridcolor: "gray"
-    zeroline: true
+    zeroline: false
     zerolinewidth: 1.0
     zerolinecolor: "gray"
     backgroundcolor: 'black'
