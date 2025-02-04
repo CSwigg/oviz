@@ -23,7 +23,7 @@ scene:
     gridcolor: "gray"
     zeroline: false
     zerolinecolor: "gray"
-    zerolinewidth: 4.0
+    zerolinewidth: 1.0
     backgroundcolor: 'black'
     showline: true
     mirror: true
@@ -38,7 +38,7 @@ scene:
     showgrid: false
     gridcolor: "gray"
     zeroline: false
-    zerolinewidth: 4.0
+    zerolinewidth: 1.0
     zerolinecolor: "gray"
     backgroundcolor: 'black'
     showline: true
@@ -53,8 +53,8 @@ scene:
     tickfont: {size: 14, color: "gray", family: 'helvetica'}
     showgrid: false
     gridcolor: "gray"
-    zeroline: false
-    zerolinewidth: 4.0
+    zeroline: true
+    zerolinewidth: 1.0
     zerolinecolor: "gray"
     backgroundcolor: 'black'
     showline: true
