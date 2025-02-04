@@ -408,13 +408,20 @@ class Animate3D:
 
             df_t = df_int[df_int['time'] == t]
             hovertext = (
-                df_t['name'].astype(str)
-                + ': '
-                + df_t['age_myr'].round(1).astype(str)
-                + ' Myr'
+                '<b style="font-size:16px;">' + df_t['name'].str.replace('_', ' ').astype(str) + '</b>' + '<br>'  # Bold cluster name
+                + cluster_group.data_name + '<br>'  # Group name
+                + 'Age = ' + df_t['age_myr'].round(1).astype(str) + ' Myr' + '<br>'  # Cluster age
             )
+
             if 'n_stars' in df_t.columns:
-                hovertext += ', N = ' + df_t['n_stars'].astype(str)
+                hovertext += 'N = ' + df_t['n_stars'].astype(str) + ' stars <br>'  # Number of stars
+
+            hovertext += (
+                '(x,y,z) = (' +
+                df_t['x'].round(0).astype(int).astype(str) + ', ' +
+                df_t['y'].round(0).astype(int).astype(str) + ', ' +
+                df_t['z'].round(0).astype(int).astype(str) + ')'
+            )
 
             scatter_list.append(
                 go.Scatter3d(
@@ -430,6 +437,8 @@ class Animate3D:
                         line=dict(color='black', width=0.0)
                     ),
                     hovertext=hovertext,
+                    hoverinfo='text',  # This removes default x, y, z
+                    hovertemplate='%{hovertext}<extra></extra>',  # This ensures only custom hovertext is shown
                     name=cluster_group.data_name
                 )
             )
@@ -571,6 +580,7 @@ def plot_trace_tracks(sc):
             opacity=sc.opacity / 1.5,
             line=dict(width=0)
         ),
+        hoverinfo='none',
         name=sc.data_name + ' Track'
     )
     return tracks

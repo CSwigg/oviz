@@ -18,7 +18,8 @@ scene:
     title_font: {size: 18, color: "black", family: 'helvetica'}
     tickfont: {size: 14, color: "black", family: 'helvetica'}
     showgrid: false
-    gridcolor: "black"
+    gridwidth: 1.0
+    gridcolor: "gray"
     zeroline: false
     zerolinecolor: "gray"
     showline: true
@@ -33,10 +34,11 @@ scene:
     title_font: {size: 18, color: "black", family: 'helvetica'}
     tickfont: {size: 14, color: "black", family: 'helvetica'}
     showgrid: false
-    gridcolor: "black"
-    zeroline: true
+    gridwidth: 1.0
+    gridcolor: "gray"
+    zeroline: false
     zerolinecolor: "gray"
-    showline: false
+    showline: true
     mirror: true
     showspikes: false
     nticks: 5
@@ -48,11 +50,12 @@ scene:
     title_font: {size: 18, color: "black", family: 'helvetica'}
     tickfont: {size: 14, color: "black", family: 'helvetica'}
     showgrid: false
-    gridcolor: "black"
-    zeroline: true
+    gridwidth: 1.0
+    gridcolor: "gray"
+    zeroline: false
     zerolinecolor: "gray"
     zerolinewidth: 1.0
-    showline: false
+    showline: true
     showspikes: false
     mirror: true
     nticks: 5
@@ -134,5 +137,3 @@ legend:
 #     font: {size: 14, color: "black"}
 #     side: 'top'
 #   font: {size: 14, family: 'Helvetica', color: "black"}
-#   itemsizing: 'constant'
-#   bgcolor: 'rgba(0,0,0,0)'

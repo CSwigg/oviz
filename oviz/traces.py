@@ -139,7 +139,7 @@ class Trace:
             'z_gc_cyl': zint_gc.flatten()
         })
         
-        if self.size_by_n_stars:
+        if 'n_stars' in self.df.columns:
             df_int['n_stars'] = np.repeat(self.df['n_stars'].values, len(time))
 
         df_int['age_myr'] = np.repeat(self.df['age_myr'].values, len(time))
