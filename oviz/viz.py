@@ -87,7 +87,8 @@ class Animate3D:
                 time, reference_frame_center=reference_frame_center
             )
         # Set cluster sizes for fade effects
-        self.data_collection.set_all_cluster_sizes(fade_in_time, fade_in_and_out)
+        self.fade_in_time = fade_in_time
+        self.data_collection.set_all_cluster_sizes(self.fade_in_time, fade_in_and_out)
 
         # Prepare time arrays and figure layout
         self.time = np.array(self.data_collection.time, dtype=np.float64)
@@ -109,7 +110,7 @@ class Animate3D:
         # Record static traces – for example, add orbit tracks as static traces
         for sc in self.data_collection.get_all_clusters():
             if sc.show_tracks:
-                track = plot_trace_tracks(sc)
+                track = plot_trace_tracks(sc, self.fade_in_time)
                 static_traces.append(track)
                 static_traces_times.append([0])  # Show only at t=0
 
@@ -326,6 +327,8 @@ class Animate3D:
 
         bg_color = self.figure_layout_dict['scene']['xaxis']['backgroundcolor']
         text_color = 'black' if self.figure_theme != 'dark' else 'white'
+        for button in buttons:
+            button['args'][1]['hoverlabel'] = dict(bgcolor='gray')
 
         return [
             dict(
@@ -418,9 +421,9 @@ class Animate3D:
 
             hovertext += (
                 '(x,y,z) = (' +
-                df_t['x'].round(0).astype(int).astype(str) + ', ' +
-                df_t['y'].round(0).astype(int).astype(str) + ', ' +
-                df_t['z'].round(0).astype(int).astype(str) + ')'
+                df_t['x'].round(1).astype(str) + ', ' +
+                df_t['y'].round(1).astype(str) + ', ' +
+                df_t['z'].round(1).astype(str) + ')'
             )
 
             scatter_list.append(
@@ -560,13 +563,18 @@ def read_theme(plot):
     return layout
 
 
-def plot_trace_tracks(sc):
+def plot_trace_tracks(sc, fade_in_time=0):
     """
     Plots the tracks of a star cluster over time < 0 in a Scatter3d trace.
     The size of markers changes with time in proportion to the cluster's 'max_size'.
     """
     df_int = sc.df_int
-    df_int = df_int.loc[(df_int['time'] > -1 * df_int['age_myr']) & (df_int['time'] < 0)]
+
+    max_size = sc.max_size/2
+    min_size = sc.min_size/2
+    df_int = df_int.loc[(df_int['time'] <= 0) & (df_int['time'] > -1 * df_int['age_myr'] - fade_in_time)]
+
+    size_fade = min_size + (max_size - min_size) * (1 - np.abs(df_int['time']) / (df_int['age_myr'] + fade_in_time))
 
     tracks = go.Scatter3d(
         x=df_int['x'].iloc[::1],
@@ -574,8 +582,7 @@ def plot_trace_tracks(sc):
         z=df_int['z'].iloc[::1],
         mode='markers',
         marker=dict(
-            size=(sc.max_size / 3)
-                 * (1 - np.abs(df_int['time']) / np.abs(df_int['time']).max()),
+            size=size_fade,
             color=sc.color,
             opacity=sc.opacity / 1.5,
             line=dict(width=0)
