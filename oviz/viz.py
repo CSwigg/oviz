@@ -262,87 +262,40 @@ class Animate3D:
 
         return [
             dict(
-            active=zero_idx,
-            xanchor="center",
-            yanchor="top",
-            transition={"duration": 300, "easing": "bounce-in"},
-            borderwidth=0.,
-            bordercolor=slider_color,
-            bgcolor=slider_color,
-            pad={"b": 0, "t": 0, "l": 0, "r": 0},
-            len=0.5,  # Adjusted the length to 0.5 for better centering
-            x=0.5,
-            y=0.,
-            currentvalue={
-                "font": {"size": 18, "color": slider_color, 'family': 'helvetica'},
-                'prefix': 'Time (Myr): ',
-                'visible': True,
-                'xanchor': 'center',
-                "offset": 20
-            },
-            steps=[
-                dict(
-                args=[
-                    [str(t)],
+                active=zero_idx,
+                xanchor="center",
+                yanchor="top",
+                transition={"duration": 300, "easing": "bounce-in"},
+                borderwidth=0.0,
+                bordercolor=slider_color,
+                bgcolor=slider_color,
+                pad={"b": 0, "t": 0, "l": 0, "r": 0},
+                len=0.5,     # Shrink slider to half its default length
+                x=0.5,       # Center slider on screen
+                y=0.0,       # Keep it at the bottom
+                currentvalue={
+                    "font": {"size": 18, "color": slider_color, "family": "helvetica"},
+                    "prefix": "Time (Myr): ",
+                    "visible": True,
+                    "xanchor": "center",
+                    "offset": 20
+                },
+                steps=[
                     dict(
-                    frame=dict(duration=5, easing='linear', redraw=True),
-                    transition=dict(duration=0, easing='linear')
-                    )
+                        args=[
+                            [str(t)],
+                            dict(
+                                frame=dict(duration=5, easing="linear", redraw=True),
+                                transition=dict(duration=0, easing="linear")
+                            )
+                        ],
+                        label=str(t),
+                        method="animate"
+                    ) for t in time_slider
                 ],
-                label=str(t),
-                method='animate'
-                ) for t in time_slider
-            ],
-            tickcolor=slider_color,
-            ticklen=10,
-            font=dict(color='rgba(0,0,0,0)', size=8, family='helvetica')
-            )
-        ]
-
-    def dropdown_menu(self):
-        """
-        Creates a dropdown menu for selecting trace groups in the 3D plot.
-        Uses 'method':'update' so the user’s grouping choice persists 
-        even when the slider returns to t=0.
-        In this update we ensure that if a static trace is a track (its name ends with ' Track'),
-        its visibility is determined by whether its base name is in the grouping.
-        """
-        buttons = []
-        for key, traces_list in self.trace_grouping_dict.items():
-            visibility = []
-            for trace in self.initial_data:
-                # Use our get_visibility function so that static tracks (and non‑track statics)
-                # obey the static_traces_legendonly flag.
-                visibility.append(self.get_visibility(trace['name'], traces_list))
-            buttons.append(
-                dict(
-                    label=key,
-                    method='update',
-                    args=[
-                        {"visible": visibility},
-                        {}
-                    ]
-                )
-            )
-
-        bg_color = self.figure_layout_dict['scene']['xaxis']['backgroundcolor']
-        text_color = 'black' if self.figure_theme != 'dark' else 'white'
-        for button in buttons:
-            button['args'][1]['hoverlabel'] = dict(bgcolor='gray')
-
-        return [
-            dict(
-                buttons=buttons,
-                direction='down',
-                pad={'r': 10, 't': 10},
-                showactive=True,
-                x=0,
-                xanchor='left',
-                y=1.1,
-                yanchor='top',
-                bgcolor=bg_color,
-                font=dict(color=text_color, family='helvetica', size=14),
-                active=0
+                tickcolor=slider_color,
+                ticklen=10,
+                font=dict(color="rgba(0,0,0,0)", size=8, family="helvetica")
             )
         ]
 

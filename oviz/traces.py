@@ -138,6 +138,7 @@ class Trace:
             'phi_gc': np.rad2deg(phiint_gc.flatten()),
             'z_gc_cyl': zint_gc.flatten()
         })
+
         
         if 'n_stars' in self.df.columns:
             df_int['n_stars'] = np.repeat(self.df['n_stars'].values, len(time))
@@ -147,6 +148,8 @@ class Trace:
         df_int['time'] = np.tile(time, len(self.df))
 
         df_int.reset_index(drop=True, inplace=True)
+
+        df_int = orbit_maker.coordFIX_to_coordROT(df_int)
         return df_int
     
     def set_age_based_sizes(self, fade_in_time, fade_in_and_out):
