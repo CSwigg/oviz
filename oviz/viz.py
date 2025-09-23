@@ -22,9 +22,17 @@ class Animate3D:
         plotly_light_template=None,
         figure_layout=None,
         figure_layout_dict=None,
-        trace_grouping_dict=None
+        trace_grouping_dict=None,
+        potential=None,
+        vo=236.,
+        ro=8.122,
+        zo=0.0208
     ):
         self.data_collection = data_collection
+        self.potential = potential
+        self.vo = vo
+        self.ro = ro
+        self.zo = zo
         self.figure_theme = figure_theme
         self.figure_layout = figure_layout
         self.figure_layout_dict = figure_layout_dict
@@ -84,7 +92,10 @@ class Animate3D:
         # Integrate orbits if not already integrated
         if self.data_collection.time is None:
             self.data_collection.integrate_all_orbits(
-                time, reference_frame_center=reference_frame_center
+                time, 
+                reference_frame_center=reference_frame_center,
+                potential=self.potential,
+                vo=self.vo, ro=self.ro, zo=self.zo
             )
         # Set cluster sizes for fade effects
         self.fade_in_time = fade_in_time
@@ -97,7 +108,7 @@ class Animate3D:
         self.static_traces_legendonly = static_traces_legendonly
 
         x_rf_int, y_rf_int, z_rf_int = orbit_maker.get_center_orbit_coords(
-            time, reference_frame_center
+            time, reference_frame_center, potential=self.potential, vo=self.vo, ro=self.ro, zo=self.zo
         )
         self.coords_center_int = (x_rf_int, y_rf_int, z_rf_int)
 

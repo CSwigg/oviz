@@ -167,7 +167,7 @@ class Trace:
         self.df_int = df_int_new_sizes
         self.sizes_set = True
 
-    def integrate_orbits(self, time, reference_frame_center=None):
+    def integrate_orbits(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
         """
         Integrate the orbits of the star cluster.
 
@@ -177,12 +177,25 @@ class Trace:
             Array of time points.
         reference_frame_center : tuple, optional
             Center of the reference frame.
+        potential : galpy potential, optional
+            Galactic potential to use. Defaults to MWPotential2014.
+        vo : float, optional
+            Circular velocity at the solar radius in km/s. Defaults to 236.
+        ro : float, optional
+            Solar radius in kpc. Defaults to 8.122.
+        zo : float, optional
+            Solar height above the galactic plane in kpc. Defaults to 0.0208.
         """
 
         if self.shifted_rf is not None:
             reference_frame_center = self.shifted_rf
 
-        self.cluster_int_coords = orbit_maker.create_orbit(self.coordinates, time, reference_frame_center=reference_frame_center)
+        self.cluster_int_coords = orbit_maker.create_orbit(
+            self.coordinates, time, 
+            reference_frame_center=reference_frame_center,
+            potential=potential,
+            vo=vo, ro=ro, zo=zo
+        )
         self.df_int = self.create_integrated_dataframe(time)
         self.integrated = True
 
@@ -276,6 +289,10 @@ class TraceCollection:
         """
         self.clusters = []
         self.time = None
+        self.potential = None
+        self.vo = None
+        self.ro = None
+        self.zo = None
         self.add_clusters(clusters)
 
     def add_clusters(self, clusters):
@@ -352,7 +369,7 @@ class TraceCollection:
         """
         return self.clusters
 
-    def integrate_all_orbits(self, time, reference_frame_center=None):
+    def integrate_all_orbits(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
         """
         Integrate the orbits of all star clusters in the collection.
 
@@ -362,10 +379,27 @@ class TraceCollection:
             Array of time points.
         reference_frame_center : tuple, optional
             Center of the reference frame.
+        potential : galpy potential, optional
+            Galactic potential to use. Defaults to MWPotential2014.
+        vo : float, optional
+            Circular velocity at the solar radius in km/s. Defaults to 236.
+        ro : float, optional
+            Solar radius in kpc. Defaults to 8.122.
+        zo : float, optional
+            Solar height above the galactic plane in kpc. Defaults to 0.0208.
         """
         self.time = time
+        self.potential = potential
+        self.vo = vo
+        self.ro = ro
+        self.zo = zo
         for cluster in self.clusters:
-            cluster.integrate_orbits(self.time, reference_frame_center=reference_frame_center)
+            cluster.integrate_orbits(
+                self.time, 
+                reference_frame_center=reference_frame_center,
+                potential=potential,
+                vo=vo, ro=ro, zo=zo
+            )
     
     def set_all_cluster_sizes(self, fade_in_time, fade_in_and_out):
         """
