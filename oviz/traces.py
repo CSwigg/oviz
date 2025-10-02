@@ -29,6 +29,10 @@ class Trace:
         Whether to show tracks (default is False).
     size_by_n_stars : bool, optional
         Whether to size by number of stars (default is False).
+    fade_in_time : float, optional
+        Duration of time for size easing (default is None, uses make_plot default).
+    fade_in_and_out : bool, optional
+        Whether to fade in and out (default is None, uses make_plot default).
 
     Attributes
     ----------
@@ -56,14 +60,18 @@ class Trace:
         Whether to show tracks.
     size_by_n_stars : bool
         Whether to size by number of stars.
+    fade_in_time : float or None
+        Duration of time for size easing (instance-specific).
+    fade_in_and_out : bool or None
+        Whether to fade in and out (instance-specific).
 
     Methods
     -------
-    __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False)
+    __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False, fade_in_time=None, fade_in_and_out=None)
         Initializes the Trace object.
     create_integrated_dataframe(self, time)
         Creates an integrated DataFrame of the star cluster.
-    set_age_based_sizes(self, fade_in_time, fade_in_and_out)
+    set_age_based_sizes(self, fade_in_time=None, fade_in_and_out=None)
         Set the point sizes for clusters based on the number of stars.
     integrate_orbits(self, time, reference_frame_center=None)
         Integrates the orbits of the star cluster.
@@ -75,7 +83,7 @@ class Trace:
         Returns a copy of the Trace object.
     """
 
-    def __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False, shifted_rf = None):
+    def __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False, shifted_rf = None, fade_in_time=None, fade_in_and_out=None):
         self.df = df
         self.data_name = data_name
         self.cluster_int_coords = None
@@ -91,6 +99,8 @@ class Trace:
         self.show_tracks = show_tracks
         self.size_by_n_stars = size_by_n_stars
         self.shifted_rf = shifted_rf
+        self.fade_in_time = fade_in_time
+        self.fade_in_and_out = fade_in_and_out
 
         necessary_columns = ['x', 'y', 'z', 'U', 'V', 'W', 'name', 'age_myr']
         if self.size_by_n_stars:
@@ -152,18 +162,29 @@ class Trace:
         df_int = orbit_maker.coordFIX_to_coordROT(df_int)
         return df_int
     
-    def set_age_based_sizes(self, fade_in_time, fade_in_and_out):
+    def set_age_based_sizes(self, fade_in_time=None, fade_in_and_out=None):
         """
         Set the point sizes for clusters based on the number of stars.
 
         Parameters
         ----------
-        fade_in_time : int
-            Duration of time for size easing.
-        fade_in_and_out : bool
-            Whether to fade in and out.
+        fade_in_time : float, optional
+            Duration of time for size easing. If None, uses instance value.
+        fade_in_and_out : bool, optional
+            Whether to fade in and out. If None, uses instance value.
         """
-        df_int_new_sizes = point_sizes.set_cluster_point_sizes(self.df_int, min_size=self.min_size, max_size=self.max_size, fade_in_time=fade_in_time, fade_in_and_out=fade_in_and_out, size_by_n_stars=self.size_by_n_stars)
+        # Use instance values if parameters are None
+        actual_fade_in_time = fade_in_time if fade_in_time is not None else self.fade_in_time
+        actual_fade_in_and_out = fade_in_and_out if fade_in_and_out is not None else self.fade_in_and_out
+        
+        df_int_new_sizes = point_sizes.set_cluster_point_sizes(
+            self.df_int, 
+            min_size=self.min_size, 
+            max_size=self.max_size, 
+            fade_in_time=actual_fade_in_time, 
+            fade_in_and_out=actual_fade_in_and_out, 
+            size_by_n_stars=self.size_by_n_stars
+        )
         self.df_int = df_int_new_sizes
         self.sizes_set = True
 
@@ -408,13 +429,16 @@ class TraceCollection:
         Parameters
         ----------
         fade_in_time : int
-            Duration of time for size easing.
+            Duration of time for size easing (used as default for clusters without instance values).
         fade_in_and_out : bool
-            Whether to fade in and out.
+            Whether to fade in and out (used as default for clusters without instance values).
         """
         for cluster in self.clusters:
             if not cluster.sizes_set:
-                cluster.set_age_based_sizes(fade_in_time, fade_in_and_out)
+                # Use cluster's instance values if they exist, otherwise use the provided defaults
+                cluster_fade_in_time = cluster.fade_in_time if cluster.fade_in_time is not None else fade_in_time
+                cluster_fade_in_and_out = cluster.fade_in_and_out if cluster.fade_in_and_out is not None else fade_in_and_out
+                cluster.set_age_based_sizes(cluster_fade_in_time, cluster_fade_in_and_out)
 
     def limit_all_cluster_ages(self, age_min, age_max):
         """
