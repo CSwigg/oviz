@@ -75,7 +75,8 @@ class Animate3D:
         focus_group=None,
         fade_in_time=5,
         fade_in_and_out=False,
-        show_gc_line=True
+        show_gc_line=True,
+        coord_system='centered'
     ):
         """
         Main method to generate a 3D animated plot. Integrates orbits if necessary and
@@ -107,6 +108,11 @@ class Animate3D:
         self.focus_group = focus_group
         self.static_traces_legendonly = static_traces_legendonly
 
+        if coord_system not in ('centered', 'rot'):
+            raise ValueError("coord_system must be either 'centered' or 'rot'")
+
+        self.coord_system = coord_system
+
         x_rf_int, y_rf_int, z_rf_int = orbit_maker.get_center_orbit_coords(
             time, reference_frame_center, potential=self.potential, vo=self.vo, ro=self.ro, zo=self.zo
         )
@@ -121,7 +127,7 @@ class Animate3D:
         # Record static traces – for example, add orbit tracks as static traces
         for sc in self.data_collection.get_all_clusters():
             if sc.show_tracks:
-                track = plot_trace_tracks(sc, self.fade_in_time)
+                track = plot_trace_tracks(sc, self.fade_in_time, coord_system=self.coord_system)
                 static_traces.append(track)
                 static_traces_times.append([0])  # Show only at t=0
 
@@ -138,7 +144,7 @@ class Animate3D:
         for i, t_i in enumerate(self.time):
             # Generate scatter traces for each cluster at time t_i
             scatter_list = self._generate_scatter_list(
-                cluster_groups, t_i, x_rf_int[i], y_rf_int[i], show_gc_line
+                cluster_groups, t_i, x_rf_int[i], y_rf_int[i], show_gc_line, coord_system=self.coord_system
             )
             # Remove any 'visible' property so frames won't override grouping
             for sc_tr in scatter_list:
@@ -173,6 +179,56 @@ class Animate3D:
             self.figure.write_html(save_name, auto_play=False)
 
         return self.figure
+
+    def _coordFIX_to_coordROT(self, x_gc_pc, y_gc_pc, z_gc_pc, time_myr):
+        """Apply the same fixed->rotating transform used in orbit_maker.coordFIX_to_coordROT.
+
+        This avoids importing pandas here and keeps the GC-line transform consistent.
+        """
+        w0 = self.vo / self.ro
+        w1 = w0 / 10.0
+        t1 = time_myr * 0.01022
+        r_sun_pc = self.ro * 1000.0
+
+        r = np.sqrt(x_gc_pc**2 + y_gc_pc**2)
+        theta = np.arctan2(x_gc_pc, y_gc_pc)
+
+        x_rot = r_sun_pc - r * np.cos(theta - w1 * t1 + np.pi / 2.0)
+        y_rot = r * np.sin(theta - w1 * t1 + np.pi / 2.0)
+        z_rot = z_gc_pc
+        return x_rot, y_rot, z_rot
+
+    def rotating_gc_line_rot(self, t_myr):
+        """GC reference line in the same rotating coordinate system as x_rot/y_rot/z_rot."""
+        n_marks = 1000
+        R = -8.122 * np.ones(n_marks)
+        phi = np.linspace(-180, 180, n_marks)
+        z = np.zeros(n_marks)
+        gc_line = SkyCoord(
+            rho=R * u.kpc,
+            phi=phi * u.deg,
+            z=[0.] * len(R) * u.pc,
+            frame='galactocentric',
+            representation_type='cylindrical'
+        )
+
+        x_gc_pc = gc_line.galactocentric.cartesian.x.value * 1000.0
+        y_gc_pc = gc_line.galactocentric.cartesian.y.value * 1000.0
+        z_gc_pc = gc_line.galactocentric.cartesian.z.value * 1000.0
+
+        x_rot, y_rot, z_rot = self._coordFIX_to_coordROT(x_gc_pc, y_gc_pc, z_gc_pc, float(t_myr))
+
+        line_color = 'gray' if self.figure_theme == 'dark' else 'black'
+        return go.Scatter3d(
+            x=x_rot,
+            y=y_rot,
+            z=z_rot,
+            mode='lines',
+            line=dict(color=line_color, width=3., dash='solid'),
+            visible=True,
+            name='R = 8.12 kpc',
+            hovertext='R = 8.12 kpc'
+        )
 
     def rotating_gc_line(self, x_sub, y_sub):
         """
@@ -407,13 +463,18 @@ class Animate3D:
 
         return False
 
-    def _generate_scatter_list(self, cluster_groups, t, x_rf, y_rf, show_gc_line):
+    def _generate_scatter_list(self, cluster_groups, t, x_rf, y_rf, show_gc_line, coord_system='centered'):
         """
         Generate the main cluster Scatter3d traces for a given time.
         Optionally includes the rotating galactic center line if show_gc_line is True.
         Non-static traces need not be “marked” since the dropdown update will control them.
         """
         scatter_list = []
+        if coord_system == 'rot':
+            x_col, y_col, z_col = 'x_rot', 'y_rot', 'z_rot'
+        else:
+            x_col, y_col, z_col = 'x', 'y', 'z'
+
         for cluster_group in cluster_groups:
             assert cluster_group.integrated
             df_int = cluster_group.df_int
@@ -431,17 +492,17 @@ class Animate3D:
                 hovertext += 'N = ' + df_t['n_stars'].astype(str) + ' stars <br>'  # Number of stars
 
             hovertext += (
-                '(x,y,z) = (' +
-                df_t['x'].round(1).astype(str) + ', ' +
-                df_t['y'].round(1).astype(str) + ', ' +
-                df_t['z'].round(1).astype(str) + ')'
+                f'({x_col},{y_col},{z_col}) = (' +
+                df_t[x_col].round(1).astype(str) + ', ' +
+                df_t[y_col].round(1).astype(str) + ', ' +
+                df_t[z_col].round(1).astype(str) + ')'
             )
 
             scatter_list.append(
                 go.Scatter3d(
-                    x=df_t['x'].values,
-                    y=df_t['y'].values,
-                    z=df_t['z'].values,
+                    x=df_t[x_col].values,
+                    y=df_t[y_col].values,
+                    z=df_t[z_col].values,
                     mode='markers',
                     marker=dict(
                         size=df_t['size'],
@@ -458,7 +519,10 @@ class Animate3D:
             )
 
         if show_gc_line:
-            gc_line_t = self.rotating_gc_line(x_rf, y_rf)
+            if coord_system == 'rot':
+                gc_line_t = self.rotating_gc_line_rot(t)
+            else:
+                gc_line_t = self.rotating_gc_line(x_rf, y_rf)
             scatter_list.append(gc_line_t)
 
         return scatter_list
@@ -517,6 +581,9 @@ class Animate3D:
             'frames': frames
         }
 
+    # Backward-compatible alias (in case external code used the old name)
+    initialize_figure = _initialize_figure
+
     def _add_slider_and_dropdown(self):
         """
         Adds the slider, play/pause buttons, and (if applicable) the dropdown menu to the layout.
@@ -574,7 +641,7 @@ def read_theme(plot):
     return layout
 
 
-def plot_trace_tracks(sc, fade_in_time=0):
+def plot_trace_tracks(sc, fade_in_time=0, coord_system='centered'):
     """
     Plots the tracks of a star cluster over time < 0 in a Scatter3d trace.
     The size of markers changes with time in proportion to the cluster's 'max_size'.
@@ -587,10 +654,15 @@ def plot_trace_tracks(sc, fade_in_time=0):
 
     size_fade = min_size + (max_size - min_size) * (1 - np.abs(df_int['time']) / (df_int['age_myr'] + fade_in_time))
 
+    if coord_system == 'rot':
+        x_col, y_col, z_col = 'x_rot', 'y_rot', 'z_rot'
+    else:
+        x_col, y_col, z_col = 'x', 'y', 'z'
+
     tracks = go.Scatter3d(
-        x=df_int['x'].iloc[::1],
-        y=df_int['y'].iloc[::1],
-        z=df_int['z'].iloc[::1],
+        x=df_int[x_col].iloc[::1],
+        y=df_int[y_col].iloc[::1],
+        z=df_int[z_col].iloc[::1],
         mode='markers',
         marker=dict(
             size=size_fade,
