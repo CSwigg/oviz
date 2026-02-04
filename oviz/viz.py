@@ -1,6 +1,7 @@
 import numpy as np
 import yaml
 import plotly.graph_objects as go
+import plotly.colors as pc
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import importlib.resources
@@ -75,6 +76,8 @@ class Animate3D:
         focus_group=None,
         fade_in_time=5,
         fade_in_and_out=False,
+        fade_in_and_disp=False,
+        disp_time=0,
         show_gc_line=True,
         coord_system='centered'
     ):
@@ -100,7 +103,12 @@ class Animate3D:
             )
         # Set cluster sizes for fade effects
         self.fade_in_time = fade_in_time
-        self.data_collection.set_all_cluster_sizes(self.fade_in_time, fade_in_and_out)
+        self.data_collection.set_all_cluster_sizes(
+            self.fade_in_time,
+            fade_in_and_out,
+            fade_in_and_disp,
+            disp_time
+        )
 
         # Prepare time arrays and figure layout
         self.time = np.array(self.data_collection.time, dtype=np.float64)
@@ -481,11 +489,18 @@ class Animate3D:
             if df_int.empty:
                 continue
 
-            df_t = df_int[df_int['time'] == t]
+            # Use isclose to avoid float equality pitfalls (e.g. -10.0 vs -10).
+            time_mask = np.isclose(df_int['time'].to_numpy(dtype=float), float(t), rtol=0.0, atol=1e-9)
+            df_t = df_int[time_mask]
+            if df_t.empty:
+                continue
+            age_at_t = df_t['age_myr'] + t
+            age_present = df_t['age_myr']
             hovertext = (
                 '<b style="font-size:16px;">' + df_t['name'].str.replace('_', ' ').astype(str) + '</b>' + '<br>'  # Bold cluster name
                 + cluster_group.data_name + '<br>'  # Group name
-                + 'Age = ' + df_t['age_myr'].round(1).astype(str) + ' Myr' + '<br>'  # Cluster age
+                + 'Age (now) = ' + age_present.round(1).astype(str) + ' Myr' + '<br>'
+                + 'Age (t) = ' + age_at_t.round(1).astype(str) + ' Myr' + '<br>'  # Cluster age at time t
             )
 
             if 'n_stars' in df_t.columns:
@@ -498,19 +513,33 @@ class Animate3D:
                 df_t[z_col].round(1).astype(str) + ')'
             )
 
+            marker_dict = dict(
+                size=df_t['size'],
+                symbol=cluster_group.marker_style,
+                line=dict(color='black', width=0.0)
+            )
+
+            marker_dict.update(opacity=cluster_group.opacity)
+            if cluster_group.colormap:
+                age_full = df_int['age_myr'] + df_int['time']
+                cmin = cluster_group.cmin if cluster_group.cmin is not None else float(age_full.min())
+                cmax = cluster_group.cmax if cluster_group.cmax is not None else float(age_full.max())
+                marker_dict.update(
+                    color=age_at_t.values,
+                    colorscale=cluster_group.colormap,
+                    cmin=cmin,
+                    cmax=cmax
+                )
+            else:
+                marker_dict.update(color=cluster_group.color)
+
             scatter_list.append(
                 go.Scatter3d(
                     x=df_t[x_col].values,
                     y=df_t[y_col].values,
                     z=df_t[z_col].values,
                     mode='markers',
-                    marker=dict(
-                        size=df_t['size'],
-                        color=cluster_group.color,
-                        opacity=cluster_group.opacity,
-                        symbol=cluster_group.marker_style,
-                        line=dict(color='black', width=0.0)
-                    ),
+                    marker=marker_dict,
                     hovertext=hovertext,
                     hoverinfo='text',  # This removes default x, y, z
                     hovertemplate='%{hovertext}<extra></extra>',  # This ensures only custom hovertext is shown
