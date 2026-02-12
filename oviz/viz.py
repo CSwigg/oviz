@@ -74,6 +74,7 @@ class Animate3D:
         static_traces_legendonly=False,
         reference_frame_center=None,
         focus_group=None,
+        galactic_mode=False,
         fade_in_time=5,
         fade_in_and_out=False,
         fade_in_and_disp=False,
@@ -112,7 +113,29 @@ class Animate3D:
 
         # Prepare time arrays and figure layout
         self.time = np.array(self.data_collection.time, dtype=np.float64)
-        self.figure_layout = go.Layout(self.figure_layout_dict)
+
+        # Build the figure layout, optionally overriding for galactic mode.
+        layout_dict = copy.deepcopy(self.figure_layout_dict)
+        if galactic_mode:
+            # Force symmetric x/y ranges to +/- 10 kpc (in pc).
+            xy_half_range = 10000
+            layout_dict['scene']['xaxis']['range'] = [-xy_half_range, xy_half_range]
+            layout_dict['scene']['yaxis']['range'] = [-xy_half_range, xy_half_range]
+
+            # Recompute aspect ratio using the existing z range.
+            z_low, z_high = layout_dict['scene']['zaxis'].get('range', [-300, 300])
+            z_width = float(z_high) - float(z_low)
+            x_width = 2.0 * float(xy_half_range)
+            layout_dict['scene']['aspectratio']['x'] = 1
+            layout_dict['scene']['aspectratio']['y'] = 1
+            layout_dict['scene']['aspectratio']['z'] = z_width / x_width
+
+            # Remove 3D axes lines/ticks/labels entirely.
+            layout_dict['scene']['xaxis']['visible'] = False
+            layout_dict['scene']['yaxis']['visible'] = False
+            layout_dict['scene']['zaxis']['visible'] = False
+
+        self.figure_layout = go.Layout(layout_dict)
         self.focus_group = focus_group
         self.static_traces_legendonly = static_traces_legendonly
 
@@ -152,7 +175,14 @@ class Animate3D:
         for i, t_i in enumerate(self.time):
             # Generate scatter traces for each cluster at time t_i
             scatter_list = self._generate_scatter_list(
-                cluster_groups, t_i, x_rf_int[i], y_rf_int[i], show_gc_line, coord_system=self.coord_system
+                cluster_groups,
+                t_i,
+                x_rf_int[i],
+                y_rf_int[i],
+                z_rf_int[i],
+                show_gc_line,
+                galactic_mode,
+                coord_system=self.coord_system
             )
             # Remove any 'visible' property so frames won't override grouping
             for sc_tr in scatter_list:
@@ -465,13 +495,27 @@ class Animate3D:
         # Special case for the galactic center line.
         if trace_name == 'R = 8.12 kpc':
             return True
+
+        # In galactic mode we add a "Galactic Center" marker that should always remain visible.
+        if trace_name == 'GC':
+            return True
         # For non-static traces:
         elif trace_name in grouping:
             return True
 
         return False
 
-    def _generate_scatter_list(self, cluster_groups, t, x_rf, y_rf, show_gc_line, coord_system='centered'):
+    def _generate_scatter_list(
+        self,
+        cluster_groups,
+        t,
+        x_rf,
+        y_rf,
+        z_rf,
+        show_gc_line,
+        galactic_mode,
+        coord_system='centered'
+    ):
         """
         Generate the main cluster Scatter3d traces for a given time.
         Optionally includes the rotating galactic center line if show_gc_line is True.
@@ -553,6 +597,59 @@ class Animate3D:
             else:
                 gc_line_t = self.rotating_gc_line(x_rf, y_rf)
             scatter_list.append(gc_line_t)
+
+        if galactic_mode:
+            # Theme-aware styling for the GC marker/text.
+            if self.figure_theme == 'dark':
+                gc_marker_color = 'gray'
+                gc_text_color = 'gray'
+                gc_line_color = 'black'
+            elif self.figure_theme in ('light', 'solarized_light'):
+                gc_marker_color = 'black'
+                gc_text_color = 'black'
+                gc_line_color = 'white'
+            else:
+                # Fallback for other themes (e.g. 'gray')
+                gc_marker_color = 'black'
+                gc_text_color = 'black'
+                gc_line_color = 'white'
+
+            # Plot the Galactic Center in the same moving reference-frame as the clusters.
+            if coord_system == 'rot':
+                # In the rotating Galactocentric frame, the GC is at the origin (r=0),
+                # which maps to a constant position under the fixed->rotating transform.
+                x_gc, y_gc, z_gc = self._coordFIX_to_coordROT(
+                    np.array([0.0]), np.array([0.0]), np.array([0.0]), float(t)
+                )
+                x_gc, y_gc, z_gc = float(x_gc[0]), float(y_gc[0]), float(z_gc[0])
+            else:
+                # In the centered (LSR) frame, shift the fixed GC heliocentric position
+                # by the same integrated reference-frame orbit used for clusters.
+                x_gc = (self.ro * 1000.0) - float(x_rf)
+                y_gc = 0.0 - float(y_rf)
+                z_gc = 0.0 - float(z_rf)
+
+            scatter_list.append(
+                go.Scatter3d(
+                    x=[x_gc],
+                    y=[y_gc],
+                    z=[z_gc],
+                    mode='markers+text',
+                    marker=dict(
+                        size=12,
+                        color=gc_marker_color,
+                        symbol='circle',
+                        line=dict(color=gc_line_color, width=2)
+                    ),
+                    text=['GC'],
+                    textposition='top center',
+                    textfont=dict(color=gc_text_color, size=14, family='helvetica'),
+                    name='GC',
+                    hovertext='Galactic Center',
+                    hoverinfo='text',
+                    hovertemplate='%{hovertext}<extra></extra>'
+                )
+            )
 
         return scatter_list
 
