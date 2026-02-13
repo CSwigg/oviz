@@ -584,6 +584,8 @@ class Animate3D:
                     z=df_t[z_col].values,
                     mode='markers',
                     marker=marker_dict,
+                    customdata=np.column_stack((age_present.to_numpy(dtype=float), age_at_t.to_numpy(dtype=float))),
+                    meta={'trace_kind': 'cluster'},
                     hovertext=hovertext,
                     hoverinfo='text',  # This removes default x, y, z
                     hovertemplate='%{hovertext}<extra></extra>',  # This ensures only custom hovertext is shown
