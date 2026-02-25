@@ -24,6 +24,41 @@ GALACTIC_RADIUS_TRACE_NAMES = (
     | {f'{name} Label' for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
 )
 
+SPIRAL_ARMS = {
+    "Perseus": {
+        "theta_ref_deg": -13.0,
+        "theta_range_deg": (-20.9, 88.2),
+        "Rref_kpc": 10.88,
+        "psi_deg": 9.8,
+        "Omega_p": 17.82
+    },
+    "Local": {
+        "theta_ref_deg": -2.3,
+        "theta_range_deg": (-26.9, 26.6),
+        "Rref_kpc": 8.69,
+        "psi_deg": 8.9,
+        "Omega_p": 33.76
+    },
+    "Sagittarius": {
+        "theta_ref_deg": 3.5,
+        "theta_range_deg": (-39.3, 67.7),
+        "Rref_kpc": 7.10,
+        "psi_deg": 10.6,
+        "Omega_p": 26.10
+    },
+    "Scutum": {
+        "theta_ref_deg": -4.8,
+        "theta_range_deg": (-32.7, 100.9),
+        "Rref_kpc": 6.02,
+        "psi_deg": 14.9,
+        "Omega_p": 49.81
+    },
+}
+SPIRAL_ARM_TRACE_NAMES = {f"Spiral Arm: {name}" for name in SPIRAL_ARMS}
+SEC_PER_MYR = 1e6 * 365.25 * 24 * 3600.0
+KPC_IN_KM = 3.085677581e16
+KM_S_PER_KPC_TO_RAD_MYR = (1.0 / KPC_IN_KM) * SEC_PER_MYR
+
 class Animate3D:
     """
     Class for generating 3D plots of star clusters.
@@ -99,6 +134,7 @@ class Animate3D:
         coord_system='centered',
         show_galactic_guides=True,
         show_galactic_center_circles=True,
+        include_spiral_arms=False,
         camera_zoom_factor=1.0,
         galactic_reference_opacity=0.5
     ):
@@ -225,6 +261,7 @@ class Animate3D:
                 galactic_mode,
                 show_galactic_guides=show_galactic_guides,
                 show_galactic_center_circles=show_galactic_center_circles,
+                include_spiral_arms=include_spiral_arms,
                 coord_system=self.coord_system
             )
             # Remove any 'visible' property so frames won't override grouping
@@ -432,6 +469,74 @@ class Animate3D:
                     angle_deg=315.0
                 )
             )
+        return traces
+
+    def _log_spiral_radius(self, theta_rad, rref_kpc, theta_ref_rad, psi_rad):
+        """Log-spiral radius model: ln(R/Rref) = -(theta - theta_ref) * tan(psi)."""
+        return float(rref_kpc) * np.exp(-(theta_rad - theta_ref_rad) * np.tan(psi_rad))
+
+    def _spiral_arm_coords_at_time(self, arm_params, t_myr, npts=500):
+        """Compute galactocentric and heliocentric-flipped spiral-arm coordinates at time t."""
+        theta_ref = np.deg2rad(float(arm_params["theta_ref_deg"]))
+        th0_deg, th1_deg = arm_params["theta_range_deg"]
+        theta_min = np.deg2rad(float(th0_deg))
+        theta_max = np.deg2rad(float(th1_deg))
+        rref_kpc = float(arm_params["Rref_kpc"])
+        psi_rad = np.deg2rad(float(arm_params["psi_deg"]))
+        omega_p = float(arm_params["Omega_p"])  # km/s/kpc
+        omega_rad_myr = omega_p * KM_S_PER_KPC_TO_RAD_MYR
+        # OVIZ uses lookback time as negative t; convert to positive lookback
+        # so the arm evolution matches the intended pattern-speed convention.
+        lookback_myr = -float(t_myr)
+        dtheta = omega_rad_myr * lookback_myr
+
+        theta_ref_t = theta_ref - dtheta
+        theta_t = np.linspace(theta_min - dtheta, theta_max - dtheta, int(npts))
+        r_kpc_t = self._log_spiral_radius(theta_t, rref_kpc, theta_ref_t, psi_rad)
+        r_pc_t = r_kpc_t * 1000.0
+
+        # Galactocentric Cartesian in the paper's convention.
+        x_gc = r_pc_t * np.cos(theta_t)
+        y_gc = r_pc_t * np.sin(theta_t)
+        z_gc = np.zeros_like(x_gc)
+
+        # Convert to heliocentric XY with flipped x so GC lies at +R0 on x.
+        r0_pc = float(self.ro) * 1000.0
+        x_helio = -(x_gc - r0_pc)
+        y_helio = y_gc
+        return x_gc, y_gc, z_gc, x_helio, y_helio
+
+    def _build_spiral_arm_traces(self, t, x_rf, y_rf, z_rf, coord_system='centered'):
+        """Build moving spiral-arm line traces for the current time."""
+        traces = []
+        for arm_name, arm_params in SPIRAL_ARMS.items():
+            x_gc, y_gc, z_gc, x_helio, y_helio = self._spiral_arm_coords_at_time(
+                arm_params, t_myr=t, npts=500
+            )
+
+            if coord_system == 'rot':
+                x_vals, y_vals, z_vals = self._coordFIX_to_coordROT(
+                    x_gc, y_gc, z_gc, float(t)
+                )
+            else:
+                x_vals = x_helio - float(x_rf)
+                y_vals = y_helio - float(y_rf)
+                z_vals = z_gc - float(z_rf)
+
+            traces.append(
+                go.Scatter3d(
+                    x=x_vals,
+                    y=y_vals,
+                    z=z_vals,
+                    mode='lines',
+                    line=dict(color='cyan', width=14.0, dash='solid'),
+                    opacity=0.3,
+                    name=f'Spiral Arm: {arm_name}',
+                    showlegend=True,
+                    hoverinfo='skip'
+                )
+            )
+
         return traces
 
     def _sync_scene_axis_style(self, layout_dict):
@@ -781,6 +886,8 @@ class Animate3D:
         # Galactic-mode reference guides should not depend on grouping.
         if trace_name in GALACTIC_GUIDE_TRACE_NAMES:
             return True
+        if trace_name in SPIRAL_ARM_TRACE_NAMES:
+            return True
         # For non-static traces:
         elif trace_name in grouping:
             return True
@@ -798,6 +905,7 @@ class Animate3D:
         galactic_mode,
         show_galactic_guides=True,
         show_galactic_center_circles=True,
+        include_spiral_arms=False,
         coord_system='centered'
     ):
         """
@@ -904,6 +1012,13 @@ class Animate3D:
 
         if galactic_mode and show_galactic_guides:
             scatter_list.extend(self._build_galactic_guide_traces(t, sun_x=sun_x, sun_y=sun_y))
+
+        if galactic_mode and include_spiral_arms:
+            scatter_list.extend(
+                self._build_spiral_arm_traces(
+                    t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+                )
+            )
 
         if galactic_mode and show_galactic_center_circles:
             # Theme-aware styling for the GC marker/text.
