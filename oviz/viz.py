@@ -8,6 +8,22 @@ import importlib.resources
 from . import orbit_maker
 import copy
 
+GALACTIC_GUIDE_TRACE_NAMES = {
+    'Galactic Quadrants',
+    'Galactic l Ticks',
+    'Galactic l Labels',
+    'Galactic Z Axis'
+}
+GALACTIC_RADIUS_CIRCLE_DEFS = (
+    (4.0, 'R = 4 kpc'),
+    (8.122, 'R = 8.12 kpc'),
+    (12.0, 'R = 12 kpc'),
+)
+GALACTIC_RADIUS_TRACE_NAMES = (
+    {name for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
+    | {f'{name} Label' for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
+)
+
 class Animate3D:
     """
     Class for generating 3D plots of star clusters.
@@ -80,7 +96,11 @@ class Animate3D:
         fade_in_and_disp=False,
         disp_time=0,
         show_gc_line=True,
-        coord_system='centered'
+        coord_system='centered',
+        show_galactic_guides=True,
+        show_galactic_center_circles=True,
+        camera_zoom_factor=1.0,
+        galactic_reference_opacity=0.5
     ):
         """
         Main method to generate a 3D animated plot. Integrates orbits if necessary and
@@ -114,8 +134,29 @@ class Animate3D:
         # Prepare time arrays and figure layout
         self.time = np.array(self.data_collection.time, dtype=np.float64)
 
+        if camera_zoom_factor <= 0:
+            raise ValueError("camera_zoom_factor must be > 0.")
+        if (galactic_reference_opacity < 0) or (galactic_reference_opacity > 1):
+            raise ValueError("galactic_reference_opacity must be between 0 and 1.")
+
+        self.galactic_reference_opacity = float(galactic_reference_opacity)
+
         # Build the figure layout, optionally overriding for galactic mode.
         layout_dict = copy.deepcopy(self.figure_layout_dict)
+
+        # Apply initial camera zoom by scaling eye distance from the scene center.
+        # Larger factor => zoom in (camera moves closer), smaller => zoom out.
+        if 'scene' in layout_dict:
+            camera_dict = layout_dict['scene'].setdefault('camera', {})
+            eye_dict = camera_dict.get('eye')
+            if isinstance(eye_dict, dict):
+                for axis_key in ('x', 'y', 'z'):
+                    if axis_key in eye_dict and eye_dict[axis_key] is not None:
+                        eye_dict[axis_key] = float(eye_dict[axis_key]) / float(camera_zoom_factor)
+
+        # Keep xyz axis lines stylistically aligned with each other.
+        self._sync_scene_axis_style(layout_dict)
+
         if galactic_mode:
             # Force symmetric x/y ranges to +/- 10 kpc (in pc).
             xy_half_range = 10000
@@ -182,6 +223,8 @@ class Animate3D:
                 z_rf_int[i],
                 show_gc_line,
                 galactic_mode,
+                show_galactic_guides=show_galactic_guides,
+                show_galactic_center_circles=show_galactic_center_circles,
                 coord_system=self.coord_system
             )
             # Remove any 'visible' property so frames won't override grouping
@@ -238,45 +281,41 @@ class Animate3D:
 
     def rotating_gc_line_rot(self, t_myr):
         """GC reference line in the same rotating coordinate system as x_rot/y_rot/z_rot."""
-        n_marks = 1000
-        R = -8.122 * np.ones(n_marks)
-        phi = np.linspace(-180, 180, n_marks)
-        z = np.zeros(n_marks)
-        gc_line = SkyCoord(
-            rho=R * u.kpc,
-            phi=phi * u.deg,
-            z=[0.] * len(R) * u.pc,
-            frame='galactocentric',
-            representation_type='cylindrical'
+        return self._radius_circle_trace(
+            radius_kpc=8.122,
+            trace_name='R = 8.12 kpc',
+            coord_system='rot',
+            t_myr=float(t_myr)
         )
 
-        x_gc_pc = gc_line.galactocentric.cartesian.x.value * 1000.0
-        y_gc_pc = gc_line.galactocentric.cartesian.y.value * 1000.0
-        z_gc_pc = gc_line.galactocentric.cartesian.z.value * 1000.0
-
-        x_rot, y_rot, z_rot = self._coordFIX_to_coordROT(x_gc_pc, y_gc_pc, z_gc_pc, float(t_myr))
-
-        line_color = 'gray' if self.figure_theme == 'dark' else 'black'
-        return go.Scatter3d(
-            x=x_rot,
-            y=y_rot,
-            z=z_rot,
-            mode='lines',
-            line=dict(color=line_color, width=3., dash='solid'),
-            visible=True,
-            name='R = 8.12 kpc',
-            hovertext='R = 8.12 kpc'
-        )
-
-    def rotating_gc_line(self, x_sub, y_sub):
+    def rotating_gc_line(self, x_sub, y_sub, z_sub=0.0):
         """
         Generates a rotating galactic center line, displayed as a 3D line in the figure.
         """
+        return self._radius_circle_trace(
+            radius_kpc=8.122,
+            trace_name='R = 8.12 kpc',
+            coord_system='centered',
+            x_sub=float(x_sub),
+            y_sub=float(y_sub),
+            z_sub=float(z_sub)
+        )
+
+    def _radius_circle_trace(
+        self,
+        radius_kpc,
+        trace_name,
+        coord_system='centered',
+        t_myr=0.0,
+        x_sub=0.0,
+        y_sub=0.0,
+        z_sub=0.0
+    ):
+        """Create a galactocentric radius circle trace in the selected coordinate system."""
         n_marks = 1000
-        R = -8.122 * np.ones(n_marks)
+        R = -float(radius_kpc) * np.ones(n_marks)
         phi = np.linspace(-180, 180, n_marks)
-        z = np.zeros(n_marks)
-        gc_line = SkyCoord(
+        radius_circle = SkyCoord(
             rho=R * u.kpc,
             phi=phi * u.deg,
             z=[0.] * len(R) * u.pc,
@@ -284,21 +323,262 @@ class Animate3D:
             representation_type='cylindrical'
         )
 
-        x_corr = gc_line.galactic.cartesian.x.value * 1000 - x_sub
-        y_corr = gc_line.galactic.cartesian.y.value * 1000 - y_sub
-        z_corr = [0.] * len(x_corr)
+        if coord_system == 'rot':
+            x_gc_pc = radius_circle.galactocentric.cartesian.x.value * 1000.0
+            y_gc_pc = radius_circle.galactocentric.cartesian.y.value * 1000.0
+            z_gc_pc = radius_circle.galactocentric.cartesian.z.value * 1000.0
+            x_vals, y_vals, z_vals = self._coordFIX_to_coordROT(
+                x_gc_pc, y_gc_pc, z_gc_pc, float(t_myr)
+            )
+        else:
+            x_vals = radius_circle.galactic.cartesian.x.value * 1000.0 - float(x_sub)
+            y_vals = radius_circle.galactic.cartesian.y.value * 1000.0 - float(y_sub)
+            z_vals = radius_circle.galactic.cartesian.z.value * 1000.0 - float(z_sub)
 
-        line_color = 'gray' if self.figure_theme == 'dark' else 'black'
+        line_color = self._reference_line_color()
         return go.Scatter3d(
-            x=x_corr,
-            y=y_corr,
-            z=z_corr,
+            x=x_vals,
+            y=y_vals,
+            z=z_vals,
             mode='lines',
-            line=dict(color=line_color, width=3., dash='solid'),
+            line=dict(color=line_color, width=self._reference_line_width(), dash='solid'),
+            opacity=self._reference_opacity(),
             visible=True,
-            name='R = 8.12 kpc',
-            hovertext='R = 8.12 kpc'
+            name=trace_name,
+            showlegend=False,
+            hovertext=trace_name
         )
+
+    def _reference_line_color(self):
+        """Common reference-line color used by GC circle and galactic guides."""
+        return 'gray' if self.figure_theme == 'dark' else 'black'
+
+    def _reference_line_width(self):
+        """Common line width for galactic reference overlays."""
+        return 2.0
+
+    def _reference_opacity(self):
+        """Common opacity for galactic reference overlays."""
+        return float(getattr(self, 'galactic_reference_opacity', 0.5))
+
+    def _galactic_center_position(self, t, x_rf, y_rf, z_rf, coord_system='centered'):
+        """Galactic-center position in the active reference frame at time t."""
+        if coord_system == 'rot':
+            x_gc, y_gc, z_gc = self._coordFIX_to_coordROT(
+                np.array([0.0]), np.array([0.0]), np.array([0.0]), float(t)
+            )
+            return float(x_gc[0]), float(y_gc[0]), float(z_gc[0])
+        return (
+            (self.ro * 1000.0) - float(x_rf),
+            0.0 - float(y_rf),
+            0.0 - float(z_rf)
+        )
+
+    def _radius_label_trace(
+        self,
+        radius_kpc,
+        label_text,
+        x_center,
+        y_center,
+        z_center,
+        angle_deg=315.0
+    ):
+        """Place a radius label at a defined angle where 0 deg points +y away from GC."""
+        angle_rad = np.deg2rad(float(angle_deg))
+        radius_pc = float(radius_kpc) * 1000.0
+        x_label = float(x_center) + radius_pc * np.sin(angle_rad)
+        y_label = float(y_center) + radius_pc * np.cos(angle_rad)
+        z_label = float(z_center)
+
+        return go.Scatter3d(
+            x=[x_label],
+            y=[y_label],
+            z=[z_label],
+            mode='text',
+            text=[label_text],
+            textposition='middle left',
+            textfont=dict(color=self._reference_line_color(), size=12, family='helvetica'),
+            opacity=self._reference_opacity(),
+            name=f'{label_text} Label',
+            showlegend=False,
+            hoverinfo='skip'
+        )
+
+    def _build_galactic_circles_with_labels(self, t, x_rf, y_rf, z_rf, coord_system='centered'):
+        """Build R=4/8.12/12 kpc circles and their labels."""
+        x_gc, y_gc, z_gc = self._galactic_center_position(
+            t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+        )
+        traces = []
+        for radius_kpc, label_text in GALACTIC_RADIUS_CIRCLE_DEFS:
+            traces.append(
+                self._radius_circle_trace(
+                    radius_kpc=radius_kpc,
+                    trace_name=label_text,
+                    coord_system=coord_system,
+                    t_myr=float(t),
+                    x_sub=float(x_rf),
+                    y_sub=float(y_rf),
+                    z_sub=float(z_rf)
+                )
+            )
+            traces.append(
+                self._radius_label_trace(
+                    radius_kpc=radius_kpc,
+                    label_text=label_text,
+                    x_center=x_gc,
+                    y_center=y_gc,
+                    z_center=z_gc,
+                    angle_deg=315.0
+                )
+            )
+        return traces
+
+    def _sync_scene_axis_style(self, layout_dict):
+        """Apply a shared x-axis line style to y/z so xyz axis lines stay visually consistent."""
+        scene = layout_dict.get('scene', {})
+        xaxis = scene.get('xaxis', {})
+        linecolor = xaxis.get('linecolor')
+        linewidth = xaxis.get('linewidth')
+        showline = xaxis.get('showline')
+
+        for axis_name in ('yaxis', 'zaxis'):
+            axis = scene.setdefault(axis_name, {})
+            if linecolor is not None:
+                axis['linecolor'] = linecolor
+            if linewidth is not None:
+                axis['linewidth'] = linewidth
+            if showline is not None:
+                axis['showline'] = showline
+
+    def _build_galactic_guide_traces(self, t, sun_x=0.0, sun_y=0.0):
+        """Quadrant guides, l-ticks, and z-axis line shown only at t=0."""
+        show_guides = np.isclose(float(t), 0.0, rtol=0.0, atol=1e-9)
+        guide_color = self._reference_line_color()
+        guide_width = self._reference_line_width()
+        guide_opacity = self._reference_opacity()
+
+        try:
+            x_min, x_max = [float(v) for v in self.figure_layout['scene']['xaxis']['range']]
+        except Exception:
+            x_min, x_max = -10000.0, 10000.0
+        try:
+            y_min, y_max = [float(v) for v in self.figure_layout['scene']['yaxis']['range']]
+        except Exception:
+            y_min, y_max = -10000.0, 10000.0
+        try:
+            z_min, z_max = [float(v) for v in self.figure_layout['scene']['zaxis']['range']]
+        except Exception:
+            z_min, z_max = -300.0, 300.0
+
+        if not show_guides:
+            return [
+                go.Scatter3d(
+                    x=[], y=[], z=[],
+                    mode='lines',
+                    name='Galactic Quadrants',
+                    showlegend=False,
+                    hoverinfo='skip'
+                ),
+                go.Scatter3d(
+                    x=[], y=[], z=[],
+                    mode='lines',
+                    name='Galactic l Ticks',
+                    showlegend=False,
+                    hoverinfo='skip'
+                ),
+                go.Scatter3d(
+                    x=[], y=[], z=[],
+                    mode='text',
+                    text=[],
+                    name='Galactic l Labels',
+                    showlegend=False,
+                    hoverinfo='skip'
+                ),
+                go.Scatter3d(
+                    x=[], y=[], z=[],
+                    mode='lines',
+                    name='Galactic Z Axis',
+                    showlegend=False,
+                    hoverinfo='skip'
+                ),
+            ]
+
+        # Cross-hair lines dividing the Galactic plane into quadrants around the Sun.
+        quadrants = go.Scatter3d(
+            x=[x_min, x_max, None, sun_x, sun_x],
+            y=[sun_y, sun_y, None, y_min, y_max],
+            z=[0.0, 0.0, None, 0.0, 0.0],
+            mode='lines',
+            line=dict(color=guide_color, width=guide_width, dash='solid'),
+            opacity=guide_opacity,
+            name='Galactic Quadrants',
+            showlegend=False,
+            hoverinfo='skip'
+        )
+
+        # Tick marks and labels for l = 0, 90, 180, 270 around the Sun.
+        xy_span = min(x_max - x_min, y_max - y_min)
+        tick_radius = 0.055 * xy_span
+        tick_half = 0.007 * xy_span
+        label_gap = 0.010 * xy_span
+        label_z = (0.03 * (z_max - z_min)) + 50.0
+        angles = [0.0, np.pi / 2.0, np.pi, 3.0 * np.pi / 2.0]
+        labels = ['l=0', 'l=90', 'l=180', 'l=270']
+
+        x_ticks, y_ticks, z_ticks = [], [], []
+        x_labels, y_labels, z_labels = [], [], []
+
+        for angle in angles:
+            c = np.cos(angle)
+            s = np.sin(angle)
+            r0 = tick_radius - tick_half
+            r1 = tick_radius + tick_half
+            x_ticks.extend([sun_x + r0 * c, sun_x + r1 * c, None])
+            y_ticks.extend([sun_y + r0 * s, sun_y + r1 * s, None])
+            z_ticks.extend([0.0, 0.0, None])
+            x_labels.append(sun_x + (tick_radius + tick_half + label_gap) * c)
+            y_labels.append(sun_y + (tick_radius + tick_half + label_gap) * s)
+            z_labels.append(label_z)
+
+        l_ticks = go.Scatter3d(
+            x=x_ticks,
+            y=y_ticks,
+            z=z_ticks,
+            mode='lines',
+            line=dict(color=guide_color, width=guide_width, dash='solid'),
+            opacity=guide_opacity,
+            name='Galactic l Ticks',
+            showlegend=False,
+            hoverinfo='skip'
+        )
+
+        l_labels = go.Scatter3d(
+            x=x_labels,
+            y=y_labels,
+            z=z_labels,
+            mode='text',
+            text=labels,
+            textposition='middle center',
+            textfont=dict(color=guide_color, size=12, family='helvetica'),
+            name='Galactic l Labels',
+            showlegend=False,
+            hoverinfo='skip'
+        )
+
+        z_axis = go.Scatter3d(
+            x=[sun_x, sun_x],
+            y=[sun_y, sun_y],
+            z=[z_min, z_max],
+            mode='lines',
+            line=dict(color=guide_color, width=guide_width, dash='solid'),
+            opacity=guide_opacity,
+            name='Galactic Z Axis',
+            showlegend=False,
+            hoverinfo='skip'
+        )
+
+        return [quadrants, l_ticks, l_labels, z_axis]
 
     def generate_play_pause(self):
         """
@@ -471,7 +751,7 @@ class Animate3D:
         - For static track traces (names ending with ' Track'):
           check if the corresponding base name is in grouping; if so, return "legendonly" when
           static_traces_legendonly is True, otherwise return True; if not, return False.
-        - The galactic center line always returns True.
+        - Galactic reference overlays (GC, radius circles/labels, guide overlays) always return True.
         - For non‑static traces, return True if the trace name is in grouping.
         """
         # For static non-track traces:
@@ -492,12 +772,14 @@ class Animate3D:
             else:
                 return False
 
-        # Special case for the galactic center line.
-        if trace_name == 'R = 8.12 kpc':
+        # In galactic mode, GC and galactic radius circles/labels stay visible.
+        if trace_name == 'GC':
+            return True
+        if trace_name in GALACTIC_RADIUS_TRACE_NAMES:
             return True
 
-        # In galactic mode we add a "Galactic Center" marker that should always remain visible.
-        if trace_name == 'GC':
+        # Galactic-mode reference guides should not depend on grouping.
+        if trace_name in GALACTIC_GUIDE_TRACE_NAMES:
             return True
         # For non-static traces:
         elif trace_name in grouping:
@@ -514,11 +796,14 @@ class Animate3D:
         z_rf,
         show_gc_line,
         galactic_mode,
+        show_galactic_guides=True,
+        show_galactic_center_circles=True,
         coord_system='centered'
     ):
         """
         Generate the main cluster Scatter3d traces for a given time.
-        Optionally includes the rotating galactic center line if show_gc_line is True.
+        Optionally includes the non-galactic R=8.12 line when show_gc_line is True.
+        In galactic mode, dedicated toggles control guide overlays and GC/circle overlays.
         Non-static traces need not be “marked” since the dropdown update will control them.
         """
         scatter_list = []
@@ -526,6 +811,9 @@ class Animate3D:
             x_col, y_col, z_col = 'x_rot', 'y_rot', 'z_rot'
         else:
             x_col, y_col, z_col = 'x', 'y', 'z'
+
+        sun_x = 0.0
+        sun_y = 0.0
 
         for cluster_group in cluster_groups:
             assert cluster_group.integrated
@@ -538,6 +826,11 @@ class Animate3D:
             df_t = df_int[time_mask]
             if df_t.empty:
                 continue
+
+            if cluster_group.data_name.strip().lower() == 'sun':
+                sun_x = float(np.nanmedian(df_t[x_col].to_numpy(dtype=float)))
+                sun_y = float(np.nanmedian(df_t[y_col].to_numpy(dtype=float)))
+
             age_at_t = df_t['age_myr'] + t
             age_present = df_t['age_myr']
             hovertext = (
@@ -593,14 +886,26 @@ class Animate3D:
                 )
             )
 
-        if show_gc_line:
-            if coord_system == 'rot':
-                gc_line_t = self.rotating_gc_line_rot(t)
-            else:
-                gc_line_t = self.rotating_gc_line(x_rf, y_rf)
-            scatter_list.append(gc_line_t)
+        show_reference_lines = show_gc_line if not galactic_mode else show_galactic_center_circles
 
-        if galactic_mode:
+        if show_reference_lines:
+            if galactic_mode:
+                scatter_list.extend(
+                    self._build_galactic_circles_with_labels(
+                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+                    )
+                )
+            else:
+                if coord_system == 'rot':
+                    gc_line_t = self.rotating_gc_line_rot(t)
+                else:
+                    gc_line_t = self.rotating_gc_line(x_rf, y_rf, z_rf)
+                scatter_list.append(gc_line_t)
+
+        if galactic_mode and show_galactic_guides:
+            scatter_list.extend(self._build_galactic_guide_traces(t, sun_x=sun_x, sun_y=sun_y))
+
+        if galactic_mode and show_galactic_center_circles:
             # Theme-aware styling for the GC marker/text.
             if self.figure_theme == 'dark':
                 gc_marker_color = 'gray'
@@ -616,20 +921,9 @@ class Animate3D:
                 gc_text_color = 'black'
                 gc_line_color = 'white'
 
-            # Plot the Galactic Center in the same moving reference-frame as the clusters.
-            if coord_system == 'rot':
-                # In the rotating Galactocentric frame, the GC is at the origin (r=0),
-                # which maps to a constant position under the fixed->rotating transform.
-                x_gc, y_gc, z_gc = self._coordFIX_to_coordROT(
-                    np.array([0.0]), np.array([0.0]), np.array([0.0]), float(t)
-                )
-                x_gc, y_gc, z_gc = float(x_gc[0]), float(y_gc[0]), float(z_gc[0])
-            else:
-                # In the centered (LSR) frame, shift the fixed GC heliocentric position
-                # by the same integrated reference-frame orbit used for clusters.
-                x_gc = (self.ro * 1000.0) - float(x_rf)
-                y_gc = 0.0 - float(y_rf)
-                z_gc = 0.0 - float(z_rf)
+            x_gc, y_gc, z_gc = self._galactic_center_position(
+                t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+            )
 
             scatter_list.append(
                 go.Scatter3d(
@@ -641,12 +935,14 @@ class Animate3D:
                         size=12,
                         color=gc_marker_color,
                         symbol='circle',
+                        opacity=self._reference_opacity(),
                         line=dict(color=gc_line_color, width=2)
                     ),
                     text=['GC'],
                     textposition='top center',
                     textfont=dict(color=gc_text_color, size=14, family='helvetica'),
                     name='GC',
+                    showlegend=False,
                     hovertext='Galactic Center',
                     hoverinfo='text',
                     hovertemplate='%{hovertext}<extra></extra>'
