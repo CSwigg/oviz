@@ -2,11 +2,13 @@ import numpy as np
 import yaml
 import plotly.graph_objects as go
 import plotly.colors as pc
+import json
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import importlib.resources
 from . import orbit_maker
 import copy
+import pandas as pd
 
 GALACTIC_GUIDE_TRACE_NAMES = {
     'Galactic Quadrants',
@@ -58,6 +60,8 @@ SPIRAL_ARM_TRACE_NAMES = {f"Spiral Arm: {name}" for name in SPIRAL_ARMS}
 SEC_PER_MYR = 1e6 * 365.25 * 24 * 3600.0
 KPC_IN_KM = 3.085677581e16
 KM_S_PER_KPC_TO_RAD_MYR = (1.0 / KPC_IN_KM) * SEC_PER_MYR
+KDE_TRACE_PREFIX = 'Age KDE: '
+KDE_TIME_MARKER_TRACE_NAME = 'Age KDE Time Marker'
 
 class Animate3D:
     """
@@ -135,6 +139,8 @@ class Animate3D:
         show_galactic_guides=True,
         show_galactic_center_circles=True,
         include_spiral_arms=False,
+        show_age_kde_inset=False,
+        age_kde_bandwidth_myr=3.0,
         camera_zoom_factor=1.0,
         galactic_reference_opacity=0.5
     ):
@@ -176,9 +182,18 @@ class Animate3D:
             raise ValueError("galactic_reference_opacity must be between 0 and 1.")
 
         self.galactic_reference_opacity = float(galactic_reference_opacity)
+        self.show_age_kde_inset = bool(show_age_kde_inset)
+        if age_kde_bandwidth_myr <= 0:
+            raise ValueError("age_kde_bandwidth_myr must be > 0.")
+        self.age_kde_bandwidth_myr = float(age_kde_bandwidth_myr)
 
         # Build the figure layout, optionally overriding for galactic mode.
         layout_dict = copy.deepcopy(self.figure_layout_dict)
+        layout_dict['dragmode'] = 'turntable'
+        layout_dict.setdefault('scene', {})['dragmode'] = 'turntable'
+
+        if self.show_age_kde_inset:
+            self._setup_age_kde_inset(layout_dict)
 
         # Apply initial camera zoom by scaling eye distance from the scene center.
         # Larger factor => zoom in (camera moves closer), smaller => zoom out.
@@ -294,7 +309,8 @@ class Animate3D:
             self.figure.show()
         if save_name:
             self.figure.update_layout(width=None, height=None)
-            self.figure.write_html(save_name, auto_play=False)
+            post_script = self._legend_kde_sync_post_script() if self.show_age_kde_inset else None
+            self.figure.write_html(save_name, auto_play=False, post_script=post_script)
 
         return self.figure
 
@@ -315,6 +331,69 @@ class Animate3D:
         y_rot = r * np.sin(theta - w1 * t1 + np.pi / 2.0)
         z_rot = z_gc_pc
         return x_rot, y_rot, z_rot
+
+    def _legend_kde_sync_post_script(self):
+        """JS hook for exported HTML: mirror 3D legend toggles to matching KDE traces."""
+        script = """
+(function() {
+  const gd = document.getElementById('{plot_id}');
+  if (!gd) return;
+
+  const KDE_PREFIX = __KDE_PREFIX__;
+  const KDE_MARKER_NAME = __KDE_MARKER_NAME__;
+  let syncing = false;
+
+  function findKdeIndexForTraceName(traceName) {
+    const kdeName = KDE_PREFIX + traceName;
+    for (let i = 0; i < gd.data.length; i++) {
+      const tr = gd.data[i];
+      if (tr && tr.name === kdeName) return i;
+    }
+    return -1;
+  }
+
+  gd.on('plotly_restyle', function(eventData) {
+    if (syncing) return;
+    if (!eventData || eventData.length < 2) return;
+
+    const update = eventData[0] || {};
+    const idxRaw = eventData[1] || [];
+    if (!Object.prototype.hasOwnProperty.call(update, 'visible')) return;
+
+    const idxs = Array.isArray(idxRaw) ? idxRaw : [idxRaw];
+    const visRaw = update.visible;
+    const visVals = Array.isArray(visRaw) ? visRaw : [visRaw];
+
+    const kdeIdxs = [];
+    const kdeVis = [];
+
+    for (let j = 0; j < idxs.length; j++) {
+      const iTrace = idxs[j];
+      const tr = gd.data[iTrace];
+      if (!tr || typeof tr.name !== 'string') continue;
+      if (tr.name.startsWith(KDE_PREFIX)) continue;
+      if (tr.name === KDE_MARKER_NAME) continue;
+
+      const kdeIdx = findKdeIndexForTraceName(tr.name);
+      if (kdeIdx < 0) continue;
+
+      const vis = visVals[Math.min(j, visVals.length - 1)];
+      kdeIdxs.push(kdeIdx);
+      kdeVis.push(vis);
+    }
+
+    if (!kdeIdxs.length) return;
+
+    syncing = true;
+    Plotly.restyle(gd, { visible: kdeVis }, kdeIdxs)
+      .then(function() { syncing = false; })
+      .catch(function() { syncing = false; });
+  });
+})();
+"""
+        script = script.replace('__KDE_PREFIX__', json.dumps(KDE_TRACE_PREFIX))
+        script = script.replace('__KDE_MARKER_NAME__', json.dumps(KDE_TIME_MARKER_TRACE_NAME))
+        return script
 
     def rotating_gc_line_rot(self, t_myr):
         """GC reference line in the same rotating coordinate system as x_rot/y_rot/z_rot."""
@@ -539,6 +618,231 @@ class Animate3D:
 
         return traces
 
+    def _kde_trace_name(self, trace_name):
+        return f'{KDE_TRACE_PREFIX}{trace_name}'
+
+    def _kde_source_trace_name(self, trace_name):
+        if isinstance(trace_name, str) and trace_name.startswith(KDE_TRACE_PREFIX):
+            return trace_name[len(KDE_TRACE_PREFIX):]
+        return None
+
+    def _coerce_numeric(self, values):
+        """Coerce iterable values to finite float array."""
+        vals = pd.to_numeric(values, errors='coerce').to_numpy(dtype=float)
+        vals = vals[np.isfinite(vals)]
+        return vals
+
+    def _kde_color_for_cluster(self, cluster_group):
+        """Choose a representative color for a cluster KDE line."""
+        color = getattr(cluster_group, 'color', None)
+        if isinstance(color, str) and color:
+            return color
+        return 'white' if self.figure_theme == 'dark' else 'black'
+
+    def _collect_trace_lookback_times(self):
+        """Collect present-day star-formation lookback times (-age_myr) per integrated trace."""
+        lookback_by_trace = {}
+        color_by_trace = {}
+        for cluster_group in self.data_collection.get_all_clusters():
+            data_df = cluster_group.df_int if cluster_group.df_int is not None else cluster_group.df
+            if data_df is None or ('age_myr' not in data_df.columns):
+                continue
+            vals = self._coerce_numeric(data_df['age_myr'])
+            if vals.size:
+                lookback_by_trace[cluster_group.data_name] = -np.abs(vals)
+                color_by_trace[cluster_group.data_name] = self._kde_color_for_cluster(cluster_group)
+        return lookback_by_trace, color_by_trace
+
+    def _gaussian_kde(self, values, x_grid, bandwidth_myr=None):
+        """Lightweight Gaussian KDE (SciPy-free)."""
+        vals = np.asarray(values, dtype=float)
+        vals = vals[np.isfinite(vals)]
+        if vals.size == 0:
+            return np.zeros_like(x_grid, dtype=float)
+
+        if bandwidth_myr is not None:
+            bandwidth = float(bandwidth_myr)
+        else:
+            std = float(np.std(vals, ddof=1))
+            iqr = float(np.subtract(*np.percentile(vals, [75.0, 25.0])))
+            sigma = min(std, iqr / 1.34) if (std > 0 and iqr > 0) else std
+            bandwidth = 0.9 * sigma * (vals.size ** (-1.0 / 5.0))
+            if (not np.isfinite(bandwidth)) or (bandwidth <= 0):
+                grid_span = float(np.max(x_grid) - np.min(x_grid))
+                bandwidth = max(grid_span / 60.0, 1e-3)
+
+        if (not np.isfinite(bandwidth)) or (bandwidth <= 0):
+            bandwidth = 1.0
+
+        u = (x_grid[:, None] - vals[None, :]) / bandwidth
+        density = np.exp(-0.5 * (u ** 2)).sum(axis=1)
+        density /= (vals.size * bandwidth * np.sqrt(2.0 * np.pi))
+        return density
+
+    def _setup_age_kde_inset(self, layout_dict):
+        """Prepare KDE inset data/axes and precompute one KDE line per integrated cluster trace."""
+        self.kde_trace_order = []
+        self.kde_density_by_trace = {}
+        self.kde_trace_name_by_trace = {}
+        self.kde_color_by_trace = {}
+
+        lookback_by_trace, color_by_trace = self._collect_trace_lookback_times()
+        self.kde_trace_order = list(lookback_by_trace.keys())
+        self.kde_color_by_trace = color_by_trace
+
+        finite_time = self.time[np.isfinite(self.time)] if self.time.size else np.array([], dtype=float)
+        non_positive_time = finite_time[finite_time <= 0]
+        if non_positive_time.size:
+            time_min = float(np.min(non_positive_time))
+        elif self.kde_trace_order:
+            all_lookback_values = np.concatenate([lookback_by_trace[k] for k in self.kde_trace_order])
+            time_min = float(np.min(all_lookback_values))
+        else:
+            time_min = 0.0
+
+        # Star-formation-history x-axis should be non-positive lookback time only.
+        x_min = min(time_min, 0.0)
+        x_max = 0.0
+        if x_min >= x_max:
+            x_min = x_max - 1.0
+
+        # Keep KDE x-range exactly matched to slider's time span for visual alignment.
+        grid_min = x_min
+        grid_max = x_max
+        self.kde_x_grid = np.linspace(grid_min, grid_max, 300)
+        self.kde_x_range = [float(grid_min), float(grid_max)]
+
+        y_max = 0.0
+        for trace_name in self.kde_trace_order:
+            dens = self._gaussian_kde(
+                lookback_by_trace[trace_name],
+                self.kde_x_grid,
+                bandwidth_myr=self.age_kde_bandwidth_myr
+            )
+            dens_max = float(np.max(dens)) if dens.size else 0.0
+            if dens_max > 0:
+                dens = dens / dens_max
+            self.kde_density_by_trace[trace_name] = dens
+            self.kde_trace_name_by_trace[trace_name] = self._kde_trace_name(trace_name)
+            if dens.size:
+                y_max = max(y_max, float(np.max(dens)))
+
+        if y_max <= 0:
+            y_max = 1.0
+        self.kde_y_max = max(y_max * 1.05, 1.0)
+
+        # Reserve a small lower strip so the inset cannot be occluded by the 3D scene.
+        scene_domain = layout_dict.setdefault('scene', {}).setdefault('domain', {})
+        scene_domain.setdefault('x', [0.0, 1.0])
+        scene_domain['y'] = [0.19, 1.0]
+
+        if self.figure_theme == 'dark':
+            axis_color = 'gray'
+        elif self.figure_theme == 'gray':
+            axis_color = 'black'
+        else:
+            axis_color = 'black'
+
+        self.kde_axis_color = axis_color
+
+        # Center the inset horizontally; slider is tied to this domain.
+        x2_domain = [0.30, 0.70]
+        y2_domain = [0.03, 0.17]
+        self.kde_x2_domain = list(x2_domain)
+        self.kde_y2_domain = list(y2_domain)
+        panel_bg = layout_dict.get('scene', {}).get('bgcolor', 'black')
+
+        # Draw a compact background panel only under the inset area.
+        layout_dict.setdefault('shapes', [])
+        layout_dict['shapes'].append(
+            dict(
+                type='rect',
+                xref='paper',
+                yref='paper',
+                x0=x2_domain[0],
+                x1=x2_domain[1],
+                y0=y2_domain[0],
+                y1=y2_domain[1],
+                fillcolor=panel_bg,
+                line=dict(width=0),
+                layer='below'
+            )
+        )
+
+        layout_dict['xaxis2'] = dict(
+            domain=x2_domain,
+            anchor='y2',
+            range=self.kde_x_range,
+            title='',
+            titlefont=dict(color=axis_color, size=10, family='helvetica'),
+            tickfont=dict(color=axis_color, size=9, family='helvetica'),
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor=axis_color,
+            linewidth=1.5,
+            mirror=True,
+            layer='above traces',
+            fixedrange=True
+        )
+        layout_dict['yaxis2'] = dict(
+            domain=y2_domain,
+            anchor='x2',
+            range=[0.0, self.kde_y_max],
+            title='Relative SFH',
+            titlefont=dict(color=axis_color, size=10, family='helvetica'),
+            tickfont=dict(color=axis_color, size=9, family='helvetica'),
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor=axis_color,
+            linewidth=1.5,
+            mirror=True,
+            layer='above traces',
+            fixedrange=True
+        )
+        layout_dict.setdefault('annotations', [])
+
+    def _build_kde_inset_traces(self):
+        """Build one static KDE trace per integrated cluster trace."""
+        traces = []
+        for trace_name in self.kde_trace_order:
+            traces.append(
+                go.Scatter(
+                    x=self.kde_x_grid,
+                    y=self.kde_density_by_trace[trace_name],
+                    mode='lines',
+                    line=dict(color=self.kde_color_by_trace.get(trace_name, self.kde_axis_color), width=1),
+                    xaxis='x2',
+                    yaxis='y2',
+                    name=self.kde_trace_name_by_trace[trace_name],
+                    showlegend=False,
+                    hovertemplate=(
+                        f'{trace_name}<br>'
+                        + 'Lookback = %{x:.1f} Myr<br>'
+                        + 'Relative KDE = %{y:.2f}<extra></extra>'
+                    )
+                )
+            )
+        return traces
+
+    def _build_kde_time_marker_trace(self, t):
+        """Build moving vertical time marker for the KDE inset."""
+        if not np.isfinite(float(t)):
+            t = 0.0
+        x_t = float(np.clip(float(t), self.kde_x_range[0], 0.0))
+        return go.Scatter(
+            x=[x_t, x_t],
+            y=[0.0, self.kde_y_max],
+            mode='lines',
+            line=dict(color=self.kde_axis_color, width=2, dash='dash'),
+            xaxis='x2',
+            yaxis='y2',
+            name=KDE_TIME_MARKER_TRACE_NAME,
+            showlegend=False,
+            hovertemplate='t = %{x:.1f} Myr<extra></extra>'
+        )
+
     def _sync_scene_axis_style(self, layout_dict):
         """Apply a shared x-axis line style to y/z so xyz axis lines stay visually consistent."""
         scene = layout_dict.get('scene', {})
@@ -750,18 +1054,29 @@ class Animate3D:
         # Locate the index where time is zero
         zero_idx = np.where(time_slider == 0)[0][0]
 
+        if self.show_age_kde_inset and hasattr(self, 'kde_x2_domain'):
+            slider_x0 = float(self.kde_x2_domain[0])
+            slider_x1 = float(self.kde_x2_domain[1])
+            slider_len = max(0.0, slider_x1 - slider_x0)
+            slider_x = slider_x0
+            slider_xanchor = "left"
+        else:
+            slider_len = 0.5
+            slider_x = 0.5
+            slider_xanchor = "center"
+
         return [
             dict(
             active=zero_idx,
-            xanchor="center",
+            xanchor=slider_xanchor,
             yanchor="top",
             transition={"duration": 300, "easing": "bounce-in"},
             borderwidth=0.,
             bordercolor=slider_color,
             bgcolor=slider_color,
             pad={"b": 0, "t": 0, "l": 0, "r": 0},
-            len=0.5,  # Adjusted the length to 0.5 for better centering
-            x=0.5,
+            len=slider_len,
+            x=slider_x,
             y=0.,
             currentvalue={
                 "font": {"size": 18, "color": slider_color, 'family': 'helvetica'},
@@ -801,9 +1116,10 @@ class Animate3D:
         for key, traces_list in self.trace_grouping_dict.items():
             visibility = []
             for trace in self.initial_data:
+                trace_name = self._trace_name(trace)
                 # Use our get_visibility function so that static tracks (and non‑track statics)
                 # obey the static_traces_legendonly flag.
-                visibility.append(self.get_visibility(trace['name'], traces_list))
+                visibility.append(self.get_visibility(trace_name, traces_list))
             buttons.append(
                 dict(
                     label=key,
@@ -847,6 +1163,19 @@ class Animate3D:
         coords = focus_group_data[['x', 'y', 'z', 'U', 'V', 'W']].median().values
         return coords
 
+    def _trace_name(self, trace):
+        """Return trace name for both graph_objects traces and dict-like traces."""
+        if isinstance(trace, dict):
+            return trace.get('name')
+        return getattr(trace, 'name', None)
+
+    def _set_trace_visible(self, trace, visible_flag):
+        """Set trace visibility for both graph_objects traces and dict-like traces."""
+        if isinstance(trace, dict):
+            trace['visible'] = visible_flag
+        else:
+            trace.visible = visible_flag
+
     def get_visibility(self, trace_name: str, grouping: list):
         """
         Determines if a given trace (by name) should be visible under the current grouping.
@@ -859,6 +1188,16 @@ class Animate3D:
         - Galactic reference overlays (GC, radius circles/labels, guide overlays) always return True.
         - For non‑static traces, return True if the trace name is in grouping.
         """
+        if trace_name is None:
+            return False
+
+        if trace_name == KDE_TIME_MARKER_TRACE_NAME:
+            return True
+
+        kde_source_trace = self._kde_source_trace_name(trace_name)
+        if kde_source_trace is not None:
+            return kde_source_trace in grouping
+
         # For static non-track traces:
         if trace_name in self.base_static_trace_names and not trace_name.endswith(" Track"):
             if self.static_traces_legendonly:
@@ -1064,6 +1403,10 @@ class Animate3D:
                 )
             )
 
+        if self.show_age_kde_inset:
+            scatter_list.append(self._build_kde_time_marker_trace(t))
+            scatter_list.extend(self._build_kde_inset_traces())
+
         return scatter_list
 
     def _add_static_traces(self, frame, static_traces, static_traces_times, reference_frame_center, t):
@@ -1109,8 +1452,9 @@ class Animate3D:
 
         data_updated = []
         for trace in starting_frame['data']:
-            visible_flag = self.get_visibility(trace['name'], grouping_0)
-            trace['visible'] = visible_flag
+            trace_name = self._trace_name(trace)
+            visible_flag = self.get_visibility(trace_name, grouping_0)
+            self._set_trace_visible(trace, visible_flag)
             data_updated.append(trace)
 
         self.initial_data = copy.deepcopy(data_updated)
