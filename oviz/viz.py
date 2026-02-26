@@ -3,6 +3,7 @@ import yaml
 import plotly.graph_objects as go
 import plotly.colors as pc
 import json
+import webcolors
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import importlib.resources
@@ -639,19 +640,64 @@ class Animate3D:
             return color
         return 'white' if self.figure_theme == 'dark' else 'black'
 
-    def _collect_trace_lookback_times(self):
-        """Collect present-day star-formation lookback times (-age_myr) per integrated trace."""
+    def _kde_opacity_for_cluster(self, cluster_group):
+        """Use trace opacity for KDE line opacity."""
+        opacity = getattr(cluster_group, 'opacity', 1.0)
+        try:
+            opacity = float(opacity)
+        except (TypeError, ValueError):
+            opacity = 1.0
+        return max(0.0, min(1.0, opacity))
+
+    def _color_with_alpha(self, color, alpha):
+        """Convert common color forms to rgba(r,g,b,a) with requested alpha."""
+        alpha = max(0.0, min(1.0, float(alpha)))
+
+        if isinstance(color, (tuple, list)) and len(color) >= 3:
+            r, g, b = int(color[0]), int(color[1]), int(color[2])
+            return f'rgba({r},{g},{b},{alpha})'
+
+        if not isinstance(color, str):
+            if self.figure_theme == 'dark':
+                return f'rgba(255,255,255,{alpha})'
+            return f'rgba(0,0,0,{alpha})'
+
+        c = color.strip()
+        try:
+            if c.startswith('rgba(') and c.endswith(')'):
+                vals = [v.strip() for v in c[5:-1].split(',')]
+                r, g, b = int(float(vals[0])), int(float(vals[1])), int(float(vals[2]))
+                return f'rgba({r},{g},{b},{alpha})'
+            if c.startswith('rgb(') and c.endswith(')'):
+                vals = [v.strip() for v in c[4:-1].split(',')]
+                r, g, b = int(float(vals[0])), int(float(vals[1])), int(float(vals[2]))
+                return f'rgba({r},{g},{b},{alpha})'
+            if c.startswith('#'):
+                rgb = webcolors.hex_to_rgb(c)
+                return f'rgba({rgb.red},{rgb.green},{rgb.blue},{alpha})'
+            rgb = webcolors.name_to_rgb(c)
+            return f'rgba({rgb.red},{rgb.green},{rgb.blue},{alpha})'
+        except Exception:
+            # Keep original color if parsing fails.
+            return c
+
+    def _collect_trace_lookback_times(self, max_lookback_myr=None):
+        """Collect lookback times (-age_myr) per trace, optionally clipped by integration window."""
         lookback_by_trace = {}
         color_by_trace = {}
+        opacity_by_trace = {}
         for cluster_group in self.data_collection.get_all_clusters():
             data_df = cluster_group.df_int if cluster_group.df_int is not None else cluster_group.df
             if data_df is None or ('age_myr' not in data_df.columns):
                 continue
             vals = self._coerce_numeric(data_df['age_myr'])
+            if max_lookback_myr is not None:
+                vals = vals[vals <= float(max_lookback_myr) + 1e-9]
             if vals.size:
                 lookback_by_trace[cluster_group.data_name] = -np.abs(vals)
                 color_by_trace[cluster_group.data_name] = self._kde_color_for_cluster(cluster_group)
-        return lookback_by_trace, color_by_trace
+                opacity_by_trace[cluster_group.data_name] = self._kde_opacity_for_cluster(cluster_group)
+        return lookback_by_trace, color_by_trace, opacity_by_trace
 
     def _gaussian_kde(self, values, x_grid, bandwidth_myr=None):
         """Lightweight Gaussian KDE (SciPy-free)."""
@@ -685,13 +731,22 @@ class Animate3D:
         self.kde_density_by_trace = {}
         self.kde_trace_name_by_trace = {}
         self.kde_color_by_trace = {}
-
-        lookback_by_trace, color_by_trace = self._collect_trace_lookback_times()
-        self.kde_trace_order = list(lookback_by_trace.keys())
-        self.kde_color_by_trace = color_by_trace
+        self.kde_opacity_by_trace = {}
 
         finite_time = self.time[np.isfinite(self.time)] if self.time.size else np.array([], dtype=float)
         non_positive_time = finite_time[finite_time <= 0]
+        if non_positive_time.size:
+            lookback_limit = abs(float(np.min(non_positive_time)))
+        else:
+            lookback_limit = None
+
+        lookback_by_trace, color_by_trace, opacity_by_trace = self._collect_trace_lookback_times(
+            max_lookback_myr=lookback_limit
+        )
+        self.kde_trace_order = list(lookback_by_trace.keys())
+        self.kde_color_by_trace = color_by_trace
+        self.kde_opacity_by_trace = opacity_by_trace
+
         if non_positive_time.size:
             time_min = float(np.min(non_positive_time))
         elif self.kde_trace_order:
@@ -807,12 +862,17 @@ class Animate3D:
         """Build one static KDE trace per integrated cluster trace."""
         traces = []
         for trace_name in self.kde_trace_order:
+            base_color = self.kde_color_by_trace.get(trace_name, self.kde_axis_color)
+            line_color = self._color_with_alpha(base_color, self.kde_opacity_by_trace.get(trace_name, 1.0))
+            fill_color = self._color_with_alpha(base_color, 0.30)
             traces.append(
                 go.Scatter(
                     x=self.kde_x_grid,
                     y=self.kde_density_by_trace[trace_name],
                     mode='lines',
-                    line=dict(color=self.kde_color_by_trace.get(trace_name, self.kde_axis_color), width=2),
+                    line=dict(color=line_color, width=2),
+                    fill='tozeroy',
+                    fillcolor=fill_color,
                     xaxis='x2',
                     yaxis='y2',
                     name=self.kde_trace_name_by_trace[trace_name],
