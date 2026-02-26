@@ -1334,6 +1334,27 @@ class Animate3D:
             if df_t.empty:
                 continue
 
+            # Build present-day (t=0) sky quantities for click->sky-panel callbacks.
+            t0_mask = np.isclose(df_int['time'].to_numpy(dtype=float), 0.0, rtol=0.0, atol=1e-9)
+            df_t0 = df_int[t0_mask]
+            if len(df_t0) != len(df_t):
+                # Fallback for any unexpected ordering/shape mismatch.
+                df_t0 = df_t
+
+            x0 = pd.to_numeric(df_t0[x_col], errors='coerce').to_numpy(dtype=float)
+            y0 = pd.to_numeric(df_t0[y_col], errors='coerce').to_numpy(dtype=float)
+            z0 = pd.to_numeric(df_t0[z_col], errors='coerce').to_numpy(dtype=float)
+
+            x_helio0 = pd.to_numeric(df_t0['x_helio'], errors='coerce').to_numpy(dtype=float)
+            y_helio0 = pd.to_numeric(df_t0['y_helio'], errors='coerce').to_numpy(dtype=float)
+            z_helio0 = pd.to_numeric(df_t0['z_helio'], errors='coerce').to_numpy(dtype=float)
+            dist0 = np.sqrt(x_helio0 ** 2 + y_helio0 ** 2 + z_helio0 ** 2)
+
+            with np.errstate(invalid='ignore', divide='ignore'):
+                l0 = np.rad2deg(np.arctan2(y_helio0, x_helio0))
+                l0 = np.mod(l0, 360.0)
+                b0 = np.rad2deg(np.arcsin(np.clip(z_helio0 / np.where(dist0 > 0, dist0, np.nan), -1.0, 1.0)))
+
             if cluster_group.data_name.strip().lower() == 'sun':
                 sun_x = float(np.nanmedian(df_t[x_col].to_numpy(dtype=float)))
                 sun_y = float(np.nanmedian(df_t[y_col].to_numpy(dtype=float)))
@@ -1377,6 +1398,10 @@ class Animate3D:
             else:
                 marker_dict.update(color=cluster_group.color)
 
+            trace_color = cluster_group.color if isinstance(cluster_group.color, str) else 'white'
+            cluster_names = df_t['name'].astype(str).to_numpy(dtype=object)
+            trace_colors = np.repeat(trace_color, len(df_t)).astype(object)
+
             scatter_list.append(
                 go.Scatter3d(
                     x=df_t[x_col].values,
@@ -1384,7 +1409,18 @@ class Animate3D:
                     z=df_t[z_col].values,
                     mode='markers',
                     marker=marker_dict,
-                    customdata=np.column_stack((age_present.to_numpy(dtype=float), age_at_t.to_numpy(dtype=float))),
+                    customdata=np.column_stack((
+                        age_present.to_numpy(dtype=float),
+                        age_at_t.to_numpy(dtype=float),
+                        l0,
+                        b0,
+                        dist0,
+                        x0,
+                        y0,
+                        z0,
+                        cluster_names,
+                        trace_colors
+                    )),
                     meta={'trace_kind': 'cluster'},
                     hovertext=hovertext,
                     hoverinfo='text',  # This removes default x, y, z
