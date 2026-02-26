@@ -812,7 +812,7 @@ class Animate3D:
                     x=self.kde_x_grid,
                     y=self.kde_density_by_trace[trace_name],
                     mode='lines',
-                    line=dict(color=self.kde_color_by_trace.get(trace_name, self.kde_axis_color), width=1),
+                    line=dict(color=self.kde_color_by_trace.get(trace_name, self.kde_axis_color), width=2),
                     xaxis='x2',
                     yaxis='y2',
                     name=self.kde_trace_name_by_trace[trace_name],
