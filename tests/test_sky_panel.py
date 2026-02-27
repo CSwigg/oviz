@@ -77,6 +77,18 @@ def test_apply_footprint_adds_overlay_traces():
     assert "__oviz_sky_footprint_axis__" not in names
 
 
+def test_apply_footprint_keeps_overlay_slots_when_no_selection():
+    fig_dict = _base_fig_dict()
+    themed = {"footprint": "#0088ff", "axis": "#ffffff"}
+    updated = _apply_footprint_to_figure(fig_dict, None, sky_radius_deg=1.0, theme_colors=themed)
+    cone = [tr for tr in updated["data"] if tr.get("name") == "__oviz_sky_footprint_cone__"]
+    rim = [tr for tr in updated["data"] if tr.get("name") == "__oviz_sky_footprint_rim__"]
+    assert len(cone) == 1
+    assert len(rim) == 1
+    assert cone[0].get("x", []) == []
+    assert rim[0].get("x", []) == []
+
+
 def test_apply_footprint_can_hide_overlay_with_visibility_flag():
     fig_dict = _base_fig_dict()
     trace0 = copy.deepcopy(fig_dict["data"][0])
@@ -111,6 +123,37 @@ def test_apply_footprint_can_hide_overlay_with_visibility_flag():
     )
     frame0_cone = [tr for tr in updated["frames"][0]["data"] if tr.get("name") == "__oviz_sky_footprint_cone__"][0]
     frame1_cone = [tr for tr in updated["frames"][1]["data"] if tr.get("name") == "__oviz_sky_footprint_cone__"][0]
+    assert len(frame0_cone.get("x", [])) > 0
+    assert len(frame1_cone.get("x", [])) == 0
+
+
+def test_apply_footprint_base_overlay_hidden_when_active_time_nonzero():
+    fig_dict = _base_fig_dict()
+    trace0 = copy.deepcopy(fig_dict["data"][0])
+    trace1 = copy.deepcopy(fig_dict["data"][0])
+    cd0 = np.asarray(trace0["customdata"], dtype=float)
+    cd1 = np.asarray(trace1["customdata"], dtype=float)
+    cd0[:, 1] = cd0[:, 0] + 0.0
+    cd1[:, 1] = cd1[:, 0] + 5.0
+    trace0["customdata"] = cd0.tolist()
+    trace1["customdata"] = cd1.tolist()
+    fig_dict["frames"] = [{"name": "0.0", "data": [trace0]}, {"name": "5.0", "data": [trace1]}]
+    fig_dict["layout"]["sliders"] = [{"steps": [{"label": "0.0"}, {"label": "5.0"}], "active": 1}]
+
+    selection = {"l_deg": 120.0, "b_deg": -20.0, "dist_pc": 150.0, "x0": 100.0, "y0": 50.0, "z0": 20.0}
+    themed = {"footprint": "#0088ff", "axis": "#ffffff"}
+    updated = _apply_footprint_to_figure(
+        fig_dict,
+        selection,
+        sky_radius_deg=1.0,
+        theme_colors=themed,
+        active_time_myr=5.0,
+    )
+
+    base_cone = [tr for tr in updated["data"] if tr.get("name") == "__oviz_sky_footprint_cone__"][0]
+    frame0_cone = [tr for tr in updated["frames"][0]["data"] if tr.get("name") == "__oviz_sky_footprint_cone__"][0]
+    frame1_cone = [tr for tr in updated["frames"][1]["data"] if tr.get("name") == "__oviz_sky_footprint_cone__"][0]
+    assert len(base_cone.get("x", [])) == 0
     assert len(frame0_cone.get("x", [])) > 0
     assert len(frame1_cone.get("x", [])) == 0
 

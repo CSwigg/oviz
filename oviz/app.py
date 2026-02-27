@@ -4,7 +4,7 @@ from typing import Optional
 import copy
 import json
 
-from dash import Dash, dcc, html, Input, Output, State, no_update, ctx
+from dash import Dash, dcc, html, Input, Output, State, no_update, ctx, Patch
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
@@ -402,28 +402,125 @@ def _frame_times(fig_dict: dict):
     return out
 
 
+def _overlay_indices(data: list):
+    cone_idx = None
+    rim_idx = None
+    if not isinstance(data, list):
+        return cone_idx, rim_idx
+    for idx, trace in enumerate(data):
+        if not isinstance(trace, dict):
+            continue
+        trace_name = trace.get("name")
+        if trace_name == FOOTPRINT_CONE_NAME:
+            cone_idx = idx
+        elif trace_name == FOOTPRINT_RIM_NAME:
+            rim_idx = idx
+    return cone_idx, rim_idx
+
+
+def _footprint_overlays(selection: dict | None, sky_radius_deg: float, theme_colors: dict, active_time_myr: float | None):
+    empty_overlay = _empty_footprint_traces(theme_colors)
+
+    full_overlay = None
+    if selection is not None:
+        candidate = _build_footprint_traces(selection, radius_deg=sky_radius_deg, theme_colors=theme_colors)
+        if candidate:
+            full_overlay = candidate
+
+    show_current = False
+    if full_overlay is not None:
+        t_now = _to_float(active_time_myr)
+        show_current = (not np.isfinite(t_now)) or np.isclose(float(t_now), 0.0, atol=1e-9)
+
+    current_overlay = full_overlay if (show_current and full_overlay is not None) else empty_overlay
+    t0_overlay = full_overlay if full_overlay is not None else empty_overlay
+    return current_overlay, t0_overlay, empty_overlay
+
+
+def _build_footprint_patch(
+    current_figure: dict | None,
+    selection: dict | None,
+    sky_radius_deg: float,
+    theme_colors: dict,
+):
+    if not isinstance(current_figure, dict):
+        return None
+
+    data = current_figure.get("data", [])
+    cone_idx, rim_idx = _overlay_indices(data)
+    if cone_idx is None or rim_idx is None:
+        return None
+
+    active_time_now = _active_slider_time(current_figure)
+    current_overlay, t0_overlay, empty_overlay = _footprint_overlays(
+        selection=selection,
+        sky_radius_deg=sky_radius_deg,
+        theme_colors=theme_colors,
+        active_time_myr=active_time_now,
+    )
+    base_cone, base_rim = current_overlay[0], current_overlay[1]
+
+    patch = Patch()
+    patch["data"][cone_idx]["x"] = copy.deepcopy(base_cone.get("x", []))
+    patch["data"][cone_idx]["y"] = copy.deepcopy(base_cone.get("y", []))
+    patch["data"][cone_idx]["z"] = copy.deepcopy(base_cone.get("z", []))
+    patch["data"][cone_idx]["i"] = copy.deepcopy(base_cone.get("i", []))
+    patch["data"][cone_idx]["j"] = copy.deepcopy(base_cone.get("j", []))
+    patch["data"][cone_idx]["k"] = copy.deepcopy(base_cone.get("k", []))
+    patch["data"][rim_idx]["x"] = copy.deepcopy(base_rim.get("x", []))
+    patch["data"][rim_idx]["y"] = copy.deepcopy(base_rim.get("y", []))
+    patch["data"][rim_idx]["z"] = copy.deepcopy(base_rim.get("z", []))
+
+    frames = current_figure.get("frames", [])
+    if not isinstance(frames, list):
+        return patch
+
+    frame_times = _frame_times(current_figure)
+    for fi, frame in enumerate(frames):
+        if not isinstance(frame, dict):
+            continue
+        fdata = frame.get("data", [])
+        fcone_idx, frim_idx = _overlay_indices(fdata)
+        if fcone_idx is None or frim_idx is None:
+            continue
+
+        t_val = frame_times[fi] if fi < len(frame_times) else np.nan
+        if np.isfinite(t_val) and np.isclose(float(t_val), 0.0, atol=1e-9):
+            ov = t0_overlay
+        else:
+            ov = empty_overlay
+        fcone, frim = ov[0], ov[1]
+
+        patch["frames"][fi]["data"][fcone_idx]["x"] = copy.deepcopy(fcone.get("x", []))
+        patch["frames"][fi]["data"][fcone_idx]["y"] = copy.deepcopy(fcone.get("y", []))
+        patch["frames"][fi]["data"][fcone_idx]["z"] = copy.deepcopy(fcone.get("z", []))
+        patch["frames"][fi]["data"][fcone_idx]["i"] = copy.deepcopy(fcone.get("i", []))
+        patch["frames"][fi]["data"][fcone_idx]["j"] = copy.deepcopy(fcone.get("j", []))
+        patch["frames"][fi]["data"][fcone_idx]["k"] = copy.deepcopy(fcone.get("k", []))
+
+        patch["frames"][fi]["data"][frim_idx]["x"] = copy.deepcopy(frim.get("x", []))
+        patch["frames"][fi]["data"][frim_idx]["y"] = copy.deepcopy(frim.get("y", []))
+        patch["frames"][fi]["data"][frim_idx]["z"] = copy.deepcopy(frim.get("z", []))
+
+    return patch
+
+
 def _apply_footprint_to_figure(
     fig_dict: dict,
     selection: dict | None,
     sky_radius_deg: float,
     theme_colors: dict,
+    active_time_myr: float | None = None,
 ):
     updated = copy.deepcopy(fig_dict)
     updated["data"] = _strip_footprint_from_data(updated.get("data", []))
-
-    if selection is None:
-        if isinstance(updated.get("frames"), list):
-            for frame in updated["frames"]:
-                if isinstance(frame, dict):
-                    frame["data"] = _strip_footprint_from_data(frame.get("data", []))
-        return updated
-
-    full_overlay = _build_footprint_traces(selection, radius_deg=sky_radius_deg, theme_colors=theme_colors)
-    if not full_overlay:
-        return updated
-    empty_overlay = _empty_footprint_traces(theme_colors)
-
-    updated["data"].extend(copy.deepcopy(full_overlay))
+    current_overlay, t0_overlay, empty_overlay = _footprint_overlays(
+        selection=selection,
+        sky_radius_deg=sky_radius_deg,
+        theme_colors=theme_colors,
+        active_time_myr=active_time_myr,
+    )
+    updated["data"].extend(copy.deepcopy(current_overlay))
 
     frames = updated.get("frames", [])
     if not isinstance(frames, list) or not frames:
@@ -436,7 +533,7 @@ def _apply_footprint_to_figure(
         frame_data = _strip_footprint_from_data(frame.get("data", []))
         t_val = frame_times[idx] if idx < len(frame_times) else np.nan
         if np.isfinite(t_val) and np.isclose(float(t_val), 0.0, atol=1e-9):
-            frame_data.extend(copy.deepcopy(full_overlay))
+            frame_data.extend(copy.deepcopy(t0_overlay))
         else:
             frame_data.extend(copy.deepcopy(empty_overlay))
         frame["data"] = frame_data
@@ -501,6 +598,266 @@ def _slider_times(fig_dict: dict):
 
         times.append(np.nan)
     return times
+
+
+def _active_slider_time(fig_dict: dict | None):
+    if not isinstance(fig_dict, dict):
+        return np.nan
+    try:
+        sliders = fig_dict.get("layout", {}).get("sliders", [])
+        if not isinstance(sliders, list) or not sliders:
+            return np.nan
+        active_idx = int(sliders[0].get("active"))
+    except Exception:
+        return np.nan
+
+    times = _slider_times(fig_dict)
+    if active_idx < 0 or active_idx >= len(times):
+        return np.nan
+    t_val = _to_float(times[active_idx])
+    return float(t_val) if np.isfinite(t_val) else np.nan
+
+
+def _extract_scene_ranges(fig_dict: dict):
+    scene = fig_dict.get("layout", {}).get("scene", {})
+    if not isinstance(scene, dict):
+        return None
+
+    out = {}
+    for ax in ("xaxis", "yaxis", "zaxis"):
+        axis_obj = scene.get(ax, {})
+        if not isinstance(axis_obj, dict):
+            continue
+        rng = axis_obj.get("range")
+        if not isinstance(rng, (list, tuple)) or len(rng) != 2:
+            continue
+        lo = _to_float(rng[0])
+        hi = _to_float(rng[1])
+        if np.isfinite(lo) and np.isfinite(hi) and lo != hi:
+            out[ax] = [float(lo), float(hi)]
+
+    return out if out else None
+
+
+def _compute_global_cluster_ranges(fig_dict: dict, pad_frac: float = 0.03):
+    mins = np.array([np.inf, np.inf, np.inf], dtype=float)
+    maxs = np.array([-np.inf, -np.inf, -np.inf], dtype=float)
+
+    for trace in _iter_cluster_traces(fig_dict):
+        x = np.asarray(trace.get("x", []), dtype=float)
+        y = np.asarray(trace.get("y", []), dtype=float)
+        z = np.asarray(trace.get("z", []), dtype=float)
+        if x.size == 0 or y.size == 0 or z.size == 0:
+            continue
+        finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
+        if not np.any(finite):
+            continue
+        x = x[finite]
+        y = y[finite]
+        z = z[finite]
+        mins = np.minimum(mins, [np.nanmin(x), np.nanmin(y), np.nanmin(z)])
+        maxs = np.maximum(maxs, [np.nanmax(x), np.nanmax(y), np.nanmax(z)])
+
+    if not (np.all(np.isfinite(mins)) and np.all(np.isfinite(maxs))):
+        return None
+
+    ranges = {}
+    for i, ax in enumerate(("xaxis", "yaxis", "zaxis")):
+        lo = float(mins[i])
+        hi = float(maxs[i])
+        width = hi - lo
+        if not np.isfinite(width):
+            continue
+        if width <= 0:
+            width = 1.0
+            lo -= 0.5
+            hi += 0.5
+        pad = max(width * float(pad_frac), 1e-6)
+        ranges[ax] = [lo - pad, hi + pad]
+    return ranges if ranges else None
+
+
+def _scene_range_lock_from_figure(fig_dict: dict):
+    explicit = _extract_scene_ranges(fig_dict)
+    if explicit is not None:
+        return explicit
+    return _compute_global_cluster_ranges(fig_dict)
+
+
+def _apply_scene_range_lock(fig_dict: dict, range_lock: dict | None):
+    if not range_lock:
+        return
+    scene = fig_dict.setdefault("layout", {}).setdefault("scene", {})
+    if not isinstance(scene, dict):
+        return
+    for ax, rng in range_lock.items():
+        axis_obj = scene.setdefault(ax, {})
+        if not isinstance(axis_obj, dict):
+            axis_obj = {}
+            scene[ax] = axis_obj
+        axis_obj["range"] = [float(rng[0]), float(rng[1])]
+        axis_obj["autorange"] = False
+
+
+def _drop_scene_camera(fig_dict: dict):
+    scene = fig_dict.get("layout", {}).get("scene", {})
+    if isinstance(scene, dict):
+        scene.pop("camera", None)
+
+
+def _copy_slider_active(target_fig: dict, source_fig: dict | None):
+    if not isinstance(source_fig, dict):
+        return
+    try:
+        active = source_fig.get("layout", {}).get("sliders", [])[0].get("active")
+    except Exception:
+        active = None
+    if active is None:
+        return
+    try:
+        target_fig["layout"]["sliders"][0]["active"] = int(active)
+    except Exception:
+        pass
+
+
+def _copy_updatemenus_active(target_fig: dict, source_fig: dict | None):
+    if not isinstance(source_fig, dict):
+        return
+    src_menus = source_fig.get("layout", {}).get("updatemenus", [])
+    tgt_menus = target_fig.get("layout", {}).get("updatemenus", [])
+    if not (isinstance(src_menus, list) and isinstance(tgt_menus, list)):
+        return
+    for idx in range(min(len(src_menus), len(tgt_menus))):
+        src_active = src_menus[idx].get("active") if isinstance(src_menus[idx], dict) else None
+        if src_active is None:
+            continue
+        if isinstance(tgt_menus[idx], dict):
+            tgt_menus[idx]["active"] = src_active
+
+
+def _copy_trace_visibility(target_fig: dict, source_fig: dict | None):
+    if not isinstance(source_fig, dict):
+        return
+    src_data = source_fig.get("data", [])
+    tgt_data = target_fig.get("data", [])
+    if not (isinstance(src_data, list) and isinstance(tgt_data, list)):
+        return
+
+    src_filtered = [tr for tr in src_data if isinstance(tr, dict) and tr.get("name") not in FOOTPRINT_TRACE_NAMES]
+    tgt_filtered = [tr for tr in tgt_data if isinstance(tr, dict) and tr.get("name") not in FOOTPRINT_TRACE_NAMES]
+
+    if len(src_filtered) == len(tgt_filtered):
+        pairs = list(zip(tgt_filtered, src_filtered))
+    else:
+        src_by_key = {}
+        for tr in src_filtered:
+            key = (tr.get("name"), tr.get("type"), tr.get("legendgroup"))
+            src_by_key.setdefault(key, []).append(tr)
+        pairs = []
+        for tr in tgt_filtered:
+            key = (tr.get("name"), tr.get("type"), tr.get("legendgroup"))
+            candidates = src_by_key.get(key, [])
+            if candidates:
+                pairs.append((tr, candidates.pop(0)))
+
+    for tgt, src in pairs:
+        if "visible" in src:
+            tgt["visible"] = src["visible"]
+        else:
+            tgt.pop("visible", None)
+
+
+def _trace_match_key(trace: dict):
+    if not isinstance(trace, dict):
+        return None
+    meta = trace.get("meta", {})
+    trace_kind = meta.get("trace_kind") if isinstance(meta, dict) else None
+    return (trace.get("name"), trace.get("type"), trace.get("legendgroup"), trace_kind)
+
+
+def _copy_trace_uids(target_fig: dict, source_fig: dict | None):
+    if not isinstance(source_fig, dict):
+        return
+
+    src_data = source_fig.get("data", [])
+    tgt_data = target_fig.get("data", [])
+    if not (isinstance(src_data, list) and isinstance(tgt_data, list)):
+        return
+
+    if len(src_data) == len(tgt_data):
+        pairs = list(zip(tgt_data, src_data))
+    else:
+        src_by_key = {}
+        for tr in src_data:
+            if not isinstance(tr, dict):
+                continue
+            src_by_key.setdefault(_trace_match_key(tr), []).append(tr)
+        pairs = []
+        for tr in tgt_data:
+            if not isinstance(tr, dict):
+                continue
+            key = _trace_match_key(tr)
+            candidates = src_by_key.get(key, [])
+            if candidates:
+                pairs.append((tr, candidates.pop(0)))
+
+    for tgt, src in pairs:
+        uid = src.get("uid") if isinstance(src, dict) else None
+        if uid is not None:
+            tgt["uid"] = uid
+
+    for tr in tgt_data:
+        if not isinstance(tr, dict):
+            continue
+        name = tr.get("name")
+        if name == FOOTPRINT_CONE_NAME:
+            tr["uid"] = "oviz-footprint-cone"
+        elif name == FOOTPRINT_RIM_NAME:
+            tr["uid"] = "oviz-footprint-rim"
+
+    src_frames = source_fig.get("frames", [])
+    tgt_frames = target_fig.get("frames", [])
+    if not (isinstance(src_frames, list) and isinstance(tgt_frames, list)):
+        return
+
+    for fi in range(min(len(src_frames), len(tgt_frames))):
+        src_frame = src_frames[fi] if isinstance(src_frames[fi], dict) else {}
+        tgt_frame = tgt_frames[fi] if isinstance(tgt_frames[fi], dict) else {}
+        src_fd = src_frame.get("data", [])
+        tgt_fd = tgt_frame.get("data", [])
+        if not (isinstance(src_fd, list) and isinstance(tgt_fd, list)):
+            continue
+
+        if len(src_fd) == len(tgt_fd):
+            frame_pairs = list(zip(tgt_fd, src_fd))
+        else:
+            src_by_key = {}
+            for tr in src_fd:
+                if not isinstance(tr, dict):
+                    continue
+                src_by_key.setdefault(_trace_match_key(tr), []).append(tr)
+            frame_pairs = []
+            for tr in tgt_fd:
+                if not isinstance(tr, dict):
+                    continue
+                key = _trace_match_key(tr)
+                candidates = src_by_key.get(key, [])
+                if candidates:
+                    frame_pairs.append((tr, candidates.pop(0)))
+
+        for tgt, src in frame_pairs:
+            uid = src.get("uid") if isinstance(src, dict) else None
+            if uid is not None:
+                tgt["uid"] = uid
+
+        for tr in tgt_fd:
+            if not isinstance(tr, dict):
+                continue
+            name = tr.get("name")
+            if name == FOOTPRINT_CONE_NAME:
+                tr["uid"] = "oviz-footprint-cone"
+            elif name == FOOTPRINT_RIM_NAME:
+                tr["uid"] = "oviz-footprint-rim"
 
 
 def _ensure_uirevision(fig_dict: dict):
@@ -741,25 +1098,18 @@ def _build_aladin_srcdoc(
       html, body {{ margin: 0; padding: 0; width: 100%; height: 100%; background: {bg}; color: {txt}; overflow:hidden; }}
       #oviz-wrap {{ position: relative; width: 100%; height: 100%; }}
       #aladin-lite-div {{ width: 100%; height: 100%; }}
-      #oviz-status {{
-        position: absolute; top: 8px; left: 8px; z-index: 10;
-        background: rgba(0,0,0,0.55); color: #eee; padding: 5px 8px; border-radius: 4px;
-        font-family: Helvetica, Arial, sans-serif; font-size: 12px;
-      }}
     </style>
   </head>
   <body>
     <div id="oviz-wrap">
-      <div id="oviz-status">l={l_deg:.4f}, b={b_deg:.4f}, ra={ra_sel:.4f}, dec={dec_sel:.4f}, fov={fov_deg:.2f} deg</div>
       <div id="aladin-lite-div"></div>
     </div>
     <script src="https://aladin.u-strasbg.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
     <script>
       (function() {{
-        const statusEl = document.getElementById("oviz-status");
         const payload = {json.dumps(catalog_payload)};
         if (typeof window.A === "undefined") {{
-          statusEl.textContent = "Aladin Lite library failed to load (network or browser blocking).";
+          console.error("Aladin Lite library failed to load.");
           return;
         }}
 
@@ -770,8 +1120,8 @@ def _build_aladin_srcdoc(
             target: {json.dumps(f"{ra_sel:.6f} {dec_sel:.6f}")},
             cooFrame: {json.dumps(coo_frame)},
             showReticle: true,
-            showLayersControl: false,
-            showGotoControl: false,
+            showLayersControl: true,
+            showGotoControl: true,
             showFrame: true
           }};
           const aladin = A.aladin("#aladin-lite-div", options);
@@ -804,7 +1154,7 @@ def _build_aladin_srcdoc(
             }}
           }});
         }}).catch((err) => {{
-          statusEl.textContent = "Aladin initialization error: " + String(err);
+          console.error("Aladin initialization error:", err);
         }});
       }})();
     </script>
@@ -887,9 +1237,24 @@ def create_dash_app(
     app.title = title
 
     base_figure_dict = fig_local.to_dict()
+    scene_range_lock = _scene_range_lock_from_figure(base_figure_dict)
+    _apply_scene_range_lock(base_figure_dict, scene_range_lock)
     _ensure_uirevision(base_figure_dict)
     age_bounds = _get_age_bounds(base_figure_dict)
     theme_colors = _theme_colors_from_figure(base_figure_dict)
+
+    if enable_sky_panel:
+        base_figure_dict = _apply_footprint_to_figure(
+            fig_dict=base_figure_dict,
+            selection=None,
+            sky_radius_deg=sky_radius_deg,
+            theme_colors=theme_colors,
+            active_time_myr=0.0,
+        )
+        _apply_scene_range_lock(base_figure_dict, scene_range_lock)
+        _ensure_uirevision(base_figure_dict)
+
+    fig_local = go.Figure(base_figure_dict)
     centers_by_name = _collect_cluster_centers(base_figure_dict)
     members_df = _load_cluster_members(cluster_members_file)
     members_by_cluster = _group_members_by_cluster(members_df)
@@ -957,7 +1322,7 @@ def create_dash_app(
     if age_filter_enabled:
         controls = _build_age_controls(theme_colors, age_bounds)
 
-    sky_container_style = {
+    sky_container_normal_style = {
         "position": "absolute",
         "top": "10px",
         "right": "10px",
@@ -970,6 +1335,19 @@ def create_dash_app(
         "border": "1px solid rgba(140,140,140,0.5)",
         "borderRadius": "8px",
         "boxShadow": "0 8px 24px rgba(0,0,0,0.30)",
+    }
+    sky_container_fullscreen_style = {
+        "position": "absolute",
+        "top": "0",
+        "left": "0",
+        "width": "100vw",
+        "height": "100vh",
+        "zIndex": 80,
+        "overflow": "hidden",
+        "background": theme_colors["panel_solid"],
+        "border": "0",
+        "borderRadius": "0",
+        "boxShadow": "none",
     }
     sky_show_btn_base_style = {
         "position": "absolute",
@@ -986,6 +1364,83 @@ def create_dash_app(
         "cursor": "pointer",
         "display": "none",
     }
+    sky_show_full_btn_base_style = {
+        "position": "absolute",
+        "top": "44px",
+        "right": "10px",
+        "zIndex": 45,
+        "padding": "6px 10px",
+        "fontSize": "11px",
+        "fontFamily": "Menlo,Monaco,Consolas,monospace",
+        "color": theme_colors["text"],
+        "background": theme_colors["panel_bg"],
+        "border": "1px solid rgba(140,140,140,0.7)",
+        "borderRadius": "6px",
+        "cursor": "pointer",
+        "display": "none",
+    }
+    sky_drag_handle_base_style = {
+        "position": "absolute",
+        "top": "0",
+        "left": "0",
+        "right": "100px",
+        "height": "24px",
+        "zIndex": 31,
+        "cursor": "move",
+        "background": "rgba(120,120,120,0.14)",
+        "borderBottom": "1px solid rgba(140,140,140,0.35)",
+        "display": "block",
+        "userSelect": "none",
+        "touchAction": "none",
+    }
+    sky_resize_nw_style = {
+        "position": "absolute",
+        "top": "0",
+        "left": "0",
+        "width": "14px",
+        "height": "14px",
+        "zIndex": 32,
+        "cursor": "nwse-resize",
+        "background": "rgba(120,120,120,0.10)",
+        "display": "block",
+        "touchAction": "none",
+    }
+    sky_resize_ne_style = {
+        "position": "absolute",
+        "top": "0",
+        "right": "0",
+        "width": "14px",
+        "height": "14px",
+        "zIndex": 32,
+        "cursor": "nesw-resize",
+        "background": "rgba(120,120,120,0.10)",
+        "display": "block",
+        "touchAction": "none",
+    }
+    sky_resize_sw_style = {
+        "position": "absolute",
+        "bottom": "0",
+        "left": "0",
+        "width": "14px",
+        "height": "14px",
+        "zIndex": 32,
+        "cursor": "nesw-resize",
+        "background": "rgba(120,120,120,0.10)",
+        "display": "block",
+        "touchAction": "none",
+    }
+    sky_resize_se_style = {
+        "position": "absolute",
+        "bottom": "0",
+        "right": "0",
+        "width": "14px",
+        "height": "14px",
+        "zIndex": 32,
+        "cursor": "nwse-resize",
+        "background": "rgba(120,120,120,0.10)",
+        "display": "block",
+        "touchAction": "none",
+    }
 
     graph_children = [
         dcc.Graph(
@@ -1001,6 +1456,11 @@ def create_dash_app(
         graph_children.append(
             html.Div(
                 [
+                    html.Div(
+                        id="oviz-sky-drag-handle",
+                        title="Drag sky panel",
+                        style=sky_drag_handle_base_style,
+                    ),
                     html.Iframe(
                         id="oviz-sky-frame",
                         srcDoc=_build_empty_sky_srcdoc(theme_colors),
@@ -1016,20 +1476,27 @@ def create_dash_app(
                         id="oviz-sky-readout",
                         children=_sky_readout_text(None, sky_radius_deg=sky_radius_deg, sky_survey=sky_survey),
                         style={
+                            "display": "none",
+                        },
+                    ),
+                    html.Button(
+                        "Full",
+                        id="oviz-sky-size-btn",
+                        n_clicks=0,
+                        title="Toggle fullscreen sky panel",
+                        style={
                             "position": "absolute",
-                            "left": "6px",
-                            "bottom": "6px",
-                            "whiteSpace": "pre-wrap",
-                            "margin": "0",
-                            "padding": "5px 7px",
-                            "background": theme_colors["panel_bg"],
-                            "borderRadius": "5px",
-                            "fontFamily": "Menlo,Monaco,Consolas,monospace",
+                            "top": "6px",
+                            "right": "52px",
+                            "zIndex": 30,
+                            "padding": "2px 6px",
                             "fontSize": "10px",
-                            "lineHeight": "1.2",
+                            "fontFamily": "Menlo,Monaco,Consolas,monospace",
                             "color": theme_colors["text"],
-                            "maxWidth": "95%",
-                            "zIndex": 20,
+                            "background": theme_colors["panel_bg"],
+                            "border": "1px solid rgba(140,140,140,0.6)",
+                            "borderRadius": "4px",
+                            "cursor": "pointer",
                         },
                     ),
                     html.Button(
@@ -1052,9 +1519,33 @@ def create_dash_app(
                             "cursor": "pointer",
                         },
                     ),
+                    html.Div(
+                        id="oviz-sky-resize-nw",
+                        className="oviz-sky-resize-handle",
+                        **{"data-dir": "nw"},
+                        style=sky_resize_nw_style,
+                    ),
+                    html.Div(
+                        id="oviz-sky-resize-ne",
+                        className="oviz-sky-resize-handle",
+                        **{"data-dir": "ne"},
+                        style=sky_resize_ne_style,
+                    ),
+                    html.Div(
+                        id="oviz-sky-resize-sw",
+                        className="oviz-sky-resize-handle",
+                        **{"data-dir": "sw"},
+                        style=sky_resize_sw_style,
+                    ),
+                    html.Div(
+                        id="oviz-sky-resize-se",
+                        className="oviz-sky-resize-handle",
+                        **{"data-dir": "se"},
+                        style=sky_resize_se_style,
+                    ),
                 ],
                 id="oviz-sky-container",
-                style=sky_container_style,
+                style=sky_container_normal_style,
             )
         )
         graph_children.append(
@@ -1066,6 +1557,15 @@ def create_dash_app(
                 style=sky_show_btn_base_style,
             )
         )
+        graph_children.append(
+            html.Button(
+                "Sky Full",
+                id="oviz-sky-show-full-btn",
+                n_clicks=0,
+                title="Show fullscreen sky panel",
+                style=sky_show_full_btn_base_style,
+            )
+        )
 
     layout_children = [
         dcc.Store(id="oviz-base-figure", data=base_figure_dict),
@@ -1073,7 +1573,7 @@ def create_dash_app(
         dcc.Store(id="oviz-age-range-store", data=list(age_bounds) if age_filter_enabled else None),
     ]
     if enable_sky_panel:
-        layout_children.append(dcc.Store(id="oviz-sky-visible-store", data=True))
+        layout_children.append(dcc.Store(id="oviz-sky-mode-store", data="normal"))
     layout_children.append(
         html.Div(
             graph_children,
@@ -1101,34 +1601,61 @@ def create_dash_app(
 
     if enable_sky_panel:
         @app.callback(
-            Output("oviz-sky-visible-store", "data"),
+            Output("oviz-sky-mode-store", "data"),
             Input("oviz-sky-hide-btn", "n_clicks"),
+            Input("oviz-sky-size-btn", "n_clicks"),
             Input("oviz-sky-show-btn", "n_clicks"),
-            State("oviz-sky-visible-store", "data"),
+            Input("oviz-sky-show-full-btn", "n_clicks"),
+            State("oviz-sky-mode-store", "data"),
             prevent_initial_call=True,
         )
-        def _toggle_sky_panel_visibility(n_hide, n_show, current_state):
+        def _toggle_sky_panel_mode(n_hide, n_size, n_show, n_show_full, current_mode):
             triggered = ctx.triggered_id
+            mode_now = str(current_mode) if current_mode in {"normal", "fullscreen", "hidden"} else "normal"
             if triggered == "oviz-sky-hide-btn":
-                return False
+                return "hidden"
+            if triggered == "oviz-sky-size-btn":
+                return "normal" if mode_now == "fullscreen" else "fullscreen"
             if triggered == "oviz-sky-show-btn":
-                return True
-            return bool(current_state) if current_state is not None else True
+                return "normal"
+            if triggered == "oviz-sky-show-full-btn":
+                return "fullscreen"
+            return mode_now
 
         @app.callback(
             Output("oviz-sky-container", "style"),
             Output("oviz-sky-show-btn", "style"),
-            Input("oviz-sky-visible-store", "data"),
+            Output("oviz-sky-show-full-btn", "style"),
+            Output("oviz-sky-size-btn", "children"),
+            Output("oviz-sky-drag-handle", "style"),
+            Input("oviz-sky-mode-store", "data"),
             prevent_initial_call=False,
         )
-        def _sync_sky_panel_visibility_styles(is_visible):
-            visible = bool(is_visible) if is_visible is not None else True
-            panel_style = dict(sky_container_style)
+        def _sync_sky_panel_visibility_styles(mode):
+            mode_now = str(mode) if mode in {"normal", "fullscreen", "hidden"} else "normal"
+            panel_style = dict(sky_container_normal_style)
             show_btn_style = dict(sky_show_btn_base_style)
-            if not visible:
+            show_full_btn_style = dict(sky_show_full_btn_base_style)
+            size_label = "Full"
+            drag_handle_style = dict(sky_drag_handle_base_style)
+
+            if mode_now == "fullscreen":
+                panel_style = dict(sky_container_fullscreen_style)
+                size_label = "Restore"
+                drag_handle_style["display"] = "none"
+            elif mode_now == "hidden":
                 panel_style["display"] = "none"
                 show_btn_style["display"] = "block"
-            return panel_style, show_btn_style
+                show_full_btn_style["display"] = "block"
+                drag_handle_style["display"] = "none"
+
+            return (
+                panel_style,
+                show_btn_style,
+                show_full_btn_style,
+                size_label,
+                drag_handle_style,
+            )
 
     def _is_t0_click(selection: dict | None):
         if not isinstance(selection, dict):
@@ -1146,6 +1673,7 @@ def create_dash_app(
             Input("oviz-age-range", "value"),
             Input(graph_id, "clickData"),
             State("oviz-base-figure", "data"),
+            State(graph_id, "figure"),
             State("oviz-selection-store", "data"),
             State("oviz-age-range-store", "data"),
             prevent_initial_call=False,
@@ -1154,6 +1682,7 @@ def create_dash_app(
             age_range,
             click_data,
             base_figure,
+            current_figure,
             selection_store,
             age_range_store,
         ):
@@ -1175,6 +1704,7 @@ def create_dash_app(
                 )
 
             fig_base = _filter_figure_by_age(base_figure, age_now[0], age_now[1])
+            _apply_scene_range_lock(fig_base, scene_range_lock)
             _ensure_uirevision(fig_base)
 
             selection_prev = selection_store if isinstance(selection_store, dict) else None
@@ -1187,13 +1717,31 @@ def create_dash_app(
             figure_changed = age_changed or selection_changed
 
             if figure_changed:
-                fig_out = _apply_footprint_to_figure(
-                    fig_dict=fig_base,
-                    selection=selection,
-                    sky_radius_deg=sky_radius_deg,
-                    theme_colors=theme_colors,
-                )
-                _ensure_uirevision(fig_out)
+                fig_out = None
+                if (not age_changed) and isinstance(current_figure, dict):
+                    fig_out = _build_footprint_patch(
+                        current_figure=current_figure,
+                        selection=selection,
+                        sky_radius_deg=sky_radius_deg,
+                        theme_colors=theme_colors,
+                    )
+
+                if fig_out is None:
+                    active_time_now = _active_slider_time(current_figure)
+                    fig_out = _apply_footprint_to_figure(
+                        fig_dict=fig_base,
+                        selection=selection,
+                        sky_radius_deg=sky_radius_deg,
+                        theme_colors=theme_colors,
+                        active_time_myr=active_time_now,
+                    )
+                    _copy_trace_uids(fig_out, current_figure)
+                    _copy_trace_visibility(fig_out, current_figure)
+                    _copy_slider_active(fig_out, current_figure)
+                    _copy_updatemenus_active(fig_out, current_figure)
+                    _drop_scene_camera(fig_out)
+                    _apply_scene_range_lock(fig_out, scene_range_lock)
+                    _ensure_uirevision(fig_out)
             else:
                 fig_out = no_update
 
@@ -1231,14 +1779,20 @@ def create_dash_app(
             Output(graph_id, "figure"),
             Input("oviz-age-range", "value"),
             State("oviz-base-figure", "data"),
+            State(graph_id, "figure"),
             prevent_initial_call=False,
         )
-        def _update_age_filtered_figure(age_range, base_figure):
+        def _update_age_filtered_figure(age_range, base_figure, current_figure):
             if not age_range or len(age_range) != 2:
                 fig_out = copy.deepcopy(base_figure)
-                _ensure_uirevision(fig_out)
-                return fig_out
-            fig_out = _filter_figure_by_age(base_figure, age_range[0], age_range[1])
+            else:
+                fig_out = _filter_figure_by_age(base_figure, age_range[0], age_range[1])
+            _copy_trace_uids(fig_out, current_figure)
+            _copy_trace_visibility(fig_out, current_figure)
+            _copy_slider_active(fig_out, current_figure)
+            _copy_updatemenus_active(fig_out, current_figure)
+            _drop_scene_camera(fig_out)
+            _apply_scene_range_lock(fig_out, scene_range_lock)
             _ensure_uirevision(fig_out)
             return fig_out
 
@@ -1250,10 +1804,11 @@ def create_dash_app(
             Output("oviz-selection-store", "data"),
             Input(graph_id, "clickData"),
             State("oviz-base-figure", "data"),
+            State(graph_id, "figure"),
             State("oviz-selection-store", "data"),
             prevent_initial_call=False,
         )
-        def _update_sky_only(click_data, base_figure, selection_store):
+        def _update_sky_only(click_data, base_figure, current_figure, selection_store):
             selection_prev = selection_store if isinstance(selection_store, dict) else None
             selection = selection_prev
             click_selection = _extract_selected_point(click_data)
@@ -1266,13 +1821,28 @@ def create_dash_app(
             if not figure_changed:
                 return (no_update, no_update, no_update, no_update)
 
-            fig_out = _apply_footprint_to_figure(
-                fig_dict=base_figure,
+            fig_out = _build_footprint_patch(
+                current_figure=current_figure,
                 selection=selection,
                 sky_radius_deg=sky_radius_deg,
                 theme_colors=theme_colors,
             )
-            _ensure_uirevision(fig_out)
+            if fig_out is None:
+                active_time_now = _active_slider_time(current_figure)
+                fig_out = _apply_footprint_to_figure(
+                    fig_dict=base_figure,
+                    selection=selection,
+                    sky_radius_deg=sky_radius_deg,
+                    theme_colors=theme_colors,
+                    active_time_myr=active_time_now,
+                )
+                _copy_trace_uids(fig_out, current_figure)
+                _copy_trace_visibility(fig_out, current_figure)
+                _copy_slider_active(fig_out, current_figure)
+                _copy_updatemenus_active(fig_out, current_figure)
+                _drop_scene_camera(fig_out)
+                _apply_scene_range_lock(fig_out, scene_range_lock)
+                _ensure_uirevision(fig_out)
 
             if selection is None:
                 sky_src = _build_empty_sky_srcdoc(theme_colors)
