@@ -10,6 +10,7 @@ import importlib.resources
 from . import orbit_maker
 import copy
 import pandas as pd
+from .threejs_figure import ThreeJSFigure
 
 GALACTIC_GUIDE_TRACE_NAMES = {
     'Galactic Quadrants',
@@ -63,6 +64,17 @@ KPC_IN_KM = 3.085677581e16
 KM_S_PER_KPC_TO_RAD_MYR = (1.0 / KPC_IN_KM) * SEC_PER_MYR
 KDE_TRACE_PREFIX = 'Age KDE: '
 KDE_TIME_MARKER_TRACE_NAME = 'Age KDE Time Marker'
+CUSTOMDATA_IDX_AGE_NOW = 0
+CUSTOMDATA_IDX_AGE_AT_T = 1
+CUSTOMDATA_IDX_L0_DEG = 2
+CUSTOMDATA_IDX_B0_DEG = 3
+CUSTOMDATA_IDX_DIST0_PC = 4
+CUSTOMDATA_IDX_X0 = 5
+CUSTOMDATA_IDX_Y0 = 6
+CUSTOMDATA_IDX_Z0 = 7
+CUSTOMDATA_IDX_CLUSTER_NAME = 8
+CUSTOMDATA_IDX_CLUSTER_COLOR = 9
+MAX_SELECTED_MEMBER_POINTS = 1200
 
 class Animate3D:
     """
@@ -143,12 +155,21 @@ class Animate3D:
         show_age_kde_inset=False,
         age_kde_bandwidth_myr=3.0,
         camera_zoom_factor=1.0,
-        galactic_reference_opacity=0.5
+        galactic_reference_opacity=0.5,
+        renderer='plotly',
+        show_milky_way_model=False,
+        enable_sky_panel=False,
+        sky_radius_deg=1.0,
+        sky_frame='galactic',
+        sky_survey='P/DSS2/color',
+        cluster_members_file=None,
     ):
         """
         Main method to generate a 3D animated plot. Integrates orbits if necessary and
         constructs frames for each time step. Optionally saves the figure to HTML.
         """
+        renderer_name = _normalize_renderer_name(renderer)
+
         # Ensure t=0 is present
         if 0 not in time:
             raise ValueError("The time array must include 0 for the present day.")
@@ -184,9 +205,28 @@ class Animate3D:
 
         self.galactic_reference_opacity = float(galactic_reference_opacity)
         self.show_age_kde_inset = bool(show_age_kde_inset)
+        self.show_milky_way_model = bool(show_milky_way_model)
+        self.enable_sky_panel = bool(enable_sky_panel)
+        self.sky_radius_deg = float(sky_radius_deg)
+        self.sky_frame = str(sky_frame)
+        self.sky_survey = str(sky_survey)
+        self.cluster_members_file = cluster_members_file
+        self.sky_members_by_cluster = None
         if age_kde_bandwidth_myr <= 0:
             raise ValueError("age_kde_bandwidth_myr must be > 0.")
         self.age_kde_bandwidth_myr = float(age_kde_bandwidth_myr)
+        if renderer_name == 'threejs' and self.show_age_kde_inset:
+            raise NotImplementedError(
+                "renderer='threejs' does not yet support show_age_kde_inset=True."
+            )
+        if self.enable_sky_panel:
+            if self.sky_radius_deg <= 0:
+                raise ValueError("sky_radius_deg must be > 0.")
+            if self.sky_frame not in ('galactic', 'icrs'):
+                raise ValueError("sky_frame must be either 'galactic' or 'icrs'.")
+            if self.sky_frame != 'galactic':
+                raise ValueError("sky_frame='icrs' is not yet supported; use 'galactic'.")
+            self.sky_members_by_cluster = _load_threejs_cluster_catalog(cluster_members_file)
 
         # Build the figure layout, optionally overriding for galactic mode.
         layout_dict = copy.deepcopy(self.figure_layout_dict)
@@ -302,16 +342,22 @@ class Animate3D:
         # Initialize the figure at t=0 (base data)
         self._initialize_figure(frames)
 
-        # Add slider & dropdown, and finalize
-        self._add_slider_and_dropdown()
+        if renderer_name == 'plotly':
+            # Add slider & dropdown, and finalize
+            self._add_slider_and_dropdown()
+        else:
+            self._build_threejs_figure(frames)
 
         # Show or save
         if show:
             self.figure.show()
         if save_name:
-            self.figure.update_layout(width=None, height=None)
-            post_script = self._legend_kde_sync_post_script() if self.show_age_kde_inset else None
-            self.figure.write_html(save_name, auto_play=False, post_script=post_script)
+            if renderer_name == 'plotly':
+                self.figure.update_layout(width=None, height=None)
+                post_script = self._legend_kde_sync_post_script() if self.show_age_kde_inset else None
+                self.figure.write_html(save_name, auto_play=False, post_script=post_script)
+            else:
+                self.figure.write_html(save_name)
 
         return self.figure
 
@@ -1100,16 +1146,7 @@ class Animate3D:
         """
         slider_color = 'gray' if self.figure_theme == 'dark' else 'black'
 
-        time_neg = self.time[self.time < 0]
-        time_pos = self.time[self.time >= 0]
-
-        # Sort out an order in which to present the slider times
-        if (len(time_neg) > 0) and (len(time_pos) > 1):
-            time_slider = np.append(time_neg, time_pos)
-        elif (len(time_neg) > 0) and (len(time_pos) == 1):
-            time_slider = np.flip(self.time)
-        else:
-            time_slider = self.time
+        time_slider = self._ordered_slider_times()
 
         # Locate the index where time is zero
         zero_idx = np.where(time_slider == 0)[0][0]
@@ -1163,6 +1200,17 @@ class Animate3D:
             font=dict(color='rgba(0,0,0,0)', size=8, family='helvetica')
             )
         ]
+
+    def _ordered_slider_times(self):
+        """Return times in the same order used by the Plotly slider."""
+        time_neg = self.time[self.time < 0]
+        time_pos = self.time[self.time >= 0]
+
+        if (len(time_neg) > 0) and (len(time_pos) > 1):
+            return np.append(time_neg, time_pos)
+        if (len(time_neg) > 0) and (len(time_pos) == 1):
+            return np.flip(self.time)
+        return self.time
 
     def dropdown_menu(self):
         """
@@ -1580,9 +1628,779 @@ class Animate3D:
 
         self.fig_dict = self.fig
 
+    def _build_threejs_figure(self, frames):
+        """Build a standalone three.js figure wrapper from the current frame data."""
+        scene_spec = self._build_threejs_scene_spec(frames)
+        self.fig = scene_spec
+        self.fig_dict = scene_spec
+        self.figure = ThreeJSFigure(scene_spec)
+
+    def _build_threejs_scene_spec(self, frames):
+        """Serialize the current animation into a renderer-agnostic scene spec."""
+        layout_json = self.figure_layout.to_plotly_json()
+        scene_layout = layout_json.get('scene', {})
+        x_range = _coerce_range(scene_layout.get('xaxis', {}).get('range'), [-1.0, 1.0])
+        y_range = _coerce_range(scene_layout.get('yaxis', {}).get('range'), [-1.0, 1.0])
+        z_range = _coerce_range(scene_layout.get('zaxis', {}).get('range'), [-1.0, 1.0])
+        center = {
+            'x': 0.5 * (x_range[0] + x_range[1]),
+            'y': 0.5 * (y_range[0] + y_range[1]),
+            'z': 0.5 * (z_range[0] + z_range[1]),
+        }
+        max_span = max(
+            x_range[1] - x_range[0],
+            y_range[1] - y_range[0],
+            z_range[1] - z_range[0],
+            1.0,
+        )
+
+        axis_x = scene_layout.get('xaxis', {})
+        axis_y = scene_layout.get('yaxis', {})
+        axis_z = scene_layout.get('zaxis', {})
+        show_axes = not (
+            axis_x.get('visible') is False
+            and axis_y.get('visible') is False
+            and axis_z.get('visible') is False
+        )
+
+        trace_keys = []
+        legend_items = []
+        for idx, trace in enumerate(self.initial_data):
+            trace_json = _trace_to_plotly_json(trace)
+            trace_key = f'trace-{idx}'
+            trace_spec = self._threejs_trace_spec(trace_key, trace_json)
+            if trace_spec is None:
+                continue
+
+            trace_keys.append((trace_key, trace_json.get('name')))
+            if trace_spec.get('showlegend'):
+                legend_items.append({
+                    'key': trace_key,
+                    'name': trace_spec.get('name') or trace_key,
+                })
+
+        group_visibility = {}
+        for group_name, traces_list in self.trace_grouping_dict.items():
+            group_visibility[group_name] = {}
+            for trace_key, trace_name in trace_keys:
+                visible = self.get_visibility(trace_name, traces_list)
+                if visible == "legendonly":
+                    group_visibility[group_name][trace_key] = "legendonly"
+                else:
+                    group_visibility[group_name][trace_key] = bool(visible)
+
+        frames_by_time = {}
+        for time_val, frame in zip(self.time, frames):
+            frames_by_time[round(float(time_val), 12)] = frame.to_plotly_json()
+
+        frame_specs = []
+        ordered_times = [float(t) for t in self._ordered_slider_times()]
+        for time_val in ordered_times:
+            frame_json = frames_by_time.get(round(float(time_val), 12))
+            if frame_json is None:
+                continue
+
+            traces = []
+            for idx, trace_json in enumerate(frame_json.get('data', [])):
+                trace_spec = self._threejs_trace_spec(f'trace-{idx}', trace_json)
+                if trace_spec is not None:
+                    traces.append(trace_spec)
+
+            frame_specs.append({
+                'name': _format_time_label(time_val),
+                'time': float(time_val),
+                'traces': traces,
+                'decorations': self._threejs_frame_decorations(
+                    frame_json=frame_json,
+                    time_value=float(time_val),
+                    x_range=x_range,
+                    y_range=y_range,
+                    z_range=z_range,
+                    fallback_center=center,
+                ),
+            })
+
+        default_group = list(self.trace_grouping_dict.keys())[0]
+        initial_frame_index = 0
+        for idx, frame_spec in enumerate(frame_specs):
+            if np.isclose(float(frame_spec['time']), 0.0, atol=1e-9):
+                initial_frame_index = idx
+                break
+        default_sky_catalog = {}
+        if getattr(self, 'enable_sky_panel', False) and frame_specs:
+            default_sky_catalog = _threejs_catalog_from_frame_spec(frame_specs[initial_frame_index])
+
+        title_cfg = layout_json.get('title', {})
+        if isinstance(title_cfg, dict):
+            title_text = title_cfg.get('text') or ''
+        else:
+            title_text = str(title_cfg)
+
+        return {
+            'renderer': 'threejs',
+            'title': title_text,
+            'width': int(layout_json.get('width') or 900),
+            'height': int(layout_json.get('height') or 700),
+            'center': center,
+            'max_span': float(max_span),
+            'ranges': {
+                'x': x_range,
+                'y': y_range,
+                'z': z_range,
+            },
+            'layout': layout_json,
+            'axes': {
+                'x': axis_x,
+                'y': axis_y,
+                'z': axis_z,
+            },
+            'theme': self._threejs_theme(layout_json),
+            'frames': frame_specs,
+            'initial_frame_index': int(initial_frame_index),
+            'group_order': list(self.trace_grouping_dict.keys()),
+            'default_group': default_group,
+            'group_visibility': group_visibility,
+            'legend': {
+                'items': legend_items,
+            },
+            'show_axes': bool(show_axes),
+            'playback_interval_ms': 500,
+            'camera_up': {'x': 0.0, 'y': 0.0, 'z': 1.0},
+            'sky_panel': self._build_threejs_sky_panel_spec(default_sky_catalog),
+            'note': self._threejs_note_text(),
+        }
+
+    def _build_threejs_sky_panel_spec(self, default_catalog=None):
+        if not getattr(self, 'enable_sky_panel', False):
+            return {'enabled': False}
+        merged_catalog = _merge_threejs_member_catalogs(default_catalog, self.sky_members_by_cluster)
+
+        return {
+            'enabled': True,
+            'radius_deg': float(self.sky_radius_deg),
+            'frame': self.sky_frame,
+            'survey': self.sky_survey,
+            'members_by_cluster': merged_catalog,
+        }
+
+    def _threejs_note_text(self):
+        note = 'Three.js modules are loaded from a CDN in this renderer path.'
+        if getattr(self, 'enable_sky_panel', False):
+            note += ' Click a cluster member at t=0 to open Aladin Lite.'
+        return note
+
+    def _threejs_frame_decorations(self, frame_json, time_value, x_range, y_range, z_range, fallback_center):
+        """Return frame-local decorative objects for the Three.js renderer."""
+        decorations = []
+        if (not getattr(self, 'show_milky_way_model', False)) or (not np.isclose(float(time_value), 0.0, atol=1e-9)):
+            return decorations
+
+        x_span = max(float(x_range[1]) - float(x_range[0]), 1.0)
+        y_span = max(float(y_range[1]) - float(y_range[0]), 1.0)
+        z_span = max(float(z_range[1]) - float(z_range[0]), 1.0)
+        disc_radius_pc = float(np.clip(0.49 * min(x_span, y_span), 4500.0, 14000.0))
+        center = self._threejs_milky_way_center(frame_json, fallback_center)
+
+        decorations.append({
+            'kind': 'milky_way_model',
+            'center': center,
+            'disc_radius_pc': disc_radius_pc,
+            'disc_thickness_pc': max(180.0, 0.018 * disc_radius_pc),
+            'bulge_radius_pc': 0.18 * disc_radius_pc,
+            'halo_radius_pc': 1.16 * disc_radius_pc,
+            'bulge_height_pc': min(max(0.75 * z_span, 700.0), 2400.0),
+            'dust_inner_radius_pc': 0.14 * disc_radius_pc,
+            'dust_outer_radius_pc': 0.92 * disc_radius_pc,
+        })
+        return decorations
+
+    def _threejs_milky_way_center(self, frame_json, fallback_center):
+        """Prefer the plotted Galactic-center marker when anchoring the Milky Way model."""
+        for trace_json in frame_json.get('data', []):
+            if trace_json.get('type', 'scatter3d') != 'scatter3d':
+                continue
+            if trace_json.get('name') != 'GC':
+                continue
+            x_vals = _as_object_list(trace_json.get('x'))
+            y_vals = _as_object_list(trace_json.get('y'))
+            z_vals = _as_object_list(trace_json.get('z'))
+            if not x_vals or not y_vals or not z_vals:
+                continue
+            try:
+                return {
+                    'x': float(x_vals[0]),
+                    'y': float(y_vals[0]),
+                    'z': float(z_vals[0]),
+                }
+            except Exception:
+                continue
+        return {
+            'x': float(fallback_center['x']),
+            'y': float(fallback_center['y']),
+            'z': float(fallback_center['z']),
+        }
+
+    def _threejs_theme(self, layout_json):
+        """Translate the Plotly layout theme into a smaller scene theme."""
+        scene_layout = layout_json.get('scene', {})
+        axis_x = scene_layout.get('xaxis', {})
+        axis_color = (
+            axis_x.get('linecolor')
+            or axis_x.get('tickfont', {}).get('color')
+            or axis_x.get('title_font', {}).get('color')
+            or ('gray' if self.figure_theme == 'dark' else 'black')
+        )
+        text_color = (
+            layout_json.get('legend', {}).get('font', {}).get('color')
+            or axis_x.get('tickfont', {}).get('color')
+            or axis_x.get('title_font', {}).get('color')
+            or ('white' if self.figure_theme == 'dark' else 'black')
+        )
+        if self.figure_theme == 'dark':
+            panel_bg = 'rgba(0,0,0,0.48)'
+            panel_border = 'rgba(110,110,110,0.60)'
+            panel_solid = '#121212'
+            footprint = '#6ec5ff'
+        else:
+            panel_bg = 'rgba(255,255,255,0.78)'
+            panel_border = 'rgba(80,80,80,0.35)'
+            panel_solid = '#f7f7f7'
+            footprint = '#0b67b1'
+
+        return {
+            'paper_bgcolor': layout_json.get('paper_bgcolor', 'black'),
+            'scene_bgcolor': scene_layout.get('bgcolor', layout_json.get('paper_bgcolor', 'black')),
+            'text_color': text_color,
+            'axis_color': axis_color,
+            'panel_bg': panel_bg,
+            'panel_border': panel_border,
+            'panel_solid': panel_solid,
+            'footprint': footprint,
+        }
+
+    def _threejs_trace_spec(self, trace_key, trace_json):
+        """Convert a Plotly trace into a simpler primitive spec for three.js."""
+        if trace_json.get('type', 'scatter3d') != 'scatter3d':
+            return None
+
+        mode = str(trace_json.get('mode', 'markers'))
+        spec = {
+            'key': trace_key,
+            'name': trace_json.get('name') or trace_key,
+            'showlegend': bool(trace_json.get('showlegend', True)),
+        }
+
+        if 'lines' in mode:
+            segments = _line_segments_from_trace(trace_json)
+            if segments:
+                line_color, line_opacity = _color_to_css_and_opacity(
+                    trace_json.get('line', {}).get('color'),
+                    base_opacity=float(trace_json.get('opacity', 1.0)),
+                )
+                spec['segments'] = segments
+                spec['line'] = {
+                    'color': line_color,
+                    'width': float(trace_json.get('line', {}).get('width', 1.0) or 1.0),
+                    'dash': trace_json.get('line', {}).get('dash', 'solid'),
+                }
+                spec['opacity'] = line_opacity
+
+        if 'markers' in mode:
+            points = _points_from_trace(
+                trace_json,
+                default_opacity=float(trace_json.get('opacity', 1.0)),
+                include_selection=bool(getattr(self, 'enable_sky_panel', False)),
+            )
+            if points:
+                spec['points'] = points
+
+        if 'text' in mode:
+            labels = _labels_from_trace(trace_json)
+            if labels:
+                spec['labels'] = labels
+
+        if any(key in spec for key in ('segments', 'points', 'labels')):
+            return spec
+        return None
+
 
 
 ####################################################################################################
+def _normalize_renderer_name(renderer):
+    renderer_name = str(renderer).strip().lower()
+    if renderer_name in ('plotly',):
+        return 'plotly'
+    if renderer_name in ('three', 'threejs', 'three.js'):
+        return 'threejs'
+    raise ValueError("renderer must be one of: 'plotly', 'threejs'.")
+
+
+def _trace_to_plotly_json(trace):
+    if isinstance(trace, dict):
+        return copy.deepcopy(trace)
+    if hasattr(trace, 'to_plotly_json'):
+        return trace.to_plotly_json()
+    raise TypeError(f'Unsupported trace type for serialization: {type(trace)!r}')
+
+
+def _coerce_range(values, default):
+    if not isinstance(values, (list, tuple, np.ndarray)) or len(values) != 2:
+        return [float(default[0]), float(default[1])]
+    try:
+        return [float(values[0]), float(values[1])]
+    except Exception:
+        return [float(default[0]), float(default[1])]
+
+
+def _format_time_label(time_value):
+    rounded = round(float(time_value), 10)
+    if np.isclose(rounded, round(rounded), atol=1e-9):
+        return str(int(round(rounded)))
+    return f'{rounded:.1f}'.rstrip('0').rstrip('.')
+
+
+def _is_sequence_value(value):
+    return isinstance(value, (list, tuple, np.ndarray, pd.Series))
+
+
+def _expand_value(value, length, default=None):
+    if length <= 0:
+        return []
+    if value is None:
+        return [default] * length
+    if _is_sequence_value(value):
+        values = _as_object_list(value)
+        if len(values) == length:
+            return values
+        if len(values) == 1:
+            return values * length
+        if len(values) < length:
+            values.extend([values[-1]] * (length - len(values)))
+            return values
+        return values[:length]
+    return [value] * length
+
+
+def _coerce_float(value, default=0.0):
+    try:
+        out = float(value)
+        if np.isfinite(out):
+            return out
+    except Exception:
+        pass
+    return float(default)
+
+
+def _as_object_list(value):
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, pd.Series):
+        return value.tolist()
+    if isinstance(value, np.ndarray):
+        return np.asarray(value, dtype=object).reshape(-1).tolist()
+    return [value]
+
+
+def _color_to_css_and_opacity(color, base_opacity=1.0):
+    opacity = _coerce_float(base_opacity, 1.0)
+    if color is None:
+        return '#808080', opacity
+
+    if isinstance(color, (tuple, list)):
+        if len(color) == 4:
+            r, g, b, a = color
+            return (
+                f'rgb({int(r)}, {int(g)}, {int(b)})',
+                opacity * _coerce_float(a, 1.0),
+            )
+        if len(color) == 3:
+            r, g, b = color
+            return f'rgb({int(r)}, {int(g)}, {int(b)})', opacity
+
+    color_text = str(color).strip()
+    if not color_text:
+        return '#808080', opacity
+
+    lower = color_text.lower()
+    if lower.startswith('rgba(') and lower.endswith(')'):
+        inner = color_text[color_text.find('(') + 1: color_text.rfind(')')]
+        parts = [part.strip() for part in inner.split(',')]
+        if len(parts) == 4:
+            try:
+                r, g, b = [int(float(part)) for part in parts[:3]]
+                a = float(parts[3])
+                return f'rgb({r}, {g}, {b})', opacity * a
+            except Exception:
+                return color_text, opacity
+
+    if lower.startswith('rgb(') and lower.endswith(')'):
+        return color_text, opacity
+
+    if color_text.startswith('#'):
+        return color_text, opacity
+
+    try:
+        return webcolors.name_to_hex(color_text), opacity
+    except Exception:
+        return color_text, opacity
+
+
+def _resolve_marker_color_values(marker, length, default_opacity=1.0):
+    color_value = marker.get('color')
+    if color_value is None:
+        css, alpha = _color_to_css_and_opacity('#808080', default_opacity)
+        return [css] * length, [alpha] * length
+
+    if _is_sequence_value(color_value):
+        color_values = list(np.asarray(color_value, dtype=object).tolist())
+        if color_values and all(_looks_numeric(val) for val in color_values):
+            colorscale = marker.get('colorscale', 'Viridis')
+            cmin = _coerce_float(marker.get('cmin'), np.nan)
+            cmax = _coerce_float(marker.get('cmax'), np.nan)
+            numeric = np.asarray([float(val) for val in color_values], dtype=float)
+            if not np.isfinite(cmin):
+                cmin = float(np.nanmin(numeric)) if numeric.size else 0.0
+            if not np.isfinite(cmax):
+                cmax = float(np.nanmax(numeric)) if numeric.size else 1.0
+            if np.isclose(cmax, cmin, atol=1e-12):
+                scaled = np.zeros_like(numeric)
+            else:
+                scaled = np.clip((numeric - cmin) / (cmax - cmin), 0.0, 1.0)
+            sampled = pc.sample_colorscale(colorscale, scaled.tolist(), colortype='rgb')
+            css_values = []
+            alpha_values = []
+            for item in sampled:
+                css, alpha = _color_to_css_and_opacity(item, default_opacity)
+                css_values.append(css)
+                alpha_values.append(alpha)
+            return css_values, alpha_values
+
+        expanded = _expand_value(color_values, length, '#808080')
+        css_values = []
+        alpha_values = []
+        for item in expanded:
+            css, alpha = _color_to_css_and_opacity(item, default_opacity)
+            css_values.append(css)
+            alpha_values.append(alpha)
+        return css_values, alpha_values
+
+    css, alpha = _color_to_css_and_opacity(color_value, default_opacity)
+    return [css] * length, [alpha] * length
+
+
+def _looks_numeric(value):
+    try:
+        return np.isfinite(float(value))
+    except Exception:
+        return False
+
+
+def _line_segments_from_trace(trace_json):
+    x_vals = _as_object_list(trace_json.get('x'))
+    y_vals = _as_object_list(trace_json.get('y'))
+    z_vals = _as_object_list(trace_json.get('z'))
+    segments = []
+    prev = None
+    for x_val, y_val, z_val in zip(x_vals, y_vals, z_vals):
+        if x_val is None or y_val is None or z_val is None:
+            prev = None
+            continue
+        try:
+            point = [float(x_val), float(y_val), float(z_val)]
+        except Exception:
+            prev = None
+            continue
+        if not all(np.isfinite(point)):
+            prev = None
+            continue
+        if prev is not None:
+            segments.append(prev + point)
+        prev = point
+    return segments
+
+
+def _selection_from_customdata_row(row):
+    if row is None:
+        return None
+
+    values = _as_object_list(row)
+    if len(values) <= CUSTOMDATA_IDX_Z0:
+        return None
+
+    l_deg = _coerce_float(values[CUSTOMDATA_IDX_L0_DEG], np.nan)
+    b_deg = _coerce_float(values[CUSTOMDATA_IDX_B0_DEG], np.nan)
+    dist_pc = _coerce_float(values[CUSTOMDATA_IDX_DIST0_PC], np.nan)
+    x0 = _coerce_float(values[CUSTOMDATA_IDX_X0], np.nan)
+    y0 = _coerce_float(values[CUSTOMDATA_IDX_Y0], np.nan)
+    z0 = _coerce_float(values[CUSTOMDATA_IDX_Z0], np.nan)
+    if (not np.isfinite(l_deg)) or (not np.isfinite(b_deg)):
+        return None
+
+    age_now = _coerce_float(values[CUSTOMDATA_IDX_AGE_NOW], np.nan)
+    age_at_t = _coerce_float(values[CUSTOMDATA_IDX_AGE_AT_T], np.nan)
+    click_time_myr = np.nan
+    if np.isfinite(age_now) and np.isfinite(age_at_t):
+        click_time_myr = float(age_at_t - age_now)
+    ra_deg = np.nan
+    dec_deg = np.nan
+    try:
+        icrs = SkyCoord(l=[l_deg] * u.deg, b=[b_deg] * u.deg, frame='galactic').icrs
+        ra_deg = float(icrs.ra.deg[0])
+        dec_deg = float(icrs.dec.deg[0])
+    except Exception:
+        pass
+
+    cluster_name = None
+    if len(values) > CUSTOMDATA_IDX_CLUSTER_NAME and values[CUSTOMDATA_IDX_CLUSTER_NAME] not in (None, ''):
+        cluster_name = str(values[CUSTOMDATA_IDX_CLUSTER_NAME])
+
+    cluster_color = None
+    if len(values) > CUSTOMDATA_IDX_CLUSTER_COLOR and values[CUSTOMDATA_IDX_CLUSTER_COLOR] not in (None, ''):
+        cluster_color = str(values[CUSTOMDATA_IDX_CLUSTER_COLOR])
+
+    return {
+        'l_deg': float(l_deg),
+        'b_deg': float(b_deg),
+        'dist_pc': float(dist_pc) if np.isfinite(dist_pc) else np.nan,
+        'x0': float(x0) if np.isfinite(x0) else np.nan,
+        'y0': float(y0) if np.isfinite(y0) else np.nan,
+        'z0': float(z0) if np.isfinite(z0) else np.nan,
+        'click_time_myr': float(click_time_myr) if np.isfinite(click_time_myr) else np.nan,
+        'ra_deg': float(ra_deg) if np.isfinite(ra_deg) else np.nan,
+        'dec_deg': float(dec_deg) if np.isfinite(dec_deg) else np.nan,
+        'cluster_name': cluster_name,
+        'cluster_color': cluster_color,
+    }
+
+
+def _points_from_trace(trace_json, default_opacity=1.0, include_selection=False):
+    x_vals = _as_object_list(trace_json.get('x'))
+    y_vals = _as_object_list(trace_json.get('y'))
+    z_vals = _as_object_list(trace_json.get('z'))
+    n_points = min(len(x_vals), len(y_vals), len(z_vals))
+    if n_points == 0:
+        return []
+
+    marker = trace_json.get('marker', {})
+    sizes = [_coerce_float(val, 4.0) for val in _expand_value(marker.get('size', 4.0), n_points, 4.0)]
+    symbols = [str(val) for val in _expand_value(marker.get('symbol', 'circle'), n_points, 'circle')]
+    hovertext = _expand_value(trace_json.get('hovertext'), n_points, '')
+
+    base_marker_opacity = marker.get('opacity')
+    if base_marker_opacity is None:
+        marker_opacity = [float(default_opacity)] * n_points
+    else:
+        marker_opacity = [
+            _coerce_float(val, default_opacity) * float(default_opacity)
+            for val in _expand_value(base_marker_opacity, n_points, default_opacity)
+        ]
+
+    colors, color_opacity = _resolve_marker_color_values(marker, n_points, default_opacity=1.0)
+    customdata = trace_json.get('customdata')
+    custom_rows = None
+    if include_selection and customdata is not None:
+        custom_arr = np.asarray(customdata, dtype=object)
+        if custom_arr.ndim == 1:
+            custom_arr = custom_arr.reshape(-1, 1)
+        if custom_arr.ndim == 2 and custom_arr.shape[0] >= n_points:
+            custom_rows = [custom_arr[idx, :].tolist() for idx in range(n_points)]
+
+    points = []
+    for idx in range(n_points):
+        try:
+            x_val = float(x_vals[idx])
+            y_val = float(y_vals[idx])
+            z_val = float(z_vals[idx])
+        except Exception:
+            continue
+        if not np.isfinite(x_val) or not np.isfinite(y_val) or not np.isfinite(z_val):
+            continue
+
+        points.append({
+            'x': x_val,
+            'y': y_val,
+            'z': z_val,
+            'size': float(max(sizes[idx], 0.0)),
+            'symbol': symbols[idx],
+            'color': colors[idx],
+            'opacity': float(np.clip(marker_opacity[idx] * color_opacity[idx], 0.0, 1.0)),
+            'hovertext': str(hovertext[idx]) if hovertext[idx] is not None else '',
+        })
+        if custom_rows is not None:
+            selection = _selection_from_customdata_row(custom_rows[idx])
+            if selection is not None:
+                selection['trace_name'] = trace_json.get('name')
+            points[-1]['selection'] = selection
+
+    return points
+
+
+def _labels_from_trace(trace_json):
+    x_vals = _as_object_list(trace_json.get('x'))
+    y_vals = _as_object_list(trace_json.get('y'))
+    z_vals = _as_object_list(trace_json.get('z'))
+    n_labels = min(len(x_vals), len(y_vals), len(z_vals))
+    if n_labels == 0:
+        return []
+
+    texts = _expand_value(trace_json.get('text'), n_labels, '')
+    textfont = trace_json.get('textfont', {})
+    color, _ = _color_to_css_and_opacity(textfont.get('color'), 1.0)
+    font_size = _coerce_float(textfont.get('size'), 12.0)
+    font_family = textfont.get('family', 'helvetica')
+
+    labels = []
+    for idx in range(n_labels):
+        text = texts[idx]
+        if text in (None, ''):
+            continue
+        try:
+            x_val = float(x_vals[idx])
+            y_val = float(y_vals[idx])
+            z_val = float(z_vals[idx])
+        except Exception:
+            continue
+        if not np.isfinite(x_val) or not np.isfinite(y_val) or not np.isfinite(z_val):
+            continue
+
+        labels.append({
+            'text': str(text),
+            'x': x_val,
+            'y': y_val,
+            'z': z_val,
+            'color': color,
+            'size': font_size,
+            'family': font_family,
+        })
+
+    return labels
+
+
+def _load_threejs_cluster_catalog(cluster_members_file):
+    if not cluster_members_file:
+        return None
+
+    try:
+        df = pd.read_csv(cluster_members_file, usecols=['name', 'l', 'b'])
+    except Exception:
+        return None
+
+    if df.empty:
+        return None
+
+    df = df.rename(columns={'name': 'cluster_name', 'l': 'l_deg', 'b': 'b_deg'})
+    df['cluster_name'] = df['cluster_name'].astype(str)
+    df['l_deg'] = pd.to_numeric(df['l_deg'], errors='coerce')
+    df['b_deg'] = pd.to_numeric(df['b_deg'], errors='coerce')
+    df = df.loc[df['l_deg'].notnull() & df['b_deg'].notnull()].copy()
+    if df.empty:
+        return None
+
+    grouped = {}
+    for cluster_name, grp in df.groupby('cluster_name', sort=False):
+        l_vals = grp['l_deg'].to_numpy(dtype=np.float64)
+        b_vals = grp['b_deg'].to_numpy(dtype=np.float64)
+        coords = SkyCoord(l=l_vals * u.deg, b=b_vals * u.deg, frame='galactic').icrs
+        idx = np.arange(l_vals.size, dtype=int)
+        if idx.size > MAX_SELECTED_MEMBER_POINTS:
+            choose = np.linspace(0, idx.size - 1, int(MAX_SELECTED_MEMBER_POINTS), dtype=int)
+            idx = idx[choose]
+
+        grouped[str(cluster_name)] = [
+            {
+                'l': float(l_vals[i]),
+                'b': float(b_vals[i]),
+                'ra': float(coords.ra.deg[i]),
+                'dec': float(coords.dec.deg[i]),
+                'label': str(cluster_name),
+            }
+            for i in idx
+        ]
+
+    return grouped or None
+
+
+def _catalog_point_from_selection(selection, default_label=''):
+    if not isinstance(selection, dict):
+        return None
+
+    l_deg = _coerce_float(selection.get('l_deg'), np.nan)
+    b_deg = _coerce_float(selection.get('b_deg'), np.nan)
+    ra_deg = _coerce_float(selection.get('ra_deg'), np.nan)
+    dec_deg = _coerce_float(selection.get('dec_deg'), np.nan)
+    if not (np.isfinite(l_deg) and np.isfinite(b_deg) and np.isfinite(ra_deg) and np.isfinite(dec_deg)):
+        return None
+
+    label = selection.get('cluster_name') or selection.get('trace_name') or default_label or 'Selection'
+    return {
+        'l': float(l_deg),
+        'b': float(b_deg),
+        'ra': float(ra_deg),
+        'dec': float(dec_deg),
+        'label': str(label),
+    }
+
+
+def _limit_catalog_points(points):
+    if not points:
+        return []
+    if len(points) <= MAX_SELECTED_MEMBER_POINTS:
+        return copy.deepcopy(points)
+
+    idx = np.linspace(0, len(points) - 1, int(MAX_SELECTED_MEMBER_POINTS), dtype=int)
+    return [copy.deepcopy(points[int(i)]) for i in idx]
+
+
+def _threejs_catalog_from_frame_spec(frame_spec):
+    if not isinstance(frame_spec, dict):
+        return {}
+
+    catalogs = {}
+    for trace in frame_spec.get('traces', []):
+        if not isinstance(trace, dict):
+            continue
+        trace_name = trace.get('name')
+        trace_points = []
+        grouped_points = {}
+
+        for point in trace.get('points', []):
+            if not isinstance(point, dict):
+                continue
+            selection = point.get('selection')
+            catalog_point = _catalog_point_from_selection(selection, default_label=trace_name or '')
+            if catalog_point is None:
+                continue
+
+            trace_points.append(catalog_point)
+
+            cluster_name = selection.get('cluster_name') if isinstance(selection, dict) else None
+            if cluster_name:
+                grouped_points.setdefault(str(cluster_name), []).append(catalog_point)
+
+        if trace_name and trace_points:
+            catalogs[str(trace_name)] = _limit_catalog_points(trace_points)
+        for cluster_name, points in grouped_points.items():
+            catalogs.setdefault(cluster_name, _limit_catalog_points(points))
+
+    return catalogs
+
+
+def _merge_threejs_member_catalogs(*catalogs):
+    merged = {}
+    for catalog in catalogs:
+        if not isinstance(catalog, dict):
+            continue
+        for key, points in catalog.items():
+            if not key or not isinstance(points, list) or not points:
+                continue
+            merged[str(key)] = copy.deepcopy(points)
+    return merged
+
+
 def read_theme(plot):
     """
     Reads the theme configuration from a YAML file and sets up figure layout based on
