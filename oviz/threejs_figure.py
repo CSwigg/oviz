@@ -93,14 +93,72 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-text);
       }
       #__ROOT_ID__ .oviz-three-legend-item {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+        font: 13px Helvetica, Arial, sans-serif;
+        line-height: 1.35;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item[data-active="false"] {
+        opacity: 0.38;
+        text-decoration: line-through;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item[data-active="true"] {
+        opacity: 1.0;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item:hover {
+        opacity: 1.0;
+      }
+      #__ROOT_ID__ .oviz-three-selection-toggle {
         display: flex;
         align-items: center;
         gap: 8px;
         font-size: 13px;
         color: var(--oviz-text);
       }
-      #__ROOT_ID__ .oviz-three-legend-item input {
+      #__ROOT_ID__ .oviz-three-selection-toggle input {
         margin: 0;
+        accent-color: var(--oviz-axis);
+      }
+      #__ROOT_ID__ .oviz-three-selection {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--oviz-panel-border);
+        background: var(--oviz-panel-bg);
+      }
+      #__ROOT_ID__ .oviz-three-selection-row {
+        display: flex;
+        gap: 8px;
+      }
+      #__ROOT_ID__ .oviz-three-selection button {
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--oviz-text);
+        cursor: pointer;
+        font: 12px Helvetica, Arial, sans-serif;
+        padding: 6px 10px;
+      }
+      #__ROOT_ID__ .oviz-three-selection button[data-active="true"] {
+        background: rgba(110, 140, 255, 0.20);
+        border-color: rgba(140, 170, 255, 0.7);
+      }
+      #__ROOT_ID__ .oviz-three-selection button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      #__ROOT_ID__ .oviz-three-selection-readout {
+        color: var(--oviz-text);
+        font-size: 12px;
+        line-height: 1.35;
+        white-space: pre-wrap;
       }
       #__ROOT_ID__ .oviz-three-footer {
         position: absolute;
@@ -168,6 +226,29 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-text);
         font-size: 12px;
         display: none;
+      }
+      #__ROOT_ID__ .oviz-three-lasso-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 7;
+        display: none;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-three-lasso-overlay[data-active="true"] {
+        display: block;
+      }
+      #__ROOT_ID__ .oviz-three-lasso-overlay svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #__ROOT_ID__ .oviz-three-lasso-overlay polyline {
+        fill: rgba(110, 197, 255, 0.10);
+        stroke: var(--oviz-footprint);
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
       }
       #__ROOT_ID__ .oviz-three-sky-panel {
         position: absolute;
@@ -314,8 +395,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="oviz-three-toolbar">
         <select class="oviz-three-group-select"></select>
         <div class="oviz-three-legend"></div>
+        <div class="oviz-three-selection">
+          <div class="oviz-three-selection-row">
+            <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
+            <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
+          </div>
+          <label class="oviz-three-selection-toggle">
+            <input class="oviz-three-click-select-toggle" type="checkbox" />
+            <span>Enable click select</span>
+          </label>
+          <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters at t=0.</div>
+        </div>
       </div>
       <canvas class="oviz-three-canvas"></canvas>
+      <div class="oviz-three-lasso-overlay" data-active="false">
+        <svg preserveAspectRatio="none" aria-hidden="true">
+          <polyline points=""></polyline>
+        </svg>
+      </div>
       <div class="oviz-three-tooltip"></div>
       <div class="oviz-three-footer">
         <button class="oviz-three-play" type="button" title="Play">▶</button>
@@ -454,6 +551,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const pauseButtonEl = root.querySelector(".oviz-three-pause");
       const tooltipEl = root.querySelector(".oviz-three-tooltip");
       const noteEl = root.querySelector(".oviz-three-note");
+      const selectionReadoutEl = root.querySelector(".oviz-three-selection-readout");
+      const lassoButtonEl = root.querySelector(".oviz-three-lasso-button");
+      const clearSelectionButtonEl = root.querySelector(".oviz-three-selection-clear");
+      const clickSelectToggleEl = root.querySelector(".oviz-three-click-select-toggle");
+      const lassoOverlayEl = root.querySelector(".oviz-three-lasso-overlay");
+      const lassoPolylineEl = root.querySelector(".oviz-three-lasso-overlay polyline");
       const skyPanelEl = root.querySelector(".oviz-three-sky-panel");
       const skyFrameEl = root.querySelector(".oviz-three-sky-frame");
       const skyReadoutEl = root.querySelector(".oviz-three-sky-readout");
@@ -501,9 +604,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let currentGroup = defaultGroup;
       let currentFrameIndex = sceneSpec.initial_frame_index || 0;
       let currentSelection = null;
+      let currentSelections = [];
+      let currentSelectionMode = "none";
+      let clickSelectionEnabled = false;
       let playbackTimer = null;
       let skyPanelMode = skySpec.enabled ? "normal" : "hidden";
       let skyPointerState = null;
+      let lassoState = null;
+      let lassoArmed = false;
+      let suppressNextCanvasClick = false;
+      let selectedClusterKeys = new Set();
 
       const renderer = new THREE.WebGLRenderer({
         canvas,
@@ -609,31 +719,120 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         };
       }
 
-      function skyReadoutText(selection) {
-        if (!selection) {
-          return "Click a cluster member at t=0 to load sky imagery.";
+      function selectionKeyFor(selection) {
+        if (!selection || typeof selection !== "object") {
+          return "";
         }
-        const clusterLabel = selection.trace_name || selection.cluster_name || "";
-        const clusterName = clusterLabel ? `Cluster: ${clusterLabel}\n` : "";
-        return (
-          clusterName
-          + `Selected direction (t=0): l=${Number(selection.l_deg).toFixed(4)} deg, b=${Number(selection.b_deg).toFixed(4)} deg\n`
-          + `Beam radius: ${Number(skySpec.radius_deg || 1.0).toFixed(2)} deg\n`
+        return String(selection.cluster_name || selection.trace_name || "").trim();
+      }
+
+      function selectionIdentityKeyFor(selection) {
+        if (!selection || typeof selection !== "object") {
+          return "";
+        }
+        const clusterName = selection.cluster_name ? String(selection.cluster_name).trim() : "";
+        if (clusterName) {
+          return clusterName;
+        }
+        const x0 = Number(selection.x0);
+        const y0 = Number(selection.y0);
+        const z0 = Number(selection.z0);
+        if (Number.isFinite(x0) && Number.isFinite(y0) && Number.isFinite(z0)) {
+          return `${x0.toFixed(6)}|${y0.toFixed(6)}|${z0.toFixed(6)}`;
+        }
+        const ra = Number(selection.ra_deg);
+        const dec = Number(selection.dec_deg);
+        if (Number.isFinite(ra) && Number.isFinite(dec)) {
+          return `${ra.toFixed(6)}|${dec.toFixed(6)}`;
+        }
+        return String(selection.trace_name || "").trim();
+      }
+
+      function normalizedSelectionKeyFor(selection) {
+        const key = selectionIdentityKeyFor(selection);
+        return key ? normalizeMemberKey(key) : "";
+      }
+
+      function uniqueSelections(selections) {
+        const items = Array.isArray(selections) ? selections : [selections];
+        const unique = [];
+        const seen = new Set();
+        items.forEach((selection) => {
+          const key = normalizedSelectionKeyFor(selection);
+          if (!key || seen.has(key)) {
+            return;
+          }
+          seen.add(key);
+          unique.push(selection);
+        });
+        return unique;
+      }
+
+      function selectionToolbarText(selections, focusSelection) {
+        const activeSelections = uniqueSelections(selections);
+        const clickHint = `Click select: ${clickSelectionEnabled ? "on" : "off"}`;
+        const focusLabel = selectionKeyFor(focusSelection);
+        if (!activeSelections.length && !focusLabel) {
+          return `Shift+drag or use Lasso to select clusters at t=0.\n${clickHint}`;
+        }
+        if (!activeSelections.length && focusLabel) {
+          return `Focused: ${focusLabel}\n${clickHint}`;
+        }
+        const labels = activeSelections
+          .map((selection) => selectionKeyFor(selection))
+          .filter(Boolean);
+        const preview = labels.slice(0, 4).join(", ");
+        const suffix = labels.length > 4 ? ` +${labels.length - 4} more` : "";
+        const focusText = focusLabel ? `\nFocused: ${focusLabel}` : "";
+        return `${labels.length} selected\n${preview}${suffix}${focusText}\n${clickHint}`;
+      }
+
+      function skyReadoutText(selections, catalogPayload, mode = "overview") {
+        const activeSelections = uniqueSelections(selections);
+        const overviewText = (
+          "View: Mollweide all-sky\\n"
+          + "Center: Galactic Center\\n"
           + `Survey: ${String(skySpec.survey || "P/DSS2/color")}`
         );
+        if (mode !== "click") {
+          if (!activeSelections.length) {
+            return overviewText;
+          }
+          const labels = activeSelections
+            .map((selection) => selectionKeyFor(selection))
+            .filter(Boolean);
+          const starCount = (catalogPayload || []).reduce((total, catalog) => total + ((catalog.points || []).length || 0), 0);
+          return (
+            `Clusters selected: ${labels.length}\n`
+            + `${labels.slice(0, 6).join(", ")}${labels.length > 6 ? ` +${labels.length - 6} more` : ""}\n`
+            + `Stars shown: ${starCount}\n`
+            + overviewText
+          );
+        }
+
+        if (!activeSelections.length) {
+          return overviewText;
+        }
+
+        if (activeSelections.length === 1) {
+          const selection = activeSelections[0];
+          const clusterLabel = selectionKeyFor(selection);
+          const clusterName = clusterLabel ? `Cluster: ${clusterLabel}\n` : "";
+          const nStars = ((catalogPayload || [])[0] || {}).points ? (catalogPayload[0].points || []).length : 0;
+          const starLine = nStars > 1 ? `Stars shown: ${nStars}\n` : "";
+          return (
+            clusterName
+            + `Selected direction (t=0): l=${Number(selection.l_deg).toFixed(4)} deg, b=${Number(selection.b_deg).toFixed(4)} deg\n`
+            + starLine
+            + `Beam radius: ${Number(skySpec.radius_deg || 1.0).toFixed(2)} deg\n`
+            + `Survey: ${String(skySpec.survey || "P/DSS2/color")}`
+          );
+        }
+        return overviewText;
       }
 
       function buildEmptySkySrcdoc() {
-        const bg = String(theme.panel_solid || theme.paper_bgcolor || "#121212");
-        const txt = String(theme.text_color || "#d0d0d0");
-        return (
-          "<!doctype html><html><head><meta charset='utf-8'></head>"
-          + "<body style=\\"margin:0;padding:0;background:" + bg + ";color:" + txt + ";"
-          + "display:flex;align-items:center;justify-content:center;height:100vh;"
-          + "font-family:Helvetica,Arial,sans-serif;font-size:14px;text-align:center;\\">"
-          + "Click a cluster member at t=0 to open Aladin Lite."
-          + "</body></html>"
-        );
+        return buildAladinSrcdoc([], [], "overview");
       }
 
       function normalizeMemberKey(value) {
@@ -667,56 +866,193 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return { key: traceName || clusterName || "Selection", points: null };
       }
 
-      function buildAladinCatalogPayload(selection) {
-        if (!selection) {
-          return [];
+      function buildAladinCatalogPayload(selections, mode = "overview") {
+        const activeSelections = uniqueSelections(selections);
+        const payload = activeSelections.map((selection) => {
+          const resolvedMembers = resolveMemberPoints(selection);
+          const lookupName = resolvedMembers.key || selectionKeyFor(selection) || "Selection";
+          const traceName = selection && selection.trace_name ? String(selection.trace_name) : lookupName;
+          const clusterColor = selection.cluster_color ? String(selection.cluster_color) : "#ffffff";
+          const members = Array.isArray(resolvedMembers.points) ? resolvedMembers.points : null;
+          let points = [];
+          if (members && members.length) {
+            points = members.map((pt) => ({
+              l: Number(pt.l),
+              b: Number(pt.b),
+              ra: Number(pt.ra),
+              dec: Number(pt.dec),
+              label: pt.label || lookupName,
+            }));
+          } else if (Number.isFinite(Number(selection.ra_deg)) && Number.isFinite(Number(selection.dec_deg))) {
+            points = [{
+              l: Number(selection.l_deg),
+              b: Number(selection.b_deg),
+              ra: Number(selection.ra_deg),
+              dec: Number(selection.dec_deg),
+              label: lookupName,
+            }];
+          }
+          return {
+            name: lookupName,
+            traceName,
+            color: clusterColor,
+            opacity: 1.0,
+            sourceSize: points.length > 1 ? 4 : 7,
+            points,
+          };
+        }).filter((catalog) => (catalog.points || []).length);
+
+        if (mode === "click" || payload.length <= 1) {
+          return payload;
         }
-        const resolvedMembers = resolveMemberPoints(selection);
-        const lookupName = resolvedMembers.key;
-        const clusterColor = selection.cluster_color ? String(selection.cluster_color) : "#ffffff";
-        const members = Array.isArray(resolvedMembers.points) ? resolvedMembers.points : null;
-        let points = [];
-        if (members && members.length) {
-          points = members.map((pt) => ({
-            l: Number(pt.l),
-            b: Number(pt.b),
-            ra: Number(pt.ra),
-            dec: Number(pt.dec),
-            label: pt.label || lookupName,
-          }));
-        } else if (Number.isFinite(Number(selection.ra_deg)) && Number.isFinite(Number(selection.dec_deg))) {
-          points = [{
-            l: Number(selection.l_deg),
-            b: Number(selection.b_deg),
-            ra: Number(selection.ra_deg),
-            dec: Number(selection.dec_deg),
-            label: lookupName,
-          }];
-        }
-        return [{
-          name: lookupName,
-          color: clusterColor,
-          opacity: 1.0,
-          sourceSize: points.length > 1 ? 4 : 7,
-          points,
-        }];
+
+        const grouped = new Map();
+        payload.forEach((catalog) => {
+          const groupKey = String(catalog.traceName || catalog.name || "Selected trace");
+          if (!grouped.has(groupKey)) {
+            grouped.set(groupKey, {
+              name: groupKey,
+              color: catalog.color,
+              opacity: 1.0,
+              sourceSize: 4,
+              points: [],
+              seen: new Set(),
+            });
+          }
+          const group = grouped.get(groupKey);
+          (catalog.points || []).forEach((point) => {
+            const ra = Number(point.ra);
+            const dec = Number(point.dec);
+            const label = String(point.label || catalog.name || "Selection");
+            const key = `${ra.toFixed(8)}|${dec.toFixed(8)}|${label}`;
+            if (!Number.isFinite(ra) || !Number.isFinite(dec) || group.seen.has(key)) {
+              return;
+            }
+            group.seen.add(key);
+            group.points.push({
+              l: Number(point.l),
+              b: Number(point.b),
+              ra,
+              dec,
+              label,
+            });
+          });
+        });
+
+        return Array.from(grouped.values())
+          .map((group) => ({
+            name: group.name,
+            color: group.color,
+            opacity: group.opacity,
+            sourceSize: group.sourceSize,
+            points: group.points,
+          }))
+          .filter((group) => group.points.length);
       }
 
-      function buildAladinSrcdoc(selection, catalogPayload) {
-        if (!selection || !Number.isFinite(Number(selection.ra_deg)) || !Number.isFinite(Number(selection.dec_deg))) {
-          return buildEmptySkySrcdoc();
+      function angularSeparationDeg(ra1Deg, dec1Deg, ra2Deg, dec2Deg) {
+        const rad = Math.PI / 180.0;
+        const sin1 = Math.sin(dec1Deg * rad);
+        const sin2 = Math.sin(dec2Deg * rad);
+        const cos1 = Math.cos(dec1Deg * rad);
+        const cos2 = Math.cos(dec2Deg * rad);
+        const deltaRa = (ra1Deg - ra2Deg) * rad;
+        const cosSep = Math.min(1.0, Math.max(-1.0, sin1 * sin2 + cos1 * cos2 * Math.cos(deltaRa)));
+        return Math.acos(cosSep) * 180.0 / Math.PI;
+      }
+
+      function skyFocusFromPayload(selections, catalogPayload) {
+        const focusPoints = [];
+        (catalogPayload || []).forEach((catalog) => {
+          (catalog.points || []).forEach((point) => {
+            const ra = Number(point.ra);
+            const dec = Number(point.dec);
+            if (Number.isFinite(ra) && Number.isFinite(dec)) {
+              focusPoints.push({ ra, dec });
+            }
+          });
+        });
+        if (!focusPoints.length) {
+          uniqueSelections(selections).forEach((selection) => {
+            const ra = Number(selection.ra_deg);
+            const dec = Number(selection.dec_deg);
+            if (Number.isFinite(ra) && Number.isFinite(dec)) {
+              focusPoints.push({ ra, dec });
+            }
+          });
         }
+        if (!focusPoints.length) {
+          return null;
+        }
+
+        const rad = Math.PI / 180.0;
+        let sx = 0.0;
+        let sy = 0.0;
+        let sz = 0.0;
+        focusPoints.forEach((point) => {
+          const ra = point.ra * rad;
+          const dec = point.dec * rad;
+          const cosDec = Math.cos(dec);
+          sx += cosDec * Math.cos(ra);
+          sy += cosDec * Math.sin(ra);
+          sz += Math.sin(dec);
+        });
+
+        const norm = Math.sqrt(sx * sx + sy * sy + sz * sz);
+        let centerRa = focusPoints[0].ra;
+        let centerDec = focusPoints[0].dec;
+        if (norm > 1e-9) {
+          centerRa = Math.atan2(sy, sx) * 180.0 / Math.PI;
+          if (centerRa < 0.0) {
+            centerRa += 360.0;
+          }
+          centerDec = Math.asin(Math.min(1.0, Math.max(-1.0, sz / norm))) * 180.0 / Math.PI;
+        }
+
+        let maxSep = 0.0;
+        focusPoints.forEach((point) => {
+          maxSep = Math.max(maxSep, angularSeparationDeg(centerRa, centerDec, point.ra, point.dec));
+        });
+
+        const radiusDeg = Number(skySpec.radius_deg || 1.0);
+        return {
+          ra: centerRa,
+          dec: centerDec,
+          fovDeg: Math.min(Math.max(radiusDeg * 2.4, maxSep * 2.8, 1.2), 180.0),
+        };
+      }
+
+      function buildAladinSrcdoc(selections, catalogPayload, mode = "overview") {
+        const activeSelections = uniqueSelections(selections);
+        const requestedMode = mode === "click" ? "click" : "overview";
+        const focus = requestedMode === "click" ? skyFocusFromPayload(activeSelections, catalogPayload) : null;
+        const actualMode = requestedMode === "click" && focus ? "click" : "overview";
         const bg = String(theme.panel_solid || theme.paper_bgcolor || "#121212");
         const txt = String(theme.text_color || "#d0d0d0");
         const beamColor = JSON.stringify(String(theme.footprint || "#6ec5ff"));
         const survey = JSON.stringify(String(skySpec.survey || "P/DSS2/color"));
-        const cooFrame = JSON.stringify(String(skySpec.frame || "galactic") === "galactic" ? "galactic" : "equatorial");
+        const cooFrame = JSON.stringify(
+          actualMode === "click"
+            ? (String(skySpec.frame || "galactic") === "galactic" ? "galactic" : "equatorial")
+            : "galactic"
+        );
         const payloadJson = JSON.stringify(catalogPayload || []);
-        const target = JSON.stringify(`${Number(selection.ra_deg).toFixed(6)} ${Number(selection.dec_deg).toFixed(6)}`);
+        const beamCentersJson = JSON.stringify((actualMode === "click" ? activeSelections : [])
+          .map((selection) => ({
+            ra: Number(selection.ra_deg),
+            dec: Number(selection.dec_deg),
+          }))
+          .filter((beam) => Number.isFinite(beam.ra) && Number.isFinite(beam.dec)));
+        const modeJson = JSON.stringify(actualMode);
+        const target = JSON.stringify(
+          actualMode === "click"
+            ? `${Number(focus.ra).toFixed(6)} ${Number(focus.dec).toFixed(6)}`
+            : "0.000000 0.000000"
+        );
         const radiusDeg = Number(skySpec.radius_deg || 1.0);
-        const fovDeg = Math.min(Math.max(radiusDeg * 2.4, 1.2), 180.0);
-        const ra = Number(selection.ra_deg);
-        const dec = Number(selection.dec_deg);
+        const fovDeg = actualMode === "click" ? Number(focus.fovDeg) : 360.0;
+        const ra = actualMode === "click" ? Number(focus.ra) : 0.0;
+        const dec = actualMode === "click" ? Number(focus.dec) : 0.0;
         return `<!doctype html>
 <html>
   <head>
@@ -726,6 +1062,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: ${bg}; color: ${txt}; overflow: hidden; }
       #oviz-wrap { position: relative; width: 100%; height: 100%; }
       #aladin-lite-div { width: 100%; height: 100%; }
+      .aladin-stack-box {
+        max-height: min(56vh, 420px) !important;
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+      }
       #oviz-status {
         position: absolute;
         inset: 0;
@@ -746,7 +1087,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
     <script src="https://aladin.u-strasbg.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"><\/script>
     <script>
       (function () {
+        const viewMode = ${modeJson};
         const payload = ${payloadJson};
+        const beamCenters = ${beamCentersJson};
         const statusEl = document.getElementById("oviz-status");
         function fail(message) {
           if (statusEl) {
@@ -758,25 +1101,40 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
         A.init.then(() => {
-          const aladin = A.aladin("#aladin-lite-div", {
+          const aladinOptions = {
             survey: ${survey},
             fov: ${fovDeg},
             target: ${target},
             cooFrame: ${cooFrame},
-            showReticle: true,
+            expandLayersControl: false,
+            showReticle: viewMode === "click",
             showLayersControl: true,
             showGotoControl: true,
             showFrame: true
-          });
+          };
+          if (viewMode !== "click") {
+            aladinOptions.projection = "MOL";
+          }
+          const aladin = A.aladin("#aladin-lite-div", aladinOptions);
           if (aladin && typeof aladin.setImageSurvey === "function") {
             aladin.setImageSurvey(${survey});
           }
-          if (aladin && typeof aladin.gotoRaDec === "function") {
+          if (viewMode === "click" && aladin && typeof aladin.gotoRaDec === "function") {
             aladin.gotoRaDec(${ra.toFixed(8)}, ${dec.toFixed(8)});
           }
-          const beam = A.graphicOverlay({ color: ${beamColor}, lineWidth: 2, opacity: 0.95 });
-          aladin.addOverlay(beam);
-          beam.add(A.circle(${ra.toFixed(8)}, ${dec.toFixed(8)}, ${radiusDeg.toFixed(8)}));
+          if (viewMode !== "click" && aladin && typeof aladin.setProjection === "function") {
+            aladin.setProjection("MOL");
+          }
+          if (viewMode !== "click" && aladin && typeof aladin.setFoV === "function") {
+            aladin.setFoV(360.0);
+          }
+          if (viewMode === "click") {
+            const beam = A.graphicOverlay({ color: ${beamColor}, lineWidth: 2, opacity: 0.95 });
+            aladin.addOverlay(beam);
+            beamCenters.forEach((beamDef) => {
+              beam.add(A.circle(Number(beamDef.ra), Number(beamDef.dec), ${radiusDeg.toFixed(8)}));
+            });
+          }
           payload.forEach((catDef) => {
             const cat = A.catalog({
               name: catDef.name,
@@ -792,14 +1150,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             });
             if (sources.length) {
               cat.addSources(sources);
-            }
-            if ((catDef.points || []).length > 1) {
-              const membersOverlay = A.graphicOverlay({ color: catDef.color, lineWidth: 1, opacity: 0.90 });
-              aladin.addOverlay(membersOverlay);
-              const markerRadius = Math.max(Math.min(${fovDeg} / 220.0, 0.04), 0.002);
-              (catDef.points || []).forEach((pt) => {
-                membersOverlay.add(A.circle(Number(pt.ra), Number(pt.dec), markerRadius));
-              });
             }
           });
           if (statusEl) {
@@ -818,14 +1168,63 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (!skySpec.enabled) {
           return;
         }
-        if (!currentSelection) {
-          skyFrameEl.srcdoc = buildEmptySkySrcdoc();
-          skyReadoutEl.textContent = skyReadoutText(null);
-          return;
+        const selectionsForPanel = currentSelection ? [currentSelection] : currentSelections;
+        const mode = currentSelection ? "click" : "overview";
+        const payload = buildAladinCatalogPayload(selectionsForPanel, mode);
+        skyFrameEl.srcdoc = buildAladinSrcdoc(selectionsForPanel, payload, mode);
+        skyReadoutEl.textContent = skyReadoutText(selectionsForPanel, payload, mode);
+      }
+
+      function updateSelectionUI() {
+        selectionReadoutEl.textContent = selectionToolbarText(currentSelections, currentSelection);
+        clearSelectionButtonEl.disabled = currentSelections.length === 0 && !currentSelection;
+        lassoButtonEl.dataset.active = lassoArmed ? "true" : "false";
+        lassoButtonEl.setAttribute("aria-pressed", lassoArmed ? "true" : "false");
+        clickSelectToggleEl.checked = clickSelectionEnabled;
+      }
+
+      function setClusterSelections(selections, mode = "click") {
+        const nextSelections = uniqueSelections(selections);
+        const normalizedMode = String(mode || "click");
+
+        if (normalizedMode === "lasso") {
+          currentSelections = nextSelections;
+          selectedClusterKeys = new Set(
+            currentSelections
+              .map((selection) => normalizedSelectionKeyFor(selection))
+              .filter(Boolean)
+          );
+          if (currentSelection) {
+            const focusKey = normalizedSelectionKeyFor(currentSelection);
+            if (!focusKey || !selectedClusterKeys.has(focusKey)) {
+              currentSelection = null;
+            }
+          }
+        } else {
+          const nextFocus = nextSelections.length ? nextSelections[0] : null;
+          if (currentSelections.length) {
+            const focusKey = normalizedSelectionKeyFor(nextFocus);
+            if (!nextFocus || !focusKey || !selectedClusterKeys.has(focusKey)) {
+              return;
+            }
+          }
+          currentSelection = nextFocus;
         }
-        const payload = buildAladinCatalogPayload(currentSelection);
-        skyFrameEl.srcdoc = buildAladinSrcdoc(currentSelection, payload);
-        skyReadoutEl.textContent = skyReadoutText(currentSelection);
+
+        currentSelectionMode = currentSelection ? "click" : (currentSelections.length ? "lasso" : "none");
+        updateSelectionUI();
+        updateSkyPanel();
+        renderFrame(currentFrameIndex);
+      }
+
+      function clearClusterSelections() {
+        currentSelections = [];
+        currentSelection = null;
+        currentSelectionMode = "none";
+        selectedClusterKeys = new Set();
+        updateSelectionUI();
+        updateSkyPanel();
+        renderFrame(currentFrameIndex);
       }
 
       function applySkyPanelMode() {
@@ -1677,7 +2076,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (!Number.isFinite(point.size) || point.size <= 0) {
             return;
           }
-          const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, point.color, point.opacity));
+          let opacityMultiplier = 1.0;
+          const pointKey = normalizedSelectionKeyFor(point.selection);
+          if (selectedClusterKeys.size && pointKey) {
+            opacityMultiplier = selectedClusterKeys.has(pointKey) ? 1.0 : 0.16;
+          }
+          const effectiveOpacity = Math.max(0.04, Math.min(1.0, Number(point.opacity ?? 1.0) * opacityMultiplier));
+          const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, point.color, effectiveOpacity));
           const scale = Math.max(point.size * pointScale, pointScale * 0.5);
           sprite.position.set(point.x, point.y, point.z);
           sprite.scale.set(scale, scale, scale);
@@ -1962,20 +2367,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             return;
           }
 
-          const label = document.createElement("label");
-          label.className = "oviz-three-legend-item";
-          const checkbox = document.createElement("input");
-          checkbox.type = "checkbox";
-          checkbox.checked = Boolean(legendState[item.key]);
-          checkbox.addEventListener("change", () => {
-            legendState[item.key] = checkbox.checked;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "oviz-three-legend-item";
+          button.dataset.active = legendState[item.key] ? "true" : "false";
+          button.textContent = item.name;
+          button.style.color = item.color || theme.text_color || theme.axis_color;
+          button.addEventListener("click", () => {
+            legendState[item.key] = !legendState[item.key];
+            renderLegend();
             renderFrame(currentFrameIndex);
           });
-          const text = document.createElement("span");
-          text.textContent = item.name;
-          label.appendChild(checkbox);
-          label.appendChild(text);
-          legendEl.appendChild(label);
+          legendEl.appendChild(button);
         });
       }
 
@@ -2008,7 +2411,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
         });
 
-        if (currentSelection && approximatelyZero(Number(frame.time))) {
+        if (currentSelectionMode === "click" && currentSelection && approximatelyZero(Number(frame.time))) {
           const footprint = buildSelectionFootprint(currentSelection, frameLineMaterials);
           if (footprint) {
             plotGroup.add(footprint);
@@ -2103,6 +2506,155 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         resize();
       }
 
+      function currentFrameAllowsSelection() {
+        const frame = currentFrame();
+        return Boolean(frame) && approximatelyZero(Number(frame.time));
+      }
+
+      function canvasPointFromEvent(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        };
+      }
+
+      function updateLassoOverlay() {
+        if (!lassoState || !Array.isArray(lassoState.points) || !lassoState.points.length) {
+          lassoOverlayEl.dataset.active = "false";
+          lassoPolylineEl.setAttribute("points", "");
+          return;
+        }
+        const points = lassoState.points.slice();
+        if (points.length > 2) {
+          points.push(points[0]);
+        }
+        lassoOverlayEl.dataset.active = "true";
+        lassoPolylineEl.setAttribute("points", points.map((point) => `${point.x},${point.y}`).join(" "));
+      }
+
+      function pointInPolygon(point, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+          const xi = polygon[i].x;
+          const yi = polygon[i].y;
+          const xj = polygon[j].x;
+          const yj = polygon[j].y;
+          const denom = yj - yi;
+          if (Math.abs(denom) < 1e-9) {
+            continue;
+          }
+          const intersect = ((yi > point.y) !== (yj > point.y))
+            && (point.x < ((xj - xi) * (point.y - yi)) / denom + xi);
+          if (intersect) {
+            inside = !inside;
+          }
+        }
+        return inside;
+      }
+
+      function spriteScreenPoint(sprite) {
+        const projected = new THREE.Vector3();
+        sprite.getWorldPosition(projected);
+        projected.project(camera);
+        if (
+          !Number.isFinite(projected.x)
+          || !Number.isFinite(projected.y)
+          || !Number.isFinite(projected.z)
+          || projected.z < -1.0
+          || projected.z > 1.0
+        ) {
+          return null;
+        }
+        return {
+          x: (projected.x * 0.5 + 0.5) * canvas.clientWidth,
+          y: (-projected.y * 0.5 + 0.5) * canvas.clientHeight,
+        };
+      }
+
+      function startLassoSelection(event) {
+        if (!currentFrameAllowsSelection() || skyPointerState || event.button !== 0) {
+          return false;
+        }
+        if (!(event.shiftKey || lassoArmed)) {
+          return false;
+        }
+        lassoState = {
+          pointerId: event.pointerId,
+          points: [canvasPointFromEvent(event)],
+          moved: false,
+        };
+        controls.enabled = false;
+        document.body.style.userSelect = "none";
+        if (typeof canvas.setPointerCapture === "function" && event.pointerId !== undefined) {
+          try {
+            canvas.setPointerCapture(event.pointerId);
+          } catch (_err) {
+          }
+        }
+        updateLassoOverlay();
+        tooltipEl.style.display = "none";
+        event.preventDefault();
+        return true;
+      }
+
+      function onLassoPointerMove(event) {
+        if (!lassoState) {
+          return;
+        }
+        const point = canvasPointFromEvent(event);
+        const lastPoint = lassoState.points[lassoState.points.length - 1];
+        const dx = point.x - lastPoint.x;
+        const dy = point.y - lastPoint.y;
+        if ((dx * dx + dy * dy) < 4.0) {
+          return;
+        }
+        lassoState.points.push(point);
+        lassoState.moved = true;
+        updateLassoOverlay();
+        tooltipEl.style.display = "none";
+        event.preventDefault();
+      }
+
+      function finishLassoSelection(event) {
+        if (!lassoState) {
+          return;
+        }
+        if (typeof canvas.releasePointerCapture === "function" && lassoState.pointerId !== undefined) {
+          try {
+            canvas.releasePointerCapture(lassoState.pointerId);
+          } catch (_err) {
+          }
+        }
+        controls.enabled = true;
+        document.body.style.userSelect = "";
+        const polygon = Array.isArray(lassoState.points) ? lassoState.points.slice() : [];
+        const shouldSuppressClick = Boolean(lassoState.moved || lassoArmed);
+        lassoState = null;
+        updateLassoOverlay();
+        if (shouldSuppressClick) {
+          suppressNextCanvasClick = true;
+        }
+        if (polygon.length < 3) {
+          return;
+        }
+        const selected = [];
+        hoverTargets.forEach((sprite) => {
+          const selection = sprite && sprite.userData ? sprite.userData.selection : null;
+          if (!selection || !approximatelyZero(Number(selection.click_time_myr))) {
+            return;
+          }
+          const screenPoint = spriteScreenPoint(sprite);
+          if (screenPoint && pointInPolygon(screenPoint, polygon)) {
+            selected.push(selection);
+          }
+        });
+        setClusterSelections(selected, "lasso");
+        if (event) {
+          event.preventDefault();
+        }
+      }
+
       function pickSprite(event) {
         const rect = canvas.getBoundingClientRect();
         pointer.x = ((event.clientX - rect.left) / rect.width) * 2.0 - 1.0;
@@ -2113,21 +2665,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function onCanvasClick(event) {
-        if (!skySpec.enabled || skyPointerState) {
+        if (suppressNextCanvasClick) {
+          suppressNextCanvasClick = false;
+          return;
+        }
+        if (skyPointerState || !clickSelectionEnabled) {
           return;
         }
         const hit = pickSprite(event);
         const selection = hit && hit.userData ? hit.userData.selection : null;
         if (!selection) {
-          return;
+            return;
         }
         const frame = currentFrame();
         if (!frame || !approximatelyZero(Number(selection.click_time_myr)) || !approximatelyZero(Number(frame.time))) {
           return;
         }
-        currentSelection = selection;
-        updateSkyPanel();
-        renderFrame(currentFrameIndex);
+        setClusterSelections([selection], "click");
       }
 
       function onSkyPointerStart(event) {
@@ -2214,7 +2768,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           applySkyPanelMode();
           return;
         }
-        skyReadoutEl.textContent = skyReadoutText(null);
+        skyReadoutEl.textContent = skyReadoutText([], [], "overview");
         skyFrameEl.srcdoc = buildEmptySkySrcdoc();
         skyShowButtonEl.addEventListener("click", () => setSkyPanelMode("normal"));
         skyShowFullButtonEl.addEventListener("click", () => setSkyPanelMode("fullscreen"));
@@ -2228,6 +2782,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function onPointerMove(event) {
+        if (lassoState) {
+          onLassoPointerMove(event);
+          return;
+        }
         const rect = canvas.getBoundingClientRect();
         pointer.x = ((event.clientX - rect.left) / rect.width) * 2.0 - 1.0;
         pointer.y = -((event.clientY - rect.top) / rect.height) * 2.0 + 1.0;
@@ -2272,6 +2830,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
         playButtonEl.addEventListener("click", play);
         pauseButtonEl.addEventListener("click", pause);
+        lassoButtonEl.addEventListener("click", () => {
+          lassoArmed = !lassoArmed;
+          updateSelectionUI();
+        });
+        clearSelectionButtonEl.addEventListener("click", clearClusterSelections);
+        clickSelectToggleEl.addEventListener("change", () => {
+          clickSelectionEnabled = Boolean(clickSelectToggleEl.checked);
+          updateSelectionUI();
+        });
+      }
+
+      function onCanvasPointerDown(event) {
+        startLassoSelection(event);
+      }
+
+      function onWindowPointerMove(event) {
+        onSkyPointerMove(event);
+      }
+
+      function onWindowPointerEnd(event) {
+        onSkyPointerEnd(event);
+        finishLassoSelection(event);
       }
 
       function animate() {
@@ -2285,16 +2865,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       initSkyPanel();
       resetLegendState(currentGroup);
       renderLegend();
+      updateSelectionUI();
       renderFrame(currentFrameIndex);
       resize();
       animate();
 
+      canvas.addEventListener("pointerdown", onCanvasPointerDown);
       canvas.addEventListener("pointermove", onPointerMove);
       canvas.addEventListener("pointerleave", onPointerLeave);
       canvas.addEventListener("click", onCanvasClick);
-      window.addEventListener("pointermove", onSkyPointerMove);
-      window.addEventListener("pointerup", onSkyPointerEnd);
-      window.addEventListener("pointercancel", onSkyPointerEnd);
+      window.addEventListener("pointermove", onWindowPointerMove);
+      window.addEventListener("pointerup", onWindowPointerEnd);
+      window.addEventListener("pointercancel", onWindowPointerEnd);
       window.addEventListener("resize", resize);
       if (typeof ResizeObserver !== "undefined") {
         const observer = new ResizeObserver(() => resize());

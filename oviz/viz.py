@@ -1677,6 +1677,7 @@ class Animate3D:
                 legend_items.append({
                     'key': trace_key,
                     'name': trace_spec.get('name') or trace_key,
+                    'color': trace_spec.get('legend_color'),
                 })
 
         group_visibility = {}
@@ -1889,6 +1890,7 @@ class Animate3D:
             'name': trace_json.get('name') or trace_key,
             'showlegend': bool(trace_json.get('showlegend', True)),
         }
+        legend_color = None
 
         if 'lines' in mode:
             segments = _line_segments_from_trace(trace_json)
@@ -1904,6 +1906,7 @@ class Animate3D:
                     'dash': trace_json.get('line', {}).get('dash', 'solid'),
                 }
                 spec['opacity'] = line_opacity
+                legend_color = line_color
 
         if 'markers' in mode:
             points = _points_from_trace(
@@ -1913,11 +1916,18 @@ class Animate3D:
             )
             if points:
                 spec['points'] = points
+                if legend_color is None:
+                    legend_color = points[0].get('color')
 
         if 'text' in mode:
             labels = _labels_from_trace(trace_json)
             if labels:
                 spec['labels'] = labels
+                if legend_color is None:
+                    legend_color = labels[0].get('color')
+
+        if legend_color is not None:
+            spec['legend_color'] = legend_color
 
         if any(key in spec for key in ('segments', 'points', 'labels')):
             return spec

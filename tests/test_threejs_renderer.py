@@ -95,12 +95,17 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("three.min.js", html)
         self.assertIn("Click to toggle traces on/off", html)
         self.assertIn("Cluster A", html)
+        self.assertIn("Shift+drag or use Lasso", html)
+        self.assertIn("oviz-three-lasso-button", html)
+        self.assertIn("Enable click select", html)
         self.assertIn("data:text/html", repr_html)
         self.assertIn("alphaTest: 0.15", html)
         self.assertIn("width: 100vw", html)
         self.assertIn("height: 100vh", html)
         self.assertEqual(viz.fig_dict["renderer"], "threejs")
         self.assertEqual(viz.fig_dict["camera_up"], {"x": 0.0, "y": 0.0, "z": 1.0})
+        cluster_legend = next(item for item in viz.fig_dict["legend"]["items"] if item["name"] == "Cluster A")
+        self.assertEqual(cluster_legend["color"], "#00ffff")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             out_file = Path(tmp_dir) / "threejs_scene.html"
@@ -163,7 +168,10 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertTrue(np.isfinite(selection["dec_deg"]))
         self.assertIn("AladinLite/api/v3/latest/aladin.js", html)
         self.assertIn("oviz-three-sky-panel", html)
-        self.assertIn("Click a cluster member at t=0 to open Aladin Lite.", html)
+        self.assertIn('aladinOptions.projection = "MOL";', html)
+        self.assertIn("expandLayersControl: false", html)
+        self.assertIn(".aladin-stack-box", html)
+        self.assertIn("View: Mollweide all-sky", html)
 
     def test_threejs_renderer_builds_trace_catalog_without_members_file(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
