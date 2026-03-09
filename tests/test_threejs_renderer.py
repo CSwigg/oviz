@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from astropy.io import fits
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
@@ -93,11 +94,14 @@ class ThreeJSRendererTests(unittest.TestCase):
 
         self.assertEqual(fig.__class__.__name__, "ThreeJSFigure")
         self.assertIn("three.min.js", html)
-        self.assertIn("Click to toggle traces on/off", html)
+        self.assertIn("Click names to toggle. Use arrows for controls.", html)
         self.assertIn("Cluster A", html)
         self.assertIn("Shift+drag or use Lasso", html)
         self.assertIn("oviz-three-lasso-button", html)
         self.assertIn("Enable click select", html)
+        self.assertIn("Lasso volumetric data", html)
+        self.assertIn("oviz-three-tools-toggle", html)
+        self.assertIn("oviz-three-scale-bar", html)
         self.assertIn("data:text/html", repr_html)
         self.assertIn("alphaTest: 0.15", html)
         self.assertIn("width: 100vw", html)
@@ -130,6 +134,33 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(len(zero_frame["decorations"]), 1)
         self.assertEqual(zero_frame["decorations"][0]["kind"], "milky_way_model")
         self.assertEqual(past_frame["decorations"], [])
+
+    def test_threejs_galactic_circles_keep_circles_but_drop_labels(self):
+        viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
+        viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            galactic_mode=True,
+            show_gc_line=True,
+        )
+
+        zero_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == 0.0)
+        trace_names = [trace.get("name") for trace in zero_frame["traces"]]
+        label_texts = [
+            label.get("text")
+            for trace in zero_frame["traces"]
+            for label in trace.get("labels", [])
+        ]
+
+        self.assertIn("R = 4 kpc", trace_names)
+        self.assertIn("R = 8.12 kpc", trace_names)
+        self.assertIn("R = 12 kpc", trace_names)
+        self.assertNotIn("GC", trace_names)
+        self.assertNotIn("GC", label_texts)
+        self.assertNotIn("R = 4 kpc", label_texts)
+        self.assertNotIn("R = 8.12 kpc", label_texts)
+        self.assertNotIn("R = 12 kpc", label_texts)
 
     def test_threejs_renderer_can_serialize_sky_panel_state(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
@@ -194,16 +225,109 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertTrue(np.isfinite(point["ra"]))
         self.assertTrue(np.isfinite(point["dec"]))
 
-    def test_threejs_renderer_rejects_age_kde_inset(self):
+    def test_threejs_renderer_can_serialize_age_kde_widget(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        viz.data_collection.cluster.df_int["age_myr"] = [0.5, 0.5]
+
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            show_age_kde_inset=True,
+            age_kde_bandwidth_myr=0.4,
+        )
+
+        html = fig.to_html()
+        age_kde = viz.fig_dict["age_kde"]
+
+        self.assertTrue(age_kde["enabled"])
+        self.assertEqual(age_kde["title"], "Relative SFH")
+        self.assertEqual(age_kde["bandwidth_myr"], 0.4)
+        self.assertEqual(len(age_kde["traces"]), 1)
+        self.assertEqual(age_kde["traces"][0]["trace_name"], "Cluster A")
+        self.assertEqual(age_kde["traces"][0]["trace_key"], "trace-0")
+        self.assertIn("oviz-three-widget-select", html)
+        self.assertIn("oviz-three-age-panel", html)
+        self.assertIn("Age KDE", html)
+        self.assertIn("Relative SFH", html)
+
+    def test_threejs_renderer_can_serialize_volume_layer(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
 
-        with self.assertRaises(NotImplementedError):
-            viz.make_plot(
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cube_path = Path(tmp_dir) / "dust_cube.fits"
+            cube = np.linspace(0.0, 1.0, 3 * 4 * 5, dtype=np.float32).reshape(3, 4, 5)
+            cube[0, 0, 0] = np.nan
+
+            image_hdu = fits.ImageHDU(cube, name="MEAN")
+            image_hdu.header["CTYPE1"] = "X"
+            image_hdu.header["CTYPE2"] = "Y"
+            image_hdu.header["CTYPE3"] = "Z"
+            image_hdu.header["CUNIT1"] = "pc"
+            image_hdu.header["CUNIT2"] = "pc"
+            image_hdu.header["CUNIT3"] = "pc"
+            image_hdu.header["CRVAL1"] = -4.0
+            image_hdu.header["CRVAL2"] = -3.0
+            image_hdu.header["CRVAL3"] = -2.0
+            image_hdu.header["CRPIX1"] = 1.0
+            image_hdu.header["CRPIX2"] = 1.0
+            image_hdu.header["CRPIX3"] = 1.0
+            image_hdu.header["CDELT1"] = 2.0
+            image_hdu.header["CDELT2"] = 2.0
+            image_hdu.header["CDELT3"] = 2.0
+            fits.HDUList([fits.PrimaryHDU(), image_hdu]).writeto(cube_path)
+
+            fig = viz.make_plot(
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
-                show_age_kde_inset=True,
+                volumes=[{
+                    "path": str(cube_path),
+                    "name": "Dust Cube",
+                    "hdu": "MEAN",
+                    "max_resolution": 8,
+                    "opacity": 0.22,
+                    "samples": 128,
+                    "alpha_coef": 42,
+                    "colormap": "inferno",
+                }],
             )
+
+        html = fig.to_html()
+        scene_spec = viz.fig_dict
+        layer = scene_spec["volumes"]["layers"][0]
+        zero_frame = next(frame for frame in scene_spec["frames"] if frame["time"] == 0.0)
+
+        self.assertTrue(scene_spec["volumes"]["enabled"])
+        self.assertEqual(layer["name"], "Dust Cube")
+        self.assertEqual(layer["shape"], {"x": 5, "y": 4, "z": 3})
+        self.assertEqual(layer["source_shape"], {"x": 5, "y": 4, "z": 3})
+        self.assertEqual(layer["downsample_method"], "scipy_zoom")
+        self.assertEqual(layer["downsample_step"], {"x": 1.0, "y": 1.0, "z": 1.0})
+        self.assertEqual(layer["bounds"]["x"], [-5.0, 5.0])
+        self.assertEqual(layer["bounds"]["y"], [-4.0, 4.0])
+        self.assertAlmostEqual(layer["bounds"]["z"][0], -3.0)
+        self.assertAlmostEqual(layer["bounds"]["z"][1], 3.0)
+        self.assertEqual(layer["default_controls"]["steps"], 128)
+        self.assertEqual(layer["default_controls"]["samples"], 128)
+        self.assertEqual(layer["default_controls"]["alpha_coef"], 42.0)
+        self.assertAlmostEqual(layer["default_controls"]["opacity"], 0.22)
+        self.assertEqual(layer["default_controls"]["colormap"], "inferno")
+        self.assertTrue(layer["legend_color"])
+        self.assertTrue(layer["data_b64"])
+        self.assertGreaterEqual(len(layer["colormap_options"]), 3)
+        self.assertEqual(zero_frame["decorations"][0]["kind"], "volume_layer")
+        self.assertIn("Dust Cube", [item["name"] for item in scene_spec["legend"]["items"]])
+        self.assertIn("oviz-three-volume", html)
+        self.assertIn("Show at t=0", html)
+        self.assertIn("DataTexture3D", html)
+        self.assertIn("Alpha coef", html)
+        self.assertIn("precision highp sampler3D;", html)
+        self.assertIn("useSelectionPolygon", html)
+        self.assertIn("selectionMaskTexture", html)
+        self.assertIn("selectionViewProjectionMatrix", html)
+        self.assertIn("selectionDimOutside", html)
+        self.assertIn("Rendered at t=0 only as a WebGL2 ray-marched volume.", html)
 
 
 if __name__ == "__main__":

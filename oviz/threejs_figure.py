@@ -66,7 +66,45 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         gap: 10px;
         max-width: min(320px, 32vw);
       }
-      #__ROOT_ID__ .oviz-three-group-select {
+      #__ROOT_ID__ .oviz-three-widget-menu {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 6;
+      }
+      #__ROOT_ID__ .oviz-three-tools-shell {
+        position: relative;
+        min-height: 34px;
+      }
+      #__ROOT_ID__ .oviz-three-tools-toggle {
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 8px;
+        background: var(--oviz-panel-bg);
+        color: var(--oviz-text);
+        cursor: pointer;
+        font: 12px Helvetica, Arial, sans-serif;
+        padding: 7px 11px;
+      }
+      #__ROOT_ID__ .oviz-three-tools-drawer {
+        position: absolute;
+        top: 0;
+        left: 52px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: min(320px, 32vw);
+        transform: translateX(-20px);
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 0.18s ease, opacity 0.18s ease;
+      }
+      #__ROOT_ID__ .oviz-three-tools-shell[data-open="true"] .oviz-three-tools-drawer {
+        transform: translateX(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+      #__ROOT_ID__ .oviz-three-group-select,
+      #__ROOT_ID__ .oviz-three-widget-select {
         min-width: 180px;
         padding: 6px 10px;
         border-radius: 6px;
@@ -93,8 +131,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-text);
       }
       #__ROOT_ID__ .oviz-three-legend-item {
-        display: block;
-        width: 100%;
+        flex: 1 1 auto;
         padding: 0;
         border: 0;
         background: transparent;
@@ -102,6 +139,109 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         cursor: pointer;
         font: 13px Helvetica, Arial, sans-serif;
         line-height: 1.35;
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry:last-child {
+        padding-bottom: 0;
+        border-bottom: 0;
+      }
+      #__ROOT_ID__ .oviz-three-legend-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-disclosure {
+        flex: 0 0 auto;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border-radius: 6px;
+        border: 1px solid var(--oviz-panel-border);
+        background: transparent;
+        color: var(--oviz-text);
+        cursor: pointer;
+        font: 12px Helvetica, Arial, sans-serif;
+        line-height: 1;
+      }
+      #__ROOT_ID__ .oviz-three-legend-disclosure[data-open="true"] {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls {
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px 10px;
+        margin-top: 2px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry[data-open="true"] .oviz-three-legend-controls {
+        display: flex;
+      }
+      #__ROOT_ID__ .oviz-three-legend-control-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+        color: var(--oviz-text);
+        font-size: 12px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"],
+      #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-legend-field select,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="color"] {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-legend-field select {
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--oviz-panel-border);
+        background: rgba(0, 0, 0, 0.18);
+        color: var(--oviz-text);
+        font: 12px Helvetica, Arial, sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"] {
+        accent-color: var(--oviz-axis);
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="color"] {
+        height: 34px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 6px;
+        padding: 2px;
+        background: rgba(0, 0, 0, 0.18);
+      }
+      #__ROOT_ID__ .oviz-three-legend-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--oviz-text);
+        font-size: 12px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-toggle input {
+        margin: 0;
+        accent-color: var(--oviz-axis);
+      }
+      #__ROOT_ID__ .oviz-three-legend-summary {
+        color: var(--oviz-text);
+        font-size: 11px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        opacity: 0.88;
       }
       #__ROOT_ID__ .oviz-three-legend-item[data-active="false"] {
         opacity: 0.38;
@@ -159,6 +299,66 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font-size: 12px;
         line-height: 1.35;
         white-space: pre-wrap;
+      }
+      #__ROOT_ID__ .oviz-three-volume {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-volume[data-enabled="true"] {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-volume-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--oviz-text);
+      }
+      #__ROOT_ID__ .oviz-three-volume-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      #__ROOT_ID__ .oviz-three-volume-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 12px;
+        color: var(--oviz-text);
+      }
+      #__ROOT_ID__ .oviz-three-volume-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--oviz-text);
+      }
+      #__ROOT_ID__ .oviz-three-volume-toggle input {
+        margin: 0;
+        accent-color: var(--oviz-axis);
+      }
+      #__ROOT_ID__ .oviz-three-volume select,
+      #__ROOT_ID__ .oviz-three-volume input[type="number"],
+      #__ROOT_ID__ .oviz-three-volume input[type="range"] {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+      #__ROOT_ID__ .oviz-three-volume select,
+      #__ROOT_ID__ .oviz-three-volume input[type="number"] {
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--oviz-panel-border);
+        background: rgba(0, 0, 0, 0.18);
+        color: var(--oviz-text);
+        font: 12px Helvetica, Arial, sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-volume input[type="range"] {
+        accent-color: var(--oviz-axis);
+      }
+      #__ROOT_ID__ .oviz-three-volume-summary {
+        color: var(--oviz-text);
+        font-size: 11px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        opacity: 0.88;
       }
       #__ROOT_ID__ .oviz-three-footer {
         position: absolute;
@@ -227,6 +427,46 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font-size: 12px;
         display: none;
       }
+      #__ROOT_ID__ .oviz-three-scale-bar {
+        position: absolute;
+        left: 18px;
+        bottom: 86px;
+        z-index: 6;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-three-scale-label {
+        color: var(--oviz-text);
+        font: 12px Helvetica, Arial, sans-serif;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-three-scale-line {
+        position: relative;
+        width: 120px;
+        height: 12px;
+      }
+      #__ROOT_ID__ .oviz-three-scale-line::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 5px;
+        border-top: 2px solid var(--oviz-axis);
+      }
+      #__ROOT_ID__ .oviz-three-scale-line::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 1px;
+        width: 100%;
+        height: 10px;
+        border-left: 2px solid var(--oviz-axis);
+        border-right: 2px solid var(--oviz-axis);
+        box-sizing: border-box;
+      }
       #__ROOT_ID__ .oviz-three-lasso-overlay {
         position: absolute;
         inset: 0;
@@ -250,12 +490,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         stroke-linecap: round;
         vector-effect: non-scaling-stroke;
       }
-      #__ROOT_ID__ .oviz-three-sky-panel {
+      #__ROOT_ID__ .oviz-three-widget-panel {
         position: absolute;
-        top: 72px;
-        right: 12px;
-        width: min(38vw, 560px);
-        height: min(56vh, 560px);
         z-index: 8;
         display: none;
         overflow: hidden;
@@ -265,10 +501,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         box-shadow: 0 18px 46px rgba(0, 0, 0, 0.30);
         touch-action: none;
       }
-      #__ROOT_ID__ .oviz-three-sky-panel[data-mode="normal"] {
+      #__ROOT_ID__ .oviz-three-widget-panel[data-mode="normal"] {
         display: block;
       }
-      #__ROOT_ID__ .oviz-three-sky-panel[data-mode="fullscreen"] {
+      #__ROOT_ID__ .oviz-three-widget-panel[data-mode="fullscreen"] {
         display: block;
         top: 0;
         right: 0;
@@ -279,7 +515,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-radius: 0;
         border-width: 0;
       }
-      #__ROOT_ID__ .oviz-three-sky-drag {
+      #__ROOT_ID__ .oviz-three-sky-panel {
+        top: 72px;
+        right: 12px;
+        width: min(38vw, 560px);
+        height: min(56vh, 560px);
+      }
+      #__ROOT_ID__ .oviz-three-age-panel {
+        top: 96px;
+        right: 44px;
+        width: min(36vw, 540px);
+        height: min(42vh, 360px);
+      }
+      #__ROOT_ID__ .oviz-three-widget-drag {
         position: absolute;
         top: 0;
         left: 0;
@@ -297,7 +545,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         cursor: grab;
         user-select: none;
       }
-      #__ROOT_ID__ .oviz-three-sky-panel[data-mode="fullscreen"] .oviz-three-sky-drag {
+      #__ROOT_ID__ .oviz-three-widget-panel[data-mode="fullscreen"] .oviz-three-widget-drag {
         cursor: default;
       }
       #__ROOT_ID__ .oviz-three-sky-frame {
@@ -325,8 +573,31 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 11px/1.45 Menlo, Monaco, Consolas, monospace;
         white-space: pre-wrap;
       }
-      #__ROOT_ID__ .oviz-three-sky-panel button,
-      #__ROOT_ID__ .oviz-three-sky-actions button {
+      #__ROOT_ID__ .oviz-three-age-canvas {
+        position: absolute;
+        top: 28px;
+        left: 0;
+        width: 100%;
+        height: calc(100% - 92px);
+        display: block;
+        background: var(--oviz-panel-solid);
+      }
+      #__ROOT_ID__ .oviz-three-age-readout {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 64px;
+        margin: 0;
+        padding: 8px 10px;
+        overflow: auto;
+        border-top: 1px solid var(--oviz-panel-border);
+        background: rgba(0, 0, 0, 0.18);
+        color: var(--oviz-text);
+        font: 11px/1.45 Menlo, Monaco, Consolas, monospace;
+        white-space: pre-wrap;
+      }
+      #__ROOT_ID__ .oviz-three-widget-panel button {
         border: 1px solid var(--oviz-panel-border);
         border-radius: 4px;
         background: var(--oviz-panel-bg);
@@ -336,26 +607,25 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         padding: 2px 6px;
       }
       #__ROOT_ID__ .oviz-three-sky-full,
-      #__ROOT_ID__ .oviz-three-sky-hide {
+      #__ROOT_ID__ .oviz-three-sky-hide,
+      #__ROOT_ID__ .oviz-three-age-full,
+      #__ROOT_ID__ .oviz-three-age-hide {
         position: absolute;
         top: 6px;
         z-index: 3;
       }
-      #__ROOT_ID__ .oviz-three-sky-full {
+      #__ROOT_ID__ .oviz-three-sky-full,
+      #__ROOT_ID__ .oviz-three-age-full {
         right: 52px;
       }
-      #__ROOT_ID__ .oviz-three-sky-hide {
+      #__ROOT_ID__ .oviz-three-sky-hide,
+      #__ROOT_ID__ .oviz-three-age-hide {
         right: 6px;
       }
       #__ROOT_ID__ .oviz-three-sky-actions {
-        position: absolute;
-        right: 12px;
-        top: 72px;
-        z-index: 8;
-        display: none;
-        gap: 8px;
+        display: none !important;
       }
-      #__ROOT_ID__ .oviz-three-sky-resize {
+      #__ROOT_ID__ .oviz-three-widget-resize {
         position: absolute;
         width: 14px;
         height: 14px;
@@ -364,25 +634,25 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: block;
         touch-action: none;
       }
-      #__ROOT_ID__ .oviz-three-sky-panel[data-mode="fullscreen"] .oviz-three-sky-resize {
+      #__ROOT_ID__ .oviz-three-widget-panel[data-mode="fullscreen"] .oviz-three-widget-resize {
         display: none;
       }
-      #__ROOT_ID__ .oviz-three-sky-resize[data-dir="nw"] {
+      #__ROOT_ID__ .oviz-three-widget-resize[data-dir="nw"] {
         top: 0;
         left: 0;
         cursor: nwse-resize;
       }
-      #__ROOT_ID__ .oviz-three-sky-resize[data-dir="ne"] {
+      #__ROOT_ID__ .oviz-three-widget-resize[data-dir="ne"] {
         top: 0;
         right: 0;
         cursor: nesw-resize;
       }
-      #__ROOT_ID__ .oviz-three-sky-resize[data-dir="sw"] {
+      #__ROOT_ID__ .oviz-three-widget-resize[data-dir="sw"] {
         bottom: 0;
         left: 0;
         cursor: nesw-resize;
       }
-      #__ROOT_ID__ .oviz-three-sky-resize[data-dir="se"] {
+      #__ROOT_ID__ .oviz-three-widget-resize[data-dir="se"] {
         right: 0;
         bottom: 0;
         cursor: nwse-resize;
@@ -392,19 +662,71 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
   <body>
     <div id="__ROOT_ID__">
       <div class="oviz-three-title"></div>
+      <div class="oviz-three-widget-menu">
+        <select class="oviz-three-widget-select">
+          <option value="">Widgets</option>
+        </select>
+      </div>
       <div class="oviz-three-toolbar">
         <select class="oviz-three-group-select"></select>
         <div class="oviz-three-legend"></div>
-        <div class="oviz-three-selection">
-          <div class="oviz-three-selection-row">
-            <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
-            <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
+        <div class="oviz-three-tools-shell" data-open="false">
+          <button class="oviz-three-tools-toggle" type="button" title="Show or hide the left control drawer">Tools ▸</button>
+          <div class="oviz-three-tools-drawer">
+            <div class="oviz-three-selection">
+              <div class="oviz-three-selection-row">
+                <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
+                <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
+              </div>
+              <label class="oviz-three-selection-toggle">
+                <input class="oviz-three-click-select-toggle" type="checkbox" />
+                <span>Enable click select</span>
+              </label>
+              <label class="oviz-three-selection-toggle">
+                <input class="oviz-three-volume-lasso-toggle" type="checkbox" checked />
+                <span>Lasso volumetric data</span>
+              </label>
+              <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters on the current frame.</div>
+            </div>
+            <div class="oviz-three-volume" data-enabled="false">
+              <div class="oviz-three-volume-title">Volume</div>
+              <label class="oviz-three-volume-field">
+                <span>Layer</span>
+                <select class="oviz-three-volume-select"></select>
+              </label>
+              <label class="oviz-three-volume-toggle">
+                <input class="oviz-three-volume-visible" type="checkbox" />
+                <span>Show at t=0</span>
+              </label>
+              <label class="oviz-three-volume-field">
+                <span>Colormap</span>
+                <select class="oviz-three-volume-colormap"></select>
+              </label>
+              <div class="oviz-three-volume-row">
+                <label class="oviz-three-volume-field">
+                  <span>vmin</span>
+                  <input class="oviz-three-volume-vmin" type="number" step="any" />
+                </label>
+                <label class="oviz-three-volume-field">
+                  <span>vmax</span>
+                  <input class="oviz-three-volume-vmax" type="number" step="any" />
+                </label>
+              </div>
+              <label class="oviz-three-volume-field">
+                <span class="oviz-three-volume-opacity-label">Opacity</span>
+                <input class="oviz-three-volume-opacity" type="range" min="0" max="1" step="0.01" />
+              </label>
+              <label class="oviz-three-volume-field">
+                <span class="oviz-three-volume-alpha-label">Alpha coef</span>
+                <input class="oviz-three-volume-alpha" type="range" min="1" max="200" step="1" />
+              </label>
+              <label class="oviz-three-volume-field">
+                <span class="oviz-three-volume-steps-label">Samples</span>
+                <input class="oviz-three-volume-steps" type="range" min="24" max="768" step="8" />
+              </label>
+              <div class="oviz-three-volume-summary"></div>
+            </div>
           </div>
-          <label class="oviz-three-selection-toggle">
-            <input class="oviz-three-click-select-toggle" type="checkbox" />
-            <span>Enable click select</span>
-          </label>
-          <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters at t=0.</div>
         </div>
       </div>
       <canvas class="oviz-three-canvas"></canvas>
@@ -414,6 +736,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         </svg>
       </div>
       <div class="oviz-three-tooltip"></div>
+      <div class="oviz-three-scale-bar">
+        <div class="oviz-three-scale-label"></div>
+        <div class="oviz-three-scale-line"></div>
+      </div>
       <div class="oviz-three-footer">
         <button class="oviz-three-play" type="button" title="Play">▶</button>
         <button class="oviz-three-pause" type="button" title="Pause">⏸</button>
@@ -421,20 +747,27 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         <input class="oviz-three-slider" type="range" min="0" max="0" step="1" value="0" />
       </div>
       <div class="oviz-three-note"></div>
-      <div class="oviz-three-sky-panel" data-mode="hidden">
-        <div class="oviz-three-sky-drag">Sky</div>
+      <div class="oviz-three-sky-panel oviz-three-widget-panel" data-widget-key="sky" data-mode="hidden">
+        <div class="oviz-three-sky-drag oviz-three-widget-drag">Sky</div>
         <iframe class="oviz-three-sky-frame" loading="eager" referrerpolicy="no-referrer"></iframe>
         <pre class="oviz-three-sky-readout"></pre>
         <button class="oviz-three-sky-full" type="button" title="Toggle fullscreen sky panel">Full</button>
         <button class="oviz-three-sky-hide" type="button" title="Hide sky panel">Hide</button>
-        <div class="oviz-three-sky-resize" data-dir="nw"></div>
-        <div class="oviz-three-sky-resize" data-dir="ne"></div>
-        <div class="oviz-three-sky-resize" data-dir="sw"></div>
-        <div class="oviz-three-sky-resize" data-dir="se"></div>
+        <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="nw"></div>
+        <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="ne"></div>
+        <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="sw"></div>
+        <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
-      <div class="oviz-three-sky-actions">
-        <button class="oviz-three-sky-show" type="button" title="Show sky panel">Sky</button>
-        <button class="oviz-three-sky-show-full" type="button" title="Show fullscreen sky panel">Sky Full</button>
+      <div class="oviz-three-age-panel oviz-three-widget-panel" data-widget-key="age_kde" data-mode="hidden">
+        <div class="oviz-three-age-drag oviz-three-widget-drag">Age KDE</div>
+        <canvas class="oviz-three-age-canvas"></canvas>
+        <pre class="oviz-three-age-readout"></pre>
+        <button class="oviz-three-age-full" type="button" title="Toggle fullscreen age KDE panel">Full</button>
+        <button class="oviz-three-age-hide" type="button" title="Hide age KDE panel">Hide</button>
+        <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="nw"></div>
+        <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="ne"></div>
+        <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="sw"></div>
+        <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
     </div>
 
@@ -544,17 +877,36 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const canvas = root.querySelector(".oviz-three-canvas");
       const titleEl = root.querySelector(".oviz-three-title");
       const groupSelectEl = root.querySelector(".oviz-three-group-select");
+      const widgetSelectEl = root.querySelector(".oviz-three-widget-select");
       const legendEl = root.querySelector(".oviz-three-legend");
+      const toolsShellEl = root.querySelector(".oviz-three-tools-shell");
+      const toolsToggleEl = root.querySelector(".oviz-three-tools-toggle");
       const sliderEl = root.querySelector(".oviz-three-slider");
       const timeLabelEl = root.querySelector(".oviz-three-time-label");
       const playButtonEl = root.querySelector(".oviz-three-play");
       const pauseButtonEl = root.querySelector(".oviz-three-pause");
       const tooltipEl = root.querySelector(".oviz-three-tooltip");
+      const scaleBarEl = root.querySelector(".oviz-three-scale-bar");
+      const scaleLabelEl = root.querySelector(".oviz-three-scale-label");
       const noteEl = root.querySelector(".oviz-three-note");
       const selectionReadoutEl = root.querySelector(".oviz-three-selection-readout");
       const lassoButtonEl = root.querySelector(".oviz-three-lasso-button");
       const clearSelectionButtonEl = root.querySelector(".oviz-three-selection-clear");
       const clickSelectToggleEl = root.querySelector(".oviz-three-click-select-toggle");
+      const volumeLassoToggleEl = root.querySelector(".oviz-three-volume-lasso-toggle");
+      const volumePanelEl = root.querySelector(".oviz-three-volume");
+      const volumeSelectEl = root.querySelector(".oviz-three-volume-select");
+      const volumeVisibleEl = root.querySelector(".oviz-three-volume-visible");
+      const volumeColormapEl = root.querySelector(".oviz-three-volume-colormap");
+      const volumeVMinEl = root.querySelector(".oviz-three-volume-vmin");
+      const volumeVMaxEl = root.querySelector(".oviz-three-volume-vmax");
+      const volumeOpacityEl = root.querySelector(".oviz-three-volume-opacity");
+      const volumeAlphaEl = root.querySelector(".oviz-three-volume-alpha");
+      const volumeStepsEl = root.querySelector(".oviz-three-volume-steps");
+      const volumeOpacityLabelEl = root.querySelector(".oviz-three-volume-opacity-label");
+      const volumeAlphaLabelEl = root.querySelector(".oviz-three-volume-alpha-label");
+      const volumeStepsLabelEl = root.querySelector(".oviz-three-volume-steps-label");
+      const volumeSummaryEl = root.querySelector(".oviz-three-volume-summary");
       const lassoOverlayEl = root.querySelector(".oviz-three-lasso-overlay");
       const lassoPolylineEl = root.querySelector(".oviz-three-lasso-overlay polyline");
       const skyPanelEl = root.querySelector(".oviz-three-sky-panel");
@@ -562,11 +914,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const skyReadoutEl = root.querySelector(".oviz-three-sky-readout");
       const skyFullButtonEl = root.querySelector(".oviz-three-sky-full");
       const skyHideButtonEl = root.querySelector(".oviz-three-sky-hide");
-      const skyShowButtonEl = root.querySelector(".oviz-three-sky-show");
-      const skyShowFullButtonEl = root.querySelector(".oviz-three-sky-show-full");
-      const skyActionsEl = root.querySelector(".oviz-three-sky-actions");
-      const skyDragHandleEl = root.querySelector(".oviz-three-sky-drag");
-      const skyResizeEls = Array.from(root.querySelectorAll(".oviz-three-sky-resize"));
+      const ageKdePanelEl = root.querySelector(".oviz-three-age-panel");
+      const ageKdeCanvasEl = root.querySelector(".oviz-three-age-canvas");
+      const ageKdeReadoutEl = root.querySelector(".oviz-three-age-readout");
+      const ageKdeFullButtonEl = root.querySelector(".oviz-three-age-full");
+      const ageKdeHideButtonEl = root.querySelector(".oviz-three-age-hide");
+      const widgetPanels = Array.from(root.querySelectorAll(".oviz-three-widget-panel"));
+      const widgetDragHandles = Array.from(root.querySelectorAll(".oviz-three-widget-drag"));
+      const widgetResizeEls = Array.from(root.querySelectorAll(".oviz-three-widget-resize"));
 
       const theme = sceneSpec.theme;
       root.style.setProperty("--oviz-paper-bg", theme.paper_bgcolor || "#000000");
@@ -592,14 +947,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const groupVisibility = sceneSpec.group_visibility || {};
       const defaultGroup = sceneSpec.default_group || "All";
       const skySpec = sceneSpec.sky_panel || { enabled: false };
+      const ageKdeSpec = sceneSpec.age_kde || { enabled: false };
+      const volumeLayers = ((sceneSpec.volumes || {}).layers || []);
+      const volumeLayersByKey = new Map(volumeLayers.map((layer) => [String(layer.key), layer]));
       const pointScale = Math.max(sceneSpec.max_span || 1, 1) / 4000.0;
       const hoverTargets = [];
       const axisLineMaterials = [];
       const frameLineMaterials = [];
+      const screenStableTextSprites = [];
       const markerTextureCache = new Map();
       const markerMaterialCache = new Map();
       const textTextureCache = new Map();
       const galaxyTextureCache = new Map();
+      const volumeScalarDataCache = new Map();
+      const volumeTextureCache = new Map();
+      const volumeColorTextureCache = new Map();
+      const volumeRuntimeByKey = new Map();
+      let volumeJitterTexture = null;
       let legendState = {};
       let currentGroup = defaultGroup;
       let currentFrameIndex = sceneSpec.initial_frame_index || 0;
@@ -607,13 +971,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let currentSelections = [];
       let currentSelectionMode = "none";
       let clickSelectionEnabled = false;
+      let lassoVolumeSelectionEnabled = true;
       let playbackTimer = null;
-      let skyPanelMode = skySpec.enabled ? "normal" : "hidden";
-      let skyPointerState = null;
+      let skyPanelMode = "hidden";
+      let ageKdePanelMode = "hidden";
+      let widgetPointerState = null;
+      let widgetZIndexCounter = 8;
       let lassoState = null;
       let lassoArmed = false;
       let suppressNextCanvasClick = false;
       let selectedClusterKeys = new Set();
+      let currentLassoSelectionMask = null;
+      let activeVolumeKey = volumeLayers.length ? String(volumeLayers[0].key) : null;
+      const volumeStateByKey = {};
+      const traceStyleStateByKey = {};
+      const legendPanelStateByKey = {};
 
       const renderer = new THREE.WebGLRenderer({
         canvas,
@@ -627,6 +999,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       } else if ("outputEncoding" in renderer && THREE.sRGBEncoding) {
         renderer.outputEncoding = THREE.sRGBEncoding;
       }
+      const volumeSupported = volumeLayers.length > 0 && Boolean(renderer.capabilities && renderer.capabilities.isWebGL2);
 
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(theme.scene_bgcolor || theme.paper_bgcolor || "#000000");
@@ -658,6 +1031,35 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const axisGroup = new THREE.Group();
       scene.add(axisGroup);
 
+      volumeLayers.forEach((layer) => {
+        const defaults = layer.default_controls || {};
+        volumeStateByKey[String(layer.key)] = {
+          visible: layer.visible !== false,
+          vmin: Number(defaults.vmin),
+          vmax: Number(defaults.vmax),
+          opacity: Number(defaults.opacity),
+          steps: Number(defaults.steps),
+          alphaCoef: Number(defaults.alpha_coef),
+          gradientStep: Number(defaults.gradient_step),
+          colormap: String(defaults.colormap || (((layer.colormap_options || [])[0] || {}).name || "inferno")),
+        };
+      });
+
+      legendItems.forEach((item) => {
+        const itemKey = String(item.key);
+        legendPanelStateByKey[itemKey] = false;
+        if (volumeLayersByKey.has(itemKey)) {
+          return;
+        }
+        traceStyleStateByKey[itemKey] = {
+          color: String(item.default_color || item.color || theme.axis_color || "#ffffff"),
+          opacity: Math.min(Math.max(Number(item.default_opacity ?? 1.0), 0.0), 1.0),
+          sizeScale: 1.0,
+          hasPoints: Boolean(item.has_points),
+          hasSegments: Boolean(item.has_segments),
+        };
+      });
+
       const raycaster = new THREE.Raycaster();
       const pointer = new THREE.Vector2(2, 2);
 
@@ -680,7 +1082,74 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return frameSpecs[Math.max(0, Math.min(currentFrameIndex, frameSpecs.length - 1))] || null;
       }
 
-      function clampSkyPosition(left, top, width, height) {
+      function widgetPanelForKey(widgetKey) {
+        if (widgetKey === "sky") {
+          return skyPanelEl;
+        }
+        if (widgetKey === "age_kde") {
+          return ageKdePanelEl;
+        }
+        return null;
+      }
+
+      function widgetEnabled(widgetKey) {
+        if (widgetKey === "sky") {
+          return Boolean(skySpec.enabled);
+        }
+        if (widgetKey === "age_kde") {
+          return Boolean(ageKdeSpec.enabled);
+        }
+        return false;
+      }
+
+      function widgetModeForKey(widgetKey) {
+        if (widgetKey === "sky") {
+          return skyPanelMode;
+        }
+        if (widgetKey === "age_kde") {
+          return ageKdePanelMode;
+        }
+        return "hidden";
+      }
+
+      function setWidgetModeValue(widgetKey, mode) {
+        if (widgetKey === "sky") {
+          skyPanelMode = mode;
+        } else if (widgetKey === "age_kde") {
+          ageKdePanelMode = mode;
+        }
+      }
+
+      function widgetDefaultRect(widgetKey) {
+        if (widgetKey === "sky") {
+          return {
+            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.38, 560) - 12),
+            top: 72,
+            width: Math.min(window.innerWidth * 0.38, 560),
+            height: Math.min(window.innerHeight * 0.56, 560),
+          };
+        }
+        if (widgetKey === "age_kde") {
+          return {
+            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.36, 540) - 44),
+            top: 96,
+            width: Math.min(window.innerWidth * 0.36, 540),
+            height: Math.min(window.innerHeight * 0.42, 360),
+          };
+        }
+        return { left: 12, top: 72, width: 360, height: 260 };
+      }
+
+      function raiseWidget(widgetKey) {
+        const panelEl = widgetPanelForKey(widgetKey);
+        if (!panelEl) {
+          return;
+        }
+        widgetZIndexCounter += 1;
+        panelEl.style.zIndex = String(widgetZIndexCounter);
+      }
+
+      function clampWidgetPosition(left, top, width, height) {
         const margin = 6;
         return {
           left: Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - width - margin)),
@@ -688,7 +1157,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         };
       }
 
-      function resizeSkyRect(state, clientX, clientY) {
+      function resizeWidgetRect(state, clientX, clientY) {
         const margin = 6;
         const minWidth = Math.min(220, Math.max(80, window.innerWidth - 2 * margin));
         const minHeight = Math.min(220, Math.max(80, window.innerHeight - 2 * margin));
@@ -717,6 +1186,41 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           width: Math.max(minWidth, right - left),
           height: Math.max(minHeight, bottom - top),
         };
+      }
+
+      function storeWidgetRect(widgetKey) {
+        const panelEl = widgetPanelForKey(widgetKey);
+        if (!panelEl) {
+          return;
+        }
+        const rect = panelEl.getBoundingClientRect();
+        panelEl.dataset.normalLeft = String(rect.left);
+        panelEl.dataset.normalTop = String(rect.top);
+        panelEl.dataset.normalWidth = String(rect.width);
+        panelEl.dataset.normalHeight = String(rect.height);
+      }
+
+      function restoreWidgetRect(widgetKey) {
+        const panelEl = widgetPanelForKey(widgetKey);
+        if (!panelEl) {
+          return;
+        }
+        const left = Number(panelEl.dataset.normalLeft);
+        const top = Number(panelEl.dataset.normalTop);
+        const width = Number(panelEl.dataset.normalWidth);
+        const height = Number(panelEl.dataset.normalHeight);
+        const defaults = widgetDefaultRect(widgetKey);
+        const next = [left, top, width, height].every(Number.isFinite)
+          ? clampWidgetPosition(left, top, width, height)
+          : clampWidgetPosition(defaults.left, defaults.top, defaults.width, defaults.height);
+        const nextWidth = Number.isFinite(width) ? width : defaults.width;
+        const nextHeight = Number.isFinite(height) ? height : defaults.height;
+        panelEl.style.left = `${next.left}px`;
+        panelEl.style.top = `${next.top}px`;
+        panelEl.style.right = "auto";
+        panelEl.style.bottom = "auto";
+        panelEl.style.width = `${nextWidth}px`;
+        panelEl.style.height = `${nextHeight}px`;
       }
 
       function selectionKeyFor(selection) {
@@ -768,15 +1272,107 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return unique;
       }
 
+      function hasActiveLassoSelectionMask() {
+        return Boolean(
+          currentLassoSelectionMask
+          && currentLassoSelectionMask.maskTexture
+          && currentLassoSelectionMask.viewProjectionMatrix
+        );
+      }
+
+      function activeVolumeLassoSelectionMask() {
+        return lassoVolumeSelectionEnabled ? currentLassoSelectionMask : null;
+      }
+
+      function disposeLassoSelectionMask(mask) {
+        if (!mask || !mask.maskTexture) {
+          return;
+        }
+        mask.maskTexture.dispose();
+      }
+
+      function canvasPointToNdc(point) {
+        const width = Math.max(canvas.clientWidth || 0, 1);
+        const height = Math.max(canvas.clientHeight || 0, 1);
+        return {
+          x: (Number(point.x) / width) * 2.0 - 1.0,
+          y: 1.0 - (Number(point.y) / height) * 2.0,
+        };
+      }
+
+      function captureLassoSelectionMask(points) {
+        const source = Array.isArray(points) ? points : [];
+        if (source.length < 3) {
+          return null;
+        }
+        const pointsNdc = source
+          .map((point) => canvasPointToNdc(point))
+          .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+        if (pointsNdc.length < 3) {
+          return null;
+        }
+
+        const maskCanvasSize = 512;
+        const maskCanvas = document.createElement("canvas");
+        maskCanvas.width = maskCanvasSize;
+        maskCanvas.height = maskCanvasSize;
+        const maskCtx = maskCanvas.getContext("2d");
+        maskCtx.clearRect(0, 0, maskCanvasSize, maskCanvasSize);
+        maskCtx.fillStyle = "#ffffff";
+        maskCtx.beginPath();
+        pointsNdc.forEach((point, index) => {
+          const x = (point.x * 0.5 + 0.5) * maskCanvasSize;
+          const y = (0.5 - point.y * 0.5) * maskCanvasSize;
+          if (index === 0) {
+            maskCtx.moveTo(x, y);
+          } else {
+            maskCtx.lineTo(x, y);
+          }
+        });
+        maskCtx.closePath();
+        maskCtx.fill();
+
+        const maskTexture = new THREE.CanvasTexture(maskCanvas);
+        maskTexture.minFilter = THREE.NearestFilter;
+        maskTexture.magFilter = THREE.NearestFilter;
+        maskTexture.wrapS = THREE.ClampToEdgeWrapping;
+        maskTexture.wrapT = THREE.ClampToEdgeWrapping;
+        maskTexture.flipY = false;
+        maskTexture.generateMipmaps = false;
+        maskTexture.needsUpdate = true;
+
+        camera.updateMatrixWorld(true);
+        camera.updateProjectionMatrix();
+        const viewProjectionMatrix = new THREE.Matrix4()
+          .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        return {
+          maskTexture,
+          viewProjectionMatrix,
+        };
+      }
+
+      function applyLassoSelectionMaskUniforms(uniforms, mask) {
+        const activeMask = mask && mask.maskTexture && mask.viewProjectionMatrix ? mask : null;
+        uniforms.useSelectionPolygon.value = Boolean(activeMask);
+        uniforms.selectionViewProjectionMatrix.value.copy(
+          activeMask ? activeMask.viewProjectionMatrix : new THREE.Matrix4()
+        );
+        uniforms.selectionMaskTexture.value = activeMask ? activeMask.maskTexture : null;
+        uniforms.selectionDimOutside.value = activeMask ? 0.0 : 1.0;
+      }
+
       function selectionToolbarText(selections, focusSelection) {
         const activeSelections = uniqueSelections(selections);
         const clickHint = `Click select: ${clickSelectionEnabled ? "on" : "off"}`;
         const focusLabel = selectionKeyFor(focusSelection);
+        const dustHint = lassoVolumeSelectionEnabled
+          ? (hasActiveLassoSelectionMask() ? "Dust lasso: on" : "Dust lasso: armed")
+          : "Dust lasso: off";
         if (!activeSelections.length && !focusLabel) {
-          return `Shift+drag or use Lasso to select clusters at t=0.\n${clickHint}`;
+          return `Shift+drag or use Lasso to select clusters on the current frame.\n${dustHint}\n${clickHint}`;
         }
         if (!activeSelections.length && focusLabel) {
-          return `Focused: ${focusLabel}\n${clickHint}`;
+          return `Focused: ${focusLabel}\n${dustHint}\n${clickHint}`;
         }
         const labels = activeSelections
           .map((selection) => selectionKeyFor(selection))
@@ -784,7 +1380,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const preview = labels.slice(0, 4).join(", ");
         const suffix = labels.length > 4 ? ` +${labels.length - 4} more` : "";
         const focusText = focusLabel ? `\nFocused: ${focusLabel}` : "";
-        return `${labels.length} selected\n${preview}${suffix}${focusText}\n${clickHint}`;
+        return `${labels.length} selected\n${preview}${suffix}${focusText}\n${dustHint}\n${clickHint}`;
       }
 
       function skyReadoutText(selections, catalogPayload, mode = "overview") {
@@ -1177,10 +1773,377 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function updateSelectionUI() {
         selectionReadoutEl.textContent = selectionToolbarText(currentSelections, currentSelection);
-        clearSelectionButtonEl.disabled = currentSelections.length === 0 && !currentSelection;
+        clearSelectionButtonEl.disabled = currentSelections.length === 0 && !currentSelection && !hasActiveLassoSelectionMask();
         lassoButtonEl.dataset.active = lassoArmed ? "true" : "false";
         lassoButtonEl.setAttribute("aria-pressed", lassoArmed ? "true" : "false");
         clickSelectToggleEl.checked = clickSelectionEnabled;
+        volumeLassoToggleEl.checked = lassoVolumeSelectionEnabled;
+      }
+
+      function clamp01(value) {
+        return Math.min(Math.max(Number(value), 0.0), 1.0);
+      }
+
+      function cssColorToHex(value, fallback = "#ffffff") {
+        try {
+          return `#${new THREE.Color(value || fallback).getHexString()}`;
+        } catch (_err) {
+          return fallback;
+        }
+      }
+
+      function cssColorWithAlpha(value, alpha, fallback = "#ffffff") {
+        try {
+          const color = new THREE.Color(value || fallback);
+          const r = Math.round(color.r * 255.0);
+          const g = Math.round(color.g * 255.0);
+          const b = Math.round(color.b * 255.0);
+          return `rgba(${r}, ${g}, ${b}, ${clamp01(alpha)})`;
+        } catch (_err) {
+          return fallback;
+        }
+      }
+
+      function formatCompactNumber(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return "";
+        }
+        const abs = Math.abs(num);
+        if (abs >= 100.0) {
+          return String(Math.round(num));
+        }
+        if (abs >= 10.0) {
+          return num.toFixed(1).replace(/\.0$/, "");
+        }
+        if (abs >= 1.0) {
+          return num.toFixed(2).replace(/0$/, "").replace(/\.$/, "");
+        }
+        return num.toPrecision(2).replace(/\.0+e/, "e");
+      }
+
+      function formatDistanceLabelPc(distancePc) {
+        const value = Number(distancePc);
+        if (!Number.isFinite(value) || value <= 0.0) {
+          return "";
+        }
+        if (value >= 1000.0) {
+          return `${formatCompactNumber(value / 1000.0)} kpc`;
+        }
+        return `${formatCompactNumber(value)} pc`;
+      }
+
+      function updateScaleBar() {
+        if (!scaleBarEl || !scaleLabelEl) {
+          return;
+        }
+        const canvasHeight = Math.max(canvas.clientHeight || root.clientHeight || 0, 1);
+        const distance = Math.max(camera.position.distanceTo(controls.target), 1e-6);
+        const worldPerPixel = (2.0 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5))) / canvasHeight;
+        const barLengthPc = worldPerPixel * 120.0;
+        scaleLabelEl.textContent = formatDistanceLabelPc(barLengthPc);
+        scaleBarEl.style.display = Number.isFinite(barLengthPc) ? "flex" : "none";
+      }
+
+      function ageKdeGridValues() {
+        const traces = Array.isArray(ageKdeSpec.traces) ? ageKdeSpec.traces : [];
+        if (traces.length && Array.isArray(traces[0].x) && traces[0].x.length >= 2) {
+          return traces[0].x.map((value) => Number(value)).filter(Number.isFinite);
+        }
+        const xRange = Array.isArray(ageKdeSpec.x_range) ? ageKdeSpec.x_range : [-1.0, 0.0];
+        const xMin = Number(xRange[0]);
+        const xMax = Number(xRange[1]);
+        const count = 300;
+        return Array.from({ length: count }, (_, index) => {
+          const frac = count <= 1 ? 0.0 : index / (count - 1);
+          return xMin + frac * (xMax - xMin);
+        });
+      }
+
+      function gaussianKde(values, xGrid, bandwidth) {
+        const finiteValues = (Array.isArray(values) ? values : []).map((value) => Number(value)).filter(Number.isFinite);
+        if (!finiteValues.length) {
+          return xGrid.map(() => 0.0);
+        }
+        const bw = Math.max(Number(bandwidth) || 1.0, 1e-6);
+        const norm = finiteValues.length * bw * Math.sqrt(2.0 * Math.PI);
+        return xGrid.map((xValue) => {
+          let sum = 0.0;
+          for (const value of finiteValues) {
+            const u = (Number(xValue) - value) / bw;
+            sum += Math.exp(-0.5 * u * u);
+          }
+          return sum / norm;
+        });
+      }
+
+      function filteredAgeKdeSeries() {
+        const defaults = groupDefaults(currentGroup);
+        const selectedKeys = selectedClusterKeys.size ? selectedClusterKeys : null;
+        const traceMetaByKey = new Map();
+        const traceMetaByName = new Map();
+        (ageKdeSpec.traces || []).forEach((traceSpec) => {
+          if (traceSpec.trace_key) {
+            traceMetaByKey.set(String(traceSpec.trace_key), traceSpec);
+          }
+          if (traceSpec.trace_name) {
+            traceMetaByName.set(String(traceSpec.trace_name), traceSpec);
+          }
+        });
+
+        const groupedAges = new Map();
+        (ageKdeSpec.cluster_points || []).forEach((point) => {
+          const traceKey = point && point.trace_key ? String(point.trace_key) : null;
+          const traceName = point && point.trace_name ? String(point.trace_name) : "";
+          const traceLookupKey = traceKey || traceName;
+          if (!traceLookupKey) {
+            return;
+          }
+          if (traceKey) {
+            const mode = defaults[traceKey];
+            if (mode !== true || legendState[traceKey] === false) {
+              return;
+            }
+          }
+          if (selectedKeys && selectedKeys.size) {
+            const selectionLike = {
+              cluster_name: point.cluster_name,
+              trace_name: traceName,
+            };
+            const pointKey = normalizedSelectionKeyFor(selectionLike);
+            if (!pointKey || !selectedKeys.has(pointKey)) {
+              return;
+            }
+          }
+          const ageNow = Number(point.age_now_myr);
+          if (!Number.isFinite(ageNow)) {
+            return;
+          }
+          if (!groupedAges.has(traceLookupKey)) {
+            groupedAges.set(traceLookupKey, []);
+          }
+          groupedAges.get(traceLookupKey).push(-Math.abs(ageNow));
+        });
+
+        const xGrid = ageKdeGridValues();
+        const series = [];
+        groupedAges.forEach((lookbackValues, traceLookupKey) => {
+          if (!lookbackValues.length) {
+            return;
+          }
+          const meta = traceMetaByKey.get(String(traceLookupKey)) || traceMetaByName.get(String(traceLookupKey)) || {};
+          const traceKey = meta.trace_key ? String(meta.trace_key) : (String(traceLookupKey).startsWith("trace-") ? String(traceLookupKey) : null);
+          const styleState = traceKey ? traceStyleStateForKey(traceKey) : null;
+          const densityRaw = gaussianKde(lookbackValues, xGrid, ageKdeSpec.bandwidth_myr);
+          const densityMax = Math.max(...densityRaw, 0.0);
+          const density = densityMax > 0.0 ? densityRaw.map((value) => value / densityMax) : densityRaw;
+          series.push({
+            traceName: String(meta.trace_name || traceLookupKey),
+            traceKey,
+            color: styleState && styleState.color ? styleState.color : (meta.color || axisSpec.x?.linecolor || theme.axis_color || "#808080"),
+            opacity: clamp01((styleState && Number.isFinite(styleState.opacity) ? styleState.opacity : 1.0) * Number(meta.opacity ?? 1.0)),
+            x: xGrid,
+            y: density,
+            count: lookbackValues.length,
+          });
+        });
+
+        series.sort((a, b) => String(a.traceName).localeCompare(String(b.traceName)));
+        return series;
+      }
+
+      function renderAgeKdeWidget() {
+        if (!ageKdeSpec.enabled || !ageKdeCanvasEl || widgetModeForKey("age_kde") === "hidden") {
+          return;
+        }
+
+        const rect = ageKdeCanvasEl.getBoundingClientRect();
+        const cssWidth = Math.max(1, Math.round(rect.width));
+        const cssHeight = Math.max(1, Math.round(rect.height));
+        const dpr = Math.max(window.devicePixelRatio || 1, 1);
+        if (ageKdeCanvasEl.width !== Math.round(cssWidth * dpr) || ageKdeCanvasEl.height !== Math.round(cssHeight * dpr)) {
+          ageKdeCanvasEl.width = Math.round(cssWidth * dpr);
+          ageKdeCanvasEl.height = Math.round(cssHeight * dpr);
+        }
+
+        const ctx = ageKdeCanvasEl.getContext("2d");
+        if (!ctx) {
+          return;
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
+        ctx.fillStyle = theme.scene_bgcolor || theme.paper_bgcolor || "#000000";
+        ctx.fillRect(0, 0, cssWidth, cssHeight);
+
+        const margin = { left: 44, right: 16, top: 18, bottom: 28 };
+        const plotWidth = Math.max(40, cssWidth - margin.left - margin.right);
+        const plotHeight = Math.max(40, cssHeight - margin.top - margin.bottom);
+        const xRange = Array.isArray(ageKdeSpec.x_range) ? ageKdeSpec.x_range : [-1.0, 0.0];
+        const xMin = Number(xRange[0]);
+        const xMax = Number(xRange[1]);
+        const axisColor = String(ageKdeSpec.axis_color || theme.axis_color || "#808080");
+        const filteredSeries = filteredAgeKdeSeries();
+        const yMax = Math.max(
+          ...filteredSeries.map((series) => Math.max(...series.y, 0.0)),
+          Number((Array.isArray(ageKdeSpec.y_range) ? ageKdeSpec.y_range[1] : 1.0)) || 1.0,
+          1e-6,
+        );
+
+        function xToPx(value) {
+          const denom = Math.max(xMax - xMin, 1e-6);
+          return margin.left + ((Number(value) - xMin) / denom) * plotWidth;
+        }
+
+        function yToPx(value) {
+          return margin.top + plotHeight - (Math.max(Number(value), 0.0) / yMax) * plotHeight;
+        }
+
+        ctx.strokeStyle = axisColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(margin.left, margin.top);
+        ctx.lineTo(margin.left, margin.top + plotHeight);
+        ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
+        ctx.stroke();
+
+        ctx.fillStyle = axisColor;
+        ctx.font = "11px Helvetica, Arial, sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "right";
+        [0.0, 0.5, 1.0].forEach((frac) => {
+          const yValue = frac * yMax;
+          const yPx = yToPx(yValue);
+          ctx.globalAlpha = 0.16;
+          ctx.beginPath();
+          ctx.moveTo(margin.left, yPx);
+          ctx.lineTo(margin.left + plotWidth, yPx);
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+          ctx.fillText(formatCompactNumber(yValue), margin.left - 8, yPx);
+        });
+
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        [xMin, 0.5 * (xMin + xMax), xMax].forEach((xValue) => {
+          const xPx = xToPx(xValue);
+          ctx.fillText(formatCompactNumber(xValue), xPx, margin.top + plotHeight + 8);
+        });
+
+        const visibleTraceNames = [];
+        filteredSeries.forEach((traceSpec) => {
+          const lineColor = traceSpec.color || axisColor;
+          const lineOpacity = clamp01(traceSpec.opacity);
+          const xValues = Array.isArray(traceSpec.x) ? traceSpec.x : [];
+          const yValues = Array.isArray(traceSpec.y) ? traceSpec.y : [];
+          if (xValues.length < 2 || yValues.length !== xValues.length) {
+            return;
+          }
+          visibleTraceNames.push(String(traceSpec.traceName || traceSpec.traceKey || "trace"));
+
+          ctx.beginPath();
+          ctx.moveTo(xToPx(xValues[0]), margin.top + plotHeight);
+          for (let i = 0; i < xValues.length; i += 1) {
+            ctx.lineTo(xToPx(xValues[i]), yToPx(yValues[i]));
+          }
+          ctx.lineTo(xToPx(xValues[xValues.length - 1]), margin.top + plotHeight);
+          ctx.closePath();
+          ctx.fillStyle = cssColorWithAlpha(lineColor, Math.min(0.28, 0.14 + 0.18 * lineOpacity), axisColor);
+          ctx.fill();
+
+          ctx.beginPath();
+          for (let i = 0; i < xValues.length; i += 1) {
+            const xPx = xToPx(xValues[i]);
+            const yPx = yToPx(yValues[i]);
+            if (i === 0) {
+              ctx.moveTo(xPx, yPx);
+            } else {
+              ctx.lineTo(xPx, yPx);
+            }
+          }
+          ctx.strokeStyle = cssColorWithAlpha(lineColor, lineOpacity, axisColor);
+          ctx.lineWidth = 2.0;
+          ctx.stroke();
+        });
+
+        const frame = currentFrame();
+        const timeValue = frame ? Number(frame.time) : 0.0;
+        const markerX = xToPx(Math.min(Math.max(timeValue, xMin), xMax));
+        ctx.save();
+        ctx.setLineDash([6, 6]);
+        ctx.strokeStyle = axisColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(markerX, margin.top);
+        ctx.lineTo(markerX, margin.top + plotHeight);
+        ctx.stroke();
+        ctx.restore();
+
+        ageKdeReadoutEl.textContent = [
+          `${String(ageKdeSpec.title || "Relative SFH")}`,
+          `Time: ${frame ? frame.name : "0"} Myr`,
+          `Bandwidth: ${formatCompactNumber(ageKdeSpec.bandwidth_myr)} Myr`,
+          `Traces shown: ${visibleTraceNames.length}`,
+          `Clusters contributing: ${filteredSeries.reduce((total, series) => total + Number(series.count || 0), 0)}`,
+        ].join("\\n");
+      }
+
+      function traceStyleStateForKey(traceKey) {
+        return traceStyleStateByKey[String(traceKey)] || null;
+      }
+
+      function volumeLayerForKey(layerKey) {
+        return volumeLayersByKey.get(String(layerKey)) || null;
+      }
+
+      function volumeLegendColorForLayer(layer) {
+        if (!layer) {
+          return theme.text_color || theme.axis_color;
+        }
+        const state = volumeStateByKey[String(layer.key)] || {};
+        const option = volumeColormapOptionFor(layer, state.colormap);
+        return (option && option.legend_color) || layer.legend_color || theme.text_color || theme.axis_color;
+      }
+
+      function legendColorForItem(item) {
+        const itemKey = String(item.key);
+        const volumeLayer = volumeLayerForKey(itemKey);
+        if (volumeLayer) {
+          return volumeLegendColorForLayer(volumeLayer);
+        }
+        const state = traceStyleStateForKey(itemKey);
+        return (state && state.color) || item.default_color || item.color || theme.text_color || theme.axis_color;
+      }
+
+      function volumeSummaryTextFor(layer, state) {
+        const unitText = layer.value_unit ? ` ${layer.value_unit}` : "";
+        const supportText = volumeSupported
+          ? "Rendered at t=0 only as a WebGL2 ray-marched volume."
+          : "Volume rendering requires WebGL2 support in the browser.";
+        const resampleMethod = String(layer.downsample_method || "resampled");
+        return [
+          `${layer.name}`,
+          `${Number(layer.shape.x)} x ${Number(layer.shape.y)} x ${Number(layer.shape.z)} voxels`,
+          `Source: ${Number(layer.source_shape.x)} x ${Number(layer.source_shape.y)} x ${Number(layer.source_shape.z)} | ${resampleMethod} scale ${formatVolumeNumber(Number(layer.downsample_step.x))} x ${formatVolumeNumber(Number(layer.downsample_step.y))} x ${formatVolumeNumber(Number(layer.downsample_step.z))}`,
+          `Samples: ${Math.round(Number(state.steps))} | alpha_coef: ${Math.round(Number(state.alphaCoef))}`,
+          `Data range: ${formatVolumeNumber((layer.data_range || [0])[0])} to ${formatVolumeNumber((layer.data_range || [0, 1])[1])}${unitText}`,
+          supportText,
+        ].join("\\n");
+      }
+
+      function createLegendField(labelText, controlEl) {
+        const field = document.createElement("label");
+        field.className = "oviz-three-legend-field";
+        const label = document.createElement("span");
+        label.textContent = labelText;
+        field.appendChild(label);
+        field.appendChild(controlEl);
+        return { field, label };
+      }
+
+      function createLegendControlRow() {
+        const row = document.createElement("div");
+        row.className = "oviz-three-legend-control-row";
+        return row;
       }
 
       function setClusterSelections(selections, mode = "click") {
@@ -1189,6 +2152,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         if (normalizedMode === "lasso") {
           currentSelections = nextSelections;
+          if (!currentSelections.length && !hasActiveLassoSelectionMask()) {
+            currentSelection = null;
+          }
           selectedClusterKeys = new Set(
             currentSelections
               .map((selection) => normalizedSelectionKeyFor(selection))
@@ -1211,7 +2177,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           currentSelection = nextFocus;
         }
 
-        currentSelectionMode = currentSelection ? "click" : (currentSelections.length ? "lasso" : "none");
+        currentSelectionMode = currentSelection ? "click" : ((currentSelections.length || hasActiveLassoSelectionMask()) ? "lasso" : "none");
         updateSelectionUI();
         updateSkyPanel();
         renderFrame(currentFrameIndex);
@@ -1220,6 +2186,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function clearClusterSelections() {
         currentSelections = [];
         currentSelection = null;
+        disposeLassoSelectionMask(currentLassoSelectionMask);
+        currentLassoSelectionMask = null;
         currentSelectionMode = "none";
         selectedClusterKeys = new Set();
         updateSelectionUI();
@@ -1228,14 +2196,600 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function applySkyPanelMode() {
-        if (!skySpec.enabled) {
-          skyPanelEl.dataset.mode = "hidden";
-          skyActionsEl.style.display = "none";
+        applyWidgetMode("sky");
+        skyFullButtonEl.textContent = skyPanelMode === "fullscreen" ? "Window" : "Full";
+      }
+
+      function applyAgeKdePanelMode() {
+        applyWidgetMode("age_kde");
+        ageKdeFullButtonEl.textContent = ageKdePanelMode === "fullscreen" ? "Window" : "Full";
+      }
+
+      function base64ToUint8Array(encoded) {
+        const binary = window.atob(String(encoded || ""));
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+      }
+
+      function base64ToUint16Array(encoded) {
+        const bytes = base64ToUint8Array(encoded);
+        return new Uint16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
+      }
+
+      function formatVolumeNumber(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return "";
+        }
+        const abs = Math.abs(num);
+        if ((abs > 0.0 && abs < 1e-3) || abs >= 1e4) {
+          return num.toExponential(2);
+        }
+        if (abs >= 100.0) {
+          return num.toFixed(2);
+        }
+        if (abs >= 1.0) {
+          return num.toFixed(4);
+        }
+        return num.toPrecision(3);
+      }
+
+      function selectedVolumeLayer() {
+        if (!activeVolumeKey) {
+          return null;
+        }
+        return volumeLayersByKey.get(String(activeVolumeKey)) || null;
+      }
+
+      function selectedVolumeState() {
+        const layer = selectedVolumeLayer();
+        if (!layer) {
+          return null;
+        }
+        return volumeStateByKey[String(layer.key)] || null;
+      }
+
+      function clampVolumeStateForLayer(layer, state) {
+        if (!layer || !state) {
           return;
         }
-        skyPanelEl.dataset.mode = skyPanelMode;
-        skyActionsEl.style.display = skyPanelMode === "hidden" ? "flex" : "none";
-        skyFullButtonEl.textContent = skyPanelMode === "fullscreen" ? "Window" : "Full";
+        const dataRange = Array.isArray(layer.data_range) ? layer.data_range : [0.0, 1.0];
+        const dataMin = Number(dataRange[0]);
+        const dataMax = Number(dataRange[1]);
+        if (!Number.isFinite(state.vmin)) {
+          state.vmin = Number((layer.default_controls || {}).vmin);
+        }
+        if (!Number.isFinite(state.vmax)) {
+          state.vmax = Number((layer.default_controls || {}).vmax);
+        }
+        if (Number.isFinite(dataMin) && Number.isFinite(dataMax)) {
+          state.vmin = Math.min(Math.max(state.vmin, dataMin), dataMax);
+          state.vmax = Math.min(Math.max(state.vmax, dataMin), dataMax);
+        }
+        if (!(state.vmax > state.vmin)) {
+          if (Number.isFinite(dataMax) && dataMax > state.vmin) {
+            state.vmax = dataMax;
+          } else {
+            state.vmax = state.vmin + 1e-6;
+          }
+        }
+        state.opacity = Math.min(Math.max(Number(state.opacity), 0.0), 1.0);
+        state.steps = Math.round(Math.min(Math.max(Number(state.steps), 24.0), 768.0) / 8.0) * 8.0;
+        if (!Number.isFinite(state.steps) || state.steps < 24) {
+          state.steps = Number((layer.default_controls || {}).steps || 192);
+        }
+        state.alphaCoef = Math.min(Math.max(Number(state.alphaCoef), 1.0), 200.0);
+        if (!Number.isFinite(state.alphaCoef)) {
+          state.alphaCoef = Number((layer.default_controls || {}).alpha_coef || 50.0);
+        }
+        state.gradientStep = Math.min(Math.max(Number(state.gradientStep), 1e-4), 0.05);
+        if (!Number.isFinite(state.gradientStep)) {
+          state.gradientStep = Number((layer.default_controls || {}).gradient_step || 0.005);
+        }
+      }
+
+      function volumeColormapOptionFor(layer, colormapName) {
+        const options = (layer && layer.colormap_options) || [];
+        const requested = String(colormapName || "").trim().toLowerCase();
+        for (const option of options) {
+          if (String(option.name || "").trim().toLowerCase() === requested) {
+            return option;
+          }
+        }
+        return options.length ? options[0] : null;
+      }
+
+      function volumeScalarArrayFor(layer) {
+        const layerKey = String(layer.key);
+        if (volumeScalarDataCache.has(layerKey)) {
+          return volumeScalarDataCache.get(layerKey);
+        }
+        const encoding = String(layer.data_encoding || "uint16_le");
+        let data = null;
+        if (encoding === "uint16_le") {
+          data = base64ToUint16Array(layer.data_b64 || "");
+        } else {
+          data = base64ToUint8Array(layer.data_b64 || "");
+        }
+        volumeScalarDataCache.set(layerKey, data);
+        return data;
+      }
+
+      function volumeColorTextureFor(option) {
+        const optionKey = String(option.name || "volume-colormap");
+        if (volumeColorTextureCache.has(optionKey)) {
+          return volumeColorTextureCache.get(optionKey);
+        }
+        const bytes = base64ToUint8Array(option.lut_b64 || "");
+        const width = Math.max(1, Math.floor(bytes.length / 4));
+        const texture = new THREE.DataTexture(bytes, width, 1, THREE.RGBAFormat);
+        texture.minFilter = THREE.NearestFilter;
+        texture.magFilter = THREE.NearestFilter;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.unpackAlignment = 1;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
+        if ("colorSpace" in texture && THREE.SRGBColorSpace) {
+          texture.colorSpace = THREE.SRGBColorSpace;
+        } else if ("encoding" in texture && THREE.sRGBEncoding) {
+          texture.encoding = THREE.sRGBEncoding;
+        }
+        volumeColorTextureCache.set(optionKey, texture);
+        return texture;
+      }
+
+      function volumeTextureFor(layer) {
+        const layerKey = String(layer.key);
+        if (volumeTextureCache.has(layerKey)) {
+          return volumeTextureCache.get(layerKey);
+        }
+        const data = volumeScalarArrayFor(layer);
+        const shape = layer.shape || {};
+        const nx = Math.max(1, Number(shape.x || 1));
+        const ny = Math.max(1, Number(shape.y || 1));
+        const nz = Math.max(1, Number(shape.z || 1));
+        const VolumeTextureCtor = THREE.Data3DTexture || THREE.DataTexture3D;
+        if (!VolumeTextureCtor) {
+          throw new Error("Three.js volume textures are unavailable in this browser build.");
+        }
+        const texture = new VolumeTextureCtor(data, nx, ny, nz);
+        texture.format = THREE.RedFormat;
+        texture.type = THREE.UnsignedByteType;
+        texture.minFilter = layer.interpolation === false ? THREE.NearestFilter : THREE.LinearFilter;
+        texture.magFilter = layer.interpolation === false ? THREE.NearestFilter : THREE.LinearFilter;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.wrapR = THREE.ClampToEdgeWrapping;
+        texture.unpackAlignment = 1;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
+        const volumeTexture = { texture, nx, ny, nz };
+        volumeTextureCache.set(layerKey, volumeTexture);
+        return volumeTexture;
+      }
+
+      function volumeJitterTextureFor() {
+        if (volumeJitterTexture) {
+          return volumeJitterTexture;
+        }
+        const bytes = new Uint8Array(64 * 64);
+        for (let i = 0; i < bytes.length; i += 1) {
+          bytes[i] = Math.floor(Math.random() * 256.0);
+        }
+        volumeJitterTexture = new THREE.DataTexture(bytes, 64, 64, THREE.RedFormat, THREE.UnsignedByteType);
+        volumeJitterTexture.minFilter = THREE.LinearFilter;
+        volumeJitterTexture.magFilter = THREE.LinearFilter;
+        volumeJitterTexture.wrapS = THREE.MirroredRepeatWrapping;
+        volumeJitterTexture.wrapT = THREE.MirroredRepeatWrapping;
+        volumeJitterTexture.generateMipmaps = false;
+        volumeJitterTexture.unpackAlignment = 1;
+        volumeJitterTexture.needsUpdate = true;
+        return volumeJitterTexture;
+      }
+
+      function normalizedVolumeWindowFor(layer, state) {
+        const dataRange = Array.isArray(layer.data_range) ? layer.data_range : [0.0, 1.0];
+        const dataMin = Number(dataRange[0]);
+        const dataMax = Number(dataRange[1]);
+        if (!Number.isFinite(dataMin) || !Number.isFinite(dataMax) || !(dataMax > dataMin)) {
+          return { low: 0.0, high: 1.0 };
+        }
+        const span = dataMax - dataMin;
+        const low = Math.min(Math.max((Number(state.vmin) - dataMin) / span, 0.0), 1.0);
+        let high = Math.min(Math.max((Number(state.vmax) - dataMin) / span, 0.0), 1.0);
+        if (!(high > low)) {
+          high = Math.min(1.0, low + 1e-6);
+        }
+        return { low, high };
+      }
+
+      const VOLUME_VERTEX_SHADER = `
+        uniform vec4 rotation;
+        uniform vec4 translation;
+
+        varying vec3 localPosition;
+        varying vec3 transformedCameraPosition;
+        varying vec3 transformedWorldPosition;
+
+        vec3 rotate_vertex_position(vec3 pos, vec3 t, vec4 q) {
+          vec3 p = pos.xyz - t.xyz;
+          return p.xyz + 2.0 * cross(cross(p.xyz, q.xyz) + q.w * p.xyz, q.xyz) + t.xyz;
+        }
+
+        void main() {
+          vec3 transformed = position;
+          localPosition = position;
+          vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
+          transformedCameraPosition = rotate_vertex_position(cameraPosition.xyz, translation.xyz, rotation);
+          transformedWorldPosition = rotate_vertex_position(worldPosition.xyz, translation.xyz, rotation);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `;
+
+      const VOLUME_FRAGMENT_SHADER = `
+        #include <common>
+        #include <lights_pars_begin>
+
+        precision highp sampler3D;
+
+        uniform sampler3D volumeTexture;
+        uniform sampler2D colormap;
+        uniform sampler2D jitterTexture;
+        uniform sampler2D selectionMaskTexture;
+        uniform float low;
+        uniform float high;
+        uniform float opacity;
+        uniform float samples;
+        uniform float alpha_coef;
+        uniform float gradient_step;
+        uniform vec4 scale;
+        uniform vec4 translation;
+        uniform bool useSelectionPolygon;
+        uniform mat4 selectionViewProjectionMatrix;
+        uniform float selectionDimOutside;
+
+        varying vec3 localPosition;
+        varying vec3 transformedCameraPosition;
+        varying vec3 transformedWorldPosition;
+
+        float inv_range;
+
+        struct Ray {
+          vec3 origin;
+          vec3 direction;
+          vec3 inv_direction;
+          int sign[3];
+        };
+
+        vec3 aabb[2] = vec3[2](
+          vec3(-0.5, -0.5, -0.5),
+          vec3(0.5, 0.5, 0.5)
+        );
+
+        Ray makeRay(vec3 origin, vec3 direction) {
+          vec3 inv_direction = vec3(1.0) / direction;
+          return Ray(
+            origin,
+            direction,
+            inv_direction,
+            int[3](
+              ((inv_direction.x < 0.0) ? 1 : 0),
+              ((inv_direction.y < 0.0) ? 1 : 0),
+              ((inv_direction.z < 0.0) ? 1 : 0)
+            )
+          );
+        }
+
+        void intersect(in Ray ray, in vec3 bounds[2], out float tmin, out float tmax) {
+          float tymin;
+          float tymax;
+          float tzmin;
+          float tzmax;
+          tmin = (bounds[ray.sign[0]].x - ray.origin.x) * ray.inv_direction.x;
+          tmax = (bounds[1 - ray.sign[0]].x - ray.origin.x) * ray.inv_direction.x;
+          tymin = (bounds[ray.sign[1]].y - ray.origin.y) * ray.inv_direction.y;
+          tymax = (bounds[1 - ray.sign[1]].y - ray.origin.y) * ray.inv_direction.y;
+          tzmin = (bounds[ray.sign[2]].z - ray.origin.z) * ray.inv_direction.z;
+          tzmax = (bounds[1 - ray.sign[2]].z - ray.origin.z) * ray.inv_direction.z;
+          tmin = max(max(tmin, tymin), tzmin);
+          tmax = min(min(tmax, tymax), tzmax);
+        }
+
+        float sampleVolume(vec3 pos) {
+          return texture(volumeTexture, clamp(pos, vec3(0.0), vec3(1.0))).x;
+        }
+
+        bool sampleInsideSelectionPolygon(vec3 worldPos) {
+          if (!useSelectionPolygon) {
+            return true;
+          }
+          vec4 clip = selectionViewProjectionMatrix * vec4(worldPos, 1.0);
+          if (clip.w <= 0.0) {
+            return false;
+          }
+          vec3 ndc = clip.xyz / clip.w;
+          if (ndc.z < -1.0 || ndc.z > 1.0) {
+            return false;
+          }
+          vec2 uv = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+          if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) {
+            return false;
+          }
+          return texture2D(selectionMaskTexture, uv).r > 0.5;
+        }
+
+        vec3 worldGetNormal(in float px, in vec3 pos) {
+          return normalize(vec3(
+            px - sampleVolume(pos + vec3(gradient_step, 0.0, 0.0)),
+            px - sampleVolume(pos + vec3(0.0, gradient_step, 0.0)),
+            px - sampleVolume(pos + vec3(0.0, 0.0, gradient_step))
+          ));
+        }
+
+        void main() {
+          float jitter = texture2D(jitterTexture, gl_FragCoord.xy / 64.0).r;
+          float tmin = 0.0;
+          float tmax = 0.0;
+          float px = 0.0;
+          vec4 pxColor = vec4(0.0);
+          vec4 value = vec4(0.0);
+          vec3 direction = normalize(transformedWorldPosition - transformedCameraPosition);
+
+          inv_range = 1.0 / max(high - low, 1e-6);
+          aabb[0] = aabb[0] * scale.xyz + translation.xyz;
+          aabb[1] = aabb[1] * scale.xyz + translation.xyz;
+          intersect(makeRay(transformedCameraPosition, direction), aabb, tmin, tmax);
+
+          if (tmax <= max(0.0, tmin)) {
+            discard;
+          }
+
+          vec3 textcoord_end = localPosition + vec3(0.5);
+          vec3 textcoord_start = textcoord_end - (tmax - max(0.0, tmin)) * direction / scale.xyz;
+          vec3 textcoord_delta = textcoord_end - textcoord_start;
+          int sampleCount = min(int(length(textcoord_delta) * samples), int(samples * 1.8));
+          if (sampleCount <= 0) {
+            discard;
+          }
+
+          textcoord_delta = textcoord_delta / float(sampleCount);
+          textcoord_start = textcoord_start - textcoord_delta * (0.01 + 0.98 * jitter);
+          vec3 textcoord = textcoord_start - textcoord_delta;
+          float step = length(textcoord_delta);
+
+          for (int count = 0; count < 2048; count++) {
+            if (count >= sampleCount) {
+              break;
+            }
+
+            textcoord += textcoord_delta;
+            px = texture(volumeTexture, textcoord).x;
+            float scaled_px = (px - low) * inv_range;
+
+            if (scaled_px > 0.0) {
+              scaled_px = min(scaled_px, 0.99);
+              pxColor = texture(colormap, vec2(scaled_px, 0.5));
+              vec3 worldPos = (textcoord - vec3(0.5)) * scale.xyz + translation.xyz;
+              bool insideSelection = sampleInsideSelectionPolygon(worldPos);
+              if (!insideSelection && selectionDimOutside <= 0.001) {
+                continue;
+              }
+              pxColor.a = 1.0 - pow(1.0 - clamp(pxColor.a * opacity, 0.0, 0.999), step * alpha_coef);
+              if (!insideSelection) {
+                pxColor.a *= selectionDimOutside;
+              }
+              pxColor.a *= (1.0 - value.a);
+              pxColor.rgb *= pxColor.a;
+
+              #if NUM_DIR_LIGHTS > 0
+              if (pxColor.a > 0.0) {
+                vec4 addedLights = vec4(ambientLightColor / PI, 1.0);
+                vec3 specularColor = vec3(0.0);
+                vec3 normal = worldGetNormal(px, textcoord);
+                vec3 lightDirection;
+                float lightingIntensity;
+                vec3 lightReflect;
+                float specularFactor;
+
+                #pragma unroll_loop_start
+                for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
+                  lightDirection = directionalLights[i].direction;
+                  lightingIntensity = clamp(dot(lightDirection, normal), 0.0, 1.0);
+                  addedLights.rgb += directionalLights[i].color / PI * (0.2 + 0.8 * lightingIntensity);
+                  lightReflect = normalize(reflect(lightDirection, normal));
+                  specularFactor = dot(direction, lightReflect);
+                  if (specularFactor > 0.0) {
+                    specularColor += 0.002 * scaled_px * (1.0 / max(step, 1e-6))
+                      * directionalLights[i].color / PI * pow(specularFactor, 250.0) * pxColor.a;
+                  }
+                }
+                #pragma unroll_loop_end
+
+                pxColor.rgb = pxColor.rgb * addedLights.xyz + specularColor;
+              }
+              #endif
+
+              value += pxColor;
+              if (value.a >= 0.99) {
+                value.a = 1.0;
+                break;
+              }
+            }
+          }
+
+          if (value.a <= 0.001) {
+            discard;
+          }
+          gl_FragColor = value;
+        }
+      `;
+
+      function createVolumeRuntime(layer) {
+        if (!volumeSupported) {
+          return null;
+        }
+        const state = volumeStateByKey[String(layer.key)];
+        if (!state) {
+          return null;
+        }
+        clampVolumeStateForLayer(layer, state);
+        const bounds = layer.bounds || {};
+        const xBounds = Array.isArray(bounds.x) ? bounds.x : [-0.5, 0.5];
+        const yBounds = Array.isArray(bounds.y) ? bounds.y : [-0.5, 0.5];
+        const zBounds = Array.isArray(bounds.z) ? bounds.z : [-0.5, 0.5];
+        const sizeX = Math.max(1e-6, Number(xBounds[1]) - Number(xBounds[0]));
+        const sizeY = Math.max(1e-6, Number(yBounds[1]) - Number(yBounds[0]));
+        const sizeZ = Math.max(1e-6, Number(zBounds[1]) - Number(zBounds[0]));
+        const centerX = 0.5 * (Number(xBounds[0]) + Number(xBounds[1]));
+        const centerY = 0.5 * (Number(yBounds[0]) + Number(yBounds[1]));
+        const centerZ = 0.5 * (Number(zBounds[0]) + Number(zBounds[1]));
+        const option = volumeColormapOptionFor(layer, state.colormap);
+        if (!option) {
+          return null;
+        }
+        const volumeTexture = volumeTextureFor(layer);
+        const windowState = normalizedVolumeWindowFor(layer, state);
+        const uniforms = THREE.UniformsUtils.merge([
+          THREE.UniformsLib.lights,
+          {
+            volumeTexture: { value: volumeTexture.texture },
+            colormap: { value: volumeColorTextureFor(option) },
+            jitterTexture: { value: volumeJitterTextureFor() },
+            low: { value: Number(windowState.low) },
+            high: { value: Number(windowState.high) },
+            opacity: { value: Number(state.opacity) },
+            samples: { value: Number(state.steps) },
+            alpha_coef: { value: Number(state.alphaCoef) },
+            gradient_step: { value: Number(state.gradientStep) },
+            scale: { value: new THREE.Vector4(sizeX, sizeY, sizeZ, 1.0) },
+            translation: { value: new THREE.Vector4(centerX, centerY, centerZ, 1.0) },
+            rotation: { value: new THREE.Vector4(0.0, 0.0, 0.0, 1.0) },
+            useSelectionPolygon: { value: false },
+            selectionViewProjectionMatrix: { value: new THREE.Matrix4() },
+            selectionMaskTexture: { value: null },
+            selectionDimOutside: { value: 1.0 },
+          },
+        ]);
+        applyLassoSelectionMaskUniforms(uniforms, activeVolumeLassoSelectionMask());
+
+        const material = new THREE.ShaderMaterial({
+          uniforms,
+          vertexShader: VOLUME_VERTEX_SHADER,
+          fragmentShader: VOLUME_FRAGMENT_SHADER,
+          transparent: true,
+          side: THREE.BackSide,
+          depthTest: false,
+          depthWrite: false,
+          lights: true,
+        });
+
+        const geometry = new THREE.BoxBufferGeometry(1, 1, 1);
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(centerX, centerY, centerZ);
+        mesh.scale.set(sizeX, sizeY, sizeZ);
+        mesh.visible = state.visible !== false;
+        mesh.renderOrder = -30;
+        mesh.frustumCulled = false;
+        const runtime = { mesh, material, geometry, layer };
+        return runtime;
+      }
+
+      function applyVolumeStateToRuntime(layer, runtime) {
+        if (!runtime || !runtime.material || !runtime.mesh) {
+          return;
+        }
+        const state = volumeStateByKey[String(layer.key)] || {};
+        const option = volumeColormapOptionFor(layer, state.colormap);
+        const windowState = normalizedVolumeWindowFor(layer, state);
+        runtime.mesh.visible = state.visible !== false;
+        runtime.material.uniforms.low.value = Number(windowState.low);
+        runtime.material.uniforms.high.value = Number(windowState.high);
+        runtime.material.uniforms.opacity.value = Number(state.opacity);
+        runtime.material.uniforms.samples.value = Number(state.steps);
+        runtime.material.uniforms.alpha_coef.value = Number(state.alphaCoef);
+        runtime.material.uniforms.gradient_step.value = Number(state.gradientStep);
+        applyLassoSelectionMaskUniforms(runtime.material.uniforms, activeVolumeLassoSelectionMask());
+        if (option) {
+          runtime.material.uniforms.colormap.value = volumeColorTextureFor(option);
+        }
+      }
+
+      function renderVolumeControls() {
+        const enabled = volumeLayers.length > 0;
+        volumePanelEl.dataset.enabled = enabled ? "true" : "false";
+        if (!enabled) {
+          return;
+        }
+
+        if (!activeVolumeKey || !volumeLayersByKey.has(String(activeVolumeKey))) {
+          activeVolumeKey = String(volumeLayers[0].key);
+        }
+
+        const layer = selectedVolumeLayer();
+        const state = selectedVolumeState();
+        if (!layer || !state) {
+          return;
+        }
+        clampVolumeStateForLayer(layer, state);
+
+        volumeSelectEl.innerHTML = "";
+        volumeLayers.forEach((volumeLayer) => {
+          const optionEl = document.createElement("option");
+          optionEl.value = String(volumeLayer.key);
+          optionEl.textContent = volumeLayer.name || String(volumeLayer.key);
+          if (String(volumeLayer.key) === String(activeVolumeKey)) {
+            optionEl.selected = true;
+          }
+          volumeSelectEl.appendChild(optionEl);
+        });
+        volumeSelectEl.disabled = !volumeSupported || volumeLayers.length <= 1;
+
+        volumeVisibleEl.checked = state.visible !== false;
+        volumeColormapEl.innerHTML = "";
+        ((layer.colormap_options || [])).forEach((option) => {
+          const optionEl = document.createElement("option");
+          optionEl.value = String(option.name);
+          optionEl.textContent = String(option.label || option.name);
+          if (String(option.name) === String(state.colormap)) {
+            optionEl.selected = true;
+          }
+          volumeColormapEl.appendChild(optionEl);
+        });
+        volumeColormapEl.value = String(state.colormap);
+
+        volumeVMinEl.value = formatVolumeNumber(state.vmin);
+        volumeVMaxEl.value = formatVolumeNumber(state.vmax);
+        volumeOpacityEl.value = String(state.opacity);
+        volumeAlphaEl.value = String(state.alphaCoef);
+        volumeStepsEl.value = String(state.steps);
+        volumeOpacityLabelEl.textContent = `Opacity (${Number(state.opacity).toFixed(2)})`;
+        volumeAlphaLabelEl.textContent = `Alpha coef (${Math.round(Number(state.alphaCoef))})`;
+        volumeStepsLabelEl.textContent = `Samples (${Math.round(Number(state.steps))})`;
+        volumeVisibleEl.disabled = !volumeSupported;
+        volumeColormapEl.disabled = !volumeSupported;
+        volumeVMinEl.disabled = !volumeSupported;
+        volumeVMaxEl.disabled = !volumeSupported;
+        volumeOpacityEl.disabled = !volumeSupported;
+        volumeAlphaEl.disabled = !volumeSupported;
+        volumeStepsEl.disabled = !volumeSupported;
+
+        const unitText = layer.value_unit ? ` ${layer.value_unit}` : "";
+        const supportText = volumeSupported
+          ? "Rendered at t=0 only as a WebGL2 ray-marched volume."
+          : "Volume rendering requires WebGL2 support in the browser.";
+        const resampleMethod = String(layer.downsample_method || "resampled");
+        volumeSummaryEl.textContent = [
+          `${layer.name}`,
+          `${Number(layer.shape.x)} x ${Number(layer.shape.y)} x ${Number(layer.shape.z)} voxels`,
+          `Source: ${Number(layer.source_shape.x)} x ${Number(layer.source_shape.y)} x ${Number(layer.source_shape.z)} | ${resampleMethod} scale ${formatVolumeNumber(Number(layer.downsample_step.x))} x ${formatVolumeNumber(Number(layer.downsample_step.y))} x ${formatVolumeNumber(Number(layer.downsample_step.z))}`,
+          `Samples: ${Math.round(Number(state.steps))} | alpha_coef: ${Math.round(Number(state.alphaCoef))}`,
+          `Data range: ${formatVolumeNumber((layer.data_range || [0])[0])} to ${formatVolumeNumber((layer.data_range || [0, 1])[1])}${unitText}`,
+          supportText,
+        ].join("\\n");
       }
 
       function clearGroup(group) {
@@ -1414,7 +2968,50 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const baseScale = (sceneSpec.max_span || 1) / 1400.0;
         const sizeScale = Math.max((options.size ?? 12) / 12.0, 0.8);
         sprite.scale.set(baseScale * aspect * 120.0 * sizeScale, baseScale * 120.0 * sizeScale, 1.0);
+        if (options.screenStable) {
+          sprite.userData.screenStable = {
+            pixelHeight: Math.max(Number(options.screenPixels) || 12.0, 6.0),
+            scaleMultiplier: Math.max(Number(options.screenScaleMultiplier) || 1.0, 0.1),
+          };
+        }
         return sprite;
+      }
+
+      function updateScreenStableTextSprite(sprite) {
+        if (!sprite || !sprite.material || !sprite.material.map) {
+          return;
+        }
+        const settings = sprite.userData ? sprite.userData.screenStable : null;
+        if (!settings) {
+          return;
+        }
+        const texture = sprite.material.map;
+        const aspect = texture.userData.width / Math.max(texture.userData.height, 1);
+        const pixelHeight = Math.max(Number(settings.pixelHeight) || 12.0, 6.0);
+        const scaleMultiplier = Math.max(Number(settings.scaleMultiplier) || 1.0, 0.1);
+        let worldHeight = 0.0;
+
+        if (camera.isPerspectiveCamera) {
+          const worldPosition = new THREE.Vector3();
+          sprite.getWorldPosition(worldPosition);
+          const distance = Math.max(camera.position.distanceTo(worldPosition), 1e-6);
+          const fovRad = THREE.MathUtils.degToRad(camera.fov);
+          worldHeight = 2.0 * Math.tan(fovRad * 0.5) * distance * (pixelHeight / Math.max(renderer.domElement.clientHeight, 1));
+        } else if (camera.isOrthographicCamera) {
+          worldHeight = ((camera.top - camera.bottom) / Math.max(camera.zoom, 1e-6)) * (pixelHeight / Math.max(renderer.domElement.clientHeight, 1));
+        }
+
+        if (!(worldHeight > 0.0) || !Number.isFinite(worldHeight)) {
+          return;
+        }
+        const height = worldHeight * scaleMultiplier;
+        sprite.scale.set(height * aspect, height, 1.0);
+      }
+
+      function updateScreenStableTextSprites() {
+        for (const sprite of screenStableTextSprites) {
+          updateScreenStableTextSprite(sprite);
+        }
       }
 
       function galaxyTextureFor(kind) {
@@ -2044,6 +3641,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (!trace.segments || !trace.segments.length) {
           return null;
         }
+        const traceState = traceStyleStateForKey(trace.key);
+        const lineColor = (traceState && traceState.color) || (trace.line || {}).color || "#ffffff";
+        const lineOpacity = traceState ? clamp01(traceState.opacity) : (trace.opacity ?? 1.0);
         const positions = [];
         trace.segments.forEach((segment) => {
           positions.push(segment[0], segment[1], segment[2], segment[3], segment[4], segment[5]);
@@ -2051,13 +3651,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const geometry = new LineSegmentsGeometry();
         geometry.setPositions(positions);
         const material = new LineMaterial({
-          color: (trace.line || {}).color ?? "#ffffff",
+          color: lineColor,
           linewidth: Math.max((trace.line || {}).width ?? 1.0, 1.0),
           dashed: ((trace.line || {}).dash || "solid") !== "solid",
           dashSize: 8.0,
           gapSize: 5.0,
-          transparent: (trace.opacity ?? 1.0) < 1.0,
-          opacity: trace.opacity ?? 1.0,
+          transparent: lineOpacity < 1.0,
+          opacity: lineOpacity,
           worldUnits: false,
         });
         material.resolution.set(root.clientWidth, root.clientHeight);
@@ -2072,6 +3672,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
         const group = new THREE.Group();
+        const traceState = traceStyleStateForKey(trace.key);
+        const traceColor = traceState ? traceState.color : null;
+        const traceOpacity = traceState ? clamp01(traceState.opacity) : null;
+        const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
         trace.points.forEach((point) => {
           if (!Number.isFinite(point.size) || point.size <= 0) {
             return;
@@ -2081,9 +3685,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (selectedClusterKeys.size && pointKey) {
             opacityMultiplier = selectedClusterKeys.has(pointKey) ? 1.0 : 0.16;
           }
-          const effectiveOpacity = Math.max(0.04, Math.min(1.0, Number(point.opacity ?? 1.0) * opacityMultiplier));
-          const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, point.color, effectiveOpacity));
-          const scale = Math.max(point.size * pointScale, pointScale * 0.5);
+          const baseOpacity = traceOpacity === null ? Number(point.opacity ?? 1.0) : traceOpacity;
+          const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * opacityMultiplier));
+          if (effectiveOpacity <= 0.001) {
+            return;
+          }
+          const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, traceColor || point.color, effectiveOpacity));
+          const scale = Math.max(point.size * sizeScaleFactor * pointScale, pointScale * 0.5);
           sprite.position.set(point.x, point.y, point.z);
           sprite.scale.set(scale, scale, scale);
           sprite.userData = {
@@ -2101,16 +3709,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
         const group = new THREE.Group();
+        const traceState = traceStyleStateForKey(trace.key);
         trace.labels.forEach((label) => {
           if (!label.text) {
             return;
           }
           const sprite = makeTextSprite(label.text, {
-            color: label.color ?? theme.axis_color,
+            color: (traceState && traceState.color) || label.color || theme.axis_color,
             size: label.size ?? 12,
             family: label.family ?? "Helvetica",
+            screenStable: label.screen_stable === true,
+            screenPixels: label.screen_px,
           });
           sprite.position.set(label.x, label.y, label.z);
+          if (label.screen_stable === true) {
+            screenStableTextSprites.push(sprite);
+          }
           group.add(sprite);
         });
         parent.add(group);
@@ -2118,6 +3732,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function addDecoration(parent, decoration) {
         if (!decoration || !decoration.kind) {
+          return;
+        }
+        if (decoration.kind === "volume_layer") {
+          const layer = volumeLayersByKey.get(String(decoration.key));
+          if (!layer) {
+            return;
+          }
+          if (legendState[String(layer.key)] === false) {
+            return;
+          }
+          const runtime = createVolumeRuntime(layer);
+          if (!runtime) {
+            return;
+          }
+          volumeRuntimeByKey.set(String(layer.key), runtime);
+          parent.add(runtime.mesh);
           return;
         }
         if (decoration.kind === "milky_way_model") {
@@ -2353,11 +3983,214 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return mode === true;
       }
 
+      function buildTraceLegendControls(item, toggleButton) {
+        const itemKey = String(item.key);
+        const state = traceStyleStateForKey(itemKey);
+        if (!state) {
+          return null;
+        }
+
+        const controls = document.createElement("div");
+        controls.className = "oviz-three-legend-controls";
+
+        const colorInput = document.createElement("input");
+        colorInput.type = "color";
+        colorInput.value = cssColorToHex(state.color, "#ffffff");
+        const colorField = createLegendField("Color", colorInput);
+
+        const opacityInput = document.createElement("input");
+        opacityInput.type = "range";
+        opacityInput.min = "0";
+        opacityInput.max = "1";
+        opacityInput.step = "0.01";
+        opacityInput.value = String(clamp01(state.opacity));
+        const opacityField = createLegendField(`Opacity (${clamp01(state.opacity).toFixed(2)})`, opacityInput);
+
+        const firstRow = createLegendControlRow();
+        firstRow.appendChild(colorField.field);
+        firstRow.appendChild(opacityField.field);
+        controls.appendChild(firstRow);
+
+        colorInput.addEventListener("input", () => {
+          state.color = String(colorInput.value);
+          toggleButton.style.color = state.color;
+          renderFrame(currentFrameIndex);
+        });
+        opacityInput.addEventListener("input", () => {
+          state.opacity = clamp01(opacityInput.value);
+          opacityField.label.textContent = `Opacity (${state.opacity.toFixed(2)})`;
+          renderFrame(currentFrameIndex);
+        });
+
+        if (state.hasPoints) {
+          const sizeInput = document.createElement("input");
+          sizeInput.type = "range";
+          sizeInput.min = "0.25";
+          sizeInput.max = "4";
+          sizeInput.step = "0.05";
+          sizeInput.value = String(Math.max(Number(state.sizeScale), 0.25));
+          const sizeField = createLegendField(`Point size (${Number(state.sizeScale).toFixed(2)}x)`, sizeInput);
+          controls.appendChild(sizeField.field);
+          sizeInput.addEventListener("input", () => {
+            state.sizeScale = Math.max(Number(sizeInput.value), 0.05);
+            sizeField.label.textContent = `Point size (${state.sizeScale.toFixed(2)}x)`;
+            renderFrame(currentFrameIndex);
+          });
+
+          const summary = document.createElement("div");
+          summary.className = "oviz-three-legend-summary";
+          summary.textContent = "Point size is applied as a multiplier on the original marker sizes.";
+          controls.appendChild(summary);
+        }
+
+        return controls;
+      }
+
+      function buildVolumeLegendControls(item, toggleButton) {
+        const layer = volumeLayerForKey(item.key);
+        const state = layer ? volumeStateByKey[String(layer.key)] : null;
+        if (!layer || !state) {
+          return null;
+        }
+
+        const controls = document.createElement("div");
+        controls.className = "oviz-three-legend-controls";
+
+        const visibleToggle = document.createElement("label");
+        visibleToggle.className = "oviz-three-legend-toggle";
+        const visibleInput = document.createElement("input");
+        visibleInput.type = "checkbox";
+        visibleToggle.appendChild(visibleInput);
+        const visibleText = document.createElement("span");
+        visibleText.textContent = "Show at t=0";
+        visibleToggle.appendChild(visibleText);
+        controls.appendChild(visibleToggle);
+
+        const colormapSelect = document.createElement("select");
+        ((layer.colormap_options || [])).forEach((option) => {
+          const optionEl = document.createElement("option");
+          optionEl.value = String(option.name);
+          optionEl.textContent = String(option.label || option.name);
+          colormapSelect.appendChild(optionEl);
+        });
+        const colormapField = createLegendField("Colormap", colormapSelect);
+        controls.appendChild(colormapField.field);
+
+        const vminInput = document.createElement("input");
+        vminInput.type = "number";
+        vminInput.step = "any";
+        const vminField = createLegendField("vmin", vminInput);
+
+        const vmaxInput = document.createElement("input");
+        vmaxInput.type = "number";
+        vmaxInput.step = "any";
+        const vmaxField = createLegendField("vmax", vmaxInput);
+
+        const valueRow = createLegendControlRow();
+        valueRow.appendChild(vminField.field);
+        valueRow.appendChild(vmaxField.field);
+        controls.appendChild(valueRow);
+
+        const opacityInput = document.createElement("input");
+        opacityInput.type = "range";
+        opacityInput.min = "0";
+        opacityInput.max = "1";
+        opacityInput.step = "0.01";
+        const opacityField = createLegendField("Opacity", opacityInput);
+        controls.appendChild(opacityField.field);
+
+        const alphaInput = document.createElement("input");
+        alphaInput.type = "range";
+        alphaInput.min = "1";
+        alphaInput.max = "200";
+        alphaInput.step = "1";
+        const alphaField = createLegendField("Alpha coef", alphaInput);
+        controls.appendChild(alphaField.field);
+
+        const samplesInput = document.createElement("input");
+        samplesInput.type = "range";
+        samplesInput.min = "24";
+        samplesInput.max = "768";
+        samplesInput.step = "8";
+        const samplesField = createLegendField("Samples", samplesInput);
+        controls.appendChild(samplesField.field);
+
+        const summary = document.createElement("div");
+        summary.className = "oviz-three-legend-summary";
+        controls.appendChild(summary);
+
+        function refreshVolumeControls(syncInputs = true) {
+          clampVolumeStateForLayer(layer, state);
+          if (syncInputs) {
+            visibleInput.checked = state.visible !== false;
+            colormapSelect.value = String(state.colormap);
+            vminInput.value = formatVolumeNumber(state.vmin);
+            vmaxInput.value = formatVolumeNumber(state.vmax);
+            opacityInput.value = String(state.opacity);
+            alphaInput.value = String(state.alphaCoef);
+            samplesInput.value = String(state.steps);
+          }
+          opacityField.label.textContent = `Opacity (${Number(state.opacity).toFixed(2)})`;
+          alphaField.label.textContent = `Alpha coef (${Math.round(Number(state.alphaCoef))})`;
+          samplesField.label.textContent = `Samples (${Math.round(Number(state.steps))})`;
+          summary.textContent = volumeSummaryTextFor(layer, state);
+          toggleButton.style.color = volumeLegendColorForLayer(layer);
+        }
+
+        function updateVolumeFromLegend(shouldRerenderLegend = false) {
+          activeVolumeKey = String(layer.key);
+          if (shouldRerenderLegend) {
+            renderLegend();
+          }
+          updateActiveVolumeRuntime();
+        }
+
+        refreshVolumeControls(true);
+
+        visibleInput.addEventListener("change", () => {
+          state.visible = Boolean(visibleInput.checked);
+          refreshVolumeControls(false);
+          updateVolumeFromLegend(false);
+        });
+        colormapSelect.addEventListener("change", () => {
+          state.colormap = String(colormapSelect.value);
+          refreshVolumeControls(false);
+          updateVolumeFromLegend(false);
+        });
+        vminInput.addEventListener("change", () => {
+          state.vmin = Number(vminInput.value);
+          refreshVolumeControls(true);
+          updateVolumeFromLegend(false);
+        });
+        vmaxInput.addEventListener("change", () => {
+          state.vmax = Number(vmaxInput.value);
+          refreshVolumeControls(true);
+          updateVolumeFromLegend(false);
+        });
+        opacityInput.addEventListener("input", () => {
+          state.opacity = Number(opacityInput.value);
+          refreshVolumeControls(false);
+          updateVolumeFromLegend(false);
+        });
+        alphaInput.addEventListener("input", () => {
+          state.alphaCoef = Number(alphaInput.value);
+          refreshVolumeControls(false);
+          updateVolumeFromLegend(false);
+        });
+        samplesInput.addEventListener("input", () => {
+          state.steps = Number(samplesInput.value);
+          refreshVolumeControls(false);
+          updateVolumeFromLegend(false);
+        });
+
+        return controls;
+      }
+
       function renderLegend() {
         legendEl.innerHTML = "";
         const title = document.createElement("div");
         title.className = "oviz-three-legend-title";
-        title.textContent = "Click to toggle traces on/off";
+        title.textContent = "Click names to toggle. Use arrows for controls.";
         legendEl.appendChild(title);
 
         const defaults = groupDefaults(currentGroup);
@@ -2367,19 +4200,56 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             return;
           }
 
+          const entry = document.createElement("div");
+          entry.className = "oviz-three-legend-entry";
+          entry.dataset.open = legendPanelStateByKey[String(item.key)] ? "true" : "false";
+
+          const row = document.createElement("div");
+          row.className = "oviz-three-legend-row";
           const button = document.createElement("button");
           button.type = "button";
           button.className = "oviz-three-legend-item";
           button.dataset.active = legendState[item.key] ? "true" : "false";
           button.textContent = item.name;
-          button.style.color = item.color || theme.text_color || theme.axis_color;
+          button.style.color = legendColorForItem(item);
           button.addEventListener("click", () => {
             legendState[item.key] = !legendState[item.key];
             renderLegend();
             renderFrame(currentFrameIndex);
           });
-          legendEl.appendChild(button);
+          row.appendChild(button);
+
+          const disclosure = document.createElement("button");
+          disclosure.type = "button";
+          disclosure.className = "oviz-three-legend-disclosure";
+          disclosure.dataset.open = legendPanelStateByKey[String(item.key)] ? "true" : "false";
+          disclosure.textContent = legendPanelStateByKey[String(item.key)] ? "▾" : "▸";
+          disclosure.addEventListener("click", () => {
+            const itemKey = String(item.key);
+            legendPanelStateByKey[itemKey] = !legendPanelStateByKey[itemKey];
+            renderLegend();
+          });
+          row.appendChild(disclosure);
+
+          entry.appendChild(row);
+
+          const controls = volumeLayerForKey(item.key)
+            ? buildVolumeLegendControls(item, button)
+            : buildTraceLegendControls(item, button);
+          if (controls) {
+            entry.appendChild(controls);
+          } else {
+            disclosure.disabled = true;
+          }
+
+          legendEl.appendChild(entry);
         });
+      }
+
+      function setToolsDrawerOpen(isOpen) {
+        const nextOpen = Boolean(isOpen);
+        toolsShellEl.dataset.open = nextOpen ? "true" : "false";
+        toolsToggleEl.textContent = nextOpen ? "Tools ◂" : "Tools ▸";
       }
 
       function renderFrame(index) {
@@ -2389,8 +4259,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         timeLabelEl.textContent = `Time (Myr): ${frame.name}`;
         tooltipEl.style.display = "none";
         hoverTargets.length = 0;
+        screenStableTextSprites.length = 0;
         clearGroup(plotGroup);
         frameLineMaterials.length = 0;
+        volumeRuntimeByKey.clear();
 
         frame.traces.forEach((trace) => {
           if (!traceVisible(trace)) {
@@ -2423,6 +4295,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
 
         resize();
+        renderAgeKdeWidget();
       }
 
       function resize() {
@@ -2434,6 +4307,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         [...axisLineMaterials, ...frameLineMaterials].forEach((material) => {
           material.resolution.set(width, height);
         });
+        updateScaleBar();
+        renderAgeKdeWidget();
       }
 
       function play() {
@@ -2453,62 +4328,81 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
       }
 
-      function storeSkyPanelRect() {
-        const rect = skyPanelEl.getBoundingClientRect();
-        skyPanelEl.dataset.normalLeft = String(rect.left);
-        skyPanelEl.dataset.normalTop = String(rect.top);
-        skyPanelEl.dataset.normalWidth = String(rect.width);
-        skyPanelEl.dataset.normalHeight = String(rect.height);
-      }
-
-      function restoreSkyPanelRect() {
-        const left = Number(skyPanelEl.dataset.normalLeft);
-        const top = Number(skyPanelEl.dataset.normalTop);
-        const width = Number(skyPanelEl.dataset.normalWidth);
-        const height = Number(skyPanelEl.dataset.normalHeight);
-        if ([left, top, width, height].every(Number.isFinite)) {
-          skyPanelEl.style.left = `${left}px`;
-          skyPanelEl.style.top = `${top}px`;
-          skyPanelEl.style.right = "auto";
-          skyPanelEl.style.bottom = "auto";
-          skyPanelEl.style.width = `${width}px`;
-          skyPanelEl.style.height = `${height}px`;
+      function applyWidgetMode(widgetKey) {
+        const panelEl = widgetPanelForKey(widgetKey);
+        if (!panelEl) {
           return;
         }
-        skyPanelEl.style.left = "";
-        skyPanelEl.style.top = "";
-        skyPanelEl.style.right = "12px";
-        skyPanelEl.style.bottom = "";
-        skyPanelEl.style.width = "";
-        skyPanelEl.style.height = "";
+        const mode = widgetEnabled(widgetKey) ? widgetModeForKey(widgetKey) : "hidden";
+        panelEl.dataset.mode = mode;
       }
 
-      function setSkyPanelMode(mode) {
-        if (!skySpec.enabled) {
+      function setWidgetMode(widgetKey, mode) {
+        if (!widgetEnabled(widgetKey)) {
           return;
         }
+        const panelEl = widgetPanelForKey(widgetKey);
+        if (!panelEl) {
+          return;
+        }
+        const currentMode = widgetModeForKey(widgetKey);
         const nextMode = ["normal", "fullscreen", "hidden"].includes(mode) ? mode : "normal";
-        if (nextMode === "fullscreen" && skyPanelMode === "normal") {
-          storeSkyPanelRect();
+        if (nextMode === "fullscreen" && currentMode === "normal") {
+          storeWidgetRect(widgetKey);
         }
-        skyPanelMode = nextMode;
-        applySkyPanelMode();
-        if (skyPanelMode === "normal") {
-          restoreSkyPanelRect();
-        } else if (skyPanelMode === "fullscreen") {
-          skyPanelEl.style.left = "0px";
-          skyPanelEl.style.top = "0px";
-          skyPanelEl.style.right = "0px";
-          skyPanelEl.style.bottom = "0px";
-          skyPanelEl.style.width = "auto";
-          skyPanelEl.style.height = "auto";
+        setWidgetModeValue(widgetKey, nextMode);
+        if (widgetKey === "sky") {
+          applySkyPanelMode();
+        } else if (widgetKey === "age_kde") {
+          applyAgeKdePanelMode();
+        } else {
+          applyWidgetMode(widgetKey);
+        }
+        if (nextMode === "normal") {
+          restoreWidgetRect(widgetKey);
+          raiseWidget(widgetKey);
+        } else if (nextMode === "fullscreen") {
+          raiseWidget(widgetKey);
+          panelEl.style.left = "0px";
+          panelEl.style.top = "0px";
+          panelEl.style.right = "0px";
+          panelEl.style.bottom = "0px";
+          panelEl.style.width = "auto";
+          panelEl.style.height = "auto";
         }
         resize();
+        renderAgeKdeWidget();
+      }
+
+      function renderWidgetMenu() {
+        widgetSelectEl.innerHTML = "";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Widgets";
+        placeholder.selected = true;
+        widgetSelectEl.appendChild(placeholder);
+
+        const items = [];
+        if (skySpec.enabled) {
+          items.push({ key: "sky", label: "Sky View" });
+        }
+        if (ageKdeSpec.enabled) {
+          items.push({ key: "age_kde", label: "Age KDE" });
+        }
+
+        items.forEach((item) => {
+          const option = document.createElement("option");
+          option.value = item.key;
+          option.textContent = item.label;
+          widgetSelectEl.appendChild(option);
+        });
+        widgetSelectEl.style.display = items.length ? "block" : "none";
+        widgetSelectEl.value = "";
       }
 
       function currentFrameAllowsSelection() {
         const frame = currentFrame();
-        return Boolean(frame) && approximatelyZero(Number(frame.time));
+        return Boolean(frame);
       }
 
       function canvasPointFromEvent(event) {
@@ -2573,7 +4467,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function startLassoSelection(event) {
-        if (!currentFrameAllowsSelection() || skyPointerState || event.button !== 0) {
+        if (!currentFrameAllowsSelection() || widgetPointerState || event.button !== 0) {
           return false;
         }
         if (!(event.shiftKey || lassoArmed)) {
@@ -2638,10 +4532,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (polygon.length < 3) {
           return;
         }
+        disposeLassoSelectionMask(currentLassoSelectionMask);
+        currentLassoSelectionMask = captureLassoSelectionMask(polygon);
         const selected = [];
         hoverTargets.forEach((sprite) => {
           const selection = sprite && sprite.userData ? sprite.userData.selection : null;
-          if (!selection || !approximatelyZero(Number(selection.click_time_myr))) {
+          if (!selection) {
             return;
           }
           const screenPoint = spriteScreenPoint(sprite);
@@ -2669,7 +4565,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           suppressNextCanvasClick = false;
           return;
         }
-        if (skyPointerState || !clickSelectionEnabled) {
+        if (widgetPointerState || !clickSelectionEnabled) {
           return;
         }
         const hit = pickSprite(event);
@@ -2684,17 +4580,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         setClusterSelections([selection], "click");
       }
 
-      function onSkyPointerStart(event) {
-        if (skyPanelMode !== "normal") {
+      function onWidgetPointerStart(event) {
+        const panelEl = event.target.closest(".oviz-three-widget-panel");
+        if (!panelEl) {
           return;
         }
-        const resizeHandle = event.target.closest(".oviz-three-sky-resize");
-        const dragHandle = event.target.closest(".oviz-three-sky-drag");
+        const widgetKey = String(panelEl.dataset.widgetKey || "");
+        if (widgetModeForKey(widgetKey) !== "normal") {
+          return;
+        }
+        const resizeHandle = event.target.closest(".oviz-three-widget-resize");
+        const dragHandle = event.target.closest(".oviz-three-widget-drag");
         if (!resizeHandle && !dragHandle) {
           return;
         }
-        const rect = skyPanelEl.getBoundingClientRect();
-        skyPointerState = {
+        const rect = panelEl.getBoundingClientRect();
+        widgetPointerState = {
+          widgetKey,
+          panelEl,
           mode: resizeHandle ? "resize" : "drag",
           dir: resizeHandle ? (resizeHandle.dataset.dir || "se").toLowerCase() : null,
           startX: event.clientX,
@@ -2707,16 +4610,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           startBottom: rect.bottom,
           handle: resizeHandle || dragHandle,
         };
-        skyPanelEl.style.left = `${rect.left}px`;
-        skyPanelEl.style.top = `${rect.top}px`;
-        skyPanelEl.style.right = "auto";
-        skyPanelEl.style.bottom = "auto";
-        skyPanelEl.style.width = `${rect.width}px`;
-        skyPanelEl.style.height = `${rect.height}px`;
+        panelEl.style.left = `${rect.left}px`;
+        panelEl.style.top = `${rect.top}px`;
+        panelEl.style.right = "auto";
+        panelEl.style.bottom = "auto";
+        panelEl.style.width = `${rect.width}px`;
+        panelEl.style.height = `${rect.height}px`;
+        raiseWidget(widgetKey);
         controls.enabled = false;
-        if (skyPointerState.handle && typeof skyPointerState.handle.setPointerCapture === "function" && event.pointerId !== undefined) {
+        if (widgetPointerState.handle && typeof widgetPointerState.handle.setPointerCapture === "function" && event.pointerId !== undefined) {
           try {
-            skyPointerState.handle.setPointerCapture(event.pointerId);
+            widgetPointerState.handle.setPointerCapture(event.pointerId);
           } catch (_err) {
           }
         }
@@ -2725,42 +4629,43 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         event.stopPropagation();
       }
 
-      function onSkyPointerMove(event) {
-        if (!skyPointerState) {
+      function onWidgetPointerMove(event) {
+        if (!widgetPointerState) {
           return;
         }
-        if (skyPointerState.mode === "drag") {
-          const left = skyPointerState.startLeft + (event.clientX - skyPointerState.startX);
-          const top = skyPointerState.startTop + (event.clientY - skyPointerState.startY);
-          const next = clampSkyPosition(left, top, skyPointerState.startWidth, skyPointerState.startHeight);
-          skyPanelEl.style.left = `${next.left}px`;
-          skyPanelEl.style.top = `${next.top}px`;
+        if (widgetPointerState.mode === "drag") {
+          const left = widgetPointerState.startLeft + (event.clientX - widgetPointerState.startX);
+          const top = widgetPointerState.startTop + (event.clientY - widgetPointerState.startY);
+          const next = clampWidgetPosition(left, top, widgetPointerState.startWidth, widgetPointerState.startHeight);
+          widgetPointerState.panelEl.style.left = `${next.left}px`;
+          widgetPointerState.panelEl.style.top = `${next.top}px`;
         } else {
-          const next = resizeSkyRect(skyPointerState, event.clientX, event.clientY);
-          skyPanelEl.style.left = `${next.left}px`;
-          skyPanelEl.style.top = `${next.top}px`;
-          skyPanelEl.style.width = `${next.width}px`;
-          skyPanelEl.style.height = `${next.height}px`;
+          const next = resizeWidgetRect(widgetPointerState, event.clientX, event.clientY);
+          widgetPointerState.panelEl.style.left = `${next.left}px`;
+          widgetPointerState.panelEl.style.top = `${next.top}px`;
+          widgetPointerState.panelEl.style.width = `${next.width}px`;
+          widgetPointerState.panelEl.style.height = `${next.height}px`;
         }
         resize();
+        renderAgeKdeWidget();
         event.preventDefault();
         event.stopPropagation();
       }
 
-      function onSkyPointerEnd(event) {
-        if (!skyPointerState) {
+      function onWidgetPointerEnd(event) {
+        if (!widgetPointerState) {
           return;
         }
-        if (skyPointerState.handle && typeof skyPointerState.handle.releasePointerCapture === "function" && event.pointerId !== undefined) {
+        if (widgetPointerState.handle && typeof widgetPointerState.handle.releasePointerCapture === "function" && event.pointerId !== undefined) {
           try {
-            skyPointerState.handle.releasePointerCapture(event.pointerId);
+            widgetPointerState.handle.releasePointerCapture(event.pointerId);
           } catch (_err) {
           }
         }
         controls.enabled = true;
         document.body.style.userSelect = "";
-        storeSkyPanelRect();
-        skyPointerState = null;
+        storeWidgetRect(widgetPointerState.widgetKey);
+        widgetPointerState = null;
       }
 
       function initSkyPanel() {
@@ -2770,15 +4675,112 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         skyReadoutEl.textContent = skyReadoutText([], [], "overview");
         skyFrameEl.srcdoc = buildEmptySkySrcdoc();
-        skyShowButtonEl.addEventListener("click", () => setSkyPanelMode("normal"));
-        skyShowFullButtonEl.addEventListener("click", () => setSkyPanelMode("fullscreen"));
-        skyHideButtonEl.addEventListener("click", () => setSkyPanelMode("hidden"));
+        skyHideButtonEl.addEventListener("click", () => setWidgetMode("sky", "hidden"));
         skyFullButtonEl.addEventListener("click", () => {
-          setSkyPanelMode(skyPanelMode === "fullscreen" ? "normal" : "fullscreen");
+          setWidgetMode("sky", skyPanelMode === "fullscreen" ? "normal" : "fullscreen");
         });
-        skyDragHandleEl.addEventListener("pointerdown", onSkyPointerStart);
-        skyResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onSkyPointerStart));
         applySkyPanelMode();
+      }
+
+      function initAgeKdePanel() {
+        if (!ageKdeSpec.enabled) {
+          applyAgeKdePanelMode();
+          return;
+        }
+        ageKdeHideButtonEl.addEventListener("click", () => setWidgetMode("age_kde", "hidden"));
+        ageKdeFullButtonEl.addEventListener("click", () => {
+          setWidgetMode("age_kde", ageKdePanelMode === "fullscreen" ? "normal" : "fullscreen");
+        });
+        renderAgeKdeWidget();
+        applyAgeKdePanelMode();
+      }
+
+      function updateActiveVolumeRuntime() {
+        const layer = selectedVolumeLayer();
+        const state = selectedVolumeState();
+        if (!layer || !state) {
+          renderVolumeControls();
+          return;
+        }
+        clampVolumeStateForLayer(layer, state);
+        renderVolumeControls();
+        const runtime = volumeRuntimeByKey.get(String(layer.key));
+        if (runtime) {
+          applyVolumeStateToRuntime(layer, runtime);
+          return;
+        }
+        const frame = currentFrame();
+        if (frame && approximatelyZero(Number(frame.time))) {
+          renderFrame(currentFrameIndex);
+        }
+      }
+
+      function initVolumeControls() {
+        renderVolumeControls();
+        if (!volumeLayers.length) {
+          return;
+        }
+
+        volumeSelectEl.addEventListener("change", () => {
+          activeVolumeKey = String(volumeSelectEl.value);
+          renderVolumeControls();
+        });
+        volumeVisibleEl.addEventListener("change", () => {
+          const state = selectedVolumeState();
+          if (!state) {
+            return;
+          }
+          state.visible = Boolean(volumeVisibleEl.checked);
+          updateActiveVolumeRuntime();
+        });
+        volumeColormapEl.addEventListener("change", () => {
+          const state = selectedVolumeState();
+          if (!state) {
+            return;
+          }
+          state.colormap = String(volumeColormapEl.value);
+          updateActiveVolumeRuntime();
+        });
+        volumeOpacityEl.addEventListener("input", () => {
+          const state = selectedVolumeState();
+          if (!state) {
+            return;
+          }
+          state.opacity = Number(volumeOpacityEl.value);
+          updateActiveVolumeRuntime();
+        });
+        volumeAlphaEl.addEventListener("input", () => {
+          const state = selectedVolumeState();
+          if (!state) {
+            return;
+          }
+          state.alphaCoef = Number(volumeAlphaEl.value);
+          updateActiveVolumeRuntime();
+        });
+        volumeStepsEl.addEventListener("input", () => {
+          const state = selectedVolumeState();
+          if (!state) {
+            return;
+          }
+          state.steps = Number(volumeStepsEl.value);
+          updateActiveVolumeRuntime();
+        });
+        volumeVMinEl.addEventListener("change", () => {
+          const state = selectedVolumeState();
+          if (!state) {
+            return;
+          }
+          state.vmin = Number(volumeVMinEl.value);
+          updateActiveVolumeRuntime();
+        });
+        volumeVMaxEl.addEventListener("change", () => {
+          const state = selectedVolumeState();
+          if (!state) {
+            return;
+          }
+          state.vmax = Number(volumeVMaxEl.value);
+          updateActiveVolumeRuntime();
+        });
       }
 
       function onPointerMove(event) {
@@ -2806,6 +4808,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function initControls() {
+        setToolsDrawerOpen(false);
         groupSelectEl.innerHTML = "";
         const groups = sceneSpec.group_order || [defaultGroup];
         groups.forEach((groupName) => {
@@ -2816,11 +4819,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
         groupSelectEl.value = currentGroup;
         groupSelectEl.style.display = groups.length > 1 ? "block" : "none";
+        renderWidgetMenu();
         groupSelectEl.addEventListener("change", () => {
           currentGroup = groupSelectEl.value;
           resetLegendState(currentGroup);
           renderLegend();
           renderFrame(currentFrameIndex);
+        });
+        widgetSelectEl.addEventListener("change", () => {
+          const widgetKey = String(widgetSelectEl.value || "");
+          if (widgetKey) {
+            setWidgetMode(widgetKey, "normal");
+          }
+          widgetSelectEl.value = "";
         });
 
         sliderEl.max = String(Math.max(frameSpecs.length - 1, 0));
@@ -2830,6 +4841,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
         playButtonEl.addEventListener("click", play);
         pauseButtonEl.addEventListener("click", pause);
+        toolsToggleEl.addEventListener("click", () => {
+          setToolsDrawerOpen(toolsShellEl.dataset.open !== "true");
+        });
         lassoButtonEl.addEventListener("click", () => {
           lassoArmed = !lassoArmed;
           updateSelectionUI();
@@ -2839,6 +4853,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           clickSelectionEnabled = Boolean(clickSelectToggleEl.checked);
           updateSelectionUI();
         });
+        volumeLassoToggleEl.addEventListener("change", () => {
+          lassoVolumeSelectionEnabled = Boolean(volumeLassoToggleEl.checked);
+          updateSelectionUI();
+          const frame = currentFrame();
+          if (frame && approximatelyZero(Number(frame.time)) && volumeLayers.length) {
+            renderFrame(currentFrameIndex);
+          }
+        });
+        widgetDragHandles.forEach((handle) => handle.addEventListener("pointerdown", onWidgetPointerStart));
+        widgetResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onWidgetPointerStart));
       }
 
       function onCanvasPointerDown(event) {
@@ -2846,23 +4870,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function onWindowPointerMove(event) {
-        onSkyPointerMove(event);
+        onWidgetPointerMove(event);
       }
 
       function onWindowPointerEnd(event) {
-        onSkyPointerEnd(event);
+        onWidgetPointerEnd(event);
         finishLassoSelection(event);
       }
 
       function animate() {
         window.requestAnimationFrame(animate);
         controls.update();
+        updateScreenStableTextSprites();
+        updateScaleBar();
+        renderAgeKdeWidget();
         renderer.render(scene, camera);
       }
 
       buildAxes();
       initControls();
       initSkyPanel();
+      initAgeKdePanel();
+      initVolumeControls();
       resetLegendState(currentGroup);
       renderLegend();
       updateSelectionUI();

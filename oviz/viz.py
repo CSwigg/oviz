@@ -1,14 +1,16 @@
+import base64
+import json
+import copy
+
 import numpy as np
 import yaml
 import plotly.graph_objects as go
 import plotly.colors as pc
-import json
 import webcolors
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import importlib.resources
 from . import orbit_maker
-import copy
 import pandas as pd
 from .threejs_figure import ThreeJSFigure
 
@@ -75,6 +77,15 @@ CUSTOMDATA_IDX_Z0 = 7
 CUSTOMDATA_IDX_CLUSTER_NAME = 8
 CUSTOMDATA_IDX_CLUSTER_COLOR = 9
 MAX_SELECTED_MEMBER_POINTS = 1200
+DEFAULT_THREEJS_VOLUME_COLORMAPS = (
+    'inferno',
+    'magma',
+    'plasma',
+    'viridis',
+    'cividis',
+    'turbo',
+    'Greys',
+)
 
 class Animate3D:
     """
@@ -163,6 +174,7 @@ class Animate3D:
         sky_frame='galactic',
         sky_survey='P/DSS2/color',
         cluster_members_file=None,
+        volumes=None,
     ):
         """
         Main method to generate a 3D animated plot. Integrates orbits if necessary and
@@ -212,12 +224,13 @@ class Animate3D:
         self.sky_survey = str(sky_survey)
         self.cluster_members_file = cluster_members_file
         self.sky_members_by_cluster = None
+        self.volume_configs = _normalize_threejs_volume_configs(volumes)
         if age_kde_bandwidth_myr <= 0:
             raise ValueError("age_kde_bandwidth_myr must be > 0.")
         self.age_kde_bandwidth_myr = float(age_kde_bandwidth_myr)
-        if renderer_name == 'threejs' and self.show_age_kde_inset:
+        if renderer_name != 'threejs' and self.volume_configs:
             raise NotImplementedError(
-                "renderer='threejs' does not yet support show_age_kde_inset=True."
+                "volumes are currently only supported with renderer='threejs'."
             )
         if self.enable_sky_panel:
             if self.sky_radius_deg <= 0:
@@ -276,6 +289,10 @@ class Animate3D:
             raise ValueError("coord_system must be either 'centered' or 'rot'")
 
         self.coord_system = coord_system
+        if renderer_name == 'threejs' and self.volume_configs and self.coord_system != 'centered':
+            raise NotImplementedError(
+                "Three.js volume rendering currently supports coord_system='centered' only."
+            )
 
         x_rf_int, y_rf_int, z_rf_int = orbit_maker.get_center_orbit_coords(
             time, reference_frame_center, potential=self.potential, vo=self.vo, ro=self.ro, zo=self.zo
@@ -568,10 +585,7 @@ class Animate3D:
         )
 
     def _build_galactic_circles_with_labels(self, t, x_rf, y_rf, z_rf, coord_system='centered'):
-        """Build R=4/8.12/12 kpc circles and their labels."""
-        x_gc, y_gc, z_gc = self._galactic_center_position(
-            t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
-        )
+        """Build R=4/8.12/12 kpc circles."""
         traces = []
         for radius_kpc, label_text in GALACTIC_RADIUS_CIRCLE_DEFS:
             traces.append(
@@ -583,16 +597,6 @@ class Animate3D:
                     x_sub=float(x_rf),
                     y_sub=float(y_rf),
                     z_sub=float(z_rf)
-                )
-            )
-            traces.append(
-                self._radius_label_trace(
-                    radius_kpc=radius_kpc,
-                    label_text=label_text,
-                    x_center=x_gc,
-                    y_center=y_gc,
-                    z_center=z_gc,
-                    angle_deg=315.0
                 )
             )
         return traces
@@ -1503,50 +1507,6 @@ class Animate3D:
                 )
             )
 
-        if galactic_mode and show_galactic_center_circles:
-            # Theme-aware styling for the GC marker/text.
-            if self.figure_theme == 'dark':
-                gc_marker_color = 'gray'
-                gc_text_color = 'gray'
-                gc_line_color = 'black'
-            elif self.figure_theme in ('light', 'solarized_light'):
-                gc_marker_color = 'black'
-                gc_text_color = 'black'
-                gc_line_color = 'white'
-            else:
-                # Fallback for other themes (e.g. 'gray')
-                gc_marker_color = 'black'
-                gc_text_color = 'black'
-                gc_line_color = 'white'
-
-            x_gc, y_gc, z_gc = self._galactic_center_position(
-                t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
-            )
-
-            scatter_list.append(
-                go.Scatter3d(
-                    x=[x_gc],
-                    y=[y_gc],
-                    z=[z_gc],
-                    mode='markers+text',
-                    marker=dict(
-                        size=12,
-                        color=gc_marker_color,
-                        symbol='circle',
-                        opacity=self._reference_opacity(),
-                        line=dict(color=gc_line_color, width=2)
-                    ),
-                    text=['GC'],
-                    textposition='top center',
-                    textfont=dict(color=gc_text_color, size=14, family='helvetica'),
-                    name='GC',
-                    showlegend=False,
-                    hovertext='Galactic Center',
-                    hoverinfo='text',
-                    hovertemplate='%{hovertext}<extra></extra>'
-                )
-            )
-
         if self.show_age_kde_inset:
             scatter_list.append(self._build_kde_time_marker_trace(t))
             scatter_list.extend(self._build_kde_inset_traces())
@@ -1663,6 +1623,7 @@ class Animate3D:
             and axis_z.get('visible') is False
         )
 
+        volume_layers = self._build_threejs_volume_layers()
         trace_keys = []
         legend_items = []
         for idx, trace in enumerate(self.initial_data):
@@ -1678,7 +1639,27 @@ class Animate3D:
                     'key': trace_key,
                     'name': trace_spec.get('name') or trace_key,
                     'color': trace_spec.get('legend_color'),
+                    'kind': 'trace',
+                    'has_points': bool(trace_spec.get('points')),
+                    'has_segments': bool(trace_spec.get('segments')),
+                    'default_color': trace_spec.get('legend_color'),
+                    'default_opacity': float(trace_spec.get('default_opacity', 1.0)),
+                    'default_point_size': trace_spec.get('default_point_size'),
                 })
+
+        trace_key_by_name = {
+            str(trace_name): trace_key
+            for trace_key, trace_name in trace_keys
+            if isinstance(trace_name, str) and trace_name
+        }
+
+        for layer in volume_layers:
+            legend_items.append({
+                'key': str(layer.get('key')),
+                'name': str(layer.get('name') or layer.get('key')),
+                'color': layer.get('legend_color'),
+                'kind': 'volume',
+            })
 
         group_visibility = {}
         for group_name, traces_list in self.trace_grouping_dict.items():
@@ -1689,6 +1670,10 @@ class Animate3D:
                     group_visibility[group_name][trace_key] = "legendonly"
                 else:
                     group_visibility[group_name][trace_key] = bool(visible)
+
+        for group_name in group_visibility:
+            for layer in volume_layers:
+                group_visibility[group_name][str(layer.get('key'))] = bool(layer.get('visible', True))
 
         frames_by_time = {}
         for time_val, frame in zip(self.time, frames):
@@ -1718,6 +1703,7 @@ class Animate3D:
                     y_range=y_range,
                     z_range=z_range,
                     fallback_center=center,
+                    volume_layers=volume_layers,
                 ),
             })
 
@@ -1768,6 +1754,11 @@ class Animate3D:
             'playback_interval_ms': 500,
             'camera_up': {'x': 0.0, 'y': 0.0, 'z': 1.0},
             'sky_panel': self._build_threejs_sky_panel_spec(default_sky_catalog),
+            'age_kde': self._build_threejs_age_kde_spec(trace_key_by_name),
+            'volumes': {
+                'enabled': bool(volume_layers),
+                'layers': volume_layers,
+            },
             'note': self._threejs_note_text(),
         }
 
@@ -1784,15 +1775,142 @@ class Animate3D:
             'members_by_cluster': merged_catalog,
         }
 
+    def _build_threejs_age_kde_spec(self, trace_key_by_name=None):
+        if not getattr(self, 'show_age_kde_inset', False):
+            return {'enabled': False}
+
+        x_grid = np.asarray(getattr(self, 'kde_x_grid', np.array([], dtype=float)), dtype=float)
+        if x_grid.size == 0:
+            return {'enabled': False}
+
+        trace_key_by_name = trace_key_by_name or {}
+        traces = []
+        for trace_name in getattr(self, 'kde_trace_order', []):
+            density = np.asarray(
+                self.kde_density_by_trace.get(trace_name, np.array([], dtype=float)),
+                dtype=float,
+            )
+            if density.size != x_grid.size:
+                continue
+            traces.append({
+                'trace_name': str(trace_name),
+                'trace_key': trace_key_by_name.get(str(trace_name)),
+                'color': str(self.kde_color_by_trace.get(trace_name, self.kde_axis_color)),
+                'opacity': float(self.kde_opacity_by_trace.get(trace_name, 1.0)),
+                'x': [float(value) for value in x_grid],
+                'y': [float(value) for value in density],
+            })
+
+        cluster_points = []
+        for cluster_group in self.data_collection.get_all_clusters():
+            trace_name = str(getattr(cluster_group, 'data_name', '') or '')
+            data_df = (
+                cluster_group.df_int
+                if getattr(cluster_group, 'df_int', None) is not None
+                else getattr(cluster_group, 'df', None)
+            )
+            if data_df is None or ('age_myr' not in data_df.columns):
+                continue
+
+            df_present = data_df
+            if 'time' in data_df.columns:
+                time_values = pd.to_numeric(data_df['time'], errors='coerce').to_numpy(dtype=float)
+                zero_mask = np.isclose(time_values, 0.0, rtol=0.0, atol=1e-9)
+                if np.any(zero_mask):
+                    df_present = data_df.loc[zero_mask]
+
+            age_values = pd.to_numeric(df_present['age_myr'], errors='coerce').to_numpy(dtype=float)
+            if 'name' in df_present.columns:
+                cluster_names = df_present['name'].astype(str).to_numpy(dtype=object)
+            else:
+                cluster_names = np.array([trace_name] * len(df_present), dtype=object)
+
+            trace_key = trace_key_by_name.get(trace_name)
+            for cluster_name, age_now in zip(cluster_names, age_values):
+                if not np.isfinite(age_now):
+                    continue
+                cluster_points.append({
+                    'cluster_name': str(cluster_name),
+                    'trace_name': trace_name,
+                    'trace_key': trace_key,
+                    'age_now_myr': float(age_now),
+                })
+
+        return {
+            'enabled': True,
+            'title': 'Relative SFH',
+            'x_range': [
+                float(value)
+                for value in getattr(
+                    self,
+                    'kde_x_range',
+                    [float(np.min(x_grid)), float(np.max(x_grid))],
+                )
+            ],
+            'y_range': [0.0, float(getattr(self, 'kde_y_max', 1.0))],
+            'axis_color': str(
+                getattr(
+                    self,
+                    'kde_axis_color',
+                    'white' if self.figure_theme == 'dark' else 'black',
+                )
+            ),
+            'bandwidth_myr': float(self.age_kde_bandwidth_myr),
+            'traces': traces,
+            'cluster_points': cluster_points,
+        }
+
+    def _build_threejs_volume_layers(self):
+        if not getattr(self, 'volume_configs', None):
+            return []
+
+        zero_matches = np.flatnonzero(np.isclose(np.asarray(self.time, dtype=float), 0.0, rtol=0.0, atol=1e-9))
+        if zero_matches.size:
+            zero_idx = int(zero_matches[0])
+        else:
+            zero_idx = 0
+
+        x_rf = float(np.asarray(self.coords_center_int[0], dtype=float)[zero_idx])
+        y_rf = float(np.asarray(self.coords_center_int[1], dtype=float)[zero_idx])
+        z_rf = float(np.asarray(self.coords_center_int[2], dtype=float)[zero_idx])
+        center_offset = {'x': x_rf, 'y': y_rf, 'z': z_rf}
+
+        layers = []
+        for idx, volume_cfg in enumerate(self.volume_configs):
+            layer = _build_threejs_volume_layer_spec(volume_cfg, center_offset=center_offset, index=idx)
+            if layer is not None:
+                layers.append(layer)
+        return layers
+
     def _threejs_note_text(self):
         note = 'Three.js modules are loaded from a CDN in this renderer path.'
         if getattr(self, 'enable_sky_panel', False):
-            note += ' Click a cluster member at t=0 to open Aladin Lite.'
+            note += ' Use the widget menu to open Aladin Lite.'
+        if getattr(self, 'show_age_kde_inset', False):
+            note += ' The widget menu also opens the age KDE view.'
+        if getattr(self, 'volume_configs', None):
+            note += ' Volumetric layers render at t=0 and are controlled from the left toolbar.'
         return note
 
-    def _threejs_frame_decorations(self, frame_json, time_value, x_range, y_range, z_range, fallback_center):
+    def _threejs_frame_decorations(
+        self,
+        frame_json,
+        time_value,
+        x_range,
+        y_range,
+        z_range,
+        fallback_center,
+        volume_layers=None,
+    ):
         """Return frame-local decorative objects for the Three.js renderer."""
         decorations = []
+        if np.isclose(float(time_value), 0.0, atol=1e-9):
+            for layer in volume_layers or []:
+                decorations.append({
+                    'kind': 'volume_layer',
+                    'key': layer.get('key'),
+                })
+
         if (not getattr(self, 'show_milky_way_model', False)) or (not np.isclose(float(time_value), 0.0, atol=1e-9)):
             return decorations
 
@@ -1916,6 +2034,20 @@ class Animate3D:
             )
             if points:
                 spec['points'] = points
+                point_sizes = [
+                    float(point.get('size'))
+                    for point in points
+                    if np.isfinite(point.get('size')) and float(point.get('size')) > 0.0
+                ]
+                if point_sizes:
+                    spec['default_point_size'] = float(np.median(point_sizes))
+                point_opacities = [
+                    float(point.get('opacity'))
+                    for point in points
+                    if np.isfinite(point.get('opacity'))
+                ]
+                if point_opacities:
+                    spec['default_opacity'] = float(np.median(point_opacities))
                 if legend_color is None:
                     legend_color = points[0].get('color')
 
@@ -1928,6 +2060,9 @@ class Animate3D:
 
         if legend_color is not None:
             spec['legend_color'] = legend_color
+
+        if 'default_opacity' not in spec:
+            spec['default_opacity'] = float(spec.get('opacity', 1.0))
 
         if any(key in spec for key in ('segments', 'points', 'labels')):
             return spec
@@ -2179,6 +2314,8 @@ def _selection_from_customdata_row(row):
         'x0': float(x0) if np.isfinite(x0) else np.nan,
         'y0': float(y0) if np.isfinite(y0) else np.nan,
         'z0': float(z0) if np.isfinite(z0) else np.nan,
+        'age_now_myr': float(age_now) if np.isfinite(age_now) else np.nan,
+        'age_at_t_myr': float(age_at_t) if np.isfinite(age_at_t) else np.nan,
         'click_time_myr': float(click_time_myr) if np.isfinite(click_time_myr) else np.nan,
         'ra_deg': float(ra_deg) if np.isfinite(ra_deg) else np.nan,
         'dec_deg': float(dec_deg) if np.isfinite(dec_deg) else np.nan,
@@ -2262,6 +2399,9 @@ def _labels_from_trace(trace_json):
     color, _ = _color_to_css_and_opacity(textfont.get('color'), 1.0)
     font_size = _coerce_float(textfont.get('size'), 12.0)
     font_family = textfont.get('family', 'helvetica')
+    trace_name = str(trace_json.get('name') or '')
+    is_gc_label = trace_name == 'GC'
+    is_galactic_radius_label = trace_name.startswith('R=') and trace_name.endswith(' Label')
 
     labels = []
     for idx in range(n_labels):
@@ -2285,6 +2425,8 @@ def _labels_from_trace(trace_json):
             'color': color,
             'size': font_size,
             'family': font_family,
+            'screen_stable': bool(is_gc_label or is_galactic_radius_label),
+            'screen_px': 10.0 if is_gc_label else (9.0 if is_galactic_radius_label else None),
         })
 
     return labels
@@ -2409,6 +2551,354 @@ def _merge_threejs_member_catalogs(*catalogs):
                 continue
             merged[str(key)] = copy.deepcopy(points)
     return merged
+
+
+def _normalize_threejs_volume_configs(volumes):
+    if volumes in (None, False):
+        return []
+
+    if isinstance(volumes, (str, bytes)):
+        return [{'path': str(volumes)}]
+
+    if isinstance(volumes, dict):
+        return [copy.deepcopy(volumes)]
+
+    normalized = []
+    for item in volumes:
+        if item in (None, False):
+            continue
+        if isinstance(item, (str, bytes)):
+            normalized.append({'path': str(item)})
+        elif isinstance(item, dict):
+            normalized.append(copy.deepcopy(item))
+        else:
+            raise TypeError(
+                "volumes must be None, a path string, a dict, or a sequence of dict/path values."
+            )
+    return normalized
+
+
+def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0):
+    from astropy.io import fits
+
+    center_offset = center_offset or {'x': 0.0, 'y': 0.0, 'z': 0.0}
+    path = volume_cfg.get('path') or volume_cfg.get('fits_file')
+    if not path:
+        raise ValueError("Each Three.js volume config must include a FITS 'path'.")
+
+    hdu_selector = volume_cfg.get('hdu', 'MEAN')
+    max_resolution = int(np.clip(_coerce_float(volume_cfg.get('max_resolution'), 96), 24, 512))
+    sample_setting = volume_cfg.get('samples', volume_cfg.get('steps', 192))
+    default_steps = int(np.clip(_coerce_float(sample_setting, 192), 24, 768))
+    default_opacity = float(np.clip(_coerce_float(volume_cfg.get('opacity'), 0.15), 0.0, 1.0))
+    default_alpha_coef = float(np.clip(_coerce_float(volume_cfg.get('alpha_coef'), 50.0), 1.0, 200.0))
+    default_gradient_step = float(np.clip(_coerce_float(volume_cfg.get('gradient_step'), 0.005), 1e-4, 0.05))
+
+    with fits.open(path, memmap=True) as hdul:
+        hdu = _resolve_threejs_volume_hdu(hdul, hdu_selector)
+        data = hdu.data
+        if data is None or np.ndim(data) != 3:
+            raise ValueError(f"Volume FITS HDU '{hdu_selector}' is not a 3D cube: {path}")
+
+        data_shape_zyx = tuple(int(v) for v in data.shape)
+        target_shape_zyx = tuple(min(max_resolution, dim) for dim in data_shape_zyx)
+        sampled = _downsample_threejs_volume_with_zoom(data, target_shape_zyx)
+        header = hdu.header.copy()
+
+    finite_mask = np.isfinite(sampled)
+    positive_mask = finite_mask & (sampled > 0)
+    stats_values = sampled[positive_mask] if np.any(positive_mask) else sampled[finite_mask]
+    if stats_values.size == 0:
+        raise ValueError(f"Volume FITS cube contains no finite samples: {path}")
+
+    data_min = float(np.nanmin(stats_values))
+    data_max = float(np.nanmax(stats_values))
+    if not np.isfinite(data_min) or not np.isfinite(data_max):
+        raise ValueError(f"Volume FITS cube statistics are not finite: {path}")
+
+    lower_quantile = float(np.clip(_coerce_float(volume_cfg.get('default_vmin_quantile'), 0.70), 0.0, 1.0))
+    upper_quantile = float(np.clip(_coerce_float(volume_cfg.get('default_vmax_quantile'), 0.995), 0.0, 1.0))
+    if upper_quantile < lower_quantile:
+        upper_quantile = lower_quantile
+
+    default_vmin = volume_cfg.get('vmin')
+    default_vmax = volume_cfg.get('vmax')
+    if default_vmin is None:
+        default_vmin = float(np.nanquantile(stats_values, lower_quantile))
+    else:
+        default_vmin = float(default_vmin)
+    if default_vmax is None:
+        default_vmax = float(np.nanquantile(stats_values, upper_quantile))
+    else:
+        default_vmax = float(default_vmax)
+
+    default_vmin = float(np.clip(default_vmin, data_min, data_max))
+    default_vmax = float(np.clip(default_vmax, data_min, data_max))
+    if not default_vmax > default_vmin:
+        if data_max > data_min:
+            default_vmin = data_min
+            default_vmax = data_max
+        else:
+            default_vmax = default_vmin + 1.0
+
+    if data_max > data_min:
+        normalized = np.zeros_like(sampled, dtype=np.float32)
+        normalized[finite_mask] = (sampled[finite_mask] - data_min) / (data_max - data_min)
+        normalized = np.clip(normalized, 0.0, 1.0)
+    else:
+        normalized = np.zeros_like(sampled, dtype=np.float32)
+        normalized[finite_mask] = 1.0
+
+    quantized = np.zeros_like(sampled, dtype=np.uint8)
+    quantized[finite_mask] = np.rint(normalized[finite_mask] * 255.0).astype(np.uint8)
+    data_b64 = base64.b64encode(np.ascontiguousarray(quantized).tobytes(order='C')).decode('ascii')
+
+    x_bounds = _threejs_volume_axis_bounds(header, axis_number=1, axis_size=int(header.get('NAXIS1', data_shape_zyx[2])))
+    y_bounds = _threejs_volume_axis_bounds(header, axis_number=2, axis_size=int(header.get('NAXIS2', data_shape_zyx[1])))
+    z_bounds = _threejs_volume_axis_bounds(header, axis_number=3, axis_size=int(header.get('NAXIS3', data_shape_zyx[0])))
+
+    opacity_function = _normalize_threejs_volume_opacity_function(volume_cfg.get('opacity_function'))
+    colormap_options = _build_threejs_volume_colormap_options(
+        volume_cfg.get('colormap', 'inferno'),
+        opacity_function=opacity_function,
+    )
+    name = str(volume_cfg.get('name') or str(path).rsplit('/', 1)[-1].rsplit('.', 1)[0] or f'Volume {index + 1}')
+    value_unit = str(volume_cfg.get('unit_label') or header.get('BUNIT') or '').strip()
+
+    return {
+        'key': f'volume-{index}',
+        'name': name,
+        'path': str(path),
+        'hdu': str(hdu_selector),
+        'data_b64': data_b64,
+        'data_encoding': 'uint8',
+        'shape': {
+            'x': int(sampled.shape[2]),
+            'y': int(sampled.shape[1]),
+            'z': int(sampled.shape[0]),
+        },
+        'source_shape': {
+            'x': int(data_shape_zyx[2]),
+            'y': int(data_shape_zyx[1]),
+            'z': int(data_shape_zyx[0]),
+        },
+        'downsample_step': {
+            'x': float(data_shape_zyx[2]) / float(sampled.shape[2]),
+            'y': float(data_shape_zyx[1]) / float(sampled.shape[1]),
+            'z': float(data_shape_zyx[0]) / float(sampled.shape[0]),
+        },
+        'downsample_method': 'scipy_zoom',
+        'bounds': {
+            'x': [float(x_bounds[0] - center_offset['x']), float(x_bounds[1] - center_offset['x'])],
+            'y': [float(y_bounds[0] - center_offset['y']), float(y_bounds[1] - center_offset['y'])],
+            'z': [float(z_bounds[0] - center_offset['z']), float(z_bounds[1] - center_offset['z'])],
+        },
+        'data_range': [float(data_min), float(data_max)],
+        'value_unit': value_unit,
+        'legend_color': colormap_options[0].get('legend_color'),
+        'visible': bool(volume_cfg.get('visible', True)),
+        'only_at_t0': bool(volume_cfg.get('only_at_t0', True)),
+        'interpolation': bool(volume_cfg.get('interpolation', True)),
+        'default_controls': {
+            'vmin': float(default_vmin),
+            'vmax': float(default_vmax),
+            'opacity': float(default_opacity),
+            'steps': int(default_steps),
+            'samples': int(default_steps),
+            'alpha_coef': float(default_alpha_coef),
+            'gradient_step': float(default_gradient_step),
+            'colormap': colormap_options[0]['name'],
+        },
+        'colormap_options': colormap_options,
+    }
+
+
+def _resolve_threejs_volume_hdu(hdul, hdu_selector):
+    if isinstance(hdu_selector, str):
+        target = hdu_selector.strip().lower()
+        for hdu in hdul:
+            if str(getattr(hdu, 'name', '')).strip().lower() == target:
+                return hdu
+        if target.isdigit():
+            return hdul[int(target)]
+        raise KeyError(f"Could not find FITS HDU named '{hdu_selector}'.")
+    return hdul[int(hdu_selector)]
+
+
+def _downsample_threejs_volume_with_zoom(data, target_shape_zyx):
+    from scipy.ndimage import zoom
+
+    source_shape = tuple(int(v) for v in np.shape(data))
+    if source_shape != tuple(int(v) for v in target_shape_zyx):
+        zoom_factors = tuple(
+            float(target_dim) / float(source_dim)
+            for source_dim, target_dim in zip(source_shape, target_shape_zyx)
+        )
+        sampled = zoom(
+            data,
+            zoom=zoom_factors,
+            order=1,
+            mode='nearest',
+            prefilter=False,
+            grid_mode=True,
+            output=np.float32,
+        )
+        return np.asarray(sampled, dtype=np.float32)
+    return np.asarray(data, dtype=np.float32)
+
+
+def _threejs_volume_axis_bounds(header, axis_number, axis_size):
+    delta = float(header.get(f'CDELT{axis_number}', 1.0))
+    crval = float(header.get(f'CRVAL{axis_number}', 0.0))
+    crpix = float(header.get(f'CRPIX{axis_number}', 1.0))
+    first_center = crval + ((1.0 - crpix) * delta)
+    last_center = crval + ((float(axis_size) - crpix) * delta)
+    edge_pad = 0.5 * delta
+    lower = min(first_center, last_center) - abs(edge_pad)
+    upper = max(first_center, last_center) + abs(edge_pad)
+    return float(lower), float(upper)
+
+
+def _normalize_threejs_volume_opacity_function(opacity_function):
+    if opacity_function is None or opacity_function is False:
+        return np.asarray([[0.0, 0.0], [1.0, 1.0]], dtype=float)
+    if isinstance(opacity_function, str) and not opacity_function.strip():
+        return np.asarray([[0.0, 0.0], [1.0, 1.0]], dtype=float)
+
+    values = np.asarray(opacity_function, dtype=float)
+    if values.ndim == 1:
+        if values.size < 4 or values.size % 2 != 0:
+            raise ValueError(
+                "Three.js volume opacity_function must contain an even number of position/alpha values."
+            )
+        values = values.reshape(-1, 2)
+    elif values.ndim != 2 or values.shape[1] != 2:
+        raise ValueError(
+            "Three.js volume opacity_function must be a flat [x0, a0, x1, a1, ...] sequence or an Nx2 array."
+        )
+
+    values = values[np.all(np.isfinite(values), axis=1)]
+    if values.shape[0] < 2:
+        return np.asarray([[0.0, 0.0], [1.0, 1.0]], dtype=float)
+
+    positions = np.clip(values[:, 0], 0.0, 1.0)
+    alphas = np.clip(values[:, 1], 0.0, 1.0)
+    order = np.argsort(positions, kind='mergesort')
+    merged = np.column_stack((positions[order], alphas[order]))
+
+    dedup_positions = []
+    dedup_alphas = []
+    for position, alpha in merged:
+        if dedup_positions and abs(position - dedup_positions[-1]) <= 1e-12:
+            dedup_alphas[-1] = float(alpha)
+            continue
+        dedup_positions.append(float(position))
+        dedup_alphas.append(float(alpha))
+
+    merged = np.column_stack((dedup_positions, dedup_alphas))
+    if merged[0, 0] > 0.0:
+        merged = np.vstack(([0.0, merged[0, 1]], merged))
+    if merged[-1, 0] < 1.0:
+        merged = np.vstack((merged, [1.0, merged[-1, 1]]))
+    return np.asarray(merged, dtype=float)
+
+
+def _build_threejs_volume_colormap_options(selected_colormap, opacity_function=None):
+    options = []
+    seen = set()
+    requested = [selected_colormap, *DEFAULT_THREEJS_VOLUME_COLORMAPS]
+
+    for candidate in requested:
+        if candidate in (None, ''):
+            continue
+        sampled = _sample_threejs_volume_colormap(candidate, opacity_function=opacity_function)
+        if sampled is None:
+            continue
+        name, rgba = sampled
+        key = str(name).strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        legend_idx = int(np.clip(round(0.72 * (rgba.shape[0] - 1)), 0, rgba.shape[0] - 1))
+        legend_rgb = rgba[legend_idx, :3].astype(int).tolist()
+        options.append({
+            'name': str(name),
+            'label': str(name),
+            'lut_b64': base64.b64encode(np.ascontiguousarray(rgba).tobytes(order='C')).decode('ascii'),
+            'legend_color': f'rgb({legend_rgb[0]}, {legend_rgb[1]}, {legend_rgb[2]})',
+        })
+
+    if not options:
+        raise ValueError("Could not resolve any colormap options for the Three.js volume renderer.")
+    return options
+
+
+def _sample_threejs_volume_colormap(colormap_value, n_samples=1024, opacity_function=None):
+    values = np.linspace(0.0, 1.0, int(n_samples), dtype=float)
+
+    cmap_obj = _resolve_threejs_volume_colormap_object(colormap_value)
+    if cmap_obj is None:
+        return None
+
+    label, cmap_callable = cmap_obj
+    sampled = np.asarray(cmap_callable(values), dtype=float)
+    if sampled.ndim != 2 or sampled.shape[0] != values.size:
+        return None
+    if sampled.shape[1] == 3:
+        alpha = np.ones((sampled.shape[0], 1), dtype=float)
+        sampled = np.concatenate((sampled, alpha), axis=1)
+    elif sampled.shape[1] != 4:
+        return None
+
+    opacity_curve = _normalize_threejs_volume_opacity_function(opacity_function)
+    sampled[:, 3] *= np.interp(values, opacity_curve[:, 0], opacity_curve[:, 1])
+    rgba = np.clip(np.rint(sampled * 255.0), 0.0, 255.0).astype(np.uint8)
+    return str(label), np.ascontiguousarray(rgba)
+
+
+def _resolve_threejs_volume_colormap_object(colormap_value):
+    if colormap_value is None:
+        colormap_value = 'inferno'
+
+    if hasattr(colormap_value, '__call__') and not isinstance(colormap_value, str):
+        label = getattr(colormap_value, 'name', None) or 'custom'
+        return str(label), colormap_value
+
+    if not isinstance(colormap_value, str):
+        return None
+
+    requested = str(colormap_value).strip()
+    if not requested:
+        return None
+
+    candidates = []
+    for name in (requested, requested.lower(), requested.capitalize()):
+        if name not in candidates:
+            candidates.append(name)
+
+    try:
+        from matplotlib import colormaps as mpl_colormaps
+
+        for name in candidates:
+            try:
+                cmap = mpl_colormaps[name]
+                return getattr(cmap, 'name', name), cmap
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    try:
+        import colormaps as installed_colormaps
+
+        for name in candidates:
+            cmap = getattr(installed_colormaps, name, None)
+            if callable(cmap):
+                return getattr(cmap, 'name', name), cmap
+    except Exception:
+        pass
+
+    return None
 
 
 def read_theme(plot):
