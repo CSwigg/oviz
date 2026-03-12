@@ -101,13 +101,40 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Enable click select", html)
         self.assertIn("Lasso volumetric data", html)
         self.assertIn("oviz-three-tools-toggle", html)
+        self.assertIn("oviz-three-controls-toggle", html)
+        self.assertIn("oviz-three-zen-mode", html)
+        self.assertIn("oviz-three-reset-view", html)
+        self.assertIn("data-zen=\"false\"", html)
+        self.assertIn('button.addEventListener("dblclick"', html)
+        self.assertIn("soloTraceLegendItem(item.key)", html)
+        self.assertIn("focusSelectionKey", html)
+        self.assertIn("Camera FOV", html)
+        self.assertIn("Focus group", html)
+        self.assertIn("Fade time (Myr)", html)
+        self.assertIn("Fade in and out", html)
+        self.assertIn("Cluster Filter", html)
+        self.assertIn("Parameter", html)
+        self.assertIn("Keyboard help", html)
+        self.assertIn("Keyboard controls are active as soon as the viewer loads.", html)
+        self.assertIn("Shift + W / A / S / D", html)
+        self.assertIn("View from Earth", html)
+        self.assertIn("Reset camera", html)
         self.assertIn("oviz-three-scale-bar", html)
+        self.assertIn("oviz-three-save-state", html)
+        self.assertIn('canvas.addEventListener("dblclick", onCanvasDoubleClick);', html)
+        self.assertIn('window.addEventListener("keydown", onKeyDown);', html)
+        self.assertIn('window.addEventListener("keyup", onKeyUp);', html)
+        self.assertIn("updateKeyboardMotion(deltaSeconds);", html)
         self.assertIn("data:text/html", repr_html)
         self.assertIn("alphaTest: 0.15", html)
         self.assertIn("width: 100vw", html)
         self.assertIn("height: 100vh", html)
         self.assertEqual(viz.fig_dict["renderer"], "threejs")
         self.assertEqual(viz.fig_dict["camera_up"], {"x": 0.0, "y": 0.0, "z": 1.0})
+        self.assertEqual(viz.fig_dict["animation"]["fade_in_time_default"], 5.0)
+        self.assertFalse(viz.fig_dict["animation"]["fade_in_and_out_default"])
+        self.assertTrue(viz.fig_dict["cluster_filter"]["enabled"])
+        self.assertEqual(viz.fig_dict["cluster_filter"]["default_parameter_key"], "age_now_myr")
         cluster_legend = next(item for item in viz.fig_dict["legend"]["items"] if item["name"] == "Cluster A")
         self.assertEqual(cluster_legend["color"], "#00ffff")
 
@@ -203,6 +230,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("expandLayersControl: false", html)
         self.assertIn(".aladin-stack-box", html)
         self.assertIn("View: Mollweide all-sky", html)
+        self.assertIn('type: "oviz-sky-hover-cluster"', html)
+        self.assertIn('type: "oviz-parent-hover-cluster"', html)
+        self.assertIn('aladin.on("objectHovered"', html)
 
     def test_threejs_renderer_builds_trace_catalog_without_members_file(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
@@ -250,6 +280,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("oviz-three-age-panel", html)
         self.assertIn("Age KDE", html)
         self.assertIn("Relative SFH", html)
+        self.assertIn("oviz-three-age-filter-range-min", html)
+        self.assertIn("Age filter for clusters contributing to the current KDE view", html)
+        self.assertIn("Visible age candidates", html)
 
     def test_threejs_renderer_can_serialize_volume_layer(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
@@ -281,6 +314,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
+                enable_sky_panel=True,
                 volumes=[{
                     "path": str(cube_path),
                     "name": "Dust Cube",
@@ -289,6 +323,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                     "opacity": 0.22,
                     "samples": 128,
                     "alpha_coef": 42,
+                    "stretch": "log10",
                     "colormap": "inferno",
                 }],
             )
@@ -311,23 +346,68 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(layer["default_controls"]["steps"], 128)
         self.assertEqual(layer["default_controls"]["samples"], 128)
         self.assertEqual(layer["default_controls"]["alpha_coef"], 42.0)
+        self.assertEqual(layer["default_controls"]["stretch"], "log10")
         self.assertAlmostEqual(layer["default_controls"]["opacity"], 0.22)
         self.assertEqual(layer["default_controls"]["colormap"], "inferno")
         self.assertTrue(layer["legend_color"])
         self.assertTrue(layer["data_b64"])
+        self.assertTrue(layer["sky_overlay_data_b64"])
+        self.assertEqual(layer["sky_overlay_data_encoding"], "png_atlas_uint8")
+        self.assertEqual(layer["sky_overlay_atlas_tiles"]["x"], 2)
+        self.assertEqual(layer["sky_overlay_atlas_tiles"]["y"], 2)
         self.assertGreaterEqual(len(layer["colormap_options"]), 3)
         self.assertEqual(zero_frame["decorations"][0]["kind"], "volume_layer")
         self.assertIn("Dust Cube", [item["name"] for item in scene_spec["legend"]["items"]])
         self.assertIn("oviz-three-volume", html)
         self.assertIn("Show at t=0", html)
+        self.assertIn("Stretch", html)
         self.assertIn("DataTexture3D", html)
         self.assertIn("Alpha coef", html)
+        self.assertIn("stretch_mode", html)
         self.assertIn("precision highp sampler3D;", html)
         self.assertIn("useSelectionPolygon", html)
         self.assertIn("selectionMaskTexture", html)
         self.assertIn("selectionViewProjectionMatrix", html)
         self.assertIn("selectionDimOutside", html)
+        self.assertIn("buildVolumeSkyImageOverlaySpec", html)
+        self.assertIn("Dust sky pixels:", html)
+        self.assertIn("setOverlayImageLayer(imageLayer", html)
         self.assertIn("Rendered at t=0 only as a WebGL2 ray-marched volume.", html)
+
+    def test_threejs_renderer_volume_auto_detects_hdu_and_centered_bounds(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cube_path = Path(tmp_dir) / "auto_volume.fits"
+            std_cube = np.ones((3, 4, 5), dtype=np.float32)
+            mean_cube = np.arange(3 * 4 * 5, dtype=np.float32).reshape(3, 4, 5)
+            fits.HDUList([
+                fits.PrimaryHDU(),
+                fits.ImageHDU(std_cube, name="STD"),
+                fits.ImageHDU(mean_cube, name="MEAN"),
+            ]).writeto(cube_path)
+
+            viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                volumes=[{
+                    "path": str(cube_path),
+                    "name": "Auto Volume",
+                    "max_resolution": 8,
+                    "opacity": 0.18,
+                    "samples": 96,
+                    "alpha_coef": 40,
+                    "colormap": "inferno",
+                }],
+            )
+
+        layer = viz.fig_dict["volumes"]["layers"][0]
+        self.assertEqual(layer["hdu"], "MEAN")
+        self.assertEqual(layer["bounds"]["x"], [-2.5, 2.5])
+        self.assertEqual(layer["bounds"]["y"], [-2.0, 2.0])
+        self.assertAlmostEqual(layer["bounds"]["z"][0], -1.5)
+        self.assertAlmostEqual(layer["bounds"]["z"][1], 1.5)
 
 
 if __name__ == "__main__":

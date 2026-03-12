@@ -1,6 +1,7 @@
 import base64
 import json
 import copy
+import io
 
 import numpy as np
 import yaml
@@ -200,6 +201,7 @@ class Animate3D:
             )
         # Set cluster sizes for fade effects
         self.fade_in_time = fade_in_time
+        self.fade_in_and_out = bool(fade_in_and_out)
         self.data_collection.set_all_cluster_sizes(
             self.fade_in_time,
             fade_in_and_out,
@@ -1717,6 +1719,8 @@ class Animate3D:
         if getattr(self, 'enable_sky_panel', False) and frame_specs:
             default_sky_catalog = _threejs_catalog_from_frame_spec(frame_specs[initial_frame_index])
 
+        _annotate_threejs_point_motion_ranges(frame_specs)
+
         title_cfg = layout_json.get('title', {})
         if isinstance(title_cfg, dict):
             title_text = title_cfg.get('text') or ''
@@ -1755,9 +1759,30 @@ class Animate3D:
             'camera_up': {'x': 0.0, 'y': 0.0, 'z': 1.0},
             'sky_panel': self._build_threejs_sky_panel_spec(default_sky_catalog),
             'age_kde': self._build_threejs_age_kde_spec(trace_key_by_name),
+            'cluster_filter': self._build_threejs_cluster_filter_spec(trace_key_by_name),
             'volumes': {
                 'enabled': bool(volume_layers),
                 'layers': volume_layers,
+            },
+            'animation': {
+                'fade_in_time_default': float(self.fade_in_time),
+                'fade_in_and_out_default': bool(getattr(self, 'fade_in_and_out', False)),
+                'focus_trace_key_default': trace_key_by_name.get(str(self.focus_group)) if self.focus_group else '',
+                'focus_options': [
+                    {
+                        'key': trace_key,
+                        'name': str(trace_name),
+                    }
+                    for trace_key, trace_name in trace_keys
+                    if isinstance(trace_name, str)
+                    and trace_name
+                    and not str(trace_name).endswith(' Track')
+                    and any(
+                        trace.get('key') == trace_key and trace.get('points')
+                        for frame_spec in frame_specs[:1]
+                        for trace in frame_spec.get('traces', [])
+                    )
+                ],
             },
             'note': self._threejs_note_text(),
         }
@@ -1860,6 +1885,84 @@ class Animate3D:
             'cluster_points': cluster_points,
         }
 
+    def _build_threejs_cluster_filter_spec(self, trace_key_by_name=None):
+        trace_key_by_name = trace_key_by_name or {}
+        entries = []
+        seen_keys = set()
+
+        for cluster_group in self.data_collection.get_all_clusters():
+            trace_name = str(getattr(cluster_group, 'data_name', '') or '')
+            trace_key = trace_key_by_name.get(trace_name)
+            data_df = (
+                cluster_group.df_int
+                if getattr(cluster_group, 'df_int', None) is not None
+                else getattr(cluster_group, 'df', None)
+            )
+            if data_df is None or data_df.empty or ('age_myr' not in data_df.columns):
+                continue
+
+            df_present = data_df
+            if 'time' in data_df.columns:
+                time_values = pd.to_numeric(data_df['time'], errors='coerce').to_numpy(dtype=float)
+                zero_mask = np.isclose(time_values, 0.0, rtol=0.0, atol=1e-9)
+                if np.any(zero_mask):
+                    df_present = data_df.loc[zero_mask]
+
+            if df_present.empty:
+                continue
+
+            age_values = pd.to_numeric(df_present['age_myr'], errors='coerce').to_numpy(dtype=float)
+            if 'n_stars' in df_present.columns:
+                n_stars_values = pd.to_numeric(df_present['n_stars'], errors='coerce').to_numpy(dtype=float)
+            else:
+                n_stars_values = np.full(len(df_present), np.nan, dtype=float)
+
+            if 'name' in df_present.columns:
+                cluster_names = df_present['name'].astype(str).to_numpy(dtype=object)
+            else:
+                cluster_names = np.array([trace_name] * len(df_present), dtype=object)
+
+            for cluster_name, age_now, n_stars in zip(cluster_names, age_values, n_stars_values):
+                selection_key = _selection_identity_key({
+                    'cluster_name': str(cluster_name),
+                    'trace_name': trace_name,
+                })
+                if not selection_key or selection_key in seen_keys:
+                    continue
+                seen_keys.add(selection_key)
+                entries.append({
+                    'selection_key': str(selection_key),
+                    'cluster_name': str(cluster_name),
+                    'trace_name': trace_name,
+                    'trace_key': trace_key,
+                    'age_now_myr': float(age_now) if np.isfinite(age_now) else np.nan,
+                    'n_stars': float(n_stars) if np.isfinite(n_stars) else np.nan,
+                })
+
+        parameters = []
+        for key, label, unit in (
+            ('age_now_myr', 'Age', 'Myr'),
+            ('n_stars', 'Stars', ''),
+        ):
+            values = np.asarray([entry.get(key, np.nan) for entry in entries], dtype=float)
+            values = values[np.isfinite(values)]
+            if values.size == 0:
+                continue
+            parameters.append({
+                'key': key,
+                'label': label,
+                'unit': unit,
+                'min': float(np.nanmin(values)),
+                'max': float(np.nanmax(values)),
+            })
+
+        return {
+            'enabled': bool(entries and parameters),
+            'default_parameter_key': parameters[0]['key'] if parameters else '',
+            'parameters': parameters,
+            'entries': entries,
+        }
+
     def _build_threejs_volume_layers(self):
         if not getattr(self, 'volume_configs', None):
             return []
@@ -1877,7 +1980,12 @@ class Animate3D:
 
         layers = []
         for idx, volume_cfg in enumerate(self.volume_configs):
-            layer = _build_threejs_volume_layer_spec(volume_cfg, center_offset=center_offset, index=idx)
+            layer = _build_threejs_volume_layer_spec(
+                volume_cfg,
+                center_offset=center_offset,
+                index=idx,
+                include_sky_overlay=bool(getattr(self, 'enable_sky_panel', False)),
+            )
             if layer is not None:
                 layers.append(layer)
         return layers
@@ -2324,6 +2432,47 @@ def _selection_from_customdata_row(row):
     }
 
 
+def _selection_identity_key(selection):
+    if not isinstance(selection, dict):
+        return ''
+
+    cluster_name = str(selection.get('cluster_name') or '').strip()
+    if cluster_name:
+        return cluster_name
+
+    x0 = _coerce_float(selection.get('x0'), np.nan)
+    y0 = _coerce_float(selection.get('y0'), np.nan)
+    z0 = _coerce_float(selection.get('z0'), np.nan)
+    if np.isfinite(x0) and np.isfinite(y0) and np.isfinite(z0):
+        return f'{x0:.6f}|{y0:.6f}|{z0:.6f}'
+
+    ra_deg = _coerce_float(selection.get('ra_deg'), np.nan)
+    dec_deg = _coerce_float(selection.get('dec_deg'), np.nan)
+    if np.isfinite(ra_deg) and np.isfinite(dec_deg):
+        return f'{ra_deg:.6f}|{dec_deg:.6f}'
+
+    return str(selection.get('trace_name') or '').strip()
+
+
+def _motion_from_selection(selection):
+    if not isinstance(selection, dict):
+        return None
+
+    age_now_myr = _coerce_float(selection.get('age_now_myr'), np.nan)
+    age_at_t_myr = _coerce_float(selection.get('age_at_t_myr'), np.nan)
+    if (not np.isfinite(age_now_myr)) or (not np.isfinite(age_at_t_myr)):
+        return None
+
+    return {
+        'key': _selection_identity_key(selection),
+        'cluster_name': str(selection.get('cluster_name') or '').strip(),
+        'trace_name': str(selection.get('trace_name') or '').strip(),
+        'age_now_myr': float(age_now_myr),
+        'age_at_t_myr': float(age_at_t_myr),
+        'time_myr': float(age_at_t_myr - age_now_myr),
+    }
+
+
 def _points_from_trace(trace_json, default_opacity=1.0, include_selection=False):
     x_vals = _as_object_list(trace_json.get('x'))
     y_vals = _as_object_list(trace_json.get('y'))
@@ -2349,7 +2498,7 @@ def _points_from_trace(trace_json, default_opacity=1.0, include_selection=False)
     colors, color_opacity = _resolve_marker_color_values(marker, n_points, default_opacity=1.0)
     customdata = trace_json.get('customdata')
     custom_rows = None
-    if include_selection and customdata is not None:
+    if customdata is not None:
         custom_arr = np.asarray(customdata, dtype=object)
         if custom_arr.ndim == 1:
             custom_arr = custom_arr.reshape(-1, 1)
@@ -2381,9 +2530,62 @@ def _points_from_trace(trace_json, default_opacity=1.0, include_selection=False)
             selection = _selection_from_customdata_row(custom_rows[idx])
             if selection is not None:
                 selection['trace_name'] = trace_json.get('name')
-            points[-1]['selection'] = selection
+                motion = _motion_from_selection(selection)
+                if motion is not None:
+                    points[-1]['motion'] = motion
+            if include_selection:
+                points[-1]['selection'] = selection
 
     return points
+
+
+def _annotate_threejs_point_motion_ranges(frame_specs):
+    motion_ranges = {}
+    for frame_spec in frame_specs:
+        for trace in frame_spec.get('traces', []):
+            for point in trace.get('points', []):
+                motion = point.get('motion')
+                if not isinstance(motion, dict):
+                    continue
+                motion_key = str(motion.get('key') or '').strip()
+                if not motion_key:
+                    continue
+                entry = motion_ranges.setdefault(
+                    motion_key,
+                    {
+                        'size_min': np.inf,
+                        'size_max': -np.inf,
+                        'opacity_min': np.inf,
+                        'opacity_max': -np.inf,
+                    },
+                )
+                point_size = _coerce_float(point.get('size'), np.nan)
+                point_opacity = _coerce_float(point.get('opacity'), np.nan)
+                if np.isfinite(point_size):
+                    entry['size_min'] = min(entry['size_min'], point_size)
+                    entry['size_max'] = max(entry['size_max'], point_size)
+                if np.isfinite(point_opacity):
+                    entry['opacity_min'] = min(entry['opacity_min'], point_opacity)
+                    entry['opacity_max'] = max(entry['opacity_max'], point_opacity)
+
+    for frame_spec in frame_specs:
+        for trace in frame_spec.get('traces', []):
+            for point in trace.get('points', []):
+                motion = point.get('motion')
+                if not isinstance(motion, dict):
+                    continue
+                motion_key = str(motion.get('key') or '').strip()
+                ranges = motion_ranges.get(motion_key)
+                if not ranges:
+                    continue
+                size_min = ranges['size_min']
+                size_max = ranges['size_max']
+                opacity_min = ranges['opacity_min']
+                opacity_max = ranges['opacity_max']
+                motion['size_min'] = float(size_min) if np.isfinite(size_min) else float(_coerce_float(point.get('size'), 0.0))
+                motion['size_max'] = float(size_max) if np.isfinite(size_max) else float(_coerce_float(point.get('size'), 0.0))
+                motion['opacity_min'] = float(opacity_min) if np.isfinite(opacity_min) else float(_coerce_float(point.get('opacity'), 1.0))
+                motion['opacity_max'] = float(opacity_max) if np.isfinite(opacity_max) else float(_coerce_float(point.get('opacity'), 1.0))
 
 
 def _labels_from_trace(trace_json):
@@ -2578,7 +2780,14 @@ def _normalize_threejs_volume_configs(volumes):
     return normalized
 
 
-def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0):
+def _normalize_threejs_volume_stretch(stretch):
+    value = str(stretch or 'linear').strip().lower()
+    if value in {'linear', 'log10', 'asinh'}:
+        return value
+    return 'linear'
+
+
+def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, include_sky_overlay=False):
     from astropy.io import fits
 
     center_offset = center_offset or {'x': 0.0, 'y': 0.0, 'z': 0.0}
@@ -2586,28 +2795,47 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0):
     if not path:
         raise ValueError("Each Three.js volume config must include a FITS 'path'.")
 
-    hdu_selector = volume_cfg.get('hdu', 'MEAN')
+    hdu_selector = volume_cfg.get('hdu')
     max_resolution = int(np.clip(_coerce_float(volume_cfg.get('max_resolution'), 96), 24, 512))
+    sky_overlay_max_resolution = None
+    if include_sky_overlay:
+        sky_overlay_max_resolution = int(
+            np.clip(
+                _coerce_float(volume_cfg.get('sky_overlay_max_resolution'), max(max_resolution, 256)),
+                64,
+                512,
+            )
+        )
     sample_setting = volume_cfg.get('samples', volume_cfg.get('steps', 192))
     default_steps = int(np.clip(_coerce_float(sample_setting, 192), 24, 768))
     default_opacity = float(np.clip(_coerce_float(volume_cfg.get('opacity'), 0.15), 0.0, 1.0))
     default_alpha_coef = float(np.clip(_coerce_float(volume_cfg.get('alpha_coef'), 50.0), 1.0, 200.0))
     default_gradient_step = float(np.clip(_coerce_float(volume_cfg.get('gradient_step'), 0.005), 1e-4, 0.05))
+    default_stretch = _normalize_threejs_volume_stretch(volume_cfg.get('stretch', 'linear'))
 
     with fits.open(path, memmap=True) as hdul:
-        hdu = _resolve_threejs_volume_hdu(hdul, hdu_selector)
-        data = hdu.data
-        if data is None or np.ndim(data) != 3:
-            raise ValueError(f"Volume FITS HDU '{hdu_selector}' is not a 3D cube: {path}")
-
+        hdu_info = _resolve_threejs_volume_hdu(hdul, hdu_selector)
+        hdu = hdu_info['hdu']
+        data = hdu_info['cube_data_zyx']
         data_shape_zyx = tuple(int(v) for v in data.shape)
         target_shape_zyx = tuple(min(max_resolution, dim) for dim in data_shape_zyx)
         sampled = _downsample_threejs_volume_with_zoom(data, target_shape_zyx)
+        sky_overlay_shape_zyx = None
+        sky_overlay_sampled = None
+        if sky_overlay_max_resolution is not None:
+            sky_overlay_shape_zyx = tuple(min(sky_overlay_max_resolution, dim) for dim in data_shape_zyx)
+            if sky_overlay_shape_zyx == target_shape_zyx:
+                sky_overlay_sampled = sampled
+            else:
+                sky_overlay_sampled = _downsample_threejs_volume_with_zoom(data, sky_overlay_shape_zyx)
         header = hdu.header.copy()
+        axis_numbers_zyx = hdu_info['axis_numbers_zyx']
+        resolved_hdu_label = hdu_info['resolved_hdu']
 
-    finite_mask = np.isfinite(sampled)
-    positive_mask = finite_mask & (sampled > 0)
-    stats_values = sampled[positive_mask] if np.any(positive_mask) else sampled[finite_mask]
+    stats_source = sky_overlay_sampled if sky_overlay_sampled is not None else sampled
+    finite_mask = np.isfinite(stats_source)
+    positive_mask = finite_mask & (stats_source > 0)
+    stats_values = stats_source[positive_mask] if np.any(positive_mask) else stats_source[finite_mask]
     if stats_values.size == 0:
         raise ValueError(f"Volume FITS cube contains no finite samples: {path}")
 
@@ -2641,21 +2869,62 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0):
         else:
             default_vmax = default_vmin + 1.0
 
-    if data_max > data_min:
-        normalized = np.zeros_like(sampled, dtype=np.float32)
-        normalized[finite_mask] = (sampled[finite_mask] - data_min) / (data_max - data_min)
-        normalized = np.clip(normalized, 0.0, 1.0)
-    else:
-        normalized = np.zeros_like(sampled, dtype=np.float32)
-        normalized[finite_mask] = 1.0
+    def _quantize_sampled_uint8(sampled_data):
+        sampled_finite_mask = np.isfinite(sampled_data)
+        if data_max > data_min:
+            normalized = np.zeros_like(sampled_data, dtype=np.float32)
+            normalized[sampled_finite_mask] = (sampled_data[sampled_finite_mask] - data_min) / (data_max - data_min)
+            normalized = np.clip(normalized, 0.0, 1.0)
+        else:
+            normalized = np.zeros_like(sampled_data, dtype=np.float32)
+            normalized[sampled_finite_mask] = 1.0
+        quantized = np.zeros_like(sampled_data, dtype=np.uint8)
+        quantized[sampled_finite_mask] = np.rint(normalized[sampled_finite_mask] * 255.0).astype(np.uint8)
+        return np.ascontiguousarray(quantized)
 
-    quantized = np.zeros_like(sampled, dtype=np.uint8)
-    quantized[finite_mask] = np.rint(normalized[finite_mask] * 255.0).astype(np.uint8)
-    data_b64 = base64.b64encode(np.ascontiguousarray(quantized).tobytes(order='C')).decode('ascii')
+    def _encode_sampled_uint8(sampled_data):
+        quantized = _quantize_sampled_uint8(sampled_data)
+        return base64.b64encode(quantized.tobytes(order='C')).decode('ascii')
 
-    x_bounds = _threejs_volume_axis_bounds(header, axis_number=1, axis_size=int(header.get('NAXIS1', data_shape_zyx[2])))
-    y_bounds = _threejs_volume_axis_bounds(header, axis_number=2, axis_size=int(header.get('NAXIS2', data_shape_zyx[1])))
-    z_bounds = _threejs_volume_axis_bounds(header, axis_number=3, axis_size=int(header.get('NAXIS3', data_shape_zyx[0])))
+    def _encode_sampled_uint8_png_atlas(sampled_data):
+        try:
+            from PIL import Image
+        except ImportError:
+            return _encode_sampled_uint8(sampled_data), 'uint8', None
+
+        quantized = _quantize_sampled_uint8(sampled_data)
+        nz, ny, nx = (int(quantized.shape[0]), int(quantized.shape[1]), int(quantized.shape[2]))
+        tile_cols = int(np.ceil(np.sqrt(max(nz, 1))))
+        tile_rows = int(np.ceil(nz / tile_cols))
+        atlas = np.zeros((tile_rows * ny, tile_cols * nx), dtype=np.uint8)
+        for z_index in range(nz):
+            row = z_index // tile_cols
+            col = z_index % tile_cols
+            atlas[row * ny:(row + 1) * ny, col * nx:(col + 1) * nx] = quantized[z_index]
+
+        buffer = io.BytesIO()
+        Image.fromarray(atlas, mode='L').save(
+            buffer,
+            format='PNG',
+            optimize=True,
+            compress_level=9,
+        )
+        return (
+            base64.b64encode(buffer.getvalue()).decode('ascii'),
+            'png_atlas_uint8',
+            {'x': tile_cols, 'y': tile_rows},
+        )
+
+    data_b64 = _encode_sampled_uint8(sampled)
+    sky_overlay_b64 = None
+    sky_overlay_encoding = None
+    sky_overlay_tiles = None
+    if sky_overlay_sampled is not None:
+        sky_overlay_b64, sky_overlay_encoding, sky_overlay_tiles = _encode_sampled_uint8_png_atlas(sky_overlay_sampled)
+
+    x_bounds = _threejs_volume_axis_bounds(header, axis_number=int(axis_numbers_zyx[2]), axis_size=int(data_shape_zyx[2]))
+    y_bounds = _threejs_volume_axis_bounds(header, axis_number=int(axis_numbers_zyx[1]), axis_size=int(data_shape_zyx[1]))
+    z_bounds = _threejs_volume_axis_bounds(header, axis_number=int(axis_numbers_zyx[0]), axis_size=int(data_shape_zyx[0]))
 
     opacity_function = _normalize_threejs_volume_opacity_function(volume_cfg.get('opacity_function'))
     colormap_options = _build_threejs_volume_colormap_options(
@@ -2669,7 +2938,7 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0):
         'key': f'volume-{index}',
         'name': name,
         'path': str(path),
-        'hdu': str(hdu_selector),
+        'hdu': str(resolved_hdu_label),
         'data_b64': data_b64,
         'data_encoding': 'uint8',
         'shape': {
@@ -2699,6 +2968,27 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0):
         'visible': bool(volume_cfg.get('visible', True)),
         'only_at_t0': bool(volume_cfg.get('only_at_t0', True)),
         'interpolation': bool(volume_cfg.get('interpolation', True)),
+        'sky_overlay_data_b64': sky_overlay_b64,
+        'sky_overlay_data_encoding': sky_overlay_encoding,
+        'sky_overlay_shape': (
+            {
+                'x': int(sky_overlay_sampled.shape[2]),
+                'y': int(sky_overlay_sampled.shape[1]),
+                'z': int(sky_overlay_sampled.shape[0]),
+            }
+            if sky_overlay_sampled is not None
+            else None
+        ),
+        'sky_overlay_atlas_tiles': sky_overlay_tiles,
+        'sky_overlay_downsample_step': (
+            {
+                'x': float(data_shape_zyx[2]) / float(sky_overlay_sampled.shape[2]),
+                'y': float(data_shape_zyx[1]) / float(sky_overlay_sampled.shape[1]),
+                'z': float(data_shape_zyx[0]) / float(sky_overlay_sampled.shape[0]),
+            }
+            if sky_overlay_sampled is not None
+            else None
+        ),
         'default_controls': {
             'vmin': float(default_vmin),
             'vmax': float(default_vmax),
@@ -2707,6 +2997,7 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0):
             'samples': int(default_steps),
             'alpha_coef': float(default_alpha_coef),
             'gradient_step': float(default_gradient_step),
+            'stretch': str(default_stretch),
             'colormap': colormap_options[0]['name'],
         },
         'colormap_options': colormap_options,
@@ -2714,6 +3005,39 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0):
 
 
 def _resolve_threejs_volume_hdu(hdul, hdu_selector):
+    if hdu_selector not in (None, '', 'auto', 'AUTO'):
+        resolved_hdu = _resolve_threejs_volume_hdu_explicit(hdul, hdu_selector)
+        cube_data_zyx, axis_numbers_zyx = _coerce_threejs_volume_cube(resolved_hdu.data)
+        return {
+            'hdu': resolved_hdu,
+            'resolved_hdu': _threejs_volume_hdu_label(hdul, resolved_hdu),
+            'cube_data_zyx': cube_data_zyx,
+            'axis_numbers_zyx': axis_numbers_zyx,
+            'auto_selected': False,
+        }
+
+    candidates = _threejs_volume_hdu_candidates(hdul)
+    if not candidates:
+        available = ', '.join(
+            f"[{idx}] {type(hdu).__name__} {getattr(hdu, 'name', '')!s}".strip()
+            for idx, hdu in enumerate(hdul)
+        )
+        raise ValueError(
+            "Could not auto-detect a 3D FITS image cube. "
+            f"Available HDUs: {available or 'none'}."
+        )
+
+    selected = max(candidates, key=_threejs_volume_hdu_candidate_sort_key)
+    return {
+        'hdu': selected['hdu'],
+        'resolved_hdu': selected['label'],
+        'cube_data_zyx': selected['cube_data_zyx'],
+        'axis_numbers_zyx': selected['axis_numbers_zyx'],
+        'auto_selected': True,
+    }
+
+
+def _resolve_threejs_volume_hdu_explicit(hdul, hdu_selector):
     if isinstance(hdu_selector, str):
         target = hdu_selector.strip().lower()
         for hdu in hdul:
@@ -2721,8 +3045,88 @@ def _resolve_threejs_volume_hdu(hdul, hdu_selector):
                 return hdu
         if target.isdigit():
             return hdul[int(target)]
-        raise KeyError(f"Could not find FITS HDU named '{hdu_selector}'.")
+        available = ', '.join(_threejs_volume_hdu_label(hdul, hdu) for hdu in hdul)
+        raise KeyError(
+            f"Could not find FITS HDU named '{hdu_selector}'. "
+            f"Available HDUs: {available or 'none'}. "
+            "Omit 'hdu' to auto-select a 3D cube."
+        )
     return hdul[int(hdu_selector)]
+
+
+def _threejs_volume_hdu_candidates(hdul):
+    candidates = []
+    for idx, hdu in enumerate(hdul):
+        data = getattr(hdu, 'data', None)
+        if data is None:
+            continue
+        try:
+            cube_data_zyx, axis_numbers_zyx = _coerce_threejs_volume_cube(data)
+        except ValueError:
+            continue
+        shape_zyx = tuple(int(v) for v in cube_data_zyx.shape)
+        name = str(getattr(hdu, 'name', '') or '').strip()
+        label = _threejs_volume_hdu_label(hdul, hdu)
+        name_lower = name.lower()
+        positive_hints = ('mean', 'dust', 'density', 'map', 'cube', 'data', 'signal', 'primary')
+        negative_hints = ('std', 'sigma', 'var', 'variance', 'error', 'err', 'uncert', 'mask', 'weight')
+        candidates.append({
+            'index': int(idx),
+            'hdu': hdu,
+            'label': label,
+            'cube_data_zyx': cube_data_zyx,
+            'axis_numbers_zyx': axis_numbers_zyx,
+            'shape_zyx': shape_zyx,
+            'voxel_count': int(np.prod(shape_zyx, dtype=np.int64)),
+            'positive_name_hint': any(hint in name_lower for hint in positive_hints),
+            'negative_name_hint': any(hint in name_lower for hint in negative_hints),
+            'ndim': int(np.ndim(data)),
+            'image_hdu': hasattr(hdu, 'is_image') and bool(hdu.is_image),
+        })
+    return candidates
+
+
+def _threejs_volume_hdu_candidate_sort_key(candidate):
+    return (
+        int(bool(candidate.get('positive_name_hint'))),
+        -int(bool(candidate.get('negative_name_hint'))),
+        int(bool(candidate.get('image_hdu'))),
+        int(candidate.get('voxel_count', 0)),
+        -abs(int(candidate.get('ndim', 3)) - 3),
+        -int(candidate.get('index', 0)),
+    )
+
+
+def _threejs_volume_hdu_label(hdul, hdu):
+    try:
+        index = int(hdul.index_of(hdu))
+    except Exception:
+        index = next((idx for idx, item in enumerate(hdul) if item is hdu), -1)
+    name = str(getattr(hdu, 'name', '') or '').strip()
+    if name:
+        return name
+    return str(index if index >= 0 else 0)
+
+
+def _coerce_threejs_volume_cube(data):
+    arr = np.asarray(data)
+    if arr.size == 0:
+        raise ValueError("FITS volume HDU is empty.")
+    if not np.issubdtype(arr.dtype, np.number):
+        raise ValueError("FITS volume HDU data is not numeric.")
+
+    fits_axis_numbers = [arr.ndim - idx for idx in range(arr.ndim)]
+    kept_axis_numbers = [
+        fits_axis_numbers[idx]
+        for idx, size in enumerate(arr.shape)
+        if int(size) != 1
+    ]
+    squeezed = np.squeeze(arr)
+    if squeezed.ndim != 3:
+        raise ValueError("FITS volume HDU is not 3D after removing singleton axes.")
+    if len(kept_axis_numbers) != 3:
+        raise ValueError("Could not map squeezed FITS cube axes.")
+    return np.asarray(squeezed), tuple(int(v) for v in kept_axis_numbers)
 
 
 def _downsample_threejs_volume_with_zoom(data, target_shape_zyx):
@@ -2748,9 +3152,19 @@ def _downsample_threejs_volume_with_zoom(data, target_shape_zyx):
 
 
 def _threejs_volume_axis_bounds(header, axis_number, axis_size):
-    delta = float(header.get(f'CDELT{axis_number}', 1.0))
-    crval = float(header.get(f'CRVAL{axis_number}', 0.0))
-    crpix = float(header.get(f'CRPIX{axis_number}', 1.0))
+    cdelt_key = f'CDELT{axis_number}'
+    crval_key = f'CRVAL{axis_number}'
+    crpix_key = f'CRPIX{axis_number}'
+    if (cdelt_key not in header) or (crval_key not in header) or (crpix_key not in header):
+        half_size = 0.5 * float(axis_size)
+        return float(-half_size), float(half_size)
+
+    delta = float(header.get(cdelt_key, 1.0))
+    crval = float(header.get(crval_key, 0.0))
+    crpix = float(header.get(crpix_key, 1.0))
+    if (not np.isfinite(delta)) or (abs(delta) <= 0.0) or (not np.isfinite(crval)) or (not np.isfinite(crpix)):
+        half_size = 0.5 * float(axis_size)
+        return float(-half_size), float(half_size)
     first_center = crval + ((1.0 - crpix) * delta)
     last_center = crval + ((float(axis_size) - crpix) * delta)
     edge_pad = 0.5 * delta
