@@ -94,27 +94,33 @@ class ThreeJSRendererTests(unittest.TestCase):
 
         self.assertEqual(fig.__class__.__name__, "ThreeJSFigure")
         self.assertIn("three.min.js", html)
-        self.assertIn("Click names to toggle. Use arrows for controls.", html)
+        self.assertIn("oviz-three-legend-popover", html)
+        self.assertIn(">Legend<", html)
+        self.assertIn(">Group<", html)
         self.assertIn("Cluster A", html)
         self.assertIn("Shift+drag or use Lasso", html)
         self.assertIn("oviz-three-lasso-button", html)
         self.assertIn("Enable click select", html)
         self.assertIn("Lasso volumetric data", html)
+        self.assertIn("let lassoVolumeSelectionEnabled = false;", html)
         self.assertIn("oviz-three-tools-toggle", html)
         self.assertIn("oviz-three-controls-toggle", html)
         self.assertIn("oviz-three-zen-mode", html)
         self.assertIn("oviz-three-reset-view", html)
         self.assertIn("data-zen=\"false\"", html)
-        self.assertIn('button.addEventListener("dblclick"', html)
-        self.assertIn("soloTraceLegendItem(item.key)", html)
+        self.assertIn('toggleButton.addEventListener("dblclick"', html)
+        self.assertIn("activeLegendEditorKey", html)
         self.assertIn("focusSelectionKey", html)
         self.assertIn("Camera FOV", html)
         self.assertIn("Focus group", html)
         self.assertIn("Fade time (Myr)", html)
         self.assertIn("Fade in and out", html)
         self.assertIn("Cluster Filter", html)
+        self.assertIn("Dendrogram", html)
         self.assertIn("Parameter", html)
         self.assertIn("Keyboard help", html)
+        self.assertIn(">Graphite<", html)
+        self.assertIn(">Aurora<", html)
         self.assertIn("Keyboard controls are active as soon as the viewer loads.", html)
         self.assertIn("Shift + W / A / S / D", html)
         self.assertIn("View from Earth", html)
@@ -135,6 +141,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertFalse(viz.fig_dict["animation"]["fade_in_and_out_default"])
         self.assertTrue(viz.fig_dict["cluster_filter"]["enabled"])
         self.assertEqual(viz.fig_dict["cluster_filter"]["default_parameter_key"], "age_now_myr")
+        self.assertTrue(viz.fig_dict["dendrogram"]["enabled"])
         cluster_legend = next(item for item in viz.fig_dict["legend"]["items"] if item["name"] == "Cluster A")
         self.assertEqual(cluster_legend["color"], "#00ffff")
 
@@ -282,7 +289,43 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Relative SFH", html)
         self.assertIn("oviz-three-age-filter-range-min", html)
         self.assertIn("Age filter for clusters contributing to the current KDE view", html)
-        self.assertIn("Visible age candidates", html)
+        self.assertIn("oviz-three-widget-window-controls", html)
+        self.assertIn("oviz-three-window-button-max", html)
+        self.assertIn("oviz-three-window-button-min", html)
+        self.assertNotIn("oviz-three-age-readout", html)
+        self.assertNotIn(">Full</button>", html)
+        self.assertNotIn(">Hide</button>", html)
+
+    def test_threejs_renderer_can_serialize_dendrogram_widget(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        viz.data_collection.cluster.df_int["age_myr"] = [8.0, 2.0]
+        viz.data_collection.cluster.df_int["name"] = ["member_1", "member_2"]
+
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+        )
+
+        html = fig.to_html()
+        dendrogram = viz.fig_dict["dendrogram"]
+
+        self.assertTrue(dendrogram["enabled"])
+        self.assertEqual(dendrogram["title"], "Birth Tree")
+        self.assertEqual(dendrogram["default_trace_key"], "trace-0")
+        self.assertGreaterEqual(dendrogram["traces"][0]["max_age_myr"], 8.0)
+        self.assertGreaterEqual(len(dendrogram["entries"]), 2)
+        self.assertIn("birth_time_myr", dendrogram["entries"][0])
+        self.assertIn("x_birth", dendrogram["entries"][0])
+        self.assertIn("time_samples", dendrogram["entries"][0])
+        self.assertIn("oviz-three-dendrogram-panel", html)
+        self.assertIn("Threshold (pc)", html)
+        self.assertIn("buildDendrogramModel", html)
+        self.assertIn("interpolateDendrogramPosition", html)
+        self.assertIn("setDendrogramPinnedSelectionKeys", html)
+        self.assertIn("traceMaxAge + 5.0", html)
+        self.assertIn("Click to pin that branch highlight.", html)
+        self.assertNotIn("oviz-three-dendrogram-readout", html)
 
     def test_threejs_renderer_can_serialize_volume_layer(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
@@ -370,6 +413,12 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("selectionViewProjectionMatrix", html)
         self.assertIn("selectionDimOutside", html)
         self.assertIn("buildVolumeSkyImageOverlaySpec", html)
+        self.assertIn('CTYPE1: "GLON-CAR"', html)
+        self.assertIn('CTYPE2: "GLAT-CAR"', html)
+        self.assertIn("deriveVolumeSkyAxisTransform", html)
+        self.assertIn("applyVolumeSkyAxisTransform", html)
+        self.assertIn("const volumeSkyAxisTransform = deriveVolumeSkyAxisTransform();", html)
+        self.assertIn("CDELT2: latSpan / height", html)
         self.assertIn("Dust sky pixels:", html)
         self.assertIn("setOverlayImageLayer(imageLayer", html)
         self.assertIn("Rendered at t=0 only as a WebGL2 ray-marched volume.", html)

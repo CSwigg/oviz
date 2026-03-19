@@ -1760,6 +1760,7 @@ class Animate3D:
             'sky_panel': self._build_threejs_sky_panel_spec(default_sky_catalog),
             'age_kde': self._build_threejs_age_kde_spec(trace_key_by_name),
             'cluster_filter': self._build_threejs_cluster_filter_spec(trace_key_by_name),
+            'dendrogram': self._build_threejs_dendrogram_spec(trace_key_by_name),
             'volumes': {
                 'enabled': bool(volume_layers),
                 'layers': volume_layers,
@@ -1960,6 +1961,153 @@ class Animate3D:
             'enabled': bool(entries and parameters),
             'default_parameter_key': parameters[0]['key'] if parameters else '',
             'parameters': parameters,
+            'entries': entries,
+        }
+
+    def _build_threejs_dendrogram_spec(self, trace_key_by_name=None):
+        trace_key_by_name = trace_key_by_name or {}
+        entries = []
+        trace_options = []
+
+        if getattr(self, 'coord_system', 'centered') == 'rot':
+            x_col, y_col, z_col = 'x_rot', 'y_rot', 'z_rot'
+        else:
+            x_col, y_col, z_col = 'x', 'y', 'z'
+
+        for cluster_group in self.data_collection.get_all_clusters():
+            trace_name = str(getattr(cluster_group, 'data_name', '') or '')
+            trace_key = trace_key_by_name.get(trace_name)
+            if not trace_name or not trace_key:
+                continue
+
+            data_df = (
+                cluster_group.df_int
+                if getattr(cluster_group, 'df_int', None) is not None
+                else getattr(cluster_group, 'df', None)
+            )
+            if data_df is None or data_df.empty or ('age_myr' not in data_df.columns):
+                continue
+
+            required_cols = {x_col, y_col, z_col}
+            if data_df.empty or not required_cols.issubset(data_df.columns):
+                continue
+
+            cluster_color = getattr(cluster_group, 'color', None)
+            if not isinstance(cluster_color, str) or not cluster_color:
+                cluster_color = '#ffffff'
+
+            working_df = data_df.copy()
+            if 'name' in working_df.columns:
+                working_df['__cluster_name'] = working_df['name'].astype(str)
+            else:
+                working_df['__cluster_name'] = trace_name
+
+            if 'time' in working_df.columns:
+                working_df['__time_myr'] = pd.to_numeric(working_df['time'], errors='coerce')
+            else:
+                working_df['__time_myr'] = 0.0
+            working_df['__age_now_myr'] = pd.to_numeric(working_df['age_myr'], errors='coerce')
+            working_df['__x'] = pd.to_numeric(working_df[x_col], errors='coerce')
+            working_df['__y'] = pd.to_numeric(working_df[y_col], errors='coerce')
+            working_df['__z'] = pd.to_numeric(working_df[z_col], errors='coerce')
+
+            trace_entry_count = 0
+            trace_age_values = pd.to_numeric(working_df['__age_now_myr'], errors='coerce').to_numpy(dtype=float)
+            trace_age_values = trace_age_values[np.isfinite(trace_age_values)]
+            trace_max_age = float(np.nanmax(trace_age_values)) if trace_age_values.size else 0.0
+
+            for cluster_name, cluster_df in working_df.groupby('__cluster_name', sort=False):
+                age_values = pd.to_numeric(cluster_df['__age_now_myr'], errors='coerce').to_numpy(dtype=float)
+                age_values = age_values[np.isfinite(age_values)]
+                if age_values.size == 0:
+                    continue
+                age_now = float(np.nanmax(age_values))
+                birth_time_myr = -age_now
+
+                time_samples = pd.to_numeric(cluster_df['__time_myr'], errors='coerce').to_numpy(dtype=float)
+                x_samples = pd.to_numeric(cluster_df['__x'], errors='coerce').to_numpy(dtype=float)
+                y_samples = pd.to_numeric(cluster_df['__y'], errors='coerce').to_numpy(dtype=float)
+                z_samples = pd.to_numeric(cluster_df['__z'], errors='coerce').to_numpy(dtype=float)
+                valid_mask = (
+                    np.isfinite(time_samples)
+                    & np.isfinite(x_samples)
+                    & np.isfinite(y_samples)
+                    & np.isfinite(z_samples)
+                )
+                if not np.any(valid_mask):
+                    continue
+
+                time_samples = time_samples[valid_mask]
+                x_samples = x_samples[valid_mask]
+                y_samples = y_samples[valid_mask]
+                z_samples = z_samples[valid_mask]
+
+                order = np.argsort(time_samples)
+                time_samples = time_samples[order]
+                x_samples = x_samples[order]
+                y_samples = y_samples[order]
+                z_samples = z_samples[order]
+
+                unique_times, unique_indices = np.unique(time_samples, return_index=True)
+                time_samples = unique_times.astype(float)
+                x_samples = x_samples[unique_indices].astype(float)
+                y_samples = y_samples[unique_indices].astype(float)
+                z_samples = z_samples[unique_indices].astype(float)
+
+                if time_samples.size == 0:
+                    continue
+
+                birth_time_for_interp = float(np.clip(birth_time_myr, np.nanmin(time_samples), np.nanmax(time_samples)))
+                birth_x = float(np.interp(birth_time_for_interp, time_samples, x_samples))
+                birth_y = float(np.interp(birth_time_for_interp, time_samples, y_samples))
+                birth_z = float(np.interp(birth_time_for_interp, time_samples, z_samples))
+                if not (np.isfinite(birth_x) and np.isfinite(birth_y) and np.isfinite(birth_z)):
+                    continue
+
+                selection_key = _selection_identity_key({
+                    'cluster_name': str(cluster_name),
+                    'trace_name': trace_name,
+                })
+                if not selection_key:
+                    continue
+                entries.append({
+                    'selection_key': str(selection_key),
+                    'cluster_name': str(cluster_name),
+                    'trace_name': trace_name,
+                    'trace_key': str(trace_key),
+                    'color': str(cluster_color),
+                    'age_now_myr': float(age_now),
+                    'birth_time_myr': float(birth_time_myr),
+                    'x_birth': birth_x,
+                    'y_birth': birth_y,
+                    'z_birth': birth_z,
+                    'time_samples': [float(value) for value in time_samples.tolist()],
+                    'x_samples': [float(value) for value in x_samples.tolist()],
+                    'y_samples': [float(value) for value in y_samples.tolist()],
+                    'z_samples': [float(value) for value in z_samples.tolist()],
+                })
+                trace_entry_count += 1
+
+            if trace_entry_count:
+                trace_options.append({
+                    'trace_name': trace_name,
+                    'trace_key': str(trace_key),
+                    'color': str(cluster_color),
+                    'count': int(trace_entry_count),
+                    'max_age_myr': float(trace_max_age),
+                })
+
+        age_values = np.asarray([entry['age_now_myr'] for entry in entries], dtype=float)
+        max_age = float(np.nanmax(age_values)) if age_values.size else 0.0
+        return {
+            'enabled': bool(entries and trace_options),
+            'title': 'Birth Tree',
+            'default_trace_key': trace_options[0]['trace_key'] if trace_options else '',
+            'default_threshold_pc': 100.0,
+            'threshold_min_pc': 0.0,
+            'threshold_max_pc': max(5000.0, max_age * 50.0 if np.isfinite(max_age) else 5000.0),
+            'max_age_myr': max_age,
+            'traces': trace_options,
             'entries': entries,
         }
 

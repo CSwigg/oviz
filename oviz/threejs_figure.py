@@ -725,11 +725,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         top: 0;
         left: 0;
         right: 0;
-        height: 28px;
+        height: 34px;
         z-index: 2;
         display: flex;
         align-items: center;
-        padding: 0 10px;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 12px;
         font-size: 11px;
         letter-spacing: 0.04em;
         text-transform: uppercase;
@@ -738,44 +740,42 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         cursor: grab;
         user-select: none;
       }
+      #__ROOT_ID__ .oviz-three-widget-title {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-three-widget-window-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
       #__ROOT_ID__ .oviz-three-widget-panel[data-mode="fullscreen"] .oviz-three-widget-drag {
         cursor: default;
       }
       #__ROOT_ID__ .oviz-three-sky-frame {
         position: absolute;
-        top: 0;
+        top: 34px;
         left: 0;
         width: 100%;
-        height: calc(100% - 72px);
+        height: calc(100% - 34px);
         border: 0;
         display: block;
         background: var(--oviz-panel-solid);
       }
-      #__ROOT_ID__ .oviz-three-sky-readout {
-        position: absolute;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        height: 72px;
-        margin: 0;
-        padding: 8px 10px;
-        overflow: auto;
-        border-top: 1px solid var(--oviz-panel-border);
-        background: rgba(0, 0, 0, 0.18);
-        color: var(--oviz-text);
-        font: 11px/1.45 Menlo, Monaco, Consolas, monospace;
-        white-space: pre-wrap;
-      }
       #__ROOT_ID__ .oviz-three-age-body {
         position: absolute;
-        top: 28px;
+        top: 34px;
         right: 0;
-        bottom: 82px;
+        bottom: 0;
         left: 0;
         display: flex;
         flex-direction: column;
         gap: 8px;
-        padding: 10px 10px 8px 10px;
+        padding: 10px;
         box-sizing: border-box;
       }
       #__ROOT_ID__ .oviz-three-age-kde-shell {
@@ -808,32 +808,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      #__ROOT_ID__ .oviz-three-age-readout {
-        position: absolute;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        height: 72px;
-        margin: 0;
-        padding: 8px 10px;
-        overflow: auto;
-        border-top: 1px solid var(--oviz-panel-border);
-        background: rgba(0, 0, 0, 0.18);
-        color: var(--oviz-text);
-        font: 11px/1.45 Menlo, Monaco, Consolas, monospace;
-        white-space: pre-wrap;
-        pointer-events: none;
-      }
       #__ROOT_ID__ .oviz-three-filter-body {
         position: absolute;
-        top: 28px;
+        top: 34px;
         right: 0;
         bottom: 0;
         left: 0;
         display: flex;
         flex-direction: column;
         gap: 8px;
-        padding: 10px 10px 72px 10px;
+        padding: 10px;
         box-sizing: border-box;
       }
       #__ROOT_ID__ .oviz-three-filter-row {
@@ -934,20 +918,56 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-axis);
         font: 10px Menlo, Monaco, Consolas, monospace;
       }
-      #__ROOT_ID__ .oviz-three-filter-readout {
+      #__ROOT_ID__ .oviz-three-dendrogram-body {
         position: absolute;
+        top: 34px;
         right: 0;
         bottom: 0;
         left: 0;
-        height: 64px;
-        margin: 0;
-        padding: 8px 10px;
-        overflow: auto;
-        border-top: 1px solid var(--oviz-panel-border);
-        background: rgba(0, 0, 0, 0.18);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        box-sizing: border-box;
+      }
+      #__ROOT_ID__ .oviz-three-dendrogram-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      #__ROOT_ID__ .oviz-three-dendrogram-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex: 1 1 auto;
         color: var(--oviz-text);
-        font: 11px/1.45 Menlo, Monaco, Consolas, monospace;
-        white-space: pre-wrap;
+        font: 11px Helvetica, Arial, sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-dendrogram-field select,
+      #__ROOT_ID__ .oviz-three-dendrogram-field input {
+        width: 100%;
+      }
+      #__ROOT_ID__ .oviz-three-dendrogram-shell {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 180px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.16);
+      }
+      #__ROOT_ID__ .oviz-three-dendrogram-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: transparent;
+      }
+      #__ROOT_ID__ .oviz-three-dendrogram-hint {
+        color: var(--oviz-axis);
+        font: 10px Menlo, Monaco, Consolas, monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       #__ROOT_ID__ .oviz-three-widget-panel button {
         border: 1px solid var(--oviz-panel-border);
@@ -958,25 +978,41 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 10px Menlo, Monaco, Consolas, monospace;
         padding: 2px 6px;
       }
-      #__ROOT_ID__ .oviz-three-sky-full,
-      #__ROOT_ID__ .oviz-three-sky-hide,
-      #__ROOT_ID__ .oviz-three-age-full,
-      #__ROOT_ID__ .oviz-three-age-hide,
-      #__ROOT_ID__ .oviz-three-filter-full,
-      #__ROOT_ID__ .oviz-three-filter-hide {
-        position: absolute;
-        top: 6px;
+      #__ROOT_ID__ .oviz-three-window-button {
+        position: relative;
         z-index: 3;
+        width: 20px;
+        height: 20px;
+        min-width: 20px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--oviz-text);
+        cursor: pointer;
+        font-size: 0;
+        line-height: 0;
       }
-      #__ROOT_ID__ .oviz-three-sky-full,
-      #__ROOT_ID__ .oviz-three-age-full,
-      #__ROOT_ID__ .oviz-three-filter-full {
-        right: 52px;
+      #__ROOT_ID__ .oviz-three-window-button:hover {
+        background: rgba(255, 255, 255, 0.10);
       }
-      #__ROOT_ID__ .oviz-three-sky-hide,
-      #__ROOT_ID__ .oviz-three-age-hide,
-      #__ROOT_ID__ .oviz-three-filter-hide {
-        right: 6px;
+      #__ROOT_ID__ .oviz-three-window-button-min::before {
+        content: "";
+        display: block;
+        width: 10px;
+        height: 1.5px;
+        background: currentColor;
+        transform: translateY(3px);
+      }
+      #__ROOT_ID__ .oviz-three-window-button-max::before {
+        content: "";
+        display: block;
+        width: 9px;
+        height: 9px;
+        border: 1.5px solid currentColor;
+        box-sizing: border-box;
       }
       #__ROOT_ID__ .oviz-three-sky-actions {
         display: none !important;
@@ -1013,146 +1049,1112 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         bottom: 0;
         cursor: nwse-resize;
       }
+      #__ROOT_ID__ {
+        --oviz-panel-bg: rgba(18, 22, 28, 0.50);
+        --oviz-panel-border: rgba(255, 255, 255, 0.11);
+        --oviz-panel-solid: rgba(19, 23, 30, 0.76);
+        --oviz-axis: #c4c9d1;
+        --oviz-text: #eef2f7;
+        --oviz-muted-text: rgba(238, 242, 247, 0.58);
+        --oviz-accent: #d8dde6;
+        --oviz-accent-strong: #eef1f5;
+        --oviz-shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.34);
+        --oviz-shadow-md: 0 18px 42px rgba(0, 0, 0, 0.24);
+      }
+      #__ROOT_ID__::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.07), transparent 24%),
+          radial-gradient(circle at 84% 10%, rgba(255, 255, 255, 0.04), transparent 18%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 20%);
+        pointer-events: none;
+        z-index: 0;
+      }
+      #__ROOT_ID__ .oviz-three-topbar {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        right: 14px;
+        z-index: 7;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: start;
+        gap: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+      #__ROOT_ID__ .oviz-three-topbar-brand {
+        display: none;
+      }
+      #__ROOT_ID__ .oviz-three-topbar-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, #ffffff, #d3d8df 62%, #9ea7b3);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 14px rgba(255, 255, 255, 0.12);
+      }
+      #__ROOT_ID__ .oviz-three-title {
+        position: static;
+        transform: none;
+        min-width: 0;
+        text-align: center;
+        justify-self: center;
+        align-self: start;
+        padding: 7px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        background: rgba(18, 22, 28, 0.20);
+        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(16px) saturate(126%);
+        -webkit-backdrop-filter: blur(16px) saturate(126%);
+        font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+        letter-spacing: -0.02em;
+        color: var(--oviz-text);
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu {
+        position: static;
+        grid-column: 3;
+        display: flex;
+        align-items: center;
+        justify-self: end;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 5px 6px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        background: rgba(18, 22, 28, 0.18);
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(18px) saturate(125%);
+        -webkit-backdrop-filter: blur(18px) saturate(125%);
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu button,
+      #__ROOT_ID__ .oviz-three-widget-menu select,
+      #__ROOT_ID__ .oviz-three-tools-toggle,
+      #__ROOT_ID__ .oviz-three-controls-toggle {
+        height: 34px;
+        border-radius: 11px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+        color: var(--oviz-text);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu button:hover,
+      #__ROOT_ID__ .oviz-three-widget-menu select:hover,
+      #__ROOT_ID__ .oviz-three-tools-toggle:hover,
+      #__ROOT_ID__ .oviz-three-controls-toggle:hover {
+        border-color: rgba(255, 255, 255, 0.18);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05));
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell {
+        position: relative;
+        min-height: auto;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        overflow: visible;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-toggle,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-toggle {
+        width: auto;
+        padding: 0 12px;
+        justify-content: center;
+        text-align: center;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
+        position: absolute;
+        top: calc(100% + 10px);
+        right: 0;
+        left: auto;
+        width: min(340px, calc(100vw - 32px));
+        max-height: min(74vh, 760px);
+        overflow: auto;
+        padding: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        background: linear-gradient(180deg, rgba(23, 26, 31, 0.54), rgba(12, 15, 19, 0.34));
+        box-shadow: var(--oviz-shadow-md);
+        backdrop-filter: blur(22px) saturate(124%);
+        -webkit-backdrop-filter: blur(22px) saturate(124%);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+        transition: opacity 0.16s ease, transform 0.16s ease;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell[data-open="true"] .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell[data-open="true"] .oviz-three-controls-drawer {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-selection,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel,
+      #__ROOT_ID__ .oviz-three-inspector-panel,
+      #__ROOT_ID__ .oviz-three-legend-popover {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        background: linear-gradient(180deg, rgba(23, 26, 31, 0.34), rgba(12, 15, 19, 0.16));
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.16);
+        backdrop-filter: blur(22px) saturate(120%);
+        -webkit-backdrop-filter: blur(22px) saturate(120%);
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        z-index: 6;
+        width: min(212px, 20vw);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel-title {
+        color: var(--oviz-text);
+        font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: -0.01em;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel-toggle {
+        width: 24px;
+        height: 24px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--oviz-muted-text);
+        font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel-body {
+        display: flex;
+        flex-direction: column;
+        max-height: min(31vh, 320px);
+        padding: 6px 8px 8px;
+        overflow: auto;
+        transition: max-height 0.18s ease, padding 0.18s ease, opacity 0.18s ease;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] .oviz-three-legend-panel-body {
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        opacity: 0;
+        overflow: hidden;
+      }
+      #__ROOT_ID__ .oviz-three-legend {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-group-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 0 1px 8px;
+        color: var(--oviz-muted-text);
+        font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-group-field select {
+        height: 30px;
+        width: 100%;
+      }
+      #__ROOT_ID__ .oviz-three-legend-title {
+        padding: 0 2px 6px;
+        color: var(--oviz-muted-text);
+        font: 500 10px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 7px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.022);
+        transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry[data-active="false"] {
+        opacity: 0.46;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item {
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        color: var(--oviz-text);
+        text-align: left;
+        font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item:hover,
+      #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      #__ROOT_ID__ .oviz-three-legend-swatch {
+        flex: 0 0 auto;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-three-legend-meta {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      #__ROOT_ID__ .oviz-three-legend-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-three-legend-edit {
+        flex: 0 0 auto;
+        width: 22px;
+        height: 22px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--oviz-muted-text);
+        font: 700 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-inspector-dock {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-inspector-dock[data-open="true"] {
+        transform: translateX(0);
+      }
+      #__ROOT_ID__ .oviz-three-inspector-dock[data-pinned="true"] .oviz-three-inspector-toggle {
+        border-color: rgba(255, 255, 255, 0.16);
+        background: linear-gradient(180deg, rgba(36, 40, 46, 0.54), rgba(18, 21, 26, 0.32));
+      }
+      #__ROOT_ID__ .oviz-three-inspector-toggle {
+        position: absolute;
+        top: 12px;
+        right: -32px;
+        width: 32px;
+        height: 108px;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 0 16px 16px 0;
+        background: linear-gradient(180deg, rgba(23, 28, 34, 0.40), rgba(14, 17, 22, 0.20));
+        color: var(--oviz-text);
+        font: 600 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+      }
+      #__ROOT_ID__ .oviz-three-inspector-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: min(56vh, 620px);
+        padding-right: 4px;
+        overflow: auto;
+      }
+      #__ROOT_ID__ .oviz-three-widget-select,
+      #__ROOT_ID__ .oviz-three-group-select,
+      #__ROOT_ID__ .oviz-three-controls-field select,
+      #__ROOT_ID__ .oviz-three-legend-field select,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-controls-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-volume select,
+      #__ROOT_ID__ .oviz-three-volume input[type="number"],
+      #__ROOT_ID__ .oviz-three-filter-field select {
+        background: rgba(8, 10, 14, 0.34);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 10px;
+        color: var(--oviz-text);
+        font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-toolbar {
+        top: 74px;
+        left: 14px;
+        z-index: 6;
+        gap: 0;
+        width: min(312px, 31vw);
+        max-width: min(312px, 31vw);
+        max-height: none;
+        padding-right: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 42px;
+        align-items: start;
+        overflow: visible;
+        transform: translateX(calc(-100% + 42px));
+        transition: transform 0.18s ease;
+      }
+      #__ROOT_ID__ .oviz-three-toolbar[data-expanded="true"] {
+        transform: translateX(0);
+      }
+      #__ROOT_ID__ .oviz-three-toolbar[data-pinned="true"] .oviz-three-toolbar-rail {
+        border-color: rgba(255, 255, 255, 0.16);
+        background: linear-gradient(180deg, rgba(28, 33, 40, 0.48), rgba(15, 18, 23, 0.28));
+      }
+      #__ROOT_ID__ .oviz-three-toolbar-rail {
+        order: 2;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px 4px 8px 2px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-left: 0;
+        border-radius: 0 16px 16px 0;
+        background: linear-gradient(180deg, rgba(26, 30, 36, 0.42), rgba(14, 17, 20, 0.24));
+        box-shadow: 0 16px 28px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(18px) saturate(128%);
+        -webkit-backdrop-filter: blur(18px) saturate(128%);
+        align-self: flex-start;
+      }
+      #__ROOT_ID__ .oviz-three-toolbar-tab {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        width: 100%;
+        min-height: 72px;
+        padding: 8px 0 6px;
+        border: 0;
+        background: transparent;
+        color: transparent;
+        font-size: 0;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+      }
+      #__ROOT_ID__ .oviz-three-toolbar-tab:focus-visible {
+        outline: 1px solid rgba(255, 255, 255, 0.22);
+        outline-offset: -3px;
+        border-radius: 12px;
+      }
+      #__ROOT_ID__ .oviz-three-toolbar-tab::before {
+        content: "▸";
+        display: block;
+        margin-bottom: 8px;
+        color: rgba(238, 242, 247, 0.82);
+        font: 600 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-toolbar[data-expanded="true"] .oviz-three-toolbar-tab::before {
+        content: "◂";
+      }
+      #__ROOT_ID__ .oviz-three-toolbar[data-pinned="true"] .oviz-three-toolbar-tab::before {
+        color: rgba(255, 255, 255, 0.96);
+      }
+      #__ROOT_ID__ .oviz-three-toolbar-tab::after {
+        content: "Scene";
+        color: var(--oviz-muted-text);
+        font: 600 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+      }
+      #__ROOT_ID__ .oviz-three-legend-peek {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 2px 4px 8px 1px;
+        max-height: min(58vh, 620px);
+        overflow: auto;
+        align-items: center;
+      }
+      #__ROOT_ID__ .oviz-three-legend-peek-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 5px;
+        width: 34px;
+        padding: 6px 0 7px;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 15px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.040), rgba(255, 255, 255, 0.022));
+        color: var(--oviz-text);
+      }
+      #__ROOT_ID__ .oviz-three-legend-peek-item[data-active="false"] {
+        opacity: 0.46;
+      }
+      #__ROOT_ID__ .oviz-three-legend-peek-item[data-editor-open="true"] {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.082), rgba(255, 255, 255, 0.036));
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 18px rgba(0, 0, 0, 0.16);
+      }
+      #__ROOT_ID__ .oviz-three-legend-peek-toggle,
+      #__ROOT_ID__ .oviz-three-legend-peek-edit {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      #__ROOT_ID__ .oviz-three-legend-peek-toggle {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        width: 100%;
+        padding: 0;
+        font: 700 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        text-align: center;
+        letter-spacing: 0.08em;
+      }
+      #__ROOT_ID__ .oviz-three-legend-peek-edit {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 19px;
+        height: 15px;
+        margin-top: 1px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.055);
+        color: rgba(238, 242, 247, 0.72);
+        font: 700 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-peek-swatch {
+        flex: 0 0 auto;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+      }
+      #__ROOT_ID__ .oviz-three-legend-peek-label {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-three-toolbar-panel {
+        order: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+        max-height: min(70vh, 760px);
+        padding-right: 6px;
+        overflow: auto;
+        overscroll-behavior: contain;
+      }
+      #__ROOT_ID__ .oviz-three-inspector-card,
+      #__ROOT_ID__ .oviz-three-tools-shell,
+      #__ROOT_ID__ .oviz-three-controls-shell {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(23, 28, 34, 0.36), rgba(14, 17, 22, 0.18));
+        box-shadow: 0 18px 36px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(18px) saturate(126%);
+        -webkit-backdrop-filter: blur(18px) saturate(126%);
+        overflow: hidden;
+      }
+      #__ROOT_ID__ .oviz-three-scene-card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+        min-height: 0;
+      }
+      #__ROOT_ID__ .oviz-three-card-head {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #__ROOT_ID__ .oviz-three-card-eyebrow {
+        color: var(--oviz-muted-text);
+        font: 600 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      #__ROOT_ID__ .oviz-three-card-caption {
+        color: var(--oviz-text);
+        font: 600 15px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+        letter-spacing: -0.02em;
+      }
+      #__ROOT_ID__ .oviz-three-scene-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      #__ROOT_ID__ .oviz-three-sidebar-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        color: var(--oviz-muted-text);
+        font: 500 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-popover {
+        position: absolute;
+        z-index: 8;
+        width: min(244px, calc(100vw - 92px));
+        max-height: min(66vh, 560px);
+        padding: 10px 10px 11px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(23, 28, 34, 0.74), rgba(14, 17, 22, 0.50));
+        box-shadow: 0 24px 46px rgba(0, 0, 0, 0.26);
+        backdrop-filter: blur(22px) saturate(132%);
+        -webkit-backdrop-filter: blur(22px) saturate(132%);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(6px);
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        overflow: auto;
+      }
+      #__ROOT_ID__ .oviz-three-legend-popover[data-open="true"] {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+      #__ROOT_ID__ .oviz-three-legend-popover-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-popover-title {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-popover-eyebrow {
+        color: var(--oviz-muted-text);
+        font: 600 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      #__ROOT_ID__ .oviz-three-legend-popover-name {
+        color: var(--oviz-text);
+        font: 600 14px/1.25 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+        letter-spacing: -0.02em;
+      }
+      #__ROOT_ID__ .oviz-three-legend-popover-close {
+        width: 26px;
+        height: 26px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--oviz-muted-text);
+        font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-popover .oviz-three-legend-controls {
+        display: flex;
+        margin-top: 2px;
+      }
+      #__ROOT_ID__ .oviz-three-legend {
+        gap: 8px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        max-height: none;
+        min-height: 0;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls {
+        gap: 9px;
+        padding: 8px 9px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.025);
+      }
+      #__ROOT_ID__ .oviz-three-legend-title {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 7px 8px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.022);
+        color: var(--oviz-muted-text);
+        font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0.02em;
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry {
+        gap: 8px;
+        padding: 8px 9px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 13px;
+        background: rgba(255, 255, 255, 0.028);
+      }
+      #__ROOT_ID__ .oviz-three-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font: 600 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-swatch {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-meta {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-three-legend-kind {
+        color: var(--oviz-muted-text);
+        font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls {
+        gap: 10px;
+        padding: 10px;
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.20);
+      }
+      #__ROOT_ID__ .oviz-three-tools-shell,
+      #__ROOT_ID__ .oviz-three-controls-shell {
+        min-height: 0;
+      }
+      #__ROOT_ID__ .oviz-three-tools-toggle,
+      #__ROOT_ID__ .oviz-three-controls-toggle {
+        width: 100%;
+        padding: 0 12px;
+        justify-content: space-between;
+        text-align: left;
+      }
+      #__ROOT_ID__ .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-controls-drawer {
+        position: static;
+        left: auto;
+        top: auto;
+        width: auto;
+        transform: none;
+        opacity: 1;
+        pointer-events: auto;
+        max-height: 0;
+        overflow: hidden;
+        padding: 0 12px;
+        transition: max-height 0.22s ease, padding 0.22s ease;
+      }
+      #__ROOT_ID__ .oviz-three-tools-shell[data-open="true"] .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-controls-shell[data-open="true"] .oviz-three-controls-drawer {
+        max-height: 1200px;
+        padding: 0 12px 12px;
+      }
+      #__ROOT_ID__ .oviz-three-selection,
+      #__ROOT_ID__ .oviz-three-controls {
+        border: 0;
+        border-radius: 14px;
+        background: transparent;
+        padding: 10px 2px 2px;
+      }
+      #__ROOT_ID__ .oviz-three-selection-readout,
+      #__ROOT_ID__ .oviz-three-controls-hint,
+      #__ROOT_ID__ .oviz-three-legend-summary {
+        color: var(--oviz-muted-text);
+      }
+      #__ROOT_ID__ .oviz-three-key-help {
+        top: 78px;
+        right: 18px;
+        width: min(460px, calc(100vw - 36px));
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(25, 30, 37, 0.82), rgba(14, 17, 22, 0.72));
+        box-shadow: var(--oviz-shadow-lg);
+        backdrop-filter: blur(24px) saturate(140%);
+        -webkit-backdrop-filter: blur(24px) saturate(140%);
+      }
+      #__ROOT_ID__ .oviz-three-footer {
+        left: 50%;
+        bottom: 18px;
+        width: min(72vw, 980px);
+        padding: 10px 14px;
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(28, 34, 42, 0.70), rgba(17, 21, 27, 0.52));
+        box-shadow: var(--oviz-shadow-lg);
+        backdrop-filter: blur(22px) saturate(140%);
+        -webkit-backdrop-filter: blur(22px) saturate(140%);
+      }
+      #__ROOT_ID__ .oviz-three-footer button {
+        width: 38px;
+        height: 38px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+      #__ROOT_ID__ .oviz-three-time-label {
+        min-width: 152px;
+        font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-scale-bar {
+        left: 18px;
+        bottom: 110px;
+        padding: 10px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        background: rgba(14, 17, 22, 0.26);
+        backdrop-filter: blur(16px) saturate(135%);
+        -webkit-backdrop-filter: blur(16px) saturate(135%);
+      }
+      #__ROOT_ID__ .oviz-three-note {
+        right: 16px;
+        bottom: 86px;
+        border-radius: 16px;
+        background: rgba(14, 17, 22, 0.40);
+        box-shadow: var(--oviz-shadow-md);
+        backdrop-filter: blur(18px) saturate(135%);
+        -webkit-backdrop-filter: blur(18px) saturate(135%);
+      }
+      #__ROOT_ID__ .oviz-three-widget-panel {
+        border-radius: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: linear-gradient(180deg, rgba(23, 28, 34, 0.82), rgba(14, 17, 22, 0.72));
+        box-shadow: var(--oviz-shadow-lg);
+        backdrop-filter: blur(24px) saturate(140%);
+        -webkit-backdrop-filter: blur(24px) saturate(140%);
+      }
+      #__ROOT_ID__ .oviz-three-widget-drag {
+        height: 34px;
+        padding: 0 14px;
+        font: 600 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0.08em;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01));
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      #__ROOT_ID__ .oviz-three-widget-panel button {
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.04);
+        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__[data-zen="true"] .oviz-three-topbar,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-legend-panel,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-inspector-dock,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-note,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-scale-bar {
+        display: none !important;
+      }
+      @media (max-width: 980px) {
+        #__ROOT_ID__ .oviz-three-topbar {
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "title"
+            "actions";
+          align-items: start;
+          gap: 8px;
+        }
+        #__ROOT_ID__ .oviz-three-title {
+          grid-area: title;
+          justify-self: center;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu {
+          grid-area: actions;
+          justify-self: end;
+        }
+        #__ROOT_ID__ .oviz-three-legend-panel {
+          width: min(244px, calc(100vw - 28px));
+        }
+        #__ROOT_ID__ .oviz-three-inspector-dock {
+          width: min(332px, calc(100vw - 28px));
+        }
+        #__ROOT_ID__ .oviz-three-footer {
+          width: min(calc(100vw - 28px), 920px);
+        }
+      }
+      @media (max-width: 720px) {
+        #__ROOT_ID__ .oviz-three-legend-panel {
+          top: 66px;
+          width: min(220px, calc(100vw - 24px));
+        }
+        #__ROOT_ID__ .oviz-three-inspector-dock {
+          top: auto;
+          bottom: 110px;
+          width: min(312px, calc(100vw - 22px));
+        }
+        #__ROOT_ID__ .oviz-three-scale-bar {
+          display: none;
+        }
+      }
     </style>
   </head>
   <body>
     <div id="__ROOT_ID__" tabindex="0" data-zen="false">
-      <div class="oviz-three-title"></div>
-      <div class="oviz-three-widget-menu">
-        <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
-        <button class="oviz-three-reset-view" type="button" title="Reset the camera and clear current lasso and click selections">Reset</button>
-        <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
-        <select class="oviz-three-widget-select">
-          <option value="">Widgets</option>
-        </select>
-      </div>
-      <div class="oviz-three-toolbar">
-        <select class="oviz-three-group-select"></select>
-        <div class="oviz-three-legend"></div>
-        <div class="oviz-three-tools-shell" data-open="false">
-          <button class="oviz-three-tools-toggle" type="button" title="Show or hide the left control drawer">Tools ▸</button>
-          <div class="oviz-three-tools-drawer">
-            <div class="oviz-three-selection">
-              <div class="oviz-three-selection-row">
-                <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
-                <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
+      <div class="oviz-three-topbar">
+        <div class="oviz-three-topbar-brand">
+          <span class="oviz-three-topbar-dot" aria-hidden="true"></span>
+          <span>oviz</span>
+        </div>
+        <div class="oviz-three-title"></div>
+        <div class="oviz-three-widget-menu">
+          <div class="oviz-three-tools-shell" data-open="false">
+            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
+            <div class="oviz-three-tools-drawer">
+              <div class="oviz-three-selection">
+                <div class="oviz-three-selection-row">
+                  <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
+                  <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
+                </div>
+                <label class="oviz-three-selection-toggle">
+                  <input class="oviz-three-click-select-toggle" type="checkbox" />
+                  <span>Enable click select</span>
+                </label>
+                <label class="oviz-three-selection-toggle">
+                  <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
+                  <span>Lasso volumetric data</span>
+                </label>
+                <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters on the current frame.</div>
               </div>
-              <label class="oviz-three-selection-toggle">
-                <input class="oviz-three-click-select-toggle" type="checkbox" />
-                <span>Enable click select</span>
-              </label>
-              <label class="oviz-three-selection-toggle">
-                <input class="oviz-three-volume-lasso-toggle" type="checkbox" checked />
-                <span>Lasso volumetric data</span>
-              </label>
-              <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters on the current frame.</div>
             </div>
-            <div class="oviz-three-volume" data-enabled="false">
-              <div class="oviz-three-volume-title">Volume</div>
-              <label class="oviz-three-volume-field">
-                <span>Layer</span>
-                <select class="oviz-three-volume-select"></select>
-              </label>
-              <label class="oviz-three-volume-toggle">
-                <input class="oviz-three-volume-visible" type="checkbox" />
-                <span>Show at t=0</span>
-              </label>
-              <label class="oviz-three-volume-field">
-                <span>Colormap</span>
-                <select class="oviz-three-volume-colormap"></select>
-              </label>
-              <label class="oviz-three-volume-field">
-                <span>Stretch</span>
-                <select class="oviz-three-volume-stretch"></select>
-              </label>
-              <div class="oviz-three-volume-row">
-                <label class="oviz-three-volume-field">
-                  <span>vmin</span>
-                  <input class="oviz-three-volume-vmin" type="number" step="any" />
+          </div>
+          <div class="oviz-three-controls-shell" data-open="false">
+            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
+            <div class="oviz-three-controls-drawer">
+              <div class="oviz-three-controls">
+                <div class="oviz-three-controls-title">Controls</div>
+                <label class="oviz-three-controls-field">
+                  <span>Theme</span>
+                  <select class="oviz-three-theme-select">
+                    <option value="default">Default</option>
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="midnight">Midnight</option>
+                    <option value="glacier">Glacier</option>
+                    <option value="ember">Ember</option>
+                    <option value="graphite">Graphite</option>
+                    <option value="aurora">Aurora</option>
+                    <option value="paper">Paper</option>
+                  </select>
                 </label>
-                <label class="oviz-three-volume-field">
-                  <span>vmax</span>
-                  <input class="oviz-three-volume-vmax" type="number" step="any" />
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-scroll-speed-label">Scroll speed</span>
+                    <input class="oviz-three-scroll-speed" type="range" min="0.2" max="4" step="0.05" />
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-camera-fov-label">Camera FOV</span>
+                    <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
+                  </label>
+                </div>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-global-point-size-label">Point size</span>
+                    <input class="oviz-three-global-point-size" type="range" min="0.25" max="4" step="0.05" />
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-global-point-opacity-label">Point opacity</span>
+                    <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
+                  </label>
+                </div>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span>Focus group</span>
+                    <select class="oviz-three-focus-group-select"></select>
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span>Fade time (Myr)</span>
+                    <input class="oviz-three-fade-time" type="number" min="0" step="0.5" />
+                  </label>
+                </div>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-fade-in-out-toggle" type="checkbox" />
+                  <span>Fade in and out</span>
                 </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
+                  <span>Show axes</span>
+                </label>
+                <div class="oviz-three-controls-actions">
+                  <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
+                  <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
+                  <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
+                  <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
+                </div>
+                <div class="oviz-three-controls-hint">Point size and opacity act as multiplicative global factors on top of each trace's existing settings.</div>
               </div>
-              <label class="oviz-three-volume-field">
-                <span class="oviz-three-volume-opacity-label">Opacity</span>
-                <input class="oviz-three-volume-opacity" type="range" min="0" max="1" step="0.01" />
+            </div>
+          </div>
+          <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
+          <button class="oviz-three-reset-view" type="button" title="Reset the camera and clear current lasso and click selections">Reset</button>
+          <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
+          <select class="oviz-three-widget-select">
+            <option value="">Widgets</option>
+          </select>
+        </div>
+      </div>
+      <div class="oviz-three-legend-panel" data-open="true">
+        <div class="oviz-three-legend-panel-head">
+          <div class="oviz-three-legend-panel-title">Legend</div>
+          <button class="oviz-three-legend-panel-toggle" type="button" title="Collapse or expand the legend">▾</button>
+        </div>
+        <div class="oviz-three-legend-panel-body">
+          <label class="oviz-three-legend-group-field">
+            <span>Group</span>
+            <select class="oviz-three-group-select"></select>
+          </label>
+          <div class="oviz-three-legend"></div>
+        </div>
+      </div>
+      <div class="oviz-three-inspector-dock" data-open="false">
+        <button class="oviz-three-inspector-toggle" type="button" title="Open settings">Settings</button>
+        <div class="oviz-three-inspector-panel">
+          <div class="oviz-three-scene-card oviz-three-inspector-card">
+            <div class="oviz-three-card-head">
+              <div class="oviz-three-card-eyebrow">Scene</div>
+              <div class="oviz-three-card-caption">Groups and view settings</div>
+            </div>
+            <div class="oviz-three-scene-meta">
+              <label class="oviz-three-sidebar-field">
+                <span>Group</span>
+                <select class="oviz-three-group-select"></select>
               </label>
-              <label class="oviz-three-volume-field">
-                <span class="oviz-three-volume-alpha-label">Alpha coef</span>
-                <input class="oviz-three-volume-alpha" type="range" min="1" max="200" step="1" />
-              </label>
-              <label class="oviz-three-volume-field">
-                <span class="oviz-three-volume-steps-label">Samples</span>
-                <input class="oviz-three-volume-steps" type="range" min="24" max="768" step="8" />
-              </label>
-              <div class="oviz-three-volume-summary"></div>
+            </div>
+          </div>
+          <div class="oviz-three-tools-shell oviz-three-inspector-card" data-open="false">
+            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
+            <div class="oviz-three-tools-drawer">
+              <div class="oviz-three-selection">
+                <div class="oviz-three-selection-row">
+                  <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
+                  <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
+                </div>
+                <label class="oviz-three-selection-toggle">
+                  <input class="oviz-three-click-select-toggle" type="checkbox" />
+                  <span>Enable click select</span>
+                </label>
+                <label class="oviz-three-selection-toggle">
+                  <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
+                  <span>Lasso volumetric data</span>
+                </label>
+                <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters on the current frame.</div>
+              </div>
+              <div class="oviz-three-volume" data-enabled="false">
+                <div class="oviz-three-volume-title">Volume</div>
+                <label class="oviz-three-volume-field">
+                  <span>Layer</span>
+                  <select class="oviz-three-volume-select"></select>
+                </label>
+                <label class="oviz-three-volume-toggle">
+                  <input class="oviz-three-volume-visible" type="checkbox" />
+                  <span>Show at t=0</span>
+                </label>
+                <label class="oviz-three-volume-field">
+                  <span>Colormap</span>
+                  <select class="oviz-three-volume-colormap"></select>
+                </label>
+                <label class="oviz-three-volume-field">
+                  <span>Stretch</span>
+                  <select class="oviz-three-volume-stretch"></select>
+                </label>
+                <div class="oviz-three-volume-row">
+                  <label class="oviz-three-volume-field">
+                    <span>vmin</span>
+                    <input class="oviz-three-volume-vmin" type="number" step="any" />
+                  </label>
+                  <label class="oviz-three-volume-field">
+                    <span>vmax</span>
+                    <input class="oviz-three-volume-vmax" type="number" step="any" />
+                  </label>
+                </div>
+                <label class="oviz-three-volume-field">
+                  <span class="oviz-three-volume-opacity-label">Opacity</span>
+                  <input class="oviz-three-volume-opacity" type="range" min="0" max="1" step="0.01" />
+                </label>
+                <label class="oviz-three-volume-field">
+                  <span class="oviz-three-volume-alpha-label">Alpha coef</span>
+                  <input class="oviz-three-volume-alpha" type="range" min="1" max="200" step="1" />
+                </label>
+                <label class="oviz-three-volume-field">
+                  <span class="oviz-three-volume-steps-label">Samples</span>
+                  <input class="oviz-three-volume-steps" type="range" min="24" max="768" step="8" />
+                </label>
+                <div class="oviz-three-volume-summary"></div>
+              </div>
+            </div>
+          </div>
+          <div class="oviz-three-controls-shell oviz-three-inspector-card" data-open="false">
+            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
+            <div class="oviz-three-controls-drawer">
+              <div class="oviz-three-controls">
+                <div class="oviz-three-controls-title">Controls</div>
+                <label class="oviz-three-controls-field">
+                  <span>Theme</span>
+                  <select class="oviz-three-theme-select">
+                    <option value="default">Default</option>
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                  </select>
+                </label>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-scroll-speed-label">Scroll speed</span>
+                    <input class="oviz-three-scroll-speed" type="range" min="0.2" max="4" step="0.05" />
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-camera-fov-label">Camera FOV</span>
+                    <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
+                  </label>
+                </div>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-global-point-size-label">Point size</span>
+                    <input class="oviz-three-global-point-size" type="range" min="0.25" max="4" step="0.05" />
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-global-point-opacity-label">Point opacity</span>
+                    <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
+                  </label>
+                </div>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span>Focus group</span>
+                    <select class="oviz-three-focus-group-select"></select>
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span>Fade time (Myr)</span>
+                    <input class="oviz-three-fade-time" type="number" min="0" step="0.5" />
+                  </label>
+                </div>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-fade-in-out-toggle" type="checkbox" />
+                  <span>Fade in and out</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
+                  <span>Show axes</span>
+                </label>
+                <div class="oviz-three-controls-actions">
+                  <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
+                  <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
+                  <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
+                  <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
+                </div>
+                <div class="oviz-three-controls-hint">Point size and opacity act as multiplicative global factors on top of each trace's existing settings.</div>
+              </div>
             </div>
           </div>
         </div>
-        <div class="oviz-three-controls-shell" data-open="false">
-          <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
-          <div class="oviz-three-controls-drawer">
-            <div class="oviz-three-controls">
-              <div class="oviz-three-controls-title">Controls</div>
-              <label class="oviz-three-controls-field">
-                <span>Theme</span>
-                <select class="oviz-three-theme-select">
-                  <option value="default">Default</option>
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
-                </select>
-              </label>
-              <div class="oviz-three-controls-row">
-                <label class="oviz-three-controls-field">
-                  <span class="oviz-three-scroll-speed-label">Scroll speed</span>
-                  <input class="oviz-three-scroll-speed" type="range" min="0.2" max="4" step="0.05" />
-                </label>
-                <label class="oviz-three-controls-field">
-                  <span class="oviz-three-camera-fov-label">Camera FOV</span>
-                  <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
-                </label>
-              </div>
-              <div class="oviz-three-controls-row">
-                <label class="oviz-three-controls-field">
-                  <span class="oviz-three-global-point-size-label">Point size</span>
-                  <input class="oviz-three-global-point-size" type="range" min="0.25" max="4" step="0.05" />
-                </label>
-                <label class="oviz-three-controls-field">
-                  <span class="oviz-three-global-point-opacity-label">Point opacity</span>
-                  <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
-                </label>
-              </div>
-              <div class="oviz-three-controls-row">
-                <label class="oviz-three-controls-field">
-                  <span>Focus group</span>
-                  <select class="oviz-three-focus-group-select"></select>
-                </label>
-                <label class="oviz-three-controls-field">
-                  <span>Fade time (Myr)</span>
-                  <input class="oviz-three-fade-time" type="number" min="0" step="0.5" />
-                </label>
-              </div>
-              <label class="oviz-three-controls-toggle-row">
-                <input class="oviz-three-fade-in-out-toggle" type="checkbox" />
-                <span>Fade in and out</span>
-              </label>
-              <label class="oviz-three-controls-toggle-row">
-                <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
-                <span>Show axes</span>
-              </label>
-              <div class="oviz-three-controls-actions">
-                <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
-                <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
-                <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
-                <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
-              </div>
-              <div class="oviz-three-controls-hint">Point size and opacity act as multiplicative global factors on top of each trace's existing settings.</div>
-            </div>
-          </div>
-        </div>
       </div>
+      <div class="oviz-three-legend-popover" data-open="false"></div>
       <div class="oviz-three-key-help" data-open="false">
         <div class="oviz-three-key-help-head">
           <div class="oviz-three-key-help-title">Keyboard Controls</div>
@@ -1207,18 +2209,27 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
       <div class="oviz-three-note"></div>
       <div class="oviz-three-sky-panel oviz-three-widget-panel" data-widget-key="sky" data-mode="hidden">
-        <div class="oviz-three-sky-drag oviz-three-widget-drag">Sky</div>
+        <div class="oviz-three-sky-drag oviz-three-widget-drag">
+          <span class="oviz-three-widget-title">Sky</span>
+          <div class="oviz-three-widget-window-controls">
+            <button class="oviz-three-sky-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide sky panel" aria-label="Hide sky panel"></button>
+            <button class="oviz-three-sky-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen sky panel" aria-label="Toggle fullscreen sky panel"></button>
+          </div>
+        </div>
         <iframe class="oviz-three-sky-frame" loading="eager" referrerpolicy="no-referrer"></iframe>
-        <pre class="oviz-three-sky-readout"></pre>
-        <button class="oviz-three-sky-full" type="button" title="Toggle fullscreen sky panel">Full</button>
-        <button class="oviz-three-sky-hide" type="button" title="Hide sky panel">Hide</button>
         <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="nw"></div>
         <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="ne"></div>
         <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="sw"></div>
         <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
       <div class="oviz-three-age-panel oviz-three-widget-panel" data-widget-key="age_kde" data-mode="hidden">
-        <div class="oviz-three-age-drag oviz-three-widget-drag">Age KDE</div>
+        <div class="oviz-three-age-drag oviz-three-widget-drag">
+          <span class="oviz-three-widget-title">Age KDE</span>
+          <div class="oviz-three-widget-window-controls">
+            <button class="oviz-three-age-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide age KDE panel" aria-label="Hide age KDE panel"></button>
+            <button class="oviz-three-age-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen age KDE panel" aria-label="Toggle fullscreen age KDE panel"></button>
+          </div>
+        </div>
         <div class="oviz-three-age-body">
           <div class="oviz-three-age-kde-shell">
             <canvas class="oviz-three-age-canvas"></canvas>
@@ -1235,16 +2246,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="oviz-three-age-filter-hint">Age filter for clusters contributing to the current KDE view</div>
           </div>
         </div>
-        <pre class="oviz-three-age-readout"></pre>
-        <button class="oviz-three-age-full" type="button" title="Toggle fullscreen age KDE panel">Full</button>
-        <button class="oviz-three-age-hide" type="button" title="Hide age KDE panel">Hide</button>
         <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="nw"></div>
         <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="ne"></div>
         <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="sw"></div>
         <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
       <div class="oviz-three-filter-panel oviz-three-widget-panel" data-widget-key="cluster_filter" data-mode="hidden">
-        <div class="oviz-three-filter-drag oviz-three-widget-drag">Filter</div>
+        <div class="oviz-three-filter-drag oviz-three-widget-drag">
+          <span class="oviz-three-widget-title">Filter</span>
+          <div class="oviz-three-widget-window-controls">
+            <button class="oviz-three-filter-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide filter panel" aria-label="Hide filter panel"></button>
+            <button class="oviz-three-filter-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen filter panel" aria-label="Toggle fullscreen filter panel"></button>
+          </div>
+        </div>
         <div class="oviz-three-filter-body">
           <div class="oviz-three-filter-row">
             <label class="oviz-three-filter-field">
@@ -1264,13 +2278,39 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             <span class="oviz-three-filter-range-readout-max"></span>
           </div>
         </div>
-        <pre class="oviz-three-filter-readout"></pre>
-        <button class="oviz-three-filter-full" type="button" title="Toggle fullscreen filter panel">Full</button>
-        <button class="oviz-three-filter-hide" type="button" title="Hide filter panel">Hide</button>
         <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="nw"></div>
         <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="ne"></div>
         <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="sw"></div>
         <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="se"></div>
+      </div>
+      <div class="oviz-three-dendrogram-panel oviz-three-widget-panel" data-widget-key="dendrogram" data-mode="hidden">
+        <div class="oviz-three-dendrogram-drag oviz-three-widget-drag">
+          <span class="oviz-three-widget-title">Dendrogram</span>
+          <div class="oviz-three-widget-window-controls">
+            <button class="oviz-three-dendrogram-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide dendrogram panel" aria-label="Hide dendrogram panel"></button>
+            <button class="oviz-three-dendrogram-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen dendrogram panel" aria-label="Toggle fullscreen dendrogram panel"></button>
+          </div>
+        </div>
+        <div class="oviz-three-dendrogram-body">
+          <div class="oviz-three-dendrogram-row">
+            <label class="oviz-three-dendrogram-field">
+              <span>Trace</span>
+              <select class="oviz-three-dendrogram-trace"></select>
+            </label>
+            <label class="oviz-three-dendrogram-field">
+              <span>Threshold (pc)</span>
+              <input class="oviz-three-dendrogram-threshold" type="number" min="0" step="1" />
+            </label>
+          </div>
+          <div class="oviz-three-dendrogram-shell">
+            <canvas class="oviz-three-dendrogram-canvas"></canvas>
+          </div>
+          <div class="oviz-three-dendrogram-hint">Hover a branch to preview its descendant clusters in 3D. Click to pin that branch highlight.</div>
+        </div>
+        <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="nw"></div>
+        <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="ne"></div>
+        <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="sw"></div>
+        <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
     </div>
 
@@ -1385,7 +2425,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const saveStateButtonEl = root.querySelector(".oviz-three-save-state");
       const groupSelectEl = root.querySelector(".oviz-three-group-select");
       const widgetSelectEl = root.querySelector(".oviz-three-widget-select");
+      const legendPanelEl = root.querySelector(".oviz-three-legend-panel");
+      const legendPanelToggleEl = root.querySelector(".oviz-three-legend-panel-toggle");
       const legendEl = root.querySelector(".oviz-three-legend");
+      const inspectorDockEl = root.querySelector(".oviz-three-inspector-dock");
+      const inspectorToggleEl = root.querySelector(".oviz-three-inspector-toggle");
+      const legendPopoverEl = root.querySelector(".oviz-three-legend-popover");
       const keyHelpEl = root.querySelector(".oviz-three-key-help");
       const keyHelpButtonEl = root.querySelector(".oviz-three-key-help-button");
       const keyHelpCloseEl = root.querySelector(".oviz-three-key-help-close");
@@ -1440,12 +2485,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const lassoPolylineEl = root.querySelector(".oviz-three-lasso-overlay polyline");
       const skyPanelEl = root.querySelector(".oviz-three-sky-panel");
       const skyFrameEl = root.querySelector(".oviz-three-sky-frame");
-      const skyReadoutEl = root.querySelector(".oviz-three-sky-readout");
       const skyFullButtonEl = root.querySelector(".oviz-three-sky-full");
       const skyHideButtonEl = root.querySelector(".oviz-three-sky-hide");
       const ageKdePanelEl = root.querySelector(".oviz-three-age-panel");
       const ageKdeCanvasEl = root.querySelector(".oviz-three-age-canvas");
-      const ageKdeReadoutEl = root.querySelector(".oviz-three-age-readout");
       const ageKdeFilterRangeMinEl = root.querySelector(".oviz-three-age-filter-range-min");
       const ageKdeFilterRangeMaxEl = root.querySelector(".oviz-three-age-filter-range-max");
       const ageKdeFilterRangeReadoutMinEl = root.querySelector(".oviz-three-age-filter-range-readout-min");
@@ -1454,7 +2497,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const ageKdeHideButtonEl = root.querySelector(".oviz-three-age-hide");
       const clusterFilterPanelEl = root.querySelector(".oviz-three-filter-panel");
       const clusterFilterCanvasEl = root.querySelector(".oviz-three-filter-canvas");
-      const clusterFilterReadoutEl = root.querySelector(".oviz-three-filter-readout");
       const clusterFilterParameterEl = root.querySelector(".oviz-three-filter-parameter");
       const clusterFilterRangeMinEl = root.querySelector(".oviz-three-filter-range-min");
       const clusterFilterRangeMaxEl = root.querySelector(".oviz-three-filter-range-max");
@@ -1462,6 +2504,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const clusterFilterRangeReadoutMaxEl = root.querySelector(".oviz-three-filter-range-readout-max");
       const clusterFilterFullButtonEl = root.querySelector(".oviz-three-filter-full");
       const clusterFilterHideButtonEl = root.querySelector(".oviz-three-filter-hide");
+      const dendrogramPanelEl = root.querySelector(".oviz-three-dendrogram-panel");
+      const dendrogramCanvasEl = root.querySelector(".oviz-three-dendrogram-canvas");
+      const dendrogramTraceEl = root.querySelector(".oviz-three-dendrogram-trace");
+      const dendrogramThresholdEl = root.querySelector(".oviz-three-dendrogram-threshold");
+      const dendrogramFullButtonEl = root.querySelector(".oviz-three-dendrogram-full");
+      const dendrogramHideButtonEl = root.querySelector(".oviz-three-dendrogram-hide");
       const widgetPanels = Array.from(root.querySelectorAll(".oviz-three-widget-panel"));
       const widgetDragHandles = Array.from(root.querySelectorAll(".oviz-three-widget-drag"));
       const widgetResizeEls = Array.from(root.querySelectorAll(".oviz-three-widget-resize"));
@@ -1494,6 +2542,66 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             panel_solid: "#ffffff",
             footprint: "#1d70b8",
           }),
+          midnight: Object.assign({}, defaultTheme, {
+            paper_bgcolor: "#050913",
+            scene_bgcolor: "#050913",
+            text_color: "#e7eefc",
+            axis_color: "#7f90b8",
+            panel_bg: "rgba(8, 13, 32, 0.56)",
+            panel_border: "rgba(126, 150, 214, 0.26)",
+            panel_solid: "#0a1126",
+            footprint: "#8ecbff",
+          }),
+          glacier: Object.assign({}, defaultTheme, {
+            paper_bgcolor: "#ecf5f9",
+            scene_bgcolor: "#f8fcfd",
+            text_color: "#173342",
+            axis_color: "#59727e",
+            panel_bg: "rgba(255, 255, 255, 0.80)",
+            panel_border: "rgba(27, 66, 82, 0.16)",
+            panel_solid: "#ffffff",
+            footprint: "#0b91c1",
+          }),
+          ember: Object.assign({}, defaultTheme, {
+            paper_bgcolor: "#140906",
+            scene_bgcolor: "#190b07",
+            text_color: "#f7e7de",
+            axis_color: "#d39a75",
+            panel_bg: "rgba(41, 18, 12, 0.54)",
+            panel_border: "rgba(233, 165, 118, 0.22)",
+            panel_solid: "#1d0d0a",
+            footprint: "#ffb273",
+          }),
+          graphite: Object.assign({}, defaultTheme, {
+            paper_bgcolor: "#0d1016",
+            scene_bgcolor: "#0d1016",
+            text_color: "#eef1f4",
+            axis_color: "#8d96a4",
+            panel_bg: "rgba(22, 27, 36, 0.54)",
+            panel_border: "rgba(194, 204, 220, 0.14)",
+            panel_solid: "#161b24",
+            footprint: "#9fc5ff",
+          }),
+          aurora: Object.assign({}, defaultTheme, {
+            paper_bgcolor: "#071413",
+            scene_bgcolor: "#091917",
+            text_color: "#e6faf5",
+            axis_color: "#7dbdb2",
+            panel_bg: "rgba(10, 29, 27, 0.56)",
+            panel_border: "rgba(121, 214, 196, 0.18)",
+            panel_solid: "#0d2421",
+            footprint: "#9df6cf",
+          }),
+          paper: Object.assign({}, defaultTheme, {
+            paper_bgcolor: "#f3ede2",
+            scene_bgcolor: "#fcfaf4",
+            text_color: "#2e2821",
+            axis_color: "#7a6d60",
+            panel_bg: "rgba(255, 252, 247, 0.80)",
+            panel_border: "rgba(92, 74, 54, 0.16)",
+            panel_solid: "#fffdf8",
+            footprint: "#3f7f97",
+          }),
         };
       }
 
@@ -1525,6 +2633,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const skySpec = sceneSpec.sky_panel || { enabled: false };
       const ageKdeSpec = sceneSpec.age_kde || { enabled: false };
       const clusterFilterSpec = sceneSpec.cluster_filter || { enabled: false };
+      const dendrogramSpec = sceneSpec.dendrogram || { enabled: false };
       const volumeLayers = ((sceneSpec.volumes || {}).layers || []);
       const volumeLayersByKey = new Map(volumeLayers.map((layer) => [String(layer.key), layer]));
       const animationSpec = sceneSpec.animation || {};
@@ -1563,11 +2672,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let currentSelections = [];
       let currentSelectionMode = "none";
       let clickSelectionEnabled = false;
-      let lassoVolumeSelectionEnabled = true;
+      let lassoVolumeSelectionEnabled = false;
       let playbackTimer = null;
       let skyPanelMode = "hidden";
       let ageKdePanelMode = "hidden";
       let clusterFilterPanelMode = "hidden";
+      let dendrogramPanelMode = "hidden";
       let widgetPointerState = null;
       let widgetZIndexCounter = 8;
       let lassoState = null;
@@ -1583,6 +2693,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let globalPointOpacityScale = 1.0;
       let globalScrollSpeed = 1.0;
       let zenModeEnabled = Boolean(initialState.zen_mode_enabled);
+      let inspectorOpen = Boolean(initialState.inspector_open);
+      let inspectorPinned = Boolean(initialState.inspector_pinned);
+      let legendPanelOpen = initialState.legend_open === undefined ? true : Boolean(initialState.legend_open);
+      let inspectorHoverOpenTimer = null;
+      let inspectorHoverCloseTimer = null;
       let fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
       let fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
       let focusTraceKey = String(animationSpec.focus_trace_key_default || "");
@@ -1594,10 +2709,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let lastAnimationTimestamp = null;
       let clusterFilterParameterKey = String(clusterFilterSpec.default_parameter_key || "");
       const clusterFilterRangeStateByKey = {};
+      let dendrogramTraceKey = String(dendrogramSpec.default_trace_key || "");
+      let dendrogramThresholdPc = Number(dendrogramSpec.default_threshold_pc || 100.0);
+      let dendrogramHoveredSelectionKeys = new Set();
+      let dendrogramPinnedSelectionKeys = new Set();
+      let dendrogramHoveredBranchLabel = "";
+      let dendrogramHoveredBranchCount = 0;
+      let dendrogramPinnedBranchLabel = "";
+      let dendrogramPinnedBranchCount = 0;
+      let dendrogramHoveredRegionKey = "";
+      let dendrogramPinnedRegionKey = "";
+      let dendrogramHitRegions = [];
       let activeVolumeKey = volumeLayers.length ? String(volumeLayers[0].key) : null;
       const volumeStateByKey = {};
       const traceStyleStateByKey = {};
-      const legendPanelStateByKey = {};
+      const legendEditButtonByKey = new Map();
+      let activeLegendEditorKey = "";
 
       const renderer = new THREE.WebGLRenderer({
         canvas,
@@ -1668,7 +2795,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       legendItems.forEach((item) => {
         const itemKey = String(item.key);
-        legendPanelStateByKey[itemKey] = false;
         if (volumeLayersByKey.has(itemKey)) {
           return;
         }
@@ -1739,6 +2865,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (widgetKey === "cluster_filter") {
           return clusterFilterPanelEl;
         }
+        if (widgetKey === "dendrogram") {
+          return dendrogramPanelEl;
+        }
         return null;
       }
 
@@ -1751,6 +2880,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         if (widgetKey === "cluster_filter") {
           return Boolean(clusterFilterSpec.enabled);
+        }
+        if (widgetKey === "dendrogram") {
+          return Boolean(dendrogramSpec.enabled);
         }
         return false;
       }
@@ -1765,6 +2897,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (widgetKey === "cluster_filter") {
           return clusterFilterPanelMode;
         }
+        if (widgetKey === "dendrogram") {
+          return dendrogramPanelMode;
+        }
         return "hidden";
       }
 
@@ -1775,6 +2910,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           ageKdePanelMode = mode;
         } else if (widgetKey === "cluster_filter") {
           clusterFilterPanelMode = mode;
+        } else if (widgetKey === "dendrogram") {
+          dendrogramPanelMode = mode;
         }
       }
 
@@ -1801,6 +2938,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             top: 108,
             width: Math.min(window.innerWidth * 0.34, 480),
             height: Math.min(window.innerHeight * 0.40, 340),
+          };
+        }
+        if (widgetKey === "dendrogram") {
+          return {
+            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.40, 560) - 88),
+            top: 104,
+            width: Math.min(window.innerWidth * 0.40, 560),
+            height: Math.min(window.innerHeight * 0.52, 440),
           };
         }
         return { left: 12, top: 72, width: 360, height: 260 };
@@ -2056,15 +3201,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           });
         }
 
-        const savedLegendPanels = initialState.legend_panel_state;
-        if (savedLegendPanels && typeof savedLegendPanels === "object") {
-          Object.entries(savedLegendPanels).forEach(([itemKey, isOpen]) => {
-            if (Object.prototype.hasOwnProperty.call(legendPanelStateByKey, String(itemKey))) {
-              legendPanelStateByKey[String(itemKey)] = Boolean(isOpen);
-            }
-          });
-        }
-
         const savedVolumeState = initialState.volume_state_by_key;
         if (savedVolumeState && typeof savedVolumeState === "object") {
           Object.entries(savedVolumeState).forEach(([layerKey, state]) => {
@@ -2120,6 +3256,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             });
           }
         }
+        const savedDendrogramState = initialState.dendrogram_state;
+        if (savedDendrogramState && typeof savedDendrogramState === "object") {
+          if (typeof savedDendrogramState.trace_key === "string" && savedDendrogramState.trace_key) {
+            dendrogramTraceKey = String(savedDendrogramState.trace_key);
+          }
+          if (Number.isFinite(Number(savedDendrogramState.threshold_pc))) {
+            dendrogramThresholdPc = Number(savedDendrogramState.threshold_pc);
+          }
+        }
 
         currentSelections = uniqueSelections(Array.isArray(initialState.current_selections) ? initialState.current_selections : []);
         currentSelection = initialState.current_selection && typeof initialState.current_selection === "object"
@@ -2142,7 +3287,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         const savedWidgets = initialState.widgets;
         if (savedWidgets && typeof savedWidgets === "object") {
-          ["sky", "age_kde", "cluster_filter"].forEach((widgetKey) => {
+          ["sky", "age_kde", "cluster_filter", "dendrogram"].forEach((widgetKey) => {
             const panelState = savedWidgets[widgetKey];
             const panelEl = widgetPanelForKey(widgetKey);
             if (!panelEl || !panelState || typeof panelState !== "object") {
@@ -2196,12 +3341,35 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
         }
 
+        const savedInspector = initialState.inspector;
+        if (savedInspector && typeof savedInspector === "object") {
+          if (typeof savedInspector.pinned === "boolean") {
+            inspectorPinned = savedInspector.pinned;
+          }
+          if (typeof savedInspector.open === "boolean") {
+            inspectorOpen = savedInspector.open;
+          }
+        }
+
+        if (typeof initialState.inspector_pinned === "boolean") {
+          inspectorPinned = initialState.inspector_pinned;
+        }
+        if (typeof initialState.inspector_open === "boolean") {
+          inspectorOpen = initialState.inspector_open;
+        }
+        if (typeof initialState.legend_open === "boolean") {
+          legendPanelOpen = initialState.legend_open;
+        }
+
         applyGlobalControlState();
         clampClusterFilterRangeForParameter(activeClusterFilterParameterSpec());
         pruneSelectionsToActiveClusterFilter();
         applyCameraViewMode();
         applyThemePreset(activeThemeKey, { rerender: false, syncInput: false });
         renderSceneControls();
+        setLegendPanelOpen(legendPanelOpen);
+        setInspectorPinned(inspectorPinned, { syncOpen: false });
+        setInspectorOpen(inspectorPinned || inspectorOpen);
         setZenMode(zenModeEnabled);
       }
 
@@ -2262,7 +3430,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           current_frame_index: currentFrameIndex,
           legend_state: legendState,
           trace_style_state: traceStyleStateByKey,
-          legend_panel_state: legendPanelStateByKey,
           click_selection_enabled: clickSelectionEnabled,
           lasso_volume_selection_enabled: lassoVolumeSelectionEnabled,
           lasso_armed: lassoArmed,
@@ -2295,15 +3462,27 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             tools_open: toolsShellEl.dataset.open === "true",
             controls_open: controlsShellEl.dataset.open === "true",
           },
+          inspector_open: inspectorOpen,
+          inspector_pinned: inspectorPinned,
+          inspector: {
+            open: inspectorOpen,
+            pinned: inspectorPinned,
+          },
+          legend_open: legendPanelOpen,
           zen_mode_enabled: zenModeEnabled,
           widgets: {
             sky: captureWidgetState("sky"),
             age_kde: captureWidgetState("age_kde"),
             cluster_filter: captureWidgetState("cluster_filter"),
+            dendrogram: captureWidgetState("dendrogram"),
           },
           cluster_filter_state: {
             parameter_key: clusterFilterParameterKey,
             ranges_by_key: clusterFilterRangeStateByKey,
+          },
+          dendrogram_state: {
+            trace_key: dendrogramTraceKey,
+            threshold_pc: dendrogramThresholdPc,
           },
           lasso_selection_mask: captureLassoSelectionMaskState(currentLassoSelectionMask),
         }, {});
@@ -2439,15 +3618,99 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return Boolean(skySpec.enabled && currentSelections.length && !currentSelection);
       }
 
-      function activeHoveredClusterKeys() {
-        if (!crossHoverEnabled()) {
-          return new Set();
-        }
+      function dendrogramFocusTraceKey() {
+        return dendrogramSpec.enabled && widgetModeForKey("dendrogram") !== "hidden"
+          ? String(dendrogramTraceKey || "")
+          : "";
+      }
+
+      function normalizeSelectionKeySet(values) {
         return new Set(
-          [localHoveredClusterKey, skyHoveredClusterKey]
+          (Array.isArray(values) ? values : Array.from(values || []))
             .map((value) => normalizeMemberKey(value))
             .filter(Boolean)
         );
+      }
+
+      function selectionKeySetsEqual(a, b) {
+        const aSet = a instanceof Set ? a : new Set(a || []);
+        const bSet = b instanceof Set ? b : new Set(b || []);
+        return aSet.size === bSet.size && Array.from(aSet).every((value) => bSet.has(value));
+      }
+
+      function activeDendrogramSelectionKeys() {
+        return dendrogramPinnedSelectionKeys.size ? dendrogramPinnedSelectionKeys : dendrogramHoveredSelectionKeys;
+      }
+
+      function setDendrogramHoveredSelectionKeys(keys, label = "", count = 0, regionKey = "") {
+        const nextKeys = normalizeSelectionKeySet(keys);
+        const nextRegionKey = String(regionKey || "");
+        if (
+          selectionKeySetsEqual(dendrogramHoveredSelectionKeys, nextKeys)
+          && dendrogramHoveredBranchLabel === String(label || "")
+          && dendrogramHoveredBranchCount === Number(count || 0)
+          && dendrogramHoveredRegionKey === nextRegionKey
+        ) {
+          return;
+        }
+        dendrogramHoveredSelectionKeys = nextKeys;
+        dendrogramHoveredBranchLabel = String(label || "");
+        dendrogramHoveredBranchCount = Number(count || 0);
+        dendrogramHoveredRegionKey = nextRegionKey;
+        applySceneHoverState();
+        if (widgetModeForKey("dendrogram") !== "hidden") {
+          renderFrame(currentFrameIndex);
+        }
+        renderDendrogramWidget();
+      }
+
+      function setDendrogramPinnedSelectionKeys(keys, label = "", count = 0, regionKey = "") {
+        const nextKeys = normalizeSelectionKeySet(keys);
+        const nextRegionKey = String(regionKey || "");
+        if (
+          selectionKeySetsEqual(dendrogramPinnedSelectionKeys, nextKeys)
+          && dendrogramPinnedBranchLabel === String(label || "")
+          && dendrogramPinnedBranchCount === Number(count || 0)
+          && dendrogramPinnedRegionKey === nextRegionKey
+        ) {
+          return;
+        }
+        dendrogramPinnedSelectionKeys = nextKeys;
+        dendrogramPinnedBranchLabel = String(label || "");
+        dendrogramPinnedBranchCount = Number(count || 0);
+        dendrogramPinnedRegionKey = nextRegionKey;
+        applySceneHoverState();
+        if (widgetModeForKey("dendrogram") !== "hidden") {
+          renderFrame(currentFrameIndex);
+        }
+        renderDendrogramWidget();
+      }
+
+      function clearDendrogramHoverState() {
+        setDendrogramHoveredSelectionKeys([], "", 0, "");
+      }
+
+      function clearDendrogramPinnedState() {
+        setDendrogramPinnedSelectionKeys([], "", 0, "");
+      }
+
+      function clearDendrogramSelectionState() {
+        clearDendrogramPinnedState();
+        clearDendrogramHoverState();
+      }
+
+      function activeHoveredClusterKeys() {
+        const keys = new Set();
+        if (crossHoverEnabled()) {
+          [localHoveredClusterKey, skyHoveredClusterKey]
+            .map((value) => normalizeMemberKey(value))
+            .filter(Boolean)
+            .forEach((value) => keys.add(value));
+        }
+        if (widgetModeForKey("dendrogram") !== "hidden") {
+          activeDendrogramSelectionKeys().forEach((value) => keys.add(normalizeMemberKey(value)));
+        }
+        return keys;
       }
 
       function applySceneHoverState() {
@@ -2459,6 +3722,61 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             entry.sprite.scale.set(scale, scale, scale);
           });
         });
+      }
+
+      function interpolateDendrogramPosition(entry, targetTimeMyr) {
+        if (!entry || typeof entry !== "object") {
+          return null;
+        }
+        const times = Array.isArray(entry.time_samples) ? entry.time_samples : [];
+        const xs = Array.isArray(entry.x_samples) ? entry.x_samples : [];
+        const ys = Array.isArray(entry.y_samples) ? entry.y_samples : [];
+        const zs = Array.isArray(entry.z_samples) ? entry.z_samples : [];
+        const sampleCount = Math.min(times.length, xs.length, ys.length, zs.length);
+        if (!sampleCount) {
+          return null;
+        }
+        const samples = [];
+        for (let index = 0; index < sampleCount; index += 1) {
+          const time = Number(times[index]);
+          const x = Number(xs[index]);
+          const y = Number(ys[index]);
+          const z = Number(zs[index]);
+          if (!Number.isFinite(time) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+            continue;
+          }
+          samples.push({ time, x, y, z });
+        }
+        if (!samples.length) {
+          return null;
+        }
+        samples.sort((a, b) => a.time - b.time);
+        const targetTime = Number(targetTimeMyr);
+        if (!Number.isFinite(targetTime)) {
+          return null;
+        }
+        if (targetTime <= samples[0].time) {
+          return samples[0];
+        }
+        if (targetTime >= samples[samples.length - 1].time) {
+          return samples[samples.length - 1];
+        }
+        for (let index = 1; index < samples.length; index += 1) {
+          const right = samples[index];
+          if (targetTime > right.time) {
+            continue;
+          }
+          const left = samples[index - 1];
+          const dt = right.time - left.time;
+          const fraction = Math.abs(dt) <= 1e-12 ? 0.0 : (targetTime - left.time) / dt;
+          return {
+            time: targetTime,
+            x: left.x + (right.x - left.x) * fraction,
+            y: left.y + (right.y - left.y) * fraction,
+            z: left.z + (right.z - left.z) * fraction,
+          };
+        }
+        return samples[samples.length - 1];
       }
 
       function postParentHoverToSkyFrame() {
@@ -2740,6 +4058,133 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         };
       }
 
+      function applyVolumeSkyAxisTransform(x, y, z, transform) {
+        const coords = [Number(x), Number(y), Number(z)];
+        if (!coords.every(Number.isFinite)) {
+          return null;
+        }
+        const xyPermutation = Array.isArray(transform && transform.xyPermutation) && transform.xyPermutation.length === 2
+          ? transform.xyPermutation
+          : [0, 1];
+        const xySigns = Array.isArray(transform && transform.xySigns) && transform.xySigns.length === 2
+          ? transform.xySigns
+          : [1, 1];
+        const zSign = Number(transform && transform.zSign);
+        const tx = (Number(xySigns[0]) || 1) * coords[Number(xyPermutation[0]) || 0];
+        const ty = (Number(xySigns[1]) || 1) * coords[Number(xyPermutation[1]) || 1];
+        const tz = (Number.isFinite(zSign) && Math.abs(zSign) > 0.5 ? zSign : 1) * coords[2];
+        return { x: tx, y: ty, z: tz };
+      }
+
+      function deriveVolumeSkyAxisTransform() {
+        const identity = { xyPermutation: [0, 1], xySigns: [1, 1], zSign: 1 };
+        const referenceFrame = frameSpecs.find((frame) => approximatelyZero(Number(frame && frame.time))) || frameSpecs[0] || null;
+        if (!referenceFrame || !Array.isArray(referenceFrame.traces)) {
+          return identity;
+        }
+
+        const samples = [];
+        referenceFrame.traces.forEach((trace) => {
+          if (!trace || !Array.isArray(trace.points)) {
+            return;
+          }
+          trace.points.forEach((point) => {
+            const selection = point && typeof point === "object" ? point.selection : null;
+            if (!selection || typeof selection !== "object") {
+              return;
+            }
+            const x0 = Number(selection.x0);
+            const y0 = Number(selection.y0);
+            const z0 = Number(selection.z0);
+            const lDeg = Number(selection.l_deg);
+            const bDeg = Number(selection.b_deg);
+            if (
+              !Number.isFinite(x0)
+              || !Number.isFinite(y0)
+              || !Number.isFinite(z0)
+              || !Number.isFinite(lDeg)
+              || !Number.isFinite(bDeg)
+            ) {
+              return;
+            }
+            const distance = Math.sqrt(x0 * x0 + y0 * y0 + z0 * z0);
+            if (!(distance > 1e-6)) {
+              return;
+            }
+            samples.push({ x: x0, y: y0, z: z0, l: lDeg, b: bDeg });
+          });
+        });
+
+        if (samples.length < 3) {
+          return identity;
+        }
+
+        const cappedSamples = samples.length > 256
+          ? samples.filter((_, idx) => (idx % Math.ceil(samples.length / 256)) === 0)
+          : samples;
+        const xyCandidates = [
+          { xyPermutation: [0, 1], xySigns: [1, 1] },
+          { xyPermutation: [0, 1], xySigns: [1, -1] },
+          { xyPermutation: [0, 1], xySigns: [-1, 1] },
+          { xyPermutation: [0, 1], xySigns: [-1, -1] },
+          { xyPermutation: [1, 0], xySigns: [1, 1] },
+          { xyPermutation: [1, 0], xySigns: [1, -1] },
+          { xyPermutation: [1, 0], xySigns: [-1, 1] },
+          { xyPermutation: [1, 0], xySigns: [-1, -1] },
+        ];
+        const zCandidates = [1, -1];
+        let bestTransform = identity;
+        let bestScore = Infinity;
+
+        xyCandidates.forEach((xyCandidate) => {
+          zCandidates.forEach((zSign) => {
+            const transform = {
+              xyPermutation: xyCandidate.xyPermutation,
+              xySigns: xyCandidate.xySigns,
+              zSign,
+            };
+            let score = 0.0;
+            let matchedCount = 0;
+            cappedSamples.forEach((sample) => {
+              const transformed = applyVolumeSkyAxisTransform(sample.x, sample.y, sample.z, transform);
+              const projected = transformed
+                ? galacticLonLatDegFromCartesian(transformed.x, transformed.y, transformed.z)
+                : null;
+              if (!projected) {
+                return;
+              }
+              const lonError = wrapLongitudeDeltaDeg(Number(projected.l) - Number(sample.l));
+              const latError = Number(projected.b) - Number(sample.b);
+              if (!Number.isFinite(lonError) || !Number.isFinite(latError)) {
+                return;
+              }
+              score += (lonError * lonError) + (latError * latError);
+              matchedCount += 1;
+            });
+            if (!matchedCount) {
+              return;
+            }
+            const normalizedScore = score / matchedCount;
+            if (normalizedScore < bestScore) {
+              bestScore = normalizedScore;
+              bestTransform = transform;
+            }
+          });
+        });
+
+        return bestTransform;
+      }
+
+      const volumeSkyAxisTransform = deriveVolumeSkyAxisTransform();
+
+      function volumeSkyGalacticLonLatDegFromCartesian(x, y, z) {
+        const transformed = applyVolumeSkyAxisTransform(x, y, z, volumeSkyAxisTransform);
+        if (!transformed) {
+          return null;
+        }
+        return galacticLonLatDegFromCartesian(transformed.x, transformed.y, transformed.z);
+      }
+
       function icrsDegFromGalacticDeg(lDeg, bDeg) {
         const lon = Number(lDeg) * Math.PI / 180.0;
         const lat = Number(bDeg) * Math.PI / 180.0;
@@ -2771,6 +4216,39 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return null;
         }
         return { ra, dec };
+      }
+
+      function galacticDegFromIcrsDeg(raDeg, decDeg) {
+        const ra = Number(raDeg) * Math.PI / 180.0;
+        const dec = Number(decDeg) * Math.PI / 180.0;
+        if (!Number.isFinite(ra) || !Number.isFinite(dec)) {
+          return null;
+        }
+        const cosDec = Math.cos(dec);
+        const xEq = cosDec * Math.cos(ra);
+        const yEq = cosDec * Math.sin(ra);
+        const zEq = Math.sin(dec);
+        const xGal = (
+          GALACTIC_TO_ICRS_MATRIX[0] * xEq
+          + GALACTIC_TO_ICRS_MATRIX[3] * yEq
+          + GALACTIC_TO_ICRS_MATRIX[6] * zEq
+        );
+        const yGal = (
+          GALACTIC_TO_ICRS_MATRIX[1] * xEq
+          + GALACTIC_TO_ICRS_MATRIX[4] * yEq
+          + GALACTIC_TO_ICRS_MATRIX[7] * zEq
+        );
+        const zGal = (
+          GALACTIC_TO_ICRS_MATRIX[2] * xEq
+          + GALACTIC_TO_ICRS_MATRIX[5] * yEq
+          + GALACTIC_TO_ICRS_MATRIX[8] * zEq
+        );
+        const b = Math.asin(Math.min(1.0, Math.max(-1.0, zGal))) * 180.0 / Math.PI;
+        const l = normalizeSkyLongitude(Math.atan2(yGal, xGal) * 180.0 / Math.PI);
+        if (!Number.isFinite(l) || !Number.isFinite(b)) {
+          return null;
+        }
+        return { l, b };
       }
 
       function volumeOverlayStretchValue(value, stretchName) {
@@ -2960,7 +4438,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const displayOffsetY = Number(plotGroup.position.y) || 0.0;
         const displayOffsetZ = Number(plotGroup.position.z) || 0.0;
         const collectedSamples = [];
-        const renderLayers = [];
         let usedLayerCount = 0;
 
         volumeLayers.forEach((layer) => {
@@ -3043,7 +4520,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                   continue;
                 }
 
-                const galactic = galacticLonLatDegFromCartesian(localX, localY, localZ);
+                const galactic = volumeSkyGalacticLonLatDegFromCartesian(localX, localY, localZ);
                 if (!galactic) {
                   continue;
                 }
@@ -3055,10 +4532,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                 }
 
                 const weight = stretchedValue * layerOpacityWeight;
+                const icrs = icrsDegFromGalacticDeg(lDeg, bDeg);
+                if (!icrs) {
+                  continue;
+                }
+                const colorIndex = Math.max(
+                  0,
+                  Math.min(
+                    lutSamples - 1,
+                    Math.round(stretchedValue * (lutSamples - 1))
+                  )
+                ) * 4;
+                const angularFootprintDeg = Math.atan2(cellSizeMin * 0.9, Math.max(Number(galactic.distance) || 0.0, 1e-6)) * 180.0 / Math.PI;
                 collectedSamples.push({
                   l: lDeg,
                   b: bDeg,
+                  ra: Number(icrs.ra),
+                  dec: Number(icrs.dec),
                   weight,
+                  r: Number(colorBytes[colorIndex]) || 0,
+                  g: Number(colorBytes[colorIndex + 1]) || 0,
+                  bColor: Number(colorBytes[colorIndex + 2]) || 0,
+                  sigmaDeg: Math.min(Math.max(angularFootprintDeg * 0.85, 0.02), 6.0),
                 });
                 layerUsed = true;
               }
@@ -3067,49 +4562,27 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
           if (layerUsed) {
             usedLayerCount += 1;
-            renderLayers.push({
-              layer,
-              state,
-              scalarData,
-              colorBytes,
-              lutSamples,
-              low,
-              high,
-              span,
-              opacityWeight: layerOpacityWeight,
-              xBounds,
-              yBounds,
-              zBounds,
-              xSpan,
-              ySpan,
-              zSpan,
-              cellSizeMin,
-              nx,
-              ny,
-              nz,
-              baseRaySamples: Math.max(96, Math.min(320, Math.round((Number(state.samples) || 96) * 4.0))),
-            });
           }
         });
 
-        if (!collectedSamples.length || !renderLayers.length) {
+        if (!collectedSamples.length || !usedLayerCount) {
           return null;
         }
 
-        let sumSin = 0.0;
-        let sumCos = 0.0;
+        let sumLonSin = 0.0;
+        let sumLonCos = 0.0;
         let sumLat = 0.0;
         let sumWeight = 0.0;
         collectedSamples.forEach((sample) => {
           const weight = Math.max(Number(sample.weight) || 0.0, 1e-6);
           const lonRad = Number(sample.l) * Math.PI / 180.0;
-          sumSin += Math.sin(lonRad) * weight;
-          sumCos += Math.cos(lonRad) * weight;
+          sumLonSin += Math.sin(lonRad) * weight;
+          sumLonCos += Math.cos(lonRad) * weight;
           sumLat += Number(sample.b) * weight;
           sumWeight += weight;
         });
 
-        const baseCenterLon = normalizeSkyLongitude(Math.atan2(sumSin, sumCos) * 180.0 / Math.PI);
+        const baseCenterLon = normalizeSkyLongitude(Math.atan2(sumLonSin, sumLonCos) * 180.0 / Math.PI);
         const baseCenterLat = sumWeight > 0.0 ? (sumLat / sumWeight) : 0.0;
         let minRelLon = Infinity;
         let maxRelLon = -Infinity;
@@ -3141,114 +4614,51 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const blueGrid = new Float32Array(pixelCount);
         const halfLonSpan = lonSpan * 0.5;
         const halfLatSpan = latSpan * 0.5;
-        for (let yIndex = 0; yIndex < height; yIndex += 1) {
-          const lat = overlayCenterLat + halfLatSpan - (((yIndex + 0.5) / height) * latSpan);
-          const latRad = lat * Math.PI / 180.0;
-          const sinLat = Math.sin(latRad);
-          const cosLat = Math.cos(latRad);
-          for (let xIndex = 0; xIndex < width; xIndex += 1) {
-            const relLon = halfLonSpan - (((xIndex + 0.5) / width) * lonSpan);
-            const lon = normalizeSkyLongitude(overlayCenterLon + relLon);
-            const lonRad = lon * Math.PI / 180.0;
-            const rayDirection = {
-              x: cosLat * Math.cos(lonRad),
-              y: cosLat * Math.sin(lonRad),
-              z: sinLat,
-            };
-            const pixelIndex = yIndex * width + xIndex;
+        const pixelScaleLon = lonSpan / Math.max(width, 1);
+        const pixelScaleLat = latSpan / Math.max(height, 1);
+        const pixelScale = Math.max(Math.min(pixelScaleLon, pixelScaleLat), 1e-6);
+        const maxSamplesForOverlay = 120000;
+        const overlaySamples = collectedSamples.length > maxSamplesForOverlay
+          ? collectedSamples.filter((_, idx) => (idx % Math.ceil(collectedSamples.length / maxSamplesForOverlay)) === 0)
+          : collectedSamples;
 
-            for (let layerIndex = 0; layerIndex < renderLayers.length; layerIndex += 1) {
-              const layerInfo = renderLayers[layerIndex];
-              const hit = intersectRayWithBounds(
-                rayDirection,
-                layerInfo.xBounds,
-                layerInfo.yBounds,
-                layerInfo.zBounds,
-              );
-              if (!hit) {
+        overlaySamples.forEach((sample) => {
+          const relLon = wrapLongitudeDeltaDeg(Number(sample.l) - overlayCenterLon);
+          const relLat = Number(sample.b) - overlayCenterLat;
+          if (Math.abs(relLon) > halfLonSpan || Math.abs(relLat) > halfLatSpan) {
+            return;
+          }
+          const xCenter = ((halfLonSpan - relLon) / lonSpan) * width - 0.5;
+          const yCenter = ((halfLatSpan - relLat) / latSpan) * height - 0.5;
+          const sigmaPx = Math.max(1.1, Number(sample.sigmaDeg || pixelScale) / pixelScale);
+          const radiusPx = Math.max(2, Math.min(18, Math.ceil(sigmaPx * 2.8)));
+          const xMin = Math.max(0, Math.floor(xCenter - radiusPx));
+          const xMax = Math.min(width - 1, Math.ceil(xCenter + radiusPx));
+          const yMin = Math.max(0, Math.floor(yCenter - radiusPx));
+          const yMax = Math.min(height - 1, Math.ceil(yCenter + radiusPx));
+          const baseWeight = Math.max(Number(sample.weight) || 0.0, 0.0);
+          if (!(baseWeight > 0.0)) {
+            return;
+          }
+          const sigmaSq = sigmaPx * sigmaPx;
+          for (let yIndex = yMin; yIndex <= yMax; yIndex += 1) {
+            const dy = yIndex - yCenter;
+            for (let xIndex = xMin; xIndex <= xMax; xIndex += 1) {
+              const dx = xIndex - xCenter;
+              const distanceSq = dx * dx + dy * dy;
+              const kernelWeight = Math.exp(-0.5 * distanceSq / sigmaSq);
+              if (!(kernelWeight > 1e-4)) {
                 continue;
               }
-              const rayLength = hit.tMax - hit.tMin;
-              if (!(rayLength > 0.0)) {
-                continue;
-              }
-              const sampleCount = Math.max(
-                48,
-                Math.min(
-                  layerInfo.baseRaySamples,
-                  Math.round(rayLength / Math.max(layerInfo.cellSizeMin * 0.8, 1e-6))
-                )
-              );
-              if (!(sampleCount > 0)) {
-                continue;
-              }
-              const dt = rayLength / sampleCount;
-              const contributionScale = dt / Math.max(layerInfo.cellSizeMin, 1e-6);
-
-              for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
-                const t = hit.tMin + ((sampleIndex + 0.5) / sampleCount) * rayLength;
-                const localX = rayDirection.x * t;
-                const localY = rayDirection.y * t;
-                const localZ = rayDirection.z * t;
-                if (
-                  !pointInsideProjectedLassoMask(
-                    localX + displayOffsetX,
-                    localY + displayOffsetY,
-                    localZ + displayOffsetZ,
-                    activeMask,
-                  )
-                ) {
-                  continue;
-                }
-                const xNorm = (localX - Number(layerInfo.xBounds[0])) / Math.max(layerInfo.xSpan, 1e-6);
-                const yNorm = (localY - Number(layerInfo.yBounds[0])) / Math.max(layerInfo.ySpan, 1e-6);
-                const zNorm = (localZ - Number(layerInfo.zBounds[0])) / Math.max(layerInfo.zSpan, 1e-6);
-                if (
-                  xNorm < 0.0 || xNorm > 1.0
-                  || yNorm < 0.0 || yNorm > 1.0
-                  || zNorm < 0.0 || zNorm > 1.0
-                ) {
-                  continue;
-                }
-                const normalizedValue = sampleVolumeScalarTrilinear(
-                  layerInfo.scalarData,
-                  layerInfo.nx,
-                  layerInfo.ny,
-                  layerInfo.nz,
-                  xNorm,
-                  yNorm,
-                  zNorm,
-                );
-                if (!(normalizedValue > layerInfo.low)) {
-                  continue;
-                }
-                const scaledValue = Math.min(
-                  Math.max((normalizedValue - layerInfo.low) / layerInfo.span, 0.0),
-                  1.0
-                );
-                const stretchedValue = volumeOverlayStretchValue(scaledValue, layerInfo.state.stretch);
-                if (!(stretchedValue > 0.005)) {
-                  continue;
-                }
-                const contribution = stretchedValue * layerInfo.opacityWeight * contributionScale;
-                if (!(contribution > 0.0)) {
-                  continue;
-                }
-                const colorIndex = Math.max(
-                  0,
-                  Math.min(
-                    layerInfo.lutSamples - 1,
-                    Math.round(stretchedValue * (layerInfo.lutSamples - 1))
-                  )
-                ) * 4;
-                weightGrid[pixelIndex] += contribution;
-                redGrid[pixelIndex] += (Number(layerInfo.colorBytes[colorIndex]) || 0) * contribution;
-                greenGrid[pixelIndex] += (Number(layerInfo.colorBytes[colorIndex + 1]) || 0) * contribution;
-                blueGrid[pixelIndex] += (Number(layerInfo.colorBytes[colorIndex + 2]) || 0) * contribution;
-              }
+              const contribution = baseWeight * kernelWeight;
+              const pixelIndex = yIndex * width + xIndex;
+              weightGrid[pixelIndex] += contribution;
+              redGrid[pixelIndex] += Number(sample.r || 0) * contribution;
+              greenGrid[pixelIndex] += Number(sample.g || 0) * contribution;
+              blueGrid[pixelIndex] += Number(sample.bColor || 0) * contribution;
             }
           }
-        }
+        });
 
         let maxWeight = 0.0;
         let nonZeroPixels = 0;
@@ -3322,11 +4732,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             CRPIX2: (height / 2.0) + 0.5,
             CRVAL1: overlayCenterLon,
             CRVAL2: overlayCenterLat,
-            CD1_1: -lonSpan / width,
-            CD1_2: 0.0,
-            CD2_1: 0.0,
-            CD2_2: -latSpan / height,
-            LONPOLE: 0.0,
+            CDELT1: -lonSpan / width,
+            // The PNG is written in browser image coordinates with a top-left origin,
+            // so latitude should decrease as rows move downward.
+            CDELT2: latSpan / height,
+            CROTA2: 0.0,
+            LONPOLE: 180.0,
+            LATPOLE: 90.0,
           },
         };
       }
@@ -3787,7 +5199,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         setSkyHoveredClusterKey("");
         lastSentSkyHoverClusterKey = null;
         skyFrameEl.srcdoc = buildAladinSrcdoc(selectionsForPanel, payload, mode, volumeOverlay);
-        skyReadoutEl.textContent = skyReadoutText(selectionsForPanel, payload, mode, volumeOverlay);
       }
 
       function updateSelectionUI() {
@@ -4374,6 +5785,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         if (key === "Escape") {
           clearPressedKeys();
+          if (activeLegendEditorKey) {
+            closeLegendPopover();
+            renderLegend();
+            event.preventDefault();
+            return;
+          }
           clearClusterSelections();
           lassoArmed = false;
           updateSelectionUI();
@@ -5051,19 +6468,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
         }
 
-        ageKdeReadoutEl.textContent = [
-          `${String(ageKdeSpec.title || "Relative SFH")}`,
-          `Time: ${frame ? frame.name : "0"} Myr`,
-          `Bandwidth: ${formatCompactNumber(ageKdeSpec.bandwidth_myr)} Myr`,
-          ageFilterParameter && ageAxisRangeState
-            ? `Age filter: ${formatAgeKdeAxisValue(ageAxisRangeState.min)} to ${formatAgeKdeAxisValue(ageAxisRangeState.max)}`
-            : "Age filter: unavailable",
-          `Traces shown: ${visibleTraceNames.length}`,
-          `Clusters contributing: ${filteredSeries.reduce((total, series) => total + Number(series.count || 0), 0)}`,
-          ageFilterParameter
-            ? `Visible age candidates: ${ageEntries.length}`
-            : null,
-        ].filter(Boolean).join("\\n");
       }
 
       function clusterFilterSliderValueToActual(sliderValue, parameter) {
@@ -5124,7 +6528,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         const parameter = activeClusterFilterParameterSpec();
         if (!parameter) {
-          clusterFilterReadoutEl.textContent = "No filterable cluster parameters available.";
           return;
         }
         const rangeState = clampClusterFilterRangeForParameter(parameter);
@@ -5219,23 +6622,361 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         ctx.textAlign = "right";
         ctx.fillText(formatCompactNumber(xMax), margin.left + plotWidth, margin.top + plotHeight + 6);
 
-        const inRangeCount = finiteEntries.filter((entry) => {
-          const value = clusterFilterEntryValue(entry, parameter.key);
-          return value >= rangeState.min && value <= rangeState.max;
-        }).length;
-        const visibleInRangeCount = finiteEntries.filter((entry) => {
-          if (!clusterFilterEntryVisibleInScene(entry)) {
+      }
+
+      function dendrogramTraceOptionsForCurrentGroup() {
+        const defaults = groupDefaults(currentGroup);
+        return (Array.isArray(dendrogramSpec.traces) ? dendrogramSpec.traces : [])
+          .filter((traceOption) => {
+            const traceKey = String(traceOption && traceOption.trace_key ? traceOption.trace_key : "");
+            if (!traceKey) {
+              return false;
+            }
+            return defaults[traceKey] === true;
+          })
+          .sort((a, b) => String(a.trace_name || a.trace_key || "").localeCompare(String(b.trace_name || b.trace_key || "")));
+      }
+
+      function activeDendrogramEntries() {
+        const traceKey = dendrogramFocusTraceKey();
+        if (!traceKey) {
+          return [];
+        }
+        return (Array.isArray(dendrogramSpec.entries) ? dendrogramSpec.entries : []).filter((entry) => {
+          if (!entry || typeof entry !== "object" || String(entry.trace_key || "") !== traceKey) {
             return false;
           }
-          const value = clusterFilterEntryValue(entry, parameter.key);
-          return value >= rangeState.min && value <= rangeState.max;
-        }).length;
-        clusterFilterReadoutEl.textContent = [
-          `Filter: ${String(parameter.label || parameter.key)}`,
-          `Range: ${formatClusterFilterValue(rangeState.min, parameter)} to ${formatClusterFilterValue(rangeState.max, parameter)}`,
-          `Clusters in range: ${inRangeCount} / ${finiteEntries.length}`,
-          `Currently visible: ${visibleInRangeCount}`,
-        ].join("\\n");
+          return clusterFilterPassesSelectionKey(entry.selection_key);
+        });
+      }
+
+      function pointSegmentDistanceSq(px, py, x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        if ((dx * dx + dy * dy) <= 1e-12) {
+          const ddx = px - x1;
+          const ddy = py - y1;
+          return ddx * ddx + ddy * ddy;
+        }
+        const t = clampRange(((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy), 0.0, 1.0);
+        const cx = x1 + t * dx;
+        const cy = y1 + t * dy;
+        const ddx = px - cx;
+        const ddy = py - cy;
+        return ddx * ddx + ddy * ddy;
+      }
+
+      function buildDendrogramModel(entries, thresholdPc) {
+        const threshold = Math.max(Number(thresholdPc) || 0.0, 0.0);
+        const sortedEntries = (Array.isArray(entries) ? entries : [])
+          .filter((entry) => (
+            entry
+            && typeof entry === "object"
+            && Number.isFinite(Number(entry.age_now_myr))
+            && Number.isFinite(Number(entry.birth_time_myr))
+            && Number.isFinite(Number(entry.x_birth))
+            && Number.isFinite(Number(entry.y_birth))
+            && Number.isFinite(Number(entry.z_birth))
+            && normalizeMemberKey(entry.selection_key)
+          ))
+          .map((entry) => ({
+            key: normalizeMemberKey(entry.selection_key),
+            selection_key: normalizeMemberKey(entry.selection_key),
+            cluster_name: String(entry.cluster_name || entry.selection_key || ""),
+            trace_name: String(entry.trace_name || ""),
+            trace_key: String(entry.trace_key || ""),
+            color: String(entry.color || "#ffffff"),
+            age_now_myr: Number(entry.age_now_myr),
+            birth_time_myr: Number(entry.birth_time_myr),
+            x_birth: Number(entry.x_birth),
+            y_birth: Number(entry.y_birth),
+            z_birth: Number(entry.z_birth),
+            time_samples: Array.isArray(entry.time_samples) ? entry.time_samples.map((value) => Number(value)) : [],
+            x_samples: Array.isArray(entry.x_samples) ? entry.x_samples.map((value) => Number(value)) : [],
+            y_samples: Array.isArray(entry.y_samples) ? entry.y_samples.map((value) => Number(value)) : [],
+            z_samples: Array.isArray(entry.z_samples) ? entry.z_samples.map((value) => Number(value)) : [],
+            parent_key: "",
+            parent_distance_pc: NaN,
+            children: [],
+            plot_order: 0,
+          }))
+          .sort((a, b) => (
+            Number(b.age_now_myr) - Number(a.age_now_myr)
+            || String(a.cluster_name).localeCompare(String(b.cluster_name))
+          ));
+
+        const nodeByKey = new Map(sortedEntries.map((entry) => [entry.key, entry]));
+        for (let index = 0; index < sortedEntries.length; index += 1) {
+          const node = sortedEntries[index];
+          let bestParent = null;
+          let bestDistance = Infinity;
+          for (let olderIndex = 0; olderIndex < index; olderIndex += 1) {
+            const candidate = sortedEntries[olderIndex];
+            const candidateAtBirth = interpolateDendrogramPosition(candidate, node.birth_time_myr);
+            if (!candidateAtBirth) {
+              continue;
+            }
+            const dx = node.x_birth - candidateAtBirth.x;
+            const dy = node.y_birth - candidateAtBirth.y;
+            const dz = node.z_birth - candidateAtBirth.z;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (!(distance <= threshold) || distance >= bestDistance) {
+              continue;
+            }
+            bestDistance = distance;
+            bestParent = candidate;
+          }
+          if (bestParent) {
+            node.parent_key = bestParent.key;
+            node.parent_distance_pc = bestDistance;
+            bestParent.children.push(node.key);
+          }
+        }
+
+        const roots = sortedEntries
+          .filter((entry) => !entry.parent_key)
+          .sort((a, b) => (
+            Number(b.age_now_myr) - Number(a.age_now_myr)
+            || String(a.cluster_name).localeCompare(String(b.cluster_name))
+          ));
+
+        let nextLeafOrder = 0;
+        function assignPlotOrder(node) {
+          const children = node.children
+            .map((childKey) => nodeByKey.get(childKey))
+            .filter(Boolean)
+            .sort((a, b) => (
+              Number(b.age_now_myr) - Number(a.age_now_myr)
+              || String(a.cluster_name).localeCompare(String(b.cluster_name))
+            ));
+          if (!children.length) {
+            node.plot_order = nextLeafOrder;
+            nextLeafOrder += 1;
+            return node.plot_order;
+          }
+          const childOrders = children.map(assignPlotOrder);
+          node.plot_order = childOrders.reduce((total, value) => total + value, 0.0) / childOrders.length;
+          return node.plot_order;
+        }
+        roots.forEach(assignPlotOrder);
+
+        const descendantKeysByNode = new Map();
+        function descendantKeysFor(node) {
+          if (!node) {
+            return [];
+          }
+          if (descendantKeysByNode.has(node.key)) {
+            return descendantKeysByNode.get(node.key);
+          }
+          const keys = [node.key];
+          node.children.forEach((childKey) => {
+            const child = nodeByKey.get(childKey);
+            descendantKeysFor(child).forEach((selectionKey) => keys.push(selectionKey));
+          });
+          const uniqueKeys = Array.from(new Set(keys.map((value) => normalizeMemberKey(value)).filter(Boolean)));
+          descendantKeysByNode.set(node.key, uniqueKeys);
+          return uniqueKeys;
+        }
+
+        const branches = [];
+        sortedEntries.forEach((node) => {
+          if (!node.parent_key) {
+            return;
+          }
+          const parent = nodeByKey.get(node.parent_key);
+          if (!parent) {
+            return;
+          }
+          branches.push({
+            key: `${node.key}->${parent.key}`,
+            child: node,
+            parent,
+            label: `${node.cluster_name} from ${parent.cluster_name}`,
+            selectionKeys: descendantKeysFor(node),
+            count: descendantKeysFor(node).length,
+            distance_pc: Number(node.parent_distance_pc),
+          });
+        });
+
+        return {
+          nodes: sortedEntries,
+          roots,
+          branches,
+          leafCount: Math.max(nextLeafOrder, 1),
+          maxAgeMyr: Math.max(...sortedEntries.map((entry) => Number(entry.age_now_myr)), 0.0),
+        };
+      }
+
+      function renderDendrogramWidget() {
+        if (!dendrogramSpec.enabled || !dendrogramCanvasEl || widgetModeForKey("dendrogram") === "hidden") {
+          dendrogramHitRegions = [];
+          return;
+        }
+
+        const traceOptions = dendrogramTraceOptionsForCurrentGroup();
+        dendrogramTraceEl.innerHTML = "";
+        traceOptions.forEach((traceOption) => {
+          const option = document.createElement("option");
+          option.value = String(traceOption.trace_key || "");
+          option.textContent = String(traceOption.trace_name || traceOption.trace_key || "");
+          dendrogramTraceEl.appendChild(option);
+        });
+        if (!traceOptions.some((traceOption) => String(traceOption.trace_key || "") === String(dendrogramTraceKey || ""))) {
+          dendrogramTraceKey = traceOptions.length ? String(traceOptions[0].trace_key || "") : "";
+          clearDendrogramHoverState();
+        }
+        dendrogramTraceEl.value = dendrogramTraceKey;
+        dendrogramThresholdPc = Math.max(Number(dendrogramThresholdPc) || 0.0, 0.0);
+        dendrogramThresholdEl.value = Number(dendrogramThresholdPc).toFixed(0);
+
+        const entries = activeDendrogramEntries();
+        const rect = dendrogramCanvasEl.getBoundingClientRect();
+        const cssWidth = Math.max(1, Math.round(rect.width));
+        const cssHeight = Math.max(1, Math.round(rect.height));
+        const dpr = Math.max(window.devicePixelRatio || 1, 1);
+        if (dendrogramCanvasEl.width !== Math.round(cssWidth * dpr) || dendrogramCanvasEl.height !== Math.round(cssHeight * dpr)) {
+          dendrogramCanvasEl.width = Math.round(cssWidth * dpr);
+          dendrogramCanvasEl.height = Math.round(cssHeight * dpr);
+        }
+        const ctx = dendrogramCanvasEl.getContext("2d");
+        if (!ctx) {
+          dendrogramHitRegions = [];
+          return;
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
+        ctx.fillStyle = theme.scene_bgcolor || theme.paper_bgcolor || "#000000";
+        ctx.fillRect(0, 0, cssWidth, cssHeight);
+
+        if (!traceOptions.length || !entries.length) {
+          dendrogramHitRegions = [];
+          clearDendrogramSelectionState();
+          return;
+        }
+
+        const model = buildDendrogramModel(entries, dendrogramThresholdPc);
+        const margin = { left: 52, right: 16, top: 18, bottom: 28 };
+        const plotWidth = Math.max(40, cssWidth - margin.left - margin.right);
+        const plotHeight = Math.max(40, cssHeight - margin.top - margin.bottom);
+        const currentTraceMeta = traceOptions.find((traceOption) => String(traceOption.trace_key || "") === String(dendrogramTraceKey || "")) || traceOptions[0];
+        const traceMaxAge = Math.max(
+          Number(currentTraceMeta && currentTraceMeta.max_age_myr) || 0.0,
+          Number(model.maxAgeMyr) || 0.0,
+          0.0
+        );
+        const maxAge = Math.max(traceMaxAge + 5.0, 1.0);
+        const traceState = traceStyleStateForKey(dendrogramTraceKey);
+        const traceColor = (traceState && traceState.color) || String(currentTraceMeta.color || theme.text_color || "#ffffff");
+        const axisColor = String(theme.axis_color || "#808080");
+        const activeKeys = activeDendrogramSelectionKeys();
+        dendrogramHitRegions = [];
+
+        function xToPx(orderValue) {
+          if (model.leafCount <= 1) {
+            return margin.left + plotWidth * 0.5;
+          }
+          return margin.left + (Number(orderValue) / Math.max(model.leafCount - 1, 1)) * plotWidth;
+        }
+
+        function yToPx(ageValue) {
+          return margin.top + (1.0 - clampRange(Number(ageValue) / maxAge, 0.0, 1.0)) * plotHeight;
+        }
+
+        ctx.strokeStyle = axisColor;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(margin.left, margin.top);
+        ctx.lineTo(margin.left, margin.top + plotHeight);
+        ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
+        ctx.stroke();
+
+        ctx.fillStyle = axisColor;
+        ctx.font = "10px Menlo, Monaco, Consolas, monospace";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        [0.0, 0.33, 0.66, 1.0].forEach((fraction) => {
+          const age = fraction * maxAge;
+          const yPx = yToPx(age);
+          ctx.globalAlpha = 0.14;
+          ctx.beginPath();
+          ctx.moveTo(margin.left, yPx);
+          ctx.lineTo(margin.left + plotWidth, yPx);
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+          ctx.fillText(`${formatCompactNumber(age)} Myr`, margin.left - 8, yPx);
+        });
+
+        ctx.save();
+        ctx.translate(14, margin.top + plotHeight * 0.5);
+        ctx.rotate(-Math.PI * 0.5);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Birth age", 0, 0);
+        ctx.restore();
+
+        const formationAge = Math.max(0.0, -(currentFrame() ? Number(currentFrame().time) : 0.0));
+        const markerY = yToPx(Math.min(formationAge, maxAge));
+        ctx.save();
+        ctx.setLineDash([6, 6]);
+        ctx.strokeStyle = axisColor;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(margin.left, markerY);
+        ctx.lineTo(margin.left + plotWidth, markerY);
+        ctx.stroke();
+        ctx.restore();
+
+        model.branches.forEach((branch) => {
+          const childX = xToPx(branch.child.plot_order);
+          const childY = yToPx(branch.child.age_now_myr);
+          const parentX = xToPx(branch.parent.plot_order);
+          const parentY = yToPx(branch.parent.age_now_myr);
+          const isPinned = dendrogramPinnedRegionKey && dendrogramPinnedRegionKey === branch.key;
+          const isHovered = !isPinned && dendrogramHoveredRegionKey === branch.key;
+          const isActive = activeKeys.size && branch.selectionKeys.some((selectionKey) => activeKeys.has(selectionKey));
+          ctx.strokeStyle = cssColorWithAlpha(traceColor, isPinned ? 1.0 : (isHovered ? 0.96 : (isActive ? 0.86 : 0.62)), traceColor);
+          ctx.lineWidth = isPinned ? 3.6 : (isHovered ? 3.0 : (isActive ? 2.4 : 1.7));
+          ctx.beginPath();
+          ctx.moveTo(childX, childY);
+          ctx.lineTo(childX, parentY);
+          ctx.lineTo(parentX, parentY);
+          ctx.stroke();
+          dendrogramHitRegions.push({
+            type: "branch",
+            key: branch.key,
+            label: branch.label,
+            count: branch.count,
+            selectionKeys: branch.selectionKeys,
+            segments: [
+              [childX, childY, childX, parentY],
+              [childX, parentY, parentX, parentY],
+            ],
+          });
+        });
+
+        model.nodes.forEach((node) => {
+          const nodeX = xToPx(node.plot_order);
+          const nodeY = yToPx(node.age_now_myr);
+          const nodeRegionKey = `node:${node.key}`;
+          const isPinned = dendrogramPinnedRegionKey && dendrogramPinnedRegionKey === nodeRegionKey;
+          const isHovered = !isPinned && dendrogramHoveredRegionKey === nodeRegionKey;
+          const isActive = activeKeys.size && activeKeys.has(node.selection_key);
+          ctx.beginPath();
+          ctx.fillStyle = cssColorWithAlpha(traceColor, isPinned ? 1.0 : (isHovered ? 0.96 : (isActive ? 0.88 : 0.82)), traceColor);
+          ctx.arc(nodeX, nodeY, isPinned ? 5.2 : (isHovered ? 4.8 : (isActive ? 4.1 : 3.4)), 0, Math.PI * 2.0);
+          ctx.fill();
+          dendrogramHitRegions.push({
+            type: "node",
+            key: nodeRegionKey,
+            label: node.cluster_name,
+            count: 1,
+            selectionKeys: [node.selection_key],
+            centerX: nodeX,
+            centerY: nodeY,
+            radius: 8.0,
+          });
+        });
+
       }
 
       function traceStyleStateForKey(traceKey) {
@@ -5361,6 +7102,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function applyClusterFilterPanelMode() {
         applyWidgetMode("cluster_filter");
         clusterFilterFullButtonEl.textContent = clusterFilterPanelMode === "fullscreen" ? "Window" : "Full";
+      }
+
+      function applyDendrogramPanelMode() {
+        applyWidgetMode("dendrogram");
+        if (widgetModeForKey("dendrogram") === "hidden") {
+          clearDendrogramSelectionState();
+        }
       }
 
       function base64ToUint8Array(encoded) {
@@ -5978,7 +7726,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           fragmentShader: VOLUME_FRAGMENT_SHADER,
           transparent: true,
           side: THREE.BackSide,
-          depthTest: false,
+          depthTest: true,
           depthWrite: false,
           lights: true,
         });
@@ -6952,7 +8700,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         const traceState = traceStyleStateForKey(trace.key);
         const lineColor = (traceState && traceState.color) || (trace.line || {}).color || "#ffffff";
-        const lineOpacity = traceState ? clamp01(traceState.opacity) : (trace.opacity ?? 1.0);
+        let lineOpacity = traceState ? clamp01(traceState.opacity) : (trace.opacity ?? 1.0);
+        const focusedTraceKey = dendrogramFocusTraceKey();
+        if (focusedTraceKey && String(trace.key) !== focusedTraceKey) {
+          lineOpacity *= 0.16;
+        }
         const positions = [];
         trace.segments.forEach((segment) => {
           positions.push(segment[0], segment[1], segment[2], segment[3], segment[4], segment[5]);
@@ -7054,8 +8806,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
           let opacityMultiplier = 1.0;
           const pointKey = normalizedSelectionKeyFor(point.selection);
+          const focusedTraceKey = dendrogramFocusTraceKey();
+          const dendrogramActiveKeys = activeDendrogramSelectionKeys();
+          if (focusedTraceKey) {
+            if (String(trace.key) !== focusedTraceKey) {
+              opacityMultiplier *= 0.14;
+            } else if (dendrogramActiveKeys.size && pointKey) {
+              opacityMultiplier *= dendrogramActiveKeys.has(pointKey) ? 1.0 : 0.24;
+            }
+          }
           if (selectedClusterKeys.size && pointKey) {
-            opacityMultiplier = selectedClusterKeys.has(pointKey) ? 1.0 : 0.16;
+            opacityMultiplier *= selectedClusterKeys.has(pointKey) ? 1.0 : 0.16;
           }
           const baseOpacity = Number(pointState.opacity ?? point.opacity ?? 1.0);
           const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * opacityMultiplier * globalPointOpacityScale));
@@ -7654,83 +9415,314 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return controls;
       }
 
-      function renderLegend() {
-        legendEl.innerHTML = "";
+      function closeLegendPopover() {
+        activeLegendEditorKey = "";
+        if (legendPopoverEl) {
+          legendPopoverEl.dataset.open = "false";
+          legendPopoverEl.innerHTML = "";
+        }
+      }
+
+      function positionInspectorDock() {
+        if (!inspectorDockEl || !legendPanelEl) {
+          return;
+        }
+        if (window.matchMedia("(max-width: 720px)").matches) {
+          inspectorDockEl.style.top = "";
+          return;
+        }
+        const rootRect = root.getBoundingClientRect();
+        const legendRect = legendPanelEl.getBoundingClientRect();
+        const nextTop = Math.max(142, Math.round(legendRect.bottom - rootRect.top + 12));
+        inspectorDockEl.style.top = `${nextTop}px`;
+      }
+
+      function positionLegendPopover(anchorEl) {
+        if (!legendPopoverEl || !anchorEl) {
+          return;
+        }
+        const rootRect = root.getBoundingClientRect();
+        const anchorRect = anchorEl.getBoundingClientRect();
+        const legendRect = legendPanelEl ? legendPanelEl.getBoundingClientRect() : anchorRect;
+        const popoverWidth = legendPopoverEl.offsetWidth || 244;
+        const popoverHeight = legendPopoverEl.offsetHeight || 320;
+        let left = Math.max(anchorRect.right, legendRect.right) - rootRect.left + 12;
+        if (left + popoverWidth > root.clientWidth - 12) {
+          left = anchorRect.left - rootRect.left - popoverWidth - 12;
+        }
+        left = clampRange(left, 12, Math.max(12, root.clientWidth - popoverWidth - 12));
+        const top = clampRange(
+          anchorRect.top - rootRect.top - 6,
+          12,
+          Math.max(12, root.clientHeight - popoverHeight - 12)
+        );
+        legendPopoverEl.style.left = `${left}px`;
+        legendPopoverEl.style.top = `${top}px`;
+      }
+
+      function renderLegendPopover(item, toggleButton) {
+        if (!legendPopoverEl || !item || !toggleButton) {
+          closeLegendPopover();
+          return;
+        }
+        legendPopoverEl.innerHTML = "";
+        const head = document.createElement("div");
+        head.className = "oviz-three-legend-popover-head";
+
         const title = document.createElement("div");
-        title.className = "oviz-three-legend-title";
-        title.textContent = "Click names to toggle. Use arrows for controls.";
-        legendEl.appendChild(title);
+        title.className = "oviz-three-legend-popover-title";
+        const eyebrow = document.createElement("div");
+        eyebrow.className = "oviz-three-legend-popover-eyebrow";
+        eyebrow.textContent = volumeLayerForKey(item.key) ? "Volume" : "Trace";
+        const name = document.createElement("div");
+        name.className = "oviz-three-legend-popover-name";
+        name.textContent = String(item.name || "");
+        name.style.color = legendColorForItem(item);
+        title.appendChild(eyebrow);
+        title.appendChild(name);
+        head.appendChild(title);
 
+        const closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.className = "oviz-three-legend-popover-close";
+        closeButton.textContent = "×";
+        closeButton.title = "Close legend editor";
+        closeButton.addEventListener("click", () => {
+          closeLegendPopover();
+          renderLegend();
+        });
+        head.appendChild(closeButton);
+        legendPopoverEl.appendChild(head);
+
+        const controls = volumeLayerForKey(item.key)
+          ? buildVolumeLegendControls(item, toggleButton)
+          : buildTraceLegendControls(item, toggleButton);
+        if (controls) {
+          setLegendPanelOpen(true);
+          legendPopoverEl.appendChild(controls);
+          legendPopoverEl.dataset.open = "true";
+          window.requestAnimationFrame(() => positionLegendPopover(toggleButton));
+        } else {
+          closeLegendPopover();
+        }
+      }
+
+      function setLegendPanelOpen(isOpen) {
+        legendPanelOpen = Boolean(isOpen);
+        if (legendPanelEl) {
+          legendPanelEl.dataset.open = legendPanelOpen ? "true" : "false";
+        }
+        if (legendPanelToggleEl) {
+          legendPanelToggleEl.textContent = legendPanelOpen ? "▾" : "▸";
+          legendPanelToggleEl.setAttribute(
+            "title",
+            legendPanelOpen ? "Collapse the legend" : "Expand the legend"
+          );
+          legendPanelToggleEl.setAttribute("aria-expanded", legendPanelOpen ? "true" : "false");
+        }
+        if (!legendPanelOpen) {
+          closeLegendPopover();
+        }
+        window.requestAnimationFrame(positionInspectorDock);
+      }
+
+      function clearInspectorTimers() {
+        if (inspectorHoverOpenTimer !== null) {
+          window.clearTimeout(inspectorHoverOpenTimer);
+          inspectorHoverOpenTimer = null;
+        }
+        if (inspectorHoverCloseTimer !== null) {
+          window.clearTimeout(inspectorHoverCloseTimer);
+          inspectorHoverCloseTimer = null;
+        }
+      }
+
+      function setInspectorOpen(isOpen) {
+        inspectorOpen = Boolean(isOpen);
+        if (inspectorDockEl) {
+          inspectorDockEl.dataset.open = inspectorOpen ? "true" : "false";
+        }
+        if (inspectorToggleEl) {
+          inspectorToggleEl.setAttribute("aria-expanded", inspectorOpen ? "true" : "false");
+          inspectorToggleEl.setAttribute(
+            "title",
+            inspectorPinned
+              ? "Settings pinned open. Click to unpin."
+              : "Hover to preview the settings. Click to pin them open."
+          );
+        }
+      }
+
+      function setInspectorPinned(isPinned, options = {}) {
+        inspectorPinned = Boolean(isPinned);
+        const syncOpen = options.syncOpen !== false;
+        if (inspectorDockEl) {
+          inspectorDockEl.dataset.pinned = inspectorPinned ? "true" : "false";
+        }
+        if (syncOpen) {
+          clearInspectorTimers();
+          setInspectorOpen(inspectorPinned || inspectorOpen);
+        } else if (inspectorToggleEl) {
+          inspectorToggleEl.setAttribute(
+            "title",
+            inspectorPinned
+              ? "Settings pinned open. Click to unpin."
+              : "Hover to preview the settings. Click to pin them open."
+          );
+        }
+      }
+
+      function scheduleInspectorOpen(delayMs = 90) {
+        if (inspectorPinned) {
+          setInspectorOpen(true);
+          return;
+        }
+        clearInspectorTimers();
+        inspectorHoverOpenTimer = window.setTimeout(() => {
+          inspectorHoverOpenTimer = null;
+          setInspectorOpen(true);
+        }, delayMs);
+      }
+
+      function scheduleInspectorClose(delayMs = 160) {
+        if (inspectorPinned) {
+          return;
+        }
+        clearInspectorTimers();
+        inspectorHoverCloseTimer = window.setTimeout(() => {
+          inspectorHoverCloseTimer = null;
+          setInspectorOpen(false);
+        }, delayMs);
+      }
+
+      function visibleLegendItemsForCurrentGroup() {
         const defaults = groupDefaults(currentGroup);
-        legendItems.forEach((item) => {
+        return legendItems.filter((item) => {
           const mode = defaults[item.key];
-          if (mode === false || mode === undefined) {
-            return;
-          }
+          return !(mode === false || mode === undefined);
+        });
+      }
 
+      function renderLegend() {
+        if (!legendEl) {
+          return;
+        }
+        const items = visibleLegendItemsForCurrentGroup();
+        legendEl.innerHTML = "";
+        legendEditButtonByKey.clear();
+
+        if (!items.length) {
+          const emptyState = document.createElement("div");
+          emptyState.className = "oviz-three-legend-title";
+          emptyState.textContent = "No visible traces for this group.";
+          legendEl.appendChild(emptyState);
+          closeLegendPopover();
+          return;
+        }
+
+        items.forEach((item) => {
+          const itemKey = String(item.key);
           const entry = document.createElement("div");
+          const itemColor = legendColorForItem(item);
           entry.className = "oviz-three-legend-entry";
-          entry.dataset.open = legendPanelStateByKey[String(item.key)] ? "true" : "false";
+          entry.dataset.active = legendState[itemKey] ? "true" : "false";
+          entry.dataset.editorOpen = activeLegendEditorKey === itemKey ? "true" : "false";
+          entry.style.borderColor = legendState[itemKey] ? itemColor : "rgba(255, 255, 255, 0.06)";
 
-          const row = document.createElement("div");
-          row.className = "oviz-three-legend-row";
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "oviz-three-legend-item";
-          button.dataset.active = legendState[item.key] ? "true" : "false";
-          button.textContent = item.name;
-          button.style.color = legendColorForItem(item);
-          button.addEventListener("click", () => {
-            legendState[item.key] = !legendState[item.key];
+          const toggleButton = document.createElement("button");
+          toggleButton.type = "button";
+          toggleButton.className = "oviz-three-legend-item";
+          toggleButton.dataset.active = legendState[itemKey] ? "true" : "false";
+          toggleButton.title = `${String(item.name || "")}: click to show or hide`;
+
+          const swatch = document.createElement("span");
+          swatch.className = "oviz-three-legend-swatch";
+          swatch.style.background = itemColor;
+          toggleButton.appendChild(swatch);
+
+          const meta = document.createElement("span");
+          meta.className = "oviz-three-legend-meta";
+
+          const name = document.createElement("span");
+          name.className = "oviz-three-legend-name";
+          name.textContent = String(item.name || "");
+          name.style.color = itemColor;
+          meta.appendChild(name);
+          toggleButton.appendChild(meta);
+
+          toggleButton.addEventListener("click", () => {
+            legendState[itemKey] = !legendState[itemKey];
             renderLegend();
             renderFrame(currentFrameIndex);
           });
           if (!volumeLayerForKey(item.key)) {
-            button.addEventListener("dblclick", (event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              soloTraceLegendItem(item.key);
+            toggleButton.addEventListener("dblclick", () => {
+              const traceItems = items.filter((candidate) => !volumeLayerForKey(candidate.key));
+              const onlyThisVisible = traceItems.every((candidate) => {
+                const candidateKey = String(candidate.key);
+                return legendState[candidateKey] === (candidateKey === itemKey);
+              });
+              traceItems.forEach((candidate) => {
+                const candidateKey = String(candidate.key);
+                legendState[candidateKey] = onlyThisVisible ? true : candidateKey === itemKey;
+              });
+              renderLegend();
+              renderFrame(currentFrameIndex);
             });
           }
-          row.appendChild(button);
+          entry.appendChild(toggleButton);
 
-          const disclosure = document.createElement("button");
-          disclosure.type = "button";
-          disclosure.className = "oviz-three-legend-disclosure";
-          disclosure.dataset.open = legendPanelStateByKey[String(item.key)] ? "true" : "false";
-          disclosure.textContent = legendPanelStateByKey[String(item.key)] ? "▾" : "▸";
-          disclosure.addEventListener("click", () => {
-            const itemKey = String(item.key);
-            legendPanelStateByKey[itemKey] = !legendPanelStateByKey[itemKey];
+          const editButton = document.createElement("button");
+          editButton.type = "button";
+          editButton.className = "oviz-three-legend-edit";
+          editButton.textContent = activeLegendEditorKey === itemKey ? "×" : "›";
+          editButton.title = activeLegendEditorKey === itemKey
+            ? "Close legend editor"
+            : `Edit ${String(item.name || "item")}`;
+          editButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (activeLegendEditorKey === itemKey) {
+              closeLegendPopover();
+              renderLegend();
+              return;
+            }
+            activeLegendEditorKey = itemKey;
             renderLegend();
           });
-          row.appendChild(disclosure);
+          entry.appendChild(editButton);
 
-          entry.appendChild(row);
-
-          const controls = volumeLayerForKey(item.key)
-            ? buildVolumeLegendControls(item, button)
-            : buildTraceLegendControls(item, button);
-          if (controls) {
-            entry.appendChild(controls);
-          } else {
-            disclosure.disabled = true;
-          }
-
+          legendEditButtonByKey.set(itemKey, editButton);
           legendEl.appendChild(entry);
         });
+
+        if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
+          const activeItem = items.find((item) => String(item.key) === activeLegendEditorKey);
+          renderLegendPopover(activeItem, legendEditButtonByKey.get(activeLegendEditorKey));
+        } else {
+          closeLegendPopover();
+        }
+        window.requestAnimationFrame(positionInspectorDock);
       }
 
       function setToolsDrawerOpen(isOpen) {
         const nextOpen = Boolean(isOpen);
         toolsShellEl.dataset.open = nextOpen ? "true" : "false";
-        toolsToggleEl.textContent = nextOpen ? "Tools ◂" : "Tools ▸";
+        toolsToggleEl.textContent = nextOpen ? "Selection ▾" : "Selection ▸";
+        if (nextOpen && controlsShellEl.dataset.open === "true") {
+          controlsShellEl.dataset.open = "false";
+          controlsToggleEl.textContent = "Controls ▸";
+        }
       }
 
       function setControlsDrawerOpen(isOpen) {
         const nextOpen = Boolean(isOpen);
         controlsShellEl.dataset.open = nextOpen ? "true" : "false";
-        controlsToggleEl.textContent = nextOpen ? "Controls ◂" : "Controls ▸";
+        controlsToggleEl.textContent = nextOpen ? "Controls ▾" : "Controls ▸";
+        if (nextOpen && toolsShellEl.dataset.open === "true") {
+          toolsShellEl.dataset.open = "false";
+          toolsToggleEl.textContent = "Selection ▸";
+        }
       }
 
       function renderFrame(index) {
@@ -7786,6 +9778,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         resize();
         renderAgeKdeWidget();
         renderClusterFilterWidget();
+        renderDendrogramWidget();
       }
 
       function resize() {
@@ -7797,9 +9790,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         [...axisLineMaterials, ...frameLineMaterials].forEach((material) => {
           material.resolution.set(width, height);
         });
+        if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
+          positionLegendPopover(legendEditButtonByKey.get(activeLegendEditorKey));
+        }
+        positionInspectorDock();
         updateScaleBar();
         renderAgeKdeWidget();
         renderClusterFilterWidget();
+        renderDendrogramWidget();
       }
 
       function play() {
@@ -7848,6 +9846,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           applyAgeKdePanelMode();
         } else if (widgetKey === "cluster_filter") {
           applyClusterFilterPanelMode();
+        } else if (widgetKey === "dendrogram") {
+          applyDendrogramPanelMode();
         } else {
           applyWidgetMode(widgetKey);
         }
@@ -7869,6 +9869,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         renderAgeKdeWidget();
         renderClusterFilterWidget();
+        renderDendrogramWidget();
+        if (widgetKey === "dendrogram") {
+          renderFrame(currentFrameIndex);
+        }
       }
 
       function renderWidgetMenu() {
@@ -7888,6 +9892,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         if (clusterFilterSpec.enabled) {
           items.push({ key: "cluster_filter", label: "Cluster Filter" });
+        }
+        if (dendrogramSpec.enabled) {
+          items.push({ key: "dendrogram", label: "Dendrogram" });
         }
 
         items.forEach((item) => {
@@ -8189,6 +10196,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (!resizeHandle && !dragHandle) {
           return;
         }
+        if (event.target.closest(".oviz-three-widget-window-controls")) {
+          return;
+        }
         const rect = panelEl.getBoundingClientRect();
         widgetPointerState = {
           widgetKey,
@@ -8272,7 +10282,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           lastSentSkyHoverClusterKey = null;
           postParentHoverToSkyFrame();
         });
-        skyReadoutEl.textContent = skyReadoutText([], [], "overview");
         skyFrameEl.srcdoc = buildEmptySkySrcdoc();
         skyHideButtonEl.addEventListener("click", () => setWidgetMode("sky", "hidden"));
         skyFullButtonEl.addEventListener("click", () => {
@@ -8362,6 +10371,100 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
         renderClusterFilterWidget();
         applyClusterFilterPanelMode();
+      }
+
+      function dendrogramHitRegionAtCanvasPoint(x, y) {
+        let hitRegion = null;
+        for (let index = dendrogramHitRegions.length - 1; index >= 0; index -= 1) {
+          const region = dendrogramHitRegions[index];
+          if (!region) {
+            continue;
+          }
+          if (region.type === "node") {
+            const dx = x - Number(region.centerX);
+            const dy = y - Number(region.centerY);
+            if ((dx * dx + dy * dy) <= Math.pow(Number(region.radius) || 0.0, 2.0)) {
+              hitRegion = region;
+              break;
+            }
+            continue;
+          }
+          if (!Array.isArray(region.segments)) {
+            continue;
+          }
+          const hit = region.segments.some((segment) => {
+            if (!Array.isArray(segment) || segment.length < 4) {
+              return false;
+            }
+            const distanceSq = pointSegmentDistanceSq(x, y, segment[0], segment[1], segment[2], segment[3]);
+            return distanceSq <= 36.0;
+          });
+          if (hit) {
+            hitRegion = region;
+            break;
+          }
+        }
+        return hitRegion;
+      }
+
+      function onDendrogramPointerMove(event) {
+        if (!dendrogramSpec.enabled || widgetModeForKey("dendrogram") === "hidden" || !dendrogramCanvasEl) {
+          return;
+        }
+        const rect = dendrogramCanvasEl.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const hitRegion = dendrogramHitRegionAtCanvasPoint(x, y);
+        if (hitRegion) {
+          setDendrogramHoveredSelectionKeys(hitRegion.selectionKeys, hitRegion.label, hitRegion.count, hitRegion.key);
+        } else {
+          clearDendrogramHoverState();
+        }
+      }
+
+      function onDendrogramClick(event) {
+        if (!dendrogramSpec.enabled || widgetModeForKey("dendrogram") === "hidden" || !dendrogramCanvasEl) {
+          return;
+        }
+        const rect = dendrogramCanvasEl.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const hitRegion = dendrogramHitRegionAtCanvasPoint(x, y);
+        if (!hitRegion) {
+          clearDendrogramPinnedState();
+          return;
+        }
+        if (String(dendrogramPinnedRegionKey || "") === String(hitRegion.key || "")) {
+          clearDendrogramPinnedState();
+          return;
+        }
+        setDendrogramPinnedSelectionKeys(hitRegion.selectionKeys, hitRegion.label, hitRegion.count, hitRegion.key);
+      }
+
+      function initDendrogramPanel() {
+        if (!dendrogramSpec.enabled) {
+          applyDendrogramPanelMode();
+          return;
+        }
+        dendrogramHideButtonEl.addEventListener("click", () => setWidgetMode("dendrogram", "hidden"));
+        dendrogramFullButtonEl.addEventListener("click", () => {
+          setWidgetMode("dendrogram", dendrogramPanelMode === "fullscreen" ? "normal" : "fullscreen");
+        });
+        dendrogramTraceEl.addEventListener("change", () => {
+          dendrogramTraceKey = String(dendrogramTraceEl.value || "");
+          clearDendrogramSelectionState();
+          renderFrame(currentFrameIndex);
+        });
+        dendrogramThresholdEl.addEventListener("change", () => {
+          dendrogramThresholdPc = Math.max(Number(dendrogramThresholdEl.value) || 0.0, 0.0);
+          clearDendrogramSelectionState();
+          renderDendrogramWidget();
+        });
+        dendrogramCanvasEl.addEventListener("pointermove", onDendrogramPointerMove);
+        dendrogramCanvasEl.addEventListener("pointerleave", clearDendrogramHoverState);
+        dendrogramCanvasEl.addEventListener("click", onDendrogramClick);
+        renderDendrogramWidget();
+        applyDendrogramPanelMode();
       }
 
       function updateActiveVolumeRuntime() {
@@ -8497,6 +10600,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function initControls() {
         setToolsDrawerOpen(toolsShellEl.dataset.open === "true");
         setControlsDrawerOpen(controlsShellEl.dataset.open === "true");
+        setLegendPanelOpen(legendPanelOpen);
+        setInspectorPinned(inspectorPinned, { syncOpen: false });
+        setInspectorOpen(inspectorPinned || inspectorOpen);
         groupSelectEl.innerHTML = "";
         const groups = sceneSpec.group_order || [defaultGroup];
         groups.forEach((groupName) => {
@@ -8554,6 +10660,47 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
 
         sliderEl.max = String(Math.max(frameSpecs.length - 1, 0));
+        legendPanelToggleEl.addEventListener("click", () => {
+          setLegendPanelOpen(!legendPanelOpen);
+          if (activeLegendEditorKey) {
+            renderLegend();
+          }
+          focusViewer();
+        });
+        inspectorToggleEl.addEventListener("click", () => {
+          if (inspectorPinned) {
+            setInspectorPinned(false);
+            setInspectorOpen(false);
+          } else {
+            setInspectorPinned(true);
+            setInspectorOpen(true);
+          }
+          focusViewer();
+        });
+        inspectorToggleEl.addEventListener("pointerenter", () => {
+          if (!inspectorPinned) {
+            scheduleInspectorOpen();
+          }
+        });
+        inspectorDockEl.addEventListener("pointerenter", () => {
+          if (!inspectorPinned) {
+            clearInspectorTimers();
+          }
+        });
+        inspectorDockEl.addEventListener("pointerleave", () => {
+          scheduleInspectorClose();
+        });
+        inspectorDockEl.addEventListener("focusin", () => {
+          clearInspectorTimers();
+          setInspectorOpen(true);
+        });
+        inspectorDockEl.addEventListener("focusout", () => {
+          window.setTimeout(() => {
+            if (!inspectorDockEl.contains(document.activeElement)) {
+              scheduleInspectorClose(120);
+            }
+          }, 0);
+        });
         sliderEl.addEventListener("input", () => {
           pause();
           renderFrame(Number(sliderEl.value));
@@ -8688,6 +10835,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         onWidgetPointerMove(event);
       }
 
+      function onWindowPointerDown(event) {
+        const target = event.target;
+        if (target) {
+          if (toolsShellEl.dataset.open === "true" && !toolsShellEl.contains(target)) {
+            setToolsDrawerOpen(false);
+          }
+          if (controlsShellEl.dataset.open === "true" && !controlsShellEl.contains(target)) {
+            setControlsDrawerOpen(false);
+          }
+        }
+        if (!activeLegendEditorKey || !target) {
+          return;
+        }
+        if ((legendPopoverEl && legendPopoverEl.contains(target)) || (legendPanelEl && legendPanelEl.contains(target))) {
+          return;
+        }
+        closeLegendPopover();
+        renderLegend();
+      }
+
       function onWindowPointerEnd(event) {
         onWidgetPointerEnd(event);
         finishLassoSelection(event);
@@ -8714,6 +10881,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       initSkyPanel();
       initAgeKdePanel();
       initClusterFilterPanel();
+      initDendrogramPanel();
       initVolumeControls();
       await restoreInitialLassoSelectionMask();
       renderLegend();
@@ -8732,6 +10900,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       window.addEventListener("keydown", onKeyDown);
       window.addEventListener("keyup", onKeyUp);
       window.addEventListener("blur", clearPressedKeys);
+      window.addEventListener("pointerdown", onWindowPointerDown);
       window.addEventListener("pointermove", onWindowPointerMove);
       window.addEventListener("pointerup", onWindowPointerEnd);
       window.addEventListener("pointercancel", onWindowPointerEnd);
