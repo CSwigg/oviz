@@ -208,6 +208,7 @@ def set_cluster_point_sizes(
 
     if 'name' in df_int.index.names:
         df_int = df_int.reset_index(drop=True)
+    name_series = df_int['name'].copy() if 'name' in df_int.columns else None
 
     def compute_size(group, size_by_n_stars):
         group = size_easing(
@@ -223,6 +224,8 @@ def set_cluster_point_sizes(
         return group
 
     df_int = df_int.groupby('name', group_keys=False).apply(compute_size, size_by_n_stars).sort_index()
+    if name_series is not None and 'name' not in df_int.columns:
+        df_int['name'] = name_series.reindex(df_int.index)
     return df_int
 
 
@@ -255,6 +258,7 @@ def set_cluster_point_opacities(
 
     if 'name' in df_int.index.names:
         df_int = df_int.reset_index(drop=True)
+    name_series = df_int['name'].copy() if 'name' in df_int.columns else None
 
     def compute_opacity(group):
         group = opacity_easing(
@@ -269,4 +273,6 @@ def set_cluster_point_opacities(
         return group
 
     df_int = df_int.groupby('name', group_keys=False).apply(compute_opacity).sort_index()
+    if name_series is not None and 'name' not in df_int.columns:
+        df_int['name'] = name_series.reindex(df_int.index)
     return df_int

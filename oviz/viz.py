@@ -1655,10 +1655,15 @@ class Animate3D:
             if isinstance(trace_name, str) and trace_name
         }
 
+        seen_volume_state_keys = set()
         for layer in volume_layers:
+            state_key = str(layer.get('state_key') or layer.get('key'))
+            if state_key in seen_volume_state_keys:
+                continue
+            seen_volume_state_keys.add(state_key)
             legend_items.append({
-                'key': str(layer.get('key')),
-                'name': str(layer.get('name') or layer.get('key')),
+                'key': state_key,
+                'name': str(layer.get('state_name') or layer.get('name') or state_key),
                 'color': layer.get('legend_color'),
                 'kind': 'volume',
             })
@@ -1675,7 +1680,8 @@ class Animate3D:
 
         for group_name in group_visibility:
             for layer in volume_layers:
-                group_visibility[group_name][str(layer.get('key'))] = bool(layer.get('visible', True))
+                state_key = str(layer.get('state_key') or layer.get('key'))
+                group_visibility[group_name][state_key] = bool(layer.get('visible', True))
 
         frames_by_time = {}
         for time_val, frame in zip(self.time, frames):
@@ -1784,6 +1790,9 @@ class Animate3D:
                         for trace in frame_spec.get('traces', [])
                     )
                 ],
+            },
+            'initial_state': {
+                'click_selection_enabled': True,
             },
             'note': self._threejs_note_text(),
         }
@@ -2145,7 +2154,14 @@ class Animate3D:
         if getattr(self, 'show_age_kde_inset', False):
             note += ' The widget menu also opens the age KDE view.'
         if getattr(self, 'volume_configs', None):
-            note += ' Volumetric layers render at t=0 and are controlled from the left toolbar.'
+            if any(
+                _coerce_threejs_volume_time_myr((cfg or {}).get('time_myr')) is not None
+                for cfg in (self.volume_configs or [])
+                if isinstance(cfg, dict)
+            ):
+                note += ' Time-resolved volumetric layers track the current animation frame and are controlled from the left toolbar.'
+            else:
+                note += ' Volumetric layers render at t=0 and are controlled from the left toolbar.'
         return note
 
     def _threejs_frame_decorations(
@@ -2160,12 +2176,18 @@ class Animate3D:
     ):
         """Return frame-local decorative objects for the Three.js renderer."""
         decorations = []
-        if np.isclose(float(time_value), 0.0, atol=1e-9):
-            for layer in volume_layers or []:
-                decorations.append({
-                    'kind': 'volume_layer',
-                    'key': layer.get('key'),
-                })
+        for layer in volume_layers or []:
+            layer_time = _coerce_threejs_volume_time_myr(layer.get('time_myr'))
+            if layer_time is not None:
+                if not np.isclose(float(time_value), float(layer_time), atol=1e-9):
+                    continue
+            elif layer.get('only_at_t0', True) and (not np.isclose(float(time_value), 0.0, atol=1e-9)):
+                continue
+            decorations.append({
+                'kind': 'volume_layer',
+                'key': layer.get('key'),
+                'state_key': layer.get('state_key') or layer.get('key'),
+            })
 
         if (not getattr(self, 'show_milky_way_model', False)) or (not np.isclose(float(time_value), 0.0, atol=1e-9)):
             return decorations
@@ -2935,13 +2957,228 @@ def _normalize_threejs_volume_stretch(stretch):
     return 'linear'
 
 
+def _coerce_threejs_volume_time_myr(value):
+    if value in (None, '', False):
+        return None
+    try:
+        coerced = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(coerced):
+        return None
+    return coerced
+
+
+def _threejs_volume_state_key(volume_cfg, fallback_key):
+    candidate = (
+        volume_cfg.get('state_key')
+        or volume_cfg.get('legend_key')
+        or volume_cfg.get('control_key')
+        or volume_cfg.get('group_key')
+        or fallback_key
+    )
+    candidate = str(candidate).strip()
+    return candidate or str(fallback_key)
+
+
+def _coerce_threejs_volume_bound_offset(bound_offset):
+    if isinstance(bound_offset, dict):
+        source = bound_offset
+    else:
+        source = {}
+    return {
+        'x': float(_coerce_float(source.get('x'), 0.0)),
+        'y': float(_coerce_float(source.get('y'), 0.0)),
+        'z': float(_coerce_float(source.get('z'), 0.0)),
+    }
+
+
+def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, index=0):
+    center_offset = center_offset or {'x': 0.0, 'y': 0.0, 'z': 0.0}
+    data = volume_cfg.get('data')
+    if data is None:
+        raise ValueError("Each Three.js volume config must include a FITS 'path' or a 3D 'data' array.")
+
+    data = np.asarray(data, dtype=np.float32)
+    if data.ndim != 3:
+        raise ValueError(
+            "Inline Three.js volume data must be a 3D array with axis order (z, y, x)."
+        )
+
+    data_shape_zyx = tuple(int(v) for v in data.shape)
+    max_resolution = volume_cfg.get('max_resolution')
+    if max_resolution is None:
+        target_shape_zyx = data_shape_zyx
+    else:
+        max_resolution = int(np.clip(_coerce_float(max_resolution, max(data_shape_zyx)), 8, 512))
+        target_shape_zyx = tuple(min(max_resolution, dim) for dim in data_shape_zyx)
+    sampled = (
+        _downsample_threejs_volume_with_zoom(data, target_shape_zyx)
+        if target_shape_zyx != data_shape_zyx
+        else np.ascontiguousarray(data)
+    )
+
+    finite_mask = np.isfinite(sampled)
+    positive_mask = finite_mask & (sampled > 0)
+    stats_values = sampled[positive_mask] if np.any(positive_mask) else sampled[finite_mask]
+    if stats_values.size == 0:
+        stats_values = np.array([0.0], dtype=float)
+
+    data_range = volume_cfg.get('data_range')
+    if data_range is not None:
+        data_min = float(data_range[0])
+        data_max = float(data_range[1])
+    else:
+        data_min = float(np.nanmin(stats_values))
+        data_max = float(np.nanmax(stats_values))
+    if not np.isfinite(data_min):
+        data_min = 0.0
+    if not np.isfinite(data_max) or not data_max > data_min:
+        data_max = data_min + 1.0
+
+    lower_quantile = float(np.clip(_coerce_float(volume_cfg.get('default_vmin_quantile'), 0.70), 0.0, 1.0))
+    upper_quantile = float(np.clip(_coerce_float(volume_cfg.get('default_vmax_quantile'), 0.995), 0.0, 1.0))
+    if upper_quantile < lower_quantile:
+        upper_quantile = lower_quantile
+
+    default_vmin = volume_cfg.get('vmin')
+    default_vmax = volume_cfg.get('vmax')
+    if default_vmin is None:
+        default_vmin = float(np.nanquantile(stats_values, lower_quantile))
+    else:
+        default_vmin = float(default_vmin)
+    if default_vmax is None:
+        default_vmax = float(np.nanquantile(stats_values, upper_quantile))
+    else:
+        default_vmax = float(default_vmax)
+
+    default_vmin = float(np.clip(default_vmin, data_min, data_max))
+    default_vmax = float(np.clip(default_vmax, data_min, data_max))
+    if not default_vmax > default_vmin:
+        default_vmin = data_min
+        default_vmax = data_max
+
+    def _quantize_sampled_uint8(sampled_data):
+        sampled_finite_mask = np.isfinite(sampled_data)
+        if data_max > data_min:
+            normalized = np.zeros_like(sampled_data, dtype=np.float32)
+            normalized[sampled_finite_mask] = (sampled_data[sampled_finite_mask] - data_min) / (data_max - data_min)
+            normalized = np.clip(normalized, 0.0, 1.0)
+        else:
+            normalized = np.zeros_like(sampled_data, dtype=np.float32)
+            normalized[sampled_finite_mask] = 1.0
+        quantized = np.zeros_like(sampled_data, dtype=np.uint8)
+        quantized[sampled_finite_mask] = np.rint(normalized[sampled_finite_mask] * 255.0).astype(np.uint8)
+        return np.ascontiguousarray(quantized)
+
+    def _encode_sampled_uint8(sampled_data):
+        quantized = _quantize_sampled_uint8(sampled_data)
+        return base64.b64encode(quantized.tobytes(order='C')).decode('ascii')
+
+    bounds_cfg = volume_cfg.get('bounds') or {}
+    x_bounds = _coerce_range(bounds_cfg.get('x'), [-0.5 * data_shape_zyx[2], 0.5 * data_shape_zyx[2]])
+    y_bounds = _coerce_range(bounds_cfg.get('y'), [-0.5 * data_shape_zyx[1], 0.5 * data_shape_zyx[1]])
+    z_bounds = _coerce_range(bounds_cfg.get('z'), [-0.5 * data_shape_zyx[0], 0.5 * data_shape_zyx[0]])
+    apply_center_offset = bool(volume_cfg.get('apply_center_offset', False))
+    bound_offset = _coerce_threejs_volume_bound_offset(volume_cfg.get('bound_offset'))
+
+    sample_setting = volume_cfg.get('samples', volume_cfg.get('steps', 192))
+    default_steps = int(np.clip(_coerce_float(sample_setting, 192), 24, 768))
+    default_opacity = float(np.clip(_coerce_float(volume_cfg.get('opacity'), 0.15), 0.0, 1.0))
+    default_alpha_coef = float(np.clip(_coerce_float(volume_cfg.get('alpha_coef'), 50.0), 1.0, 200.0))
+    default_gradient_step = float(np.clip(_coerce_float(volume_cfg.get('gradient_step'), 0.005), 1e-4, 0.05))
+    default_stretch = _normalize_threejs_volume_stretch(volume_cfg.get('stretch', 'linear'))
+
+    name = str(volume_cfg.get('name') or f'Volume {index + 1}')
+    key = str(volume_cfg.get('key') or f'volume-{index}')
+    state_key = _threejs_volume_state_key(volume_cfg, key)
+    state_name = str(volume_cfg.get('state_name') or volume_cfg.get('legend_name') or name)
+    time_myr = _coerce_threejs_volume_time_myr(volume_cfg.get('time_myr'))
+    opacity_function = _normalize_threejs_volume_opacity_function(volume_cfg.get('opacity_function'))
+    colormap_options = _build_threejs_volume_colormap_options(
+        volume_cfg.get('colormap', 'inferno'),
+        opacity_function=opacity_function,
+    )
+
+    return {
+        'key': key,
+        'state_key': state_key,
+        'state_name': state_name,
+        'time_myr': time_myr,
+        'name': name,
+        'path': '<inline>',
+        'hdu': 'inline',
+        'data_b64': _encode_sampled_uint8(sampled),
+        'data_encoding': 'uint8',
+        'shape': {
+            'x': int(sampled.shape[2]),
+            'y': int(sampled.shape[1]),
+            'z': int(sampled.shape[0]),
+        },
+        'source_shape': {
+            'x': int(data_shape_zyx[2]),
+            'y': int(data_shape_zyx[1]),
+            'z': int(data_shape_zyx[0]),
+        },
+        'downsample_step': {
+            'x': float(data_shape_zyx[2]) / float(sampled.shape[2]),
+            'y': float(data_shape_zyx[1]) / float(sampled.shape[1]),
+            'z': float(data_shape_zyx[0]) / float(sampled.shape[0]),
+        },
+        'downsample_method': 'scipy_zoom' if sampled.shape != data.shape else 'inline',
+        'bounds': {
+            'x': [
+                float((x_bounds[0] + bound_offset['x']) - center_offset['x'])
+                if apply_center_offset else float(x_bounds[0] + bound_offset['x']),
+                float((x_bounds[1] + bound_offset['x']) - center_offset['x'])
+                if apply_center_offset else float(x_bounds[1] + bound_offset['x']),
+            ],
+            'y': [
+                float((y_bounds[0] + bound_offset['y']) - center_offset['y'])
+                if apply_center_offset else float(y_bounds[0] + bound_offset['y']),
+                float((y_bounds[1] + bound_offset['y']) - center_offset['y'])
+                if apply_center_offset else float(y_bounds[1] + bound_offset['y']),
+            ],
+            'z': [
+                float((z_bounds[0] + bound_offset['z']) - center_offset['z'])
+                if apply_center_offset else float(z_bounds[0] + bound_offset['z']),
+                float((z_bounds[1] + bound_offset['z']) - center_offset['z'])
+                if apply_center_offset else float(z_bounds[1] + bound_offset['z']),
+            ],
+        },
+        'data_range': [float(data_min), float(data_max)],
+        'value_unit': str(volume_cfg.get('unit_label') or volume_cfg.get('value_unit') or '').strip(),
+        'legend_color': colormap_options[0].get('legend_color'),
+        'visible': bool(volume_cfg.get('visible', True)),
+        'only_at_t0': bool(volume_cfg.get('only_at_t0', time_myr is None)),
+        'interpolation': bool(volume_cfg.get('interpolation', True)),
+        'sky_overlay_data_b64': None,
+        'sky_overlay_data_encoding': None,
+        'sky_overlay_shape': None,
+        'sky_overlay_atlas_tiles': None,
+        'sky_overlay_downsample_step': None,
+        'default_controls': {
+            'vmin': float(default_vmin),
+            'vmax': float(default_vmax),
+            'opacity': float(default_opacity),
+            'steps': int(default_steps),
+            'samples': int(default_steps),
+            'alpha_coef': float(default_alpha_coef),
+            'gradient_step': float(default_gradient_step),
+            'stretch': str(default_stretch),
+            'colormap': colormap_options[0]['name'],
+        },
+        'colormap_options': colormap_options,
+    }
+
+
 def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, include_sky_overlay=False):
     from astropy.io import fits
 
     center_offset = center_offset or {'x': 0.0, 'y': 0.0, 'z': 0.0}
     path = volume_cfg.get('path') or volume_cfg.get('fits_file')
     if not path:
-        raise ValueError("Each Three.js volume config must include a FITS 'path'.")
+        return _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=center_offset, index=index)
 
     hdu_selector = volume_cfg.get('hdu')
     max_resolution = int(np.clip(_coerce_float(volume_cfg.get('max_resolution'), 96), 24, 512))
@@ -2954,6 +3191,8 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
                 512,
             )
         )
+    apply_center_offset = bool(volume_cfg.get('apply_center_offset', True))
+    bound_offset = _coerce_threejs_volume_bound_offset(volume_cfg.get('bound_offset'))
     sample_setting = volume_cfg.get('samples', volume_cfg.get('steps', 192))
     default_steps = int(np.clip(_coerce_float(sample_setting, 192), 24, 768))
     default_opacity = float(np.clip(_coerce_float(volume_cfg.get('opacity'), 0.15), 0.0, 1.0))
@@ -3082,8 +3321,16 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
     name = str(volume_cfg.get('name') or str(path).rsplit('/', 1)[-1].rsplit('.', 1)[0] or f'Volume {index + 1}')
     value_unit = str(volume_cfg.get('unit_label') or header.get('BUNIT') or '').strip()
 
+    key = str(volume_cfg.get('key') or f'volume-{index}')
+    state_key = _threejs_volume_state_key(volume_cfg, key)
+    time_myr = _coerce_threejs_volume_time_myr(volume_cfg.get('time_myr'))
+    state_name = str(volume_cfg.get('state_name') or volume_cfg.get('legend_name') or name)
+
     return {
-        'key': f'volume-{index}',
+        'key': key,
+        'state_key': state_key,
+        'state_name': state_name,
+        'time_myr': time_myr,
         'name': name,
         'path': str(path),
         'hdu': str(resolved_hdu_label),
@@ -3106,15 +3353,30 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         },
         'downsample_method': 'scipy_zoom',
         'bounds': {
-            'x': [float(x_bounds[0] - center_offset['x']), float(x_bounds[1] - center_offset['x'])],
-            'y': [float(y_bounds[0] - center_offset['y']), float(y_bounds[1] - center_offset['y'])],
-            'z': [float(z_bounds[0] - center_offset['z']), float(z_bounds[1] - center_offset['z'])],
+            'x': [
+                float((x_bounds[0] + bound_offset['x']) - center_offset['x'])
+                if apply_center_offset else float(x_bounds[0] + bound_offset['x']),
+                float((x_bounds[1] + bound_offset['x']) - center_offset['x'])
+                if apply_center_offset else float(x_bounds[1] + bound_offset['x']),
+            ],
+            'y': [
+                float((y_bounds[0] + bound_offset['y']) - center_offset['y'])
+                if apply_center_offset else float(y_bounds[0] + bound_offset['y']),
+                float((y_bounds[1] + bound_offset['y']) - center_offset['y'])
+                if apply_center_offset else float(y_bounds[1] + bound_offset['y']),
+            ],
+            'z': [
+                float((z_bounds[0] + bound_offset['z']) - center_offset['z'])
+                if apply_center_offset else float(z_bounds[0] + bound_offset['z']),
+                float((z_bounds[1] + bound_offset['z']) - center_offset['z'])
+                if apply_center_offset else float(z_bounds[1] + bound_offset['z']),
+            ],
         },
         'data_range': [float(data_min), float(data_max)],
         'value_unit': value_unit,
         'legend_color': colormap_options[0].get('legend_color'),
         'visible': bool(volume_cfg.get('visible', True)),
-        'only_at_t0': bool(volume_cfg.get('only_at_t0', True)),
+        'only_at_t0': bool(volume_cfg.get('only_at_t0', time_myr is None)),
         'interpolation': bool(volume_cfg.get('interpolation', True)),
         'sky_overlay_data_b64': sky_overlay_b64,
         'sky_overlay_data_encoding': sky_overlay_encoding,

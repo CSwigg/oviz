@@ -2055,7 +2055,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                 </label>
                 <label class="oviz-three-volume-toggle">
                   <input class="oviz-three-volume-visible" type="checkbox" />
-                  <span>Show at t=0</span>
+                  <span>Show volume</span>
                 </label>
                 <label class="oviz-three-volume-field">
                   <span>Colormap</span>
@@ -2636,6 +2636,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const dendrogramSpec = sceneSpec.dendrogram || { enabled: false };
       const volumeLayers = ((sceneSpec.volumes || {}).layers || []);
       const volumeLayersByKey = new Map(volumeLayers.map((layer) => [String(layer.key), layer]));
+      const volumeStateKeyForRawLayer = (layer) => String((layer && (layer.state_key || layer.key)) || "");
+      const volumeStateKeys = Array.from(
+        new Set(
+          volumeLayers
+            .map((layer) => volumeStateKeyForRawLayer(layer))
+            .filter((key) => key)
+        )
+      );
+      const volumeStateKeySet = new Set(volumeStateKeys);
       const animationSpec = sceneSpec.animation || {};
       const clusterFilterParameters = Array.isArray(clusterFilterSpec.parameters) ? clusterFilterSpec.parameters : [];
       const clusterFilterEntries = Array.isArray(clusterFilterSpec.entries) ? clusterFilterSpec.entries : [];
@@ -2720,7 +2729,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let dendrogramHoveredRegionKey = "";
       let dendrogramPinnedRegionKey = "";
       let dendrogramHitRegions = [];
-      let activeVolumeKey = volumeLayers.length ? String(volumeLayers[0].key) : null;
+      let activeVolumeKey = volumeStateKeys.length ? String(volumeStateKeys[0]) : null;
       const volumeStateByKey = {};
       const traceStyleStateByKey = {};
       const legendEditButtonByKey = new Map();
@@ -2738,7 +2747,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       } else if ("outputEncoding" in renderer && THREE.sRGBEncoding) {
         renderer.outputEncoding = THREE.sRGBEncoding;
       }
-      const volumeSupported = volumeLayers.length > 0 && Boolean(renderer.capabilities && renderer.capabilities.isWebGL2);
+      const volumeSupported = volumeStateKeys.length > 0 && Boolean(renderer.capabilities && renderer.capabilities.isWebGL2);
 
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(theme.scene_bgcolor || theme.paper_bgcolor || "#000000");
@@ -2779,8 +2788,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       scene.add(axisGroup);
 
       volumeLayers.forEach((layer) => {
+        const stateKey = volumeStateKeyForRawLayer(layer);
+        if (!stateKey || Object.prototype.hasOwnProperty.call(volumeStateByKey, stateKey)) {
+          return;
+        }
         const defaults = layer.default_controls || {};
-        volumeStateByKey[String(layer.key)] = {
+        volumeStateByKey[stateKey] = {
           visible: layer.visible !== false,
           vmin: Number(defaults.vmin),
           vmax: Number(defaults.vmax),
@@ -2795,7 +2808,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       legendItems.forEach((item) => {
         const itemKey = String(item.key);
-        if (volumeLayersByKey.has(itemKey)) {
+        if (volumeStateKeySet.has(itemKey)) {
           return;
         }
         traceStyleStateByKey[itemKey] = {
@@ -3168,7 +3181,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
         }
 
-        if (initialState.active_volume_key && volumeLayersByKey.has(String(initialState.active_volume_key))) {
+        if (initialState.active_volume_key && volumeStateKeySet.has(String(initialState.active_volume_key))) {
           activeVolumeKey = String(initialState.active_volume_key);
         }
 
@@ -4440,13 +4453,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const collectedSamples = [];
         let usedLayerCount = 0;
 
-        volumeLayers.forEach((layer) => {
-          const layerKey = String(layer.key);
-          const state = volumeStateByKey[layerKey];
-          if (!state || state.visible === false || legendState[layerKey] === false) {
-            return;
-          }
-          if (layer.only_at_t0 && !approximatelyZero(frameTime)) {
+        frameVolumeLayers(frame).forEach((layer) => {
+          const stateKey = volumeStateKeyForLayer(layer);
+          const state = volumeStateByKey[stateKey];
+          if (!state || state.visible === false || legendState[stateKey] === false) {
             return;
           }
 
@@ -6983,15 +6993,53 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return traceStyleStateByKey[String(traceKey)] || null;
       }
 
+      function volumeStateKeyForLayer(layer) {
+        return String((layer && (layer.state_key || layer.key)) || "");
+      }
+
+      function volumeStateNameForLayer(layer) {
+        if (!layer) {
+          return "";
+        }
+        return String(layer.state_name || layer.name || volumeStateKeyForLayer(layer));
+      }
+
+      function frameVolumeLayers(frame = currentFrame()) {
+        if (!frame || !Array.isArray(frame.decorations)) {
+          return [];
+        }
+        return frame.decorations
+          .filter((decoration) => decoration && decoration.kind === "volume_layer")
+          .map((decoration) => volumeLayersByKey.get(String(decoration.key)))
+          .filter(Boolean);
+      }
+
+      function frameVolumeLayerForStateKey(stateKey, frame = currentFrame()) {
+        const wantedKey = String(stateKey || "");
+        if (!wantedKey) {
+          return null;
+        }
+        const frameLayers = frameVolumeLayers(frame);
+        const matchedLayer = frameLayers.find((layer) => volumeStateKeyForLayer(layer) === wantedKey);
+        if (matchedLayer) {
+          return matchedLayer;
+        }
+        return volumeLayers.find((layer) => volumeStateKeyForLayer(layer) === wantedKey) || null;
+      }
+
       function volumeLayerForKey(layerKey) {
-        return volumeLayersByKey.get(String(layerKey)) || null;
+        const exactLayer = volumeLayersByKey.get(String(layerKey));
+        if (exactLayer) {
+          return exactLayer;
+        }
+        return frameVolumeLayerForStateKey(layerKey);
       }
 
       function volumeLegendColorForLayer(layer) {
         if (!layer) {
           return theme.text_color || theme.axis_color;
         }
-        const state = volumeStateByKey[String(layer.key)] || {};
+        const state = volumeStateByKey[volumeStateKeyForLayer(layer)] || {};
         const option = volumeColormapOptionFor(layer, state.colormap);
         return (option && option.legend_color) || layer.legend_color || theme.text_color || theme.axis_color;
       }
@@ -7007,13 +7055,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function volumeSummaryTextFor(layer, state) {
+        if (!layer || !state) {
+          return "";
+        }
         const unitText = layer.value_unit ? ` ${layer.value_unit}` : "";
         const supportText = volumeSupported
-          ? "Rendered at t=0 only as a WebGL2 ray-marched volume."
+          ? (
+            Number.isFinite(Number(layer.time_myr))
+              ? "Rendered as a time-resolved WebGL2 ray-marched volume matched to the current animation frame."
+              : "Rendered at t=0 only as a WebGL2 ray-marched volume."
+          )
           : "Volume rendering requires WebGL2 support in the browser.";
         const resampleMethod = String(layer.downsample_method || "resampled");
         return [
-          `${layer.name}`,
+          `${volumeStateNameForLayer(layer)}`,
           `${Number(layer.shape.x)} x ${Number(layer.shape.y)} x ${Number(layer.shape.z)} voxels`,
           `Source: ${Number(layer.source_shape.x)} x ${Number(layer.source_shape.y)} x ${Number(layer.source_shape.z)} | ${resampleMethod} scale ${formatVolumeNumber(Number(layer.downsample_step.x))} x ${formatVolumeNumber(Number(layer.downsample_step.y))} x ${formatVolumeNumber(Number(layer.downsample_step.z))}`,
           `Samples: ${Math.round(Number(state.steps))} | alpha_coef: ${Math.round(Number(state.alphaCoef))} | stretch: ${normalizeVolumeStretch(state.stretch)}`,
@@ -7147,15 +7202,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (!activeVolumeKey) {
           return null;
         }
-        return volumeLayersByKey.get(String(activeVolumeKey)) || null;
+        return frameVolumeLayerForStateKey(activeVolumeKey);
       }
 
       function selectedVolumeState() {
-        const layer = selectedVolumeLayer();
-        if (!layer) {
+        if (!activeVolumeKey) {
           return null;
         }
-        return volumeStateByKey[String(layer.key)] || null;
+        return volumeStateByKey[String(activeVolumeKey)] || null;
       }
 
       function clampVolumeStateForLayer(layer, state) {
@@ -7675,7 +7729,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (!volumeSupported) {
           return null;
         }
-        const state = volumeStateByKey[String(layer.key)];
+        const state = volumeStateByKey[volumeStateKeyForLayer(layer)];
         if (!state) {
           return null;
         }
@@ -7746,7 +7800,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (!runtime || !runtime.material || !runtime.mesh) {
           return;
         }
-        const state = volumeStateByKey[String(layer.key)] || {};
+        const state = volumeStateByKey[volumeStateKeyForLayer(layer)] || {};
         const option = volumeColormapOptionFor(layer, state.colormap);
         const windowState = normalizedVolumeWindowFor(layer, state);
         runtime.mesh.visible = state.visible !== false;
@@ -7764,38 +7818,48 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function renderVolumeControls() {
-        const enabled = volumeLayers.length > 0;
+        const enabled = volumeStateKeys.length > 0;
         volumePanelEl.dataset.enabled = enabled ? "true" : "false";
         if (!enabled) {
           return;
         }
 
-        if (!activeVolumeKey || !volumeLayersByKey.has(String(activeVolumeKey))) {
-          activeVolumeKey = String(volumeLayers[0].key);
+        if (!activeVolumeKey || !Object.prototype.hasOwnProperty.call(volumeStateByKey, String(activeVolumeKey))) {
+          activeVolumeKey = String(volumeStateKeys[0]);
         }
 
         const layer = selectedVolumeLayer();
         const state = selectedVolumeState();
-        if (!layer || !state) {
+        if (!state) {
           return;
         }
-        clampVolumeStateForLayer(layer, state);
+        if (layer) {
+          clampVolumeStateForLayer(layer, state);
+        }
 
         volumeSelectEl.innerHTML = "";
-        volumeLayers.forEach((volumeLayer) => {
+        volumeStateKeys.forEach((stateKey) => {
+          const volumeLayer = volumeLayerForKey(stateKey);
+          if (!volumeLayer) {
+            return;
+          }
           const optionEl = document.createElement("option");
-          optionEl.value = String(volumeLayer.key);
-          optionEl.textContent = volumeLayer.name || String(volumeLayer.key);
-          if (String(volumeLayer.key) === String(activeVolumeKey)) {
+          optionEl.value = String(stateKey);
+          optionEl.textContent = volumeStateNameForLayer(volumeLayer);
+          if (String(stateKey) === String(activeVolumeKey)) {
             optionEl.selected = true;
           }
           volumeSelectEl.appendChild(optionEl);
         });
-        volumeSelectEl.disabled = !volumeSupported || volumeLayers.length <= 1;
+        volumeSelectEl.disabled = !volumeSupported || volumeStateKeys.length <= 1;
 
+        const controlLayer = layer || volumeLayerForKey(activeVolumeKey);
+        if (!controlLayer) {
+          return;
+        }
         volumeVisibleEl.checked = state.visible !== false;
         volumeColormapEl.innerHTML = "";
-        ((layer.colormap_options || [])).forEach((option) => {
+        ((controlLayer.colormap_options || [])).forEach((option) => {
           const optionEl = document.createElement("option");
           optionEl.value = String(option.name);
           optionEl.textContent = String(option.label || option.name);
@@ -7834,19 +7898,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         volumeAlphaEl.disabled = !volumeSupported;
         volumeStepsEl.disabled = !volumeSupported;
 
-        const unitText = layer.value_unit ? ` ${layer.value_unit}` : "";
-        const supportText = volumeSupported
-          ? "Rendered at t=0 only as a WebGL2 ray-marched volume."
-          : "Volume rendering requires WebGL2 support in the browser.";
-        const resampleMethod = String(layer.downsample_method || "resampled");
-        volumeSummaryEl.textContent = [
-          `${layer.name}`,
-          `${Number(layer.shape.x)} x ${Number(layer.shape.y)} x ${Number(layer.shape.z)} voxels`,
-          `Source: ${Number(layer.source_shape.x)} x ${Number(layer.source_shape.y)} x ${Number(layer.source_shape.z)} | ${resampleMethod} scale ${formatVolumeNumber(Number(layer.downsample_step.x))} x ${formatVolumeNumber(Number(layer.downsample_step.y))} x ${formatVolumeNumber(Number(layer.downsample_step.z))}`,
-          `Samples: ${Math.round(Number(state.steps))} | alpha_coef: ${Math.round(Number(state.alphaCoef))} | stretch: ${normalizeVolumeStretch(state.stretch)}`,
-          `Data range: ${formatVolumeNumber((layer.data_range || [0])[0])} to ${formatVolumeNumber((layer.data_range || [0, 1])[1])}${unitText}`,
-          supportText,
-        ].join("\\n");
+        volumeSummaryEl.textContent = volumeSummaryTextFor(controlLayer, state);
       }
 
       function clearGroup(group) {
@@ -8885,7 +8937,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (!layer) {
             return;
           }
-          if (legendState[String(layer.key)] === false) {
+          const stateKey = volumeStateKeyForLayer(layer);
+          if (legendState[stateKey] === false) {
             return;
           }
           const runtime = createVolumeRuntime(layer);
@@ -9261,7 +9314,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function buildVolumeLegendControls(item, toggleButton) {
         const layer = volumeLayerForKey(item.key);
-        const state = layer ? volumeStateByKey[String(layer.key)] : null;
+        const stateKey = layer ? volumeStateKeyForLayer(layer) : String(item.key || "");
+        const state = stateKey ? volumeStateByKey[stateKey] : null;
         if (!layer || !state) {
           return null;
         }
@@ -9275,7 +9329,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         visibleInput.type = "checkbox";
         visibleToggle.appendChild(visibleInput);
         const visibleText = document.createElement("span");
-        visibleText.textContent = "Show at t=0";
+        visibleText.textContent = Number.isFinite(Number(layer.time_myr)) ? "Show volume series" : "Show volume";
         visibleToggle.appendChild(visibleText);
         controls.appendChild(visibleToggle);
 
@@ -9343,7 +9397,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         controls.appendChild(summary);
 
         function refreshVolumeControls(syncInputs = true) {
-          clampVolumeStateForLayer(layer, state);
+          const summaryLayer = frameVolumeLayerForStateKey(stateKey) || layer;
+          clampVolumeStateForLayer(summaryLayer, state);
           if (syncInputs) {
             visibleInput.checked = state.visible !== false;
             colormapSelect.value = String(state.colormap);
@@ -9357,12 +9412,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           opacityField.label.textContent = `Opacity (${Number(state.opacity).toFixed(2)})`;
           alphaField.label.textContent = `Alpha coef (${Math.round(Number(state.alphaCoef))})`;
           samplesField.label.textContent = `Samples (${Math.round(Number(state.steps))})`;
-          summary.textContent = volumeSummaryTextFor(layer, state);
-          toggleButton.style.color = volumeLegendColorForLayer(layer);
+          summary.textContent = volumeSummaryTextFor(summaryLayer, state);
+          toggleButton.style.color = volumeLegendColorForLayer(summaryLayer);
         }
 
         function updateVolumeFromLegend(shouldRerenderLegend = false) {
-          activeVolumeKey = String(layer.key);
+          activeVolumeKey = String(stateKey);
           if (shouldRerenderLegend) {
             renderLegend();
           }
@@ -9776,6 +9831,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         applySceneHoverState();
         resize();
+        renderVolumeControls();
         renderAgeKdeWidget();
         renderClusterFilterWidget();
         renderDendrogramWidget();
@@ -10470,12 +10526,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function updateActiveVolumeRuntime() {
         const layer = selectedVolumeLayer();
         const state = selectedVolumeState();
-        if (!layer || !state) {
+        if (!state) {
           renderVolumeControls();
           return;
         }
-        clampVolumeStateForLayer(layer, state);
+        if (layer) {
+          clampVolumeStateForLayer(layer, state);
+        }
         renderVolumeControls();
+        if (!layer) {
+          return;
+        }
         const runtime = volumeRuntimeByKey.get(String(layer.key));
         if (runtime) {
           applyVolumeStateToRuntime(layer, runtime);
@@ -10485,7 +10546,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
         const frame = currentFrame();
-        if (frame && approximatelyZero(Number(frame.time))) {
+        if (frame && frameVolumeLayerForStateKey(activeVolumeKey, frame)) {
           renderFrame(currentFrameIndex);
           if (skySpec.enabled && !currentSelection) {
             updateSkyPanel();
@@ -10495,13 +10556,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function initVolumeControls() {
         renderVolumeControls();
-        if (!volumeLayers.length) {
+        if (!volumeStateKeys.length) {
           return;
         }
 
         volumeSelectEl.addEventListener("change", () => {
           activeVolumeKey = String(volumeSelectEl.value);
-          renderVolumeControls();
+          updateActiveVolumeRuntime();
         });
         volumeVisibleEl.addEventListener("change", () => {
           const state = selectedVolumeState();
@@ -10737,7 +10798,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           lassoVolumeSelectionEnabled = Boolean(volumeLassoToggleEl.checked);
           updateSelectionUI();
           const frame = currentFrame();
-          if (frame && approximatelyZero(Number(frame.time)) && volumeLayers.length) {
+          if (frame && frameVolumeLayers(frame).length) {
             renderFrame(currentFrameIndex);
           }
           if (skySpec.enabled && !currentSelection) {
