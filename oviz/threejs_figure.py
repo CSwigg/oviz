@@ -933,15 +933,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-dendrogram-row {
         display: flex;
         gap: 8px;
-        align-items: center;
+        align-items: flex-end;
+        flex-wrap: wrap;
       }
       #__ROOT_ID__ .oviz-three-dendrogram-field {
         display: flex;
         flex-direction: column;
         gap: 4px;
         flex: 1 1 auto;
+        min-width: 120px;
         color: var(--oviz-text);
         font: 11px Helvetica, Arial, sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-dendrogram-field--trace {
+        flex: 1.6 1 180px;
       }
       #__ROOT_ID__ .oviz-three-dendrogram-field select,
       #__ROOT_ID__ .oviz-three-dendrogram-field input {
@@ -2293,12 +2298,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
         <div class="oviz-three-dendrogram-body">
           <div class="oviz-three-dendrogram-row">
-            <label class="oviz-three-dendrogram-field">
+            <label class="oviz-three-dendrogram-field oviz-three-dendrogram-field--trace">
               <span>Trace</span>
               <select class="oviz-three-dendrogram-trace"></select>
             </label>
             <label class="oviz-three-dendrogram-field">
-              <span>Threshold (pc)</span>
+              <span>Links</span>
+              <select class="oviz-three-dendrogram-connection">
+                <option value="birth_to_older_track">Birth to older track</option>
+                <option value="birth_to_birth">Birth to birth</option>
+              </select>
+            </label>
+            <label class="oviz-three-dendrogram-field">
+              <span>Mode</span>
+              <select class="oviz-three-dendrogram-mode">
+                <option value="distance_pc">Distance threshold</option>
+                <option value="birth_age_myr">Birth-age threshold</option>
+              </select>
+            </label>
+            <label class="oviz-three-dendrogram-field">
+              <span class="oviz-three-dendrogram-threshold-label">Threshold (pc)</span>
               <input class="oviz-three-dendrogram-threshold" type="number" min="0" step="1" />
             </label>
           </div>
@@ -2507,6 +2526,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const dendrogramPanelEl = root.querySelector(".oviz-three-dendrogram-panel");
       const dendrogramCanvasEl = root.querySelector(".oviz-three-dendrogram-canvas");
       const dendrogramTraceEl = root.querySelector(".oviz-three-dendrogram-trace");
+      const dendrogramConnectionEl = root.querySelector(".oviz-three-dendrogram-connection");
+      const dendrogramModeEl = root.querySelector(".oviz-three-dendrogram-mode");
+      const dendrogramThresholdLabelEl = root.querySelector(".oviz-three-dendrogram-threshold-label");
       const dendrogramThresholdEl = root.querySelector(".oviz-three-dendrogram-threshold");
       const dendrogramFullButtonEl = root.querySelector(".oviz-three-dendrogram-full");
       const dendrogramHideButtonEl = root.querySelector(".oviz-three-dendrogram-hide");
@@ -2719,7 +2741,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let clusterFilterParameterKey = String(clusterFilterSpec.default_parameter_key || "");
       const clusterFilterRangeStateByKey = {};
       let dendrogramTraceKey = String(dendrogramSpec.default_trace_key || "");
+      let dendrogramConnectionMode = String(dendrogramSpec.default_connection_mode || "birth_to_older_track");
+      let dendrogramThresholdMode = String(dendrogramSpec.default_threshold_mode || "distance_pc");
       let dendrogramThresholdPc = Number(dendrogramSpec.default_threshold_pc || 100.0);
+      let dendrogramThresholdAgeMyr = Number(dendrogramSpec.default_threshold_age_myr || 5.0);
       let dendrogramHoveredSelectionKeys = new Set();
       let dendrogramPinnedSelectionKeys = new Set();
       let dendrogramHoveredBranchLabel = "";
@@ -3274,8 +3299,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedDendrogramState.trace_key === "string" && savedDendrogramState.trace_key) {
             dendrogramTraceKey = String(savedDendrogramState.trace_key);
           }
+          if (typeof savedDendrogramState.connection_mode === "string" && savedDendrogramState.connection_mode) {
+            dendrogramConnectionMode = String(savedDendrogramState.connection_mode);
+          }
+          if (typeof savedDendrogramState.threshold_mode === "string" && savedDendrogramState.threshold_mode) {
+            dendrogramThresholdMode = String(savedDendrogramState.threshold_mode);
+          }
           if (Number.isFinite(Number(savedDendrogramState.threshold_pc))) {
             dendrogramThresholdPc = Number(savedDendrogramState.threshold_pc);
+          }
+          if (Number.isFinite(Number(savedDendrogramState.threshold_age_myr))) {
+            dendrogramThresholdAgeMyr = Number(savedDendrogramState.threshold_age_myr);
           }
         }
 
@@ -3495,7 +3529,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           },
           dendrogram_state: {
             trace_key: dendrogramTraceKey,
+            connection_mode: dendrogramConnectionMode,
+            threshold_mode: dendrogramThresholdMode,
             threshold_pc: dendrogramThresholdPc,
+            threshold_age_myr: dendrogramThresholdAgeMyr,
           },
           lasso_selection_mask: captureLassoSelectionMaskState(currentLassoSelectionMask),
         }, {});
@@ -3714,8 +3751,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function activeHoveredClusterKeys() {
         const keys = new Set();
+        [localHoveredClusterKey]
+          .map((value) => normalizeMemberKey(value))
+          .filter(Boolean)
+          .forEach((value) => keys.add(value));
         if (crossHoverEnabled()) {
-          [localHoveredClusterKey, skyHoveredClusterKey]
+          [skyHoveredClusterKey]
             .map((value) => normalizeMemberKey(value))
             .filter(Boolean)
             .forEach((value) => keys.add(value));
@@ -3808,12 +3849,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function setLocalHoveredClusterKey(clusterKey) {
-        const nextKey = crossHoverEnabled() ? normalizeMemberKey(clusterKey) : "";
+        const nextKey = normalizeMemberKey(clusterKey);
         if (nextKey === localHoveredClusterKey) {
           return;
         }
         localHoveredClusterKey = nextKey;
         applySceneHoverState();
+        if (widgetModeForKey("dendrogram") !== "hidden") {
+          renderDendrogramWidget();
+        }
         postParentHoverToSkyFrame();
       }
 
@@ -3824,6 +3868,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         skyHoveredClusterKey = nextKey;
         applySceneHoverState();
+        if (widgetModeForKey("dendrogram") !== "hidden") {
+          renderDendrogramWidget();
+        }
       }
 
       function clearCrossHoverState() {
@@ -3831,6 +3878,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         skyHoveredClusterKey = "";
         lastSentSkyHoverClusterKey = null;
         applySceneHoverState();
+        if (widgetModeForKey("dendrogram") !== "hidden") {
+          renderDendrogramWidget();
+        }
         postParentHoverToSkyFrame();
       }
 
@@ -6660,6 +6710,52 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
       }
 
+      function currentDendrogramThresholdMode() {
+        return String(dendrogramThresholdMode || "distance_pc") === "birth_age_myr"
+          ? "birth_age_myr"
+          : "distance_pc";
+      }
+
+      function currentDendrogramConnectionMode() {
+        return String(dendrogramConnectionMode || "birth_to_older_track") === "birth_to_birth"
+          ? "birth_to_birth"
+          : "birth_to_older_track";
+      }
+
+      function currentDendrogramThresholdValue() {
+        return currentDendrogramThresholdMode() === "birth_age_myr"
+          ? Math.max(Number(dendrogramThresholdAgeMyr) || 0.0, 0.0)
+          : Math.max(Number(dendrogramThresholdPc) || 0.0, 0.0);
+      }
+
+      function syncDendrogramThresholdControls() {
+        const mode = currentDendrogramThresholdMode();
+        if (dendrogramModeEl) {
+          dendrogramModeEl.value = mode;
+        }
+        if (dendrogramThresholdLabelEl) {
+          dendrogramThresholdLabelEl.textContent = mode === "birth_age_myr" ? "Threshold (Myr)" : "Threshold (pc)";
+        }
+        if (!dendrogramThresholdEl) {
+          return;
+        }
+        if (mode === "birth_age_myr") {
+          const minValue = Math.max(Number(dendrogramSpec.threshold_min_age_myr) || 0.0, 0.0);
+          const maxValue = Math.max(Number(dendrogramSpec.threshold_max_age_myr) || 10.0, minValue + 1.0);
+          dendrogramThresholdEl.min = String(minValue);
+          dendrogramThresholdEl.max = String(maxValue);
+          dendrogramThresholdEl.step = "0.5";
+          dendrogramThresholdEl.value = Number(dendrogramThresholdAgeMyr).toFixed(1);
+          return;
+        }
+        const minValue = Math.max(Number(dendrogramSpec.threshold_min_pc) || 0.0, 0.0);
+        const maxValue = Math.max(Number(dendrogramSpec.threshold_max_pc) || 1000.0, minValue + 1.0);
+        dendrogramThresholdEl.min = String(minValue);
+        dendrogramThresholdEl.max = String(maxValue);
+        dendrogramThresholdEl.step = "1";
+        dendrogramThresholdEl.value = Number(dendrogramThresholdPc).toFixed(0);
+      }
+
       function pointSegmentDistanceSq(px, py, x1, y1, x2, y2) {
         const dx = x2 - x1;
         const dy = y2 - y1;
@@ -6676,8 +6772,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return ddx * ddx + ddy * ddy;
       }
 
-      function buildDendrogramModel(entries, thresholdPc) {
-        const threshold = Math.max(Number(thresholdPc) || 0.0, 0.0);
+      function buildDendrogramModel(entries, thresholdValue, thresholdMode, connectionMode) {
+        const mode = String(thresholdMode || "distance_pc") === "birth_age_myr"
+          ? "birth_age_myr"
+          : "distance_pc";
+        const linksMode = String(connectionMode || "birth_to_older_track") === "birth_to_birth"
+          ? "birth_to_birth"
+          : "birth_to_older_track";
+        const threshold = Math.max(Number(thresholdValue) || 0.0, 0.0);
         const sortedEntries = (Array.isArray(entries) ? entries : [])
           .filter((entry) => (
             entry
@@ -6707,6 +6809,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             z_samples: Array.isArray(entry.z_samples) ? entry.z_samples.map((value) => Number(value)) : [],
             parent_key: "",
             parent_distance_pc: NaN,
+            parent_age_gap_myr: NaN,
+            axis_value: 0.0,
             children: [],
             plot_order: 0,
           }))
@@ -6720,27 +6824,69 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           const node = sortedEntries[index];
           let bestParent = null;
           let bestDistance = Infinity;
+          let bestAgeGap = Infinity;
           for (let olderIndex = 0; olderIndex < index; olderIndex += 1) {
             const candidate = sortedEntries[olderIndex];
-            const candidateAtBirth = interpolateDendrogramPosition(candidate, node.birth_time_myr);
-            if (!candidateAtBirth) {
+            const ageGap = Math.max(0.0, Number(candidate.age_now_myr) - Number(node.age_now_myr));
+            const candidatePosition = linksMode === "birth_to_birth"
+              ? {
+                x: Number(candidate.x_birth),
+                y: Number(candidate.y_birth),
+                z: Number(candidate.z_birth),
+              }
+              : interpolateDendrogramPosition(candidate, node.birth_time_myr);
+            if (!candidatePosition) {
               continue;
             }
-            const dx = node.x_birth - candidateAtBirth.x;
-            const dy = node.y_birth - candidateAtBirth.y;
-            const dz = node.z_birth - candidateAtBirth.z;
+            const dx = node.x_birth - candidatePosition.x;
+            const dy = node.y_birth - candidatePosition.y;
+            const dz = node.z_birth - candidatePosition.z;
             const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (!(distance <= threshold) || distance >= bestDistance) {
+            if (mode === "birth_age_myr") {
+              if (!(ageGap <= threshold) || distance >= bestDistance) {
+                continue;
+              }
+            } else if (!(distance <= threshold) || distance >= bestDistance) {
               continue;
             }
             bestDistance = distance;
+            bestAgeGap = ageGap;
             bestParent = candidate;
           }
           if (bestParent) {
             node.parent_key = bestParent.key;
             node.parent_distance_pc = bestDistance;
+            node.parent_age_gap_myr = bestAgeGap;
             bestParent.children.push(node.key);
           }
+          node.axis_value = mode === "birth_age_myr"
+            ? 0.0
+            : Math.max(Number(node.age_now_myr) || 0.0, 0.0);
+        }
+
+        if (mode === "birth_age_myr") {
+          const cumulativeAxisByKey = new Map();
+          function cumulativeBirthDistanceFor(node) {
+            if (!node) {
+              return 0.0;
+            }
+            if (cumulativeAxisByKey.has(node.key)) {
+              return cumulativeAxisByKey.get(node.key);
+            }
+            const localDistance = Number.isFinite(node.parent_distance_pc)
+              ? Math.max(Number(node.parent_distance_pc), 0.0)
+              : 0.0;
+            const parentDistance = node.parent_key
+              ? cumulativeBirthDistanceFor(nodeByKey.get(node.parent_key))
+              : 0.0;
+            const cumulativeDistance = parentDistance + localDistance;
+            cumulativeAxisByKey.set(node.key, cumulativeDistance);
+            return cumulativeDistance;
+          }
+
+          sortedEntries.forEach((node) => {
+            node.axis_value = cumulativeBirthDistanceFor(node);
+          });
         }
 
         const roots = sortedEntries
@@ -6805,8 +6951,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             selectionKeys: descendantKeysFor(node),
             count: descendantKeysFor(node).length,
             distance_pc: Number(node.parent_distance_pc),
+            age_gap_myr: Number(node.parent_age_gap_myr),
           });
         });
+
+        const axisValues = sortedEntries
+          .map((entry) => Number(entry.axis_value))
+          .filter((value) => Number.isFinite(value) && value >= 0.0);
 
         return {
           nodes: sortedEntries,
@@ -6814,6 +6965,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           branches,
           leafCount: Math.max(nextLeafOrder, 1),
           maxAgeMyr: Math.max(...sortedEntries.map((entry) => Number(entry.age_now_myr)), 0.0),
+          maxAxisValue: axisValues.length ? Math.max(...axisValues, 0.0) : 0.0,
+          connectionMode: linksMode,
+          thresholdMode: mode,
         };
       }
 
@@ -6836,8 +6990,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           clearDendrogramHoverState();
         }
         dendrogramTraceEl.value = dendrogramTraceKey;
+        dendrogramConnectionMode = currentDendrogramConnectionMode();
+        if (dendrogramConnectionEl) {
+          dendrogramConnectionEl.value = dendrogramConnectionMode;
+        }
         dendrogramThresholdPc = Math.max(Number(dendrogramThresholdPc) || 0.0, 0.0);
-        dendrogramThresholdEl.value = Number(dendrogramThresholdPc).toFixed(0);
+        dendrogramThresholdAgeMyr = Math.max(Number(dendrogramThresholdAgeMyr) || 0.0, 0.0);
+        syncDendrogramThresholdControls();
 
         const entries = activeDendrogramEntries();
         const rect = dendrogramCanvasEl.getBoundingClientRect();
@@ -6864,21 +7023,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
 
-        const model = buildDendrogramModel(entries, dendrogramThresholdPc);
+        const thresholdMode = currentDendrogramThresholdMode();
+        const thresholdValue = currentDendrogramThresholdValue();
+        const connectionMode = currentDendrogramConnectionMode();
+        const model = buildDendrogramModel(entries, thresholdValue, thresholdMode, connectionMode);
         const margin = { left: 52, right: 16, top: 18, bottom: 28 };
         const plotWidth = Math.max(40, cssWidth - margin.left - margin.right);
         const plotHeight = Math.max(40, cssHeight - margin.top - margin.bottom);
         const currentTraceMeta = traceOptions.find((traceOption) => String(traceOption.trace_key || "") === String(dendrogramTraceKey || "")) || traceOptions[0];
-        const traceMaxAge = Math.max(
-          Number(currentTraceMeta && currentTraceMeta.max_age_myr) || 0.0,
-          Number(model.maxAgeMyr) || 0.0,
-          0.0
-        );
-        const maxAge = Math.max(traceMaxAge + 5.0, 1.0);
+        const traceMaxAge = Math.max(Number(currentTraceMeta && currentTraceMeta.max_age_myr) || 0.0, Number(model.maxAgeMyr) || 0.0, 0.0);
+        const axisMode = model.thresholdMode || thresholdMode;
+        const axisLabel = axisMode === "birth_age_myr" ? "Birth distance" : "Birth age";
+        const axisUnit = axisMode === "birth_age_myr" ? "pc" : "Myr";
+        const axisMax = axisMode === "birth_age_myr"
+          ? Math.max((Number(model.maxAxisValue) || 0.0) * 1.08, 25.0)
+          : Math.max(traceMaxAge + 5.0, 1.0);
         const traceState = traceStyleStateForKey(dendrogramTraceKey);
         const traceColor = (traceState && traceState.color) || String(currentTraceMeta.color || theme.text_color || "#ffffff");
         const axisColor = String(theme.axis_color || "#808080");
         const activeKeys = activeDendrogramSelectionKeys();
+        const hoveredClusterKeys = activeHoveredClusterKeys();
         dendrogramHitRegions = [];
 
         function xToPx(orderValue) {
@@ -6888,8 +7052,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return margin.left + (Number(orderValue) / Math.max(model.leafCount - 1, 1)) * plotWidth;
         }
 
-        function yToPx(ageValue) {
-          return margin.top + (1.0 - clampRange(Number(ageValue) / maxAge, 0.0, 1.0)) * plotHeight;
+        function yToPx(axisValue) {
+          return margin.top + (1.0 - clampRange(Number(axisValue) / axisMax, 0.0, 1.0)) * plotHeight;
         }
 
         ctx.strokeStyle = axisColor;
@@ -6905,15 +7069,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         ctx.textAlign = "right";
         ctx.textBaseline = "middle";
         [0.0, 0.33, 0.66, 1.0].forEach((fraction) => {
-          const age = fraction * maxAge;
-          const yPx = yToPx(age);
+          const axisValue = fraction * axisMax;
+          const yPx = yToPx(axisValue);
           ctx.globalAlpha = 0.14;
           ctx.beginPath();
           ctx.moveTo(margin.left, yPx);
           ctx.lineTo(margin.left + plotWidth, yPx);
           ctx.stroke();
           ctx.globalAlpha = 1.0;
-          ctx.fillText(`${formatCompactNumber(age)} Myr`, margin.left - 8, yPx);
+          ctx.fillText(`${formatCompactNumber(axisValue)} ${axisUnit}`, margin.left - 8, yPx);
         });
 
         ctx.save();
@@ -6921,26 +7085,35 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         ctx.rotate(-Math.PI * 0.5);
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("Birth age", 0, 0);
+        ctx.fillText(axisLabel, 0, 0);
         ctx.restore();
 
         const formationAge = Math.max(0.0, -(currentFrame() ? Number(currentFrame().time) : 0.0));
-        const markerY = yToPx(Math.min(formationAge, maxAge));
-        ctx.save();
-        ctx.setLineDash([6, 6]);
-        ctx.strokeStyle = axisColor;
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(margin.left, markerY);
-        ctx.lineTo(margin.left + plotWidth, markerY);
-        ctx.stroke();
-        ctx.restore();
+        if (axisMode === "distance_pc") {
+          const markerY = yToPx(Math.min(formationAge, axisMax));
+          ctx.save();
+          ctx.setLineDash([6, 6]);
+          ctx.strokeStyle = axisColor;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(margin.left, markerY);
+          ctx.lineTo(margin.left + plotWidth, markerY);
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.textAlign = "right";
+          ctx.textBaseline = "top";
+          ctx.fillStyle = cssColorWithAlpha(axisColor, 0.9, axisColor);
+          ctx.fillText(`Formation age: ${formatCompactNumber(formationAge)} Myr`, margin.left + plotWidth, margin.top + 2);
+          ctx.restore();
+        }
 
         model.branches.forEach((branch) => {
           const childX = xToPx(branch.child.plot_order);
-          const childY = yToPx(branch.child.age_now_myr);
+          const childY = yToPx(branch.child.axis_value);
           const parentX = xToPx(branch.parent.plot_order);
-          const parentY = yToPx(branch.parent.age_now_myr);
+          const parentY = yToPx(branch.parent.axis_value);
           const isPinned = dendrogramPinnedRegionKey && dendrogramPinnedRegionKey === branch.key;
           const isHovered = !isPinned && dendrogramHoveredRegionKey === branch.key;
           const isActive = activeKeys.size && branch.selectionKeys.some((selectionKey) => activeKeys.has(selectionKey));
@@ -6957,6 +7130,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             label: branch.label,
             count: branch.count,
             selectionKeys: branch.selectionKeys,
+            hitRadius: isPinned ? 10.0 : (isHovered ? 9.0 : 8.0),
             segments: [
               [childX, childY, childX, parentY],
               [childX, parentY, parentX, parentY],
@@ -6966,15 +7140,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         model.nodes.forEach((node) => {
           const nodeX = xToPx(node.plot_order);
-          const nodeY = yToPx(node.age_now_myr);
+          const nodeY = yToPx(node.axis_value);
           const nodeRegionKey = `node:${node.key}`;
           const isPinned = dendrogramPinnedRegionKey && dendrogramPinnedRegionKey === nodeRegionKey;
           const isHovered = !isPinned && dendrogramHoveredRegionKey === nodeRegionKey;
           const isActive = activeKeys.size && activeKeys.has(node.selection_key);
+          const isSceneHovered = hoveredClusterKeys.has(node.selection_key);
+          const nodeRadius = isPinned ? 5.2 : (isHovered ? 4.8 : (isSceneHovered ? 4.6 : (isActive ? 4.1 : 3.4)));
           ctx.beginPath();
-          ctx.fillStyle = cssColorWithAlpha(traceColor, isPinned ? 1.0 : (isHovered ? 0.96 : (isActive ? 0.88 : 0.82)), traceColor);
-          ctx.arc(nodeX, nodeY, isPinned ? 5.2 : (isHovered ? 4.8 : (isActive ? 4.1 : 3.4)), 0, Math.PI * 2.0);
+          ctx.fillStyle = cssColorWithAlpha(traceColor, isPinned ? 1.0 : (isHovered ? 0.96 : (isSceneHovered ? 0.94 : (isActive ? 0.88 : 0.82))), traceColor);
+          ctx.arc(nodeX, nodeY, nodeRadius, 0, Math.PI * 2.0);
           ctx.fill();
+          if (isSceneHovered && !isPinned) {
+            ctx.save();
+            ctx.strokeStyle = cssColorWithAlpha(traceColor, 0.95, traceColor);
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.arc(nodeX, nodeY, nodeRadius + 2.6, 0, Math.PI * 2.0);
+            ctx.stroke();
+            ctx.restore();
+          }
           dendrogramHitRegions.push({
             type: "node",
             key: nodeRegionKey,
@@ -6983,7 +7168,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             selectionKeys: [node.selection_key],
             centerX: nodeX,
             centerY: nodeY,
-            radius: 8.0,
+            radius: Math.max(7.5, nodeRadius + 2.5),
           });
         });
 
@@ -7146,21 +7331,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function applySkyPanelMode() {
         applyWidgetMode("sky");
-        skyFullButtonEl.textContent = skyPanelMode === "fullscreen" ? "Window" : "Full";
+        skyFullButtonEl.setAttribute("title", skyPanelMode === "fullscreen" ? "Restore sky panel" : "Maximize sky panel");
+        skyFullButtonEl.setAttribute("aria-label", skyPanelMode === "fullscreen" ? "Restore sky panel" : "Maximize sky panel");
       }
 
       function applyAgeKdePanelMode() {
         applyWidgetMode("age_kde");
-        ageKdeFullButtonEl.textContent = ageKdePanelMode === "fullscreen" ? "Window" : "Full";
+        ageKdeFullButtonEl.setAttribute("title", ageKdePanelMode === "fullscreen" ? "Restore age KDE panel" : "Maximize age KDE panel");
+        ageKdeFullButtonEl.setAttribute("aria-label", ageKdePanelMode === "fullscreen" ? "Restore age KDE panel" : "Maximize age KDE panel");
       }
 
       function applyClusterFilterPanelMode() {
         applyWidgetMode("cluster_filter");
-        clusterFilterFullButtonEl.textContent = clusterFilterPanelMode === "fullscreen" ? "Window" : "Full";
+        clusterFilterFullButtonEl.setAttribute("title", clusterFilterPanelMode === "fullscreen" ? "Restore filter panel" : "Maximize filter panel");
+        clusterFilterFullButtonEl.setAttribute("aria-label", clusterFilterPanelMode === "fullscreen" ? "Restore filter panel" : "Maximize filter panel");
       }
 
       function applyDendrogramPanelMode() {
         applyWidgetMode("dendrogram");
+        dendrogramFullButtonEl.setAttribute("title", dendrogramPanelMode === "fullscreen" ? "Restore dendrogram panel" : "Maximize dendrogram panel");
+        dendrogramFullButtonEl.setAttribute("aria-label", dendrogramPanelMode === "fullscreen" ? "Restore dendrogram panel" : "Maximize dendrogram panel");
         if (widgetModeForKey("dendrogram") === "hidden") {
           clearDendrogramSelectionState();
         }
@@ -10430,7 +10620,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function dendrogramHitRegionAtCanvasPoint(x, y) {
-        let hitRegion = null;
+        let bestNode = null;
+        let bestNodeDistanceSq = Infinity;
+        let bestBranch = null;
+        let bestBranchDistanceSq = Infinity;
         for (let index = dendrogramHitRegions.length - 1; index >= 0; index -= 1) {
           const region = dendrogramHitRegions[index];
           if (!region) {
@@ -10439,28 +10632,33 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (region.type === "node") {
             const dx = x - Number(region.centerX);
             const dy = y - Number(region.centerY);
-            if ((dx * dx + dy * dy) <= Math.pow(Number(region.radius) || 0.0, 2.0)) {
-              hitRegion = region;
-              break;
+            const distanceSq = dx * dx + dy * dy;
+            if (distanceSq <= Math.pow(Number(region.radius) || 0.0, 2.0) && distanceSq < bestNodeDistanceSq) {
+              bestNode = region;
+              bestNodeDistanceSq = distanceSq;
             }
             continue;
           }
           if (!Array.isArray(region.segments)) {
             continue;
           }
-          const hit = region.segments.some((segment) => {
+          let minDistanceSq = Infinity;
+          region.segments.forEach((segment) => {
             if (!Array.isArray(segment) || segment.length < 4) {
-              return false;
+              return;
             }
-            const distanceSq = pointSegmentDistanceSq(x, y, segment[0], segment[1], segment[2], segment[3]);
-            return distanceSq <= 36.0;
+            minDistanceSq = Math.min(minDistanceSq, pointSegmentDistanceSq(x, y, segment[0], segment[1], segment[2], segment[3]));
           });
-          if (hit) {
-            hitRegion = region;
-            break;
+          const hitRadius = Math.max(Number(region.hitRadius) || 0.0, 0.0);
+          if (minDistanceSq <= hitRadius * hitRadius && minDistanceSq < bestBranchDistanceSq) {
+            bestBranch = region;
+            bestBranchDistanceSq = minDistanceSq;
           }
         }
-        return hitRegion;
+        if (bestNode && bestNodeDistanceSq <= 18.0) {
+          return bestNode;
+        }
+        return bestBranch || bestNode || null;
       }
 
       function onDendrogramPointerMove(event) {
@@ -10511,8 +10709,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           clearDendrogramSelectionState();
           renderFrame(currentFrameIndex);
         });
+        dendrogramConnectionEl.addEventListener("change", () => {
+          dendrogramConnectionMode = String(dendrogramConnectionEl.value || "birth_to_older_track");
+          clearDendrogramSelectionState();
+          renderDendrogramWidget();
+        });
+        dendrogramModeEl.addEventListener("change", () => {
+          dendrogramThresholdMode = String(dendrogramModeEl.value || "distance_pc");
+          clearDendrogramSelectionState();
+          renderDendrogramWidget();
+        });
         dendrogramThresholdEl.addEventListener("change", () => {
-          dendrogramThresholdPc = Math.max(Number(dendrogramThresholdEl.value) || 0.0, 0.0);
+          if (currentDendrogramThresholdMode() === "birth_age_myr") {
+            dendrogramThresholdAgeMyr = Math.max(Number(dendrogramThresholdEl.value) || 0.0, 0.0);
+          } else {
+            dendrogramThresholdPc = Math.max(Number(dendrogramThresholdEl.value) || 0.0, 0.0);
+          }
           clearDendrogramSelectionState();
           renderDendrogramWidget();
         });

@@ -118,6 +118,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Cluster Filter", html)
         self.assertIn("Dendrogram", html)
         self.assertIn("Parameter", html)
+        self.assertIn("Birth to older track", html)
+        self.assertIn("Birth to birth", html)
         self.assertIn("Keyboard help", html)
         self.assertIn(">Graphite<", html)
         self.assertIn(">Aurora<", html)
@@ -367,7 +369,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                     "samples": 128,
                     "alpha_coef": 42,
                     "stretch": "log10",
-                    "colormap": "inferno",
+                    "colormap": "gist_heat_r",
                 }],
             )
 
@@ -391,7 +393,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(layer["default_controls"]["alpha_coef"], 42.0)
         self.assertEqual(layer["default_controls"]["stretch"], "log10")
         self.assertAlmostEqual(layer["default_controls"]["opacity"], 0.22)
-        self.assertEqual(layer["default_controls"]["colormap"], "inferno")
+        self.assertEqual(layer["default_controls"]["colormap"], "gist_heat_r")
         self.assertTrue(layer["legend_color"])
         self.assertTrue(layer["data_b64"])
         self.assertTrue(layer["sky_overlay_data_b64"])
@@ -399,6 +401,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(layer["sky_overlay_atlas_tiles"]["x"], 2)
         self.assertEqual(layer["sky_overlay_atlas_tiles"]["y"], 2)
         self.assertGreaterEqual(len(layer["colormap_options"]), 3)
+        self.assertIn("gist_heat", [option["name"] for option in layer["colormap_options"]])
+        self.assertIn("gist_heat_r", [option["name"] for option in layer["colormap_options"]])
         self.assertEqual(zero_frame["decorations"][0]["kind"], "volume_layer")
         self.assertIn("Dust Cube", [item["name"] for item in scene_spec["legend"]["items"]])
         self.assertIn("oviz-three-volume", html)

@@ -85,6 +85,7 @@ DEFAULT_THREEJS_VOLUME_COLORMAPS = (
     'viridis',
     'cividis',
     'turbo',
+    'gist_heat',
     'Greys',
 )
 
@@ -2108,13 +2109,19 @@ class Animate3D:
 
         age_values = np.asarray([entry['age_now_myr'] for entry in entries], dtype=float)
         max_age = float(np.nanmax(age_values)) if age_values.size else 0.0
+        max_age_gap = max_age
         return {
             'enabled': bool(entries and trace_options),
             'title': 'Birth Tree',
             'default_trace_key': trace_options[0]['trace_key'] if trace_options else '',
+            'default_threshold_mode': 'distance_pc',
+            'default_connection_mode': 'birth_to_older_track',
             'default_threshold_pc': 100.0,
             'threshold_min_pc': 0.0,
             'threshold_max_pc': max(5000.0, max_age * 50.0 if np.isfinite(max_age) else 5000.0),
+            'default_threshold_age_myr': 5.0,
+            'threshold_min_age_myr': 0.0,
+            'threshold_max_age_myr': max(10.0, max_age_gap + 5.0 if np.isfinite(max_age_gap) else 10.0),
             'max_age_myr': max_age,
             'traces': trace_options,
             'entries': entries,
@@ -3630,16 +3637,24 @@ def _normalize_threejs_volume_opacity_function(opacity_function):
 def _build_threejs_volume_colormap_options(selected_colormap, opacity_function=None):
     options = []
     seen = set()
-    requested = [selected_colormap, *DEFAULT_THREEJS_VOLUME_COLORMAPS]
+    requested = []
+
+    def _append_requested(value):
+        if value in (None, ''):
+            return
+        requested.append(value)
+
+    _append_requested(selected_colormap)
+    for base_name in DEFAULT_THREEJS_VOLUME_COLORMAPS:
+        _append_requested(base_name)
+        _append_requested(_threejs_reversed_colormap_name(base_name))
 
     for candidate in requested:
-        if candidate in (None, ''):
-            continue
         sampled = _sample_threejs_volume_colormap(candidate, opacity_function=opacity_function)
         if sampled is None:
             continue
         name, rgba = sampled
-        key = str(name).strip().lower()
+        key = _normalize_threejs_volume_colormap_name(name)
         if not key or key in seen:
             continue
         seen.add(key)
@@ -3695,18 +3710,27 @@ def _resolve_threejs_volume_colormap_object(colormap_value):
     if not requested:
         return None
 
-    candidates = []
-    for name in (requested, requested.lower(), requested.capitalize()):
-        if name not in candidates:
-            candidates.append(name)
+    normalized_requested = _normalize_threejs_volume_colormap_name(requested)
+    if not normalized_requested:
+        return None
+
+    is_reversed = normalized_requested.endswith('_r')
+    base_normalized = normalized_requested[:-2] if is_reversed else normalized_requested
+    candidates = _threejs_volume_colormap_name_candidates(requested)
+    if is_reversed:
+        candidates.extend(_threejs_volume_colormap_name_candidates(base_normalized))
+    ordered_candidates = []
+    for name in candidates:
+        if name not in ordered_candidates:
+            ordered_candidates.append(name)
 
     try:
         from matplotlib import colormaps as mpl_colormaps
 
-        for name in candidates:
+        for name in ordered_candidates:
             try:
                 cmap = mpl_colormaps[name]
-                return getattr(cmap, 'name', name), cmap
+                return _finalize_threejs_volume_colormap(name, cmap, reversed_requested=is_reversed)
             except Exception:
                 continue
     except Exception:
@@ -3715,14 +3739,82 @@ def _resolve_threejs_volume_colormap_object(colormap_value):
     try:
         import colormaps as installed_colormaps
 
-        for name in candidates:
+        for name in ordered_candidates:
             cmap = getattr(installed_colormaps, name, None)
             if callable(cmap):
-                return getattr(cmap, 'name', name), cmap
+                return _finalize_threejs_volume_colormap(name, cmap, reversed_requested=is_reversed)
     except Exception:
         pass
 
     return None
+
+
+def _normalize_threejs_volume_colormap_name(name):
+    if name in (None, ''):
+        return ''
+    normalized = str(name).strip()
+    if not normalized:
+        return ''
+    return normalized.replace('-', '_').replace(' ', '_').lower()
+
+
+def _threejs_reversed_colormap_name(name):
+    normalized = _normalize_threejs_volume_colormap_name(name)
+    if not normalized:
+        return ''
+    if normalized.endswith('_r'):
+        return normalized
+    return f'{normalized}_r'
+
+
+def _threejs_volume_colormap_name_candidates(name):
+    normalized = _normalize_threejs_volume_colormap_name(name)
+    if not normalized:
+        return []
+
+    candidates = [normalized]
+
+    if normalized.endswith('_r'):
+        base_name = normalized[:-2]
+        candidates.extend((f'{base_name}_r',))
+
+    plain_name = normalized[:-2] if normalized.endswith('_r') else normalized
+    if plain_name:
+        title_name = plain_name.title().replace('_', '_')
+        candidates.extend((plain_name, title_name))
+        if normalized.endswith('_r'):
+            candidates.extend((f'{plain_name}_r', f'{title_name}_r'))
+
+    ordered = []
+    for candidate in candidates:
+        if candidate and candidate not in ordered:
+            ordered.append(candidate)
+    return ordered
+
+
+def _finalize_threejs_volume_colormap(name, cmap, reversed_requested=False):
+    normalized_name = _normalize_threejs_volume_colormap_name(name)
+    label = getattr(cmap, 'name', None) or normalized_name or 'custom'
+
+    if not reversed_requested:
+        return str(label), cmap
+
+    if normalized_name.endswith('_r'):
+        return str(label), cmap
+
+    if hasattr(cmap, 'reversed'):
+        try:
+            reversed_cmap = cmap.reversed()
+            reversed_label = getattr(reversed_cmap, 'name', None) or _threejs_reversed_colormap_name(label)
+            return str(reversed_label), reversed_cmap
+        except Exception:
+            pass
+
+    def reversed_callable(values, _base_cmap=cmap):
+        return _base_cmap(np.clip(1.0 - np.asarray(values, dtype=float), 0.0, 1.0))
+
+    reversed_callable.name = _threejs_reversed_colormap_name(label)
+    return str(reversed_callable.name), reversed_callable
 
 
 def read_theme(plot):
