@@ -161,12 +161,30 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         cursor: default;
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-toolbar,
-      #__ROOT_ID__[data-zen="true"] .oviz-three-widget-select,
-      #__ROOT_ID__[data-zen="true"] .oviz-three-reset-view,
-      #__ROOT_ID__[data-zen="true"] .oviz-three-save-state,
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel {
         display: none !important;
+      }
+      #__ROOT_ID__[data-zen="true"] .oviz-three-topbar {
+        grid-template-columns: auto;
+        grid-template-areas: "actions";
+        justify-content: end;
+        padding-inline: 12px;
+        background: transparent;
+        border-bottom-color: transparent;
+        box-shadow: none;
+      }
+      #__ROOT_ID__[data-zen="true"] .oviz-three-topbar-brand,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-title,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-tools-shell,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-controls-shell,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-widget-select,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-reset-view,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-save-state {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-zen="true"] .oviz-three-widget-menu {
+        justify-self: end;
       }
       #__ROOT_ID__ .oviz-three-legend {
         display: flex;
@@ -382,12 +400,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-text);
       }
       #__ROOT_ID__ .oviz-three-controls-field input[type="range"],
-      #__ROOT_ID__ .oviz-three-controls-field select {
+      #__ROOT_ID__ .oviz-three-controls-field select,
+      #__ROOT_ID__ .oviz-three-controls-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-controls-field input[type="text"] {
         width: 100%;
         min-width: 0;
         box-sizing: border-box;
       }
-      #__ROOT_ID__ .oviz-three-controls-field select {
+      #__ROOT_ID__ .oviz-three-controls-field select,
+      #__ROOT_ID__ .oviz-three-controls-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-controls-field input[type="text"] {
         padding: 6px 8px;
         border-radius: 6px;
         border: 1px solid var(--oviz-panel-border);
@@ -423,12 +445,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 12px Helvetica, Arial, sans-serif;
         padding: 6px 10px;
       }
+      #__ROOT_ID__ .oviz-three-controls-actions button[data-active="true"] {
+        background: rgba(110, 140, 255, 0.20);
+        border-color: rgba(140, 170, 255, 0.7);
+      }
       #__ROOT_ID__ .oviz-three-controls-hint {
         color: var(--oviz-text);
         font-size: 11px;
         line-height: 1.4;
         white-space: pre-wrap;
         opacity: 0.88;
+      }
+      #__ROOT_ID__ .oviz-three-manual-labels {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-three-manual-label-actions {
+        align-items: center;
       }
       #__ROOT_ID__ .oviz-three-key-help {
         position: absolute;
@@ -623,7 +659,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         flex-direction: column;
         align-items: flex-start;
         gap: 6px;
-        pointer-events: none;
+        pointer-events: auto;
+        cursor: grab;
+        user-select: none;
+        touch-action: none;
+      }
+      #__ROOT_ID__ .oviz-three-scale-bar[data-dragging="true"] {
+        cursor: grabbing;
       }
       #__ROOT_ID__ .oviz-three-scale-label {
         color: var(--oviz-text);
@@ -719,6 +761,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         right: 72px;
         width: min(34vw, 480px);
         height: min(40vh, 340px);
+      }
+      #__ROOT_ID__ .oviz-three-box-panel {
+        right: 18px;
+        bottom: 86px;
+        width: min(40vw, 580px);
+        height: min(46vh, 420px);
       }
       #__ROOT_ID__ .oviz-three-widget-drag {
         position: absolute;
@@ -968,6 +1016,74 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: transparent;
       }
       #__ROOT_ID__ .oviz-three-dendrogram-hint {
+        color: var(--oviz-axis);
+        font: 10px Menlo, Monaco, Consolas, monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #__ROOT_ID__ .oviz-three-box-body {
+        position: absolute;
+        top: 34px;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        box-sizing: border-box;
+      }
+      #__ROOT_ID__ .oviz-three-box-toolbar {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      #__ROOT_ID__ .oviz-three-box-summary {
+        flex: 1 1 auto;
+        color: var(--oviz-text);
+        font: 11px Menlo, Monaco, Consolas, monospace;
+        line-height: 1.35;
+        white-space: pre-wrap;
+      }
+      #__ROOT_ID__ .oviz-three-box-controls {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      #__ROOT_ID__ .oviz-three-box-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        color: var(--oviz-text);
+        font: 10px Helvetica, Arial, sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-box-field input {
+        width: 82px;
+      }
+      #__ROOT_ID__ .oviz-three-box-reset {
+        flex: 0 0 auto;
+      }
+      #__ROOT_ID__ .oviz-three-box-shell {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 220px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.16);
+      }
+      #__ROOT_ID__ .oviz-three-box-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: transparent;
+      }
+      #__ROOT_ID__ .oviz-three-box-hint {
         color: var(--oviz-axis);
         font: 10px Menlo, Monaco, Consolas, monospace;
         white-space: nowrap;
@@ -1391,6 +1507,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-field select,
       #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
       #__ROOT_ID__ .oviz-three-controls-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-controls-field input[type="text"],
       #__ROOT_ID__ .oviz-three-volume select,
       #__ROOT_ID__ .oviz-three-volume input[type="number"],
       #__ROOT_ID__ .oviz-three-filter-field select {
@@ -1850,7 +1967,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(255, 255, 255, 0.04);
         font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
-      #__ROOT_ID__[data-zen="true"] .oviz-three-topbar,
       #__ROOT_ID__[data-zen="true"] .oviz-three-legend-panel,
       #__ROOT_ID__[data-zen="true"] .oviz-three-inspector-dock,
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
@@ -1988,9 +2104,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                   <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
                   <span>Show axes</span>
                 </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-galactic-reference-toggle" type="checkbox" checked />
+                  <span>Show GC/radius overlays</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
+                  <span>Show region labels</span>
+                </label>
                 <div class="oviz-three-controls-actions">
                   <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
                   <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
+                  <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
                   <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
                   <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
                 </div>
@@ -2057,6 +2182,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                 <label class="oviz-three-volume-field">
                   <span>Layer</span>
                   <select class="oviz-three-volume-select"></select>
+                </label>
+                <label class="oviz-three-volume-field oviz-three-volume-smoothing-field">
+                  <span>Smoothing</span>
+                  <select class="oviz-three-volume-smoothing"></select>
                 </label>
                 <label class="oviz-three-volume-toggle">
                   <input class="oviz-three-volume-visible" type="checkbox" />
@@ -2147,9 +2276,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                   <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
                   <span>Show axes</span>
                 </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-galactic-reference-toggle" type="checkbox" checked />
+                  <span>Show GC/radius overlays</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
+                  <span>Show region labels</span>
+                </label>
                 <div class="oviz-three-controls-actions">
                   <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
                   <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
+                  <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
                   <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
                   <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
                 </div>
@@ -2189,6 +2327,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           <div>Toggle lasso mode or click selection.</div>
           <div class="oviz-three-key-help-keys">V</div>
           <div>Activate View from Earth.</div>
+          <div class="oviz-three-key-help-keys">O</div>
+          <div>Toggle automatic orbit around the current anchor point.</div>
           <div class="oviz-three-key-help-keys">?</div>
           <div>Open this keyboard help panel.</div>
           <div class="oviz-three-key-help-keys">Esc</div>
@@ -2202,7 +2342,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         </svg>
       </div>
       <div class="oviz-three-tooltip"></div>
-      <div class="oviz-three-scale-bar">
+      <div class="oviz-three-scale-bar" data-dragging="false" title="Drag to reposition">
         <div class="oviz-three-scale-label"></div>
         <div class="oviz-three-scale-line"></div>
       </div>
@@ -2287,6 +2427,35 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="ne"></div>
         <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="sw"></div>
         <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="se"></div>
+      </div>
+      <div class="oviz-three-box-panel oviz-three-widget-panel" data-widget-key="box_metrics" data-mode="hidden">
+        <div class="oviz-three-box-drag oviz-three-widget-drag">
+          <span class="oviz-three-widget-title">Box Metrics</span>
+          <div class="oviz-three-widget-window-controls">
+            <button class="oviz-three-box-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide box metrics panel" aria-label="Hide box metrics panel"></button>
+            <button class="oviz-three-box-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen box metrics panel" aria-label="Toggle fullscreen box metrics panel"></button>
+          </div>
+        </div>
+        <div class="oviz-three-box-body">
+          <div class="oviz-three-box-toolbar">
+            <div class="oviz-three-box-summary"></div>
+            <div class="oviz-three-box-controls">
+              <label class="oviz-three-box-field">
+                <span>Show Box</span>
+                <input class="oviz-three-box-visible" type="checkbox" />
+              </label>
+              <button class="oviz-three-box-reset" type="button">Reset Box</button>
+            </div>
+          </div>
+          <div class="oviz-three-box-shell">
+            <canvas class="oviz-three-box-canvas"></canvas>
+          </div>
+          <div class="oviz-three-box-hint">Drag cube faces to move the co-rotating box in local X/Y. Drag a corner handle to resize it. The lower panel shows nearest-neighbor clustering enhancement relative to matched random catalogs.</div>
+        </div>
+        <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="nw"></div>
+        <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="ne"></div>
+        <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="sw"></div>
+        <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
       <div class="oviz-three-dendrogram-panel oviz-three-widget-panel" data-widget-key="dendrogram" data-mode="hidden">
         <div class="oviz-three-dendrogram-drag oviz-three-widget-drag">
@@ -2483,11 +2652,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const fadeTimeEl = root.querySelector(".oviz-three-fade-time");
       const fadeInOutToggleEl = root.querySelector(".oviz-three-fade-in-out-toggle");
       const axesVisibleToggleEl = root.querySelector(".oviz-three-axes-visible-toggle");
+      const galacticReferenceToggleEl = root.querySelector(".oviz-three-galactic-reference-toggle");
+      const nearbyRegionLabelsToggleEls = Array.from(root.querySelectorAll(".oviz-three-region-labels-toggle"));
+      const manualLabelSelectEl = root.querySelector(".oviz-three-manual-label-select");
+      const manualLabelTextEl = root.querySelector(".oviz-three-manual-label-text");
+      const manualLabelSizeEl = root.querySelector(".oviz-three-manual-label-size");
+      const manualLabelAddButtonEl = root.querySelector(".oviz-three-manual-label-add");
+      const manualLabelApplyButtonEl = root.querySelector(".oviz-three-manual-label-apply");
+      const manualLabelDeleteButtonEl = root.querySelector(".oviz-three-manual-label-delete");
+      const manualLabelReadoutEl = root.querySelector(".oviz-three-manual-label-readout");
+      const orbitCameraButtons = Array.from(root.querySelectorAll(".oviz-three-auto-orbit"));
       const viewFromEarthButtonEl = root.querySelector(".oviz-three-view-from-earth");
       const resetCameraButtonEl = root.querySelector(".oviz-three-reset-camera");
       const resetControlsButtonEl = root.querySelector(".oviz-three-reset-controls");
       const volumePanelEl = root.querySelector(".oviz-three-volume");
       const volumeSelectEl = root.querySelector(".oviz-three-volume-select");
+      const volumeSmoothingFieldEl = root.querySelector(".oviz-three-volume-smoothing-field");
+      const volumeSmoothingEl = root.querySelector(".oviz-three-volume-smoothing");
       const volumeVisibleEl = root.querySelector(".oviz-three-volume-visible");
       const volumeColormapEl = root.querySelector(".oviz-three-volume-colormap");
       const volumeStretchEl = root.querySelector(".oviz-three-volume-stretch");
@@ -2523,6 +2704,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const clusterFilterRangeReadoutMaxEl = root.querySelector(".oviz-three-filter-range-readout-max");
       const clusterFilterFullButtonEl = root.querySelector(".oviz-three-filter-full");
       const clusterFilterHideButtonEl = root.querySelector(".oviz-three-filter-hide");
+      const boxMetricsPanelEl = root.querySelector(".oviz-three-box-panel");
+      const boxMetricsCanvasEl = root.querySelector(".oviz-three-box-canvas");
+      const boxMetricsSummaryEl = root.querySelector(".oviz-three-box-summary");
+      const boxMetricsVisibleEl = root.querySelector(".oviz-three-box-visible");
+      const boxMetricsFullButtonEl = root.querySelector(".oviz-three-box-full");
+      const boxMetricsHideButtonEl = root.querySelector(".oviz-three-box-hide");
+      const boxMetricsResetButtonEl = root.querySelector(".oviz-three-box-reset");
       const dendrogramPanelEl = root.querySelector(".oviz-three-dendrogram-panel");
       const dendrogramCanvasEl = root.querySelector(".oviz-three-dendrogram-canvas");
       const dendrogramTraceEl = root.querySelector(".oviz-three-dendrogram-trace");
@@ -2653,6 +2841,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const groupVisibility = sceneSpec.group_visibility || {};
       const defaultGroup = sceneSpec.default_group || "All";
       const skySpec = sceneSpec.sky_panel || { enabled: false };
+      const selectionBoxSpec = sceneSpec.selection_box || { enabled: false };
       const ageKdeSpec = sceneSpec.age_kde || { enabled: false };
       const clusterFilterSpec = sceneSpec.cluster_filter || { enabled: false };
       const dendrogramSpec = sceneSpec.dendrogram || { enabled: false };
@@ -2678,6 +2867,49 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           })
           .filter(Boolean)
       );
+      const selectionBoxMetricsSpec = selectionBoxSpec.metrics || { enabled: false };
+      const selectionBoxTransformSpec = selectionBoxSpec.transform || {};
+      const selectionBoxReferenceOrbitSpec = selectionBoxTransformSpec.reference_orbit || {};
+      const selectionBoxDefaultBandSpec = (() => {
+        const explicitDefault = Array.isArray(selectionBoxMetricsSpec.twopcf_default_band_pc)
+          ? selectionBoxMetricsSpec.twopcf_default_band_pc
+          : null;
+        const fallbackBand = Array.isArray(selectionBoxMetricsSpec.twopcf_bands_pc)
+          && selectionBoxMetricsSpec.twopcf_bands_pc.length
+          ? selectionBoxMetricsSpec.twopcf_bands_pc[0]
+          : [30.0, 80.0];
+        const sourceBand = explicitDefault || fallbackBand;
+        const minValue = Number(sourceBand && sourceBand[0]);
+        const maxValue = Number(sourceBand && sourceBand[1]);
+        if (Number.isFinite(minValue) && Number.isFinite(maxValue) && maxValue > minValue) {
+          return [minValue, maxValue];
+        }
+        return [30.0, 80.0];
+      })();
+      const galacticReferenceTraceNames = new Set([
+        "GC",
+        "GC Ring",
+        "R = 4 kpc",
+        "R = 8.12 kpc",
+        "R = 12 kpc",
+        "Galactic Quadrants",
+        "Galactic l Ticks",
+        "Galactic l Labels",
+        "Galactic Z Axis",
+      ]);
+      const nearbyRegionLabelTraceNames = new Set([
+        "Nearby Region Labels",
+      ]);
+      const selectionBoxMetricTimeCenters = buildSelectionBoxMetricTimeCenters();
+      const selectionBoxMetricEvents = normalizeSelectionBoxMetricEvents(selectionBoxMetricsSpec.events || {});
+      const selectionBoxRandomCatalogSize = Math.max(
+        32,
+        Math.round(Number(selectionBoxMetricsSpec.random_catalog_size) || 256)
+      );
+      const selectionBoxRandomUnitCatalog = buildSelectionBoxRandomUnitCatalog(
+        selectionBoxRandomCatalogSize,
+        734921
+      );
       const themePresets = buildThemePresets(baseTheme);
       const pointScale = Math.max(sceneSpec.max_span || 1, 1) / 4000.0;
       const hoverTargets = [];
@@ -2695,6 +2927,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const volumeColorTextureCache = new Map();
       const volumeColorBytesCache = new Map();
       const volumeRuntimeByKey = new Map();
+      const DEFAULT_MANUAL_LABEL_SIZE = 24.0;
+      const MIN_MANUAL_LABEL_SIZE = 8.0;
+      const MAX_MANUAL_LABEL_SIZE = 120.0;
+      const MAX_MANUAL_LABEL_TEXT_LENGTH = 80;
       let volumeJitterTexture = null;
       let legendState = {};
       let currentGroup = defaultGroup;
@@ -2706,11 +2942,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let lassoVolumeSelectionEnabled = false;
       let playbackTimer = null;
       let skyPanelMode = "hidden";
+      let boxMetricsPanelMode = "hidden";
       let ageKdePanelMode = "hidden";
       let clusterFilterPanelMode = "hidden";
       let dendrogramPanelMode = "hidden";
       let widgetPointerState = null;
+      let scaleBarPointerState = null;
       let widgetZIndexCounter = 8;
+      let selectionBoxPointerState = null;
       let lassoState = null;
       let lassoArmed = false;
       let suppressNextCanvasClick = false;
@@ -2718,11 +2957,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let localHoveredClusterKey = "";
       let skyHoveredClusterKey = "";
       let lastSentSkyHoverClusterKey = null;
+      let scaleBarPosition = null;
       let activeThemeKey = "default";
       let axesVisible = Boolean(sceneSpec.show_axes);
+      let galacticReferenceVisible = true;
+      let nearbyRegionLabelsVisible = true;
+      let manualLabels = [];
+      let activeManualLabelId = "";
+      let manualLabelDraftText = "";
+      let manualLabelDraftSize = DEFAULT_MANUAL_LABEL_SIZE;
+      let manualLabelPointerState = null;
+      let manualLabelIdCounter = 0;
       let globalPointSizeScale = 1.0;
       let globalPointOpacityScale = 1.0;
       let globalScrollSpeed = 1.0;
+      let cameraAutoOrbitEnabled = Boolean(
+        initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled
+      );
       let zenModeEnabled = Boolean(initialState.zen_mode_enabled);
       let inspectorOpen = Boolean(initialState.inspector_open);
       let inspectorPinned = Boolean(initialState.inspector_pinned);
@@ -2759,6 +3010,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const traceStyleStateByKey = {};
       const legendEditButtonByKey = new Map();
       let activeLegendEditorKey = "";
+      let selectionBoxState = buildDefaultSelectionBoxState();
+      let selectionBoxHitObjects = [];
+      let selectionBoxMetricsCache = null;
+      let selectionBoxMetricsTimer = null;
+      let selectionBoxMetricsVersion = 0;
+      let selectionBoxMetricsPending = false;
 
       const renderer = new THREE.WebGLRenderer({
         canvas,
@@ -2779,6 +3036,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       const sceneUp = sceneSpec.camera_up || { x: 0.0, y: 0.0, z: 1.0 };
       const sceneUpVector = new THREE.Vector3(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0).normalize();
+      const CAMERA_AUTO_ORBIT_SPEED = 1.2;
       const camera = new THREE.PerspectiveCamera(38, 1, 0.1, Math.max((sceneSpec.max_span || 1) * 20.0, 10000.0));
       camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
       const controls = new OrbitControls(camera, renderer.domElement);
@@ -2787,6 +3045,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       controls.rotateSpeed = 0.7;
       controls.panSpeed = 0.7;
       controls.zoomSpeed = globalScrollSpeed;
+      controls.autoRotate = cameraAutoOrbitEnabled;
+      controls.autoRotateSpeed = CAMERA_AUTO_ORBIT_SPEED;
       controls.minPolarAngle = 0.02;
       controls.maxPolarAngle = Math.PI - 0.02;
       controls.target.set(sceneSpec.center.x, sceneSpec.center.y, sceneSpec.center.z);
@@ -2842,6 +3102,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           sizeScale: 1.0,
           hasPoints: Boolean(item.has_points),
           hasSegments: Boolean(item.has_segments),
+          hasLabels: Boolean(item.has_labels),
         };
       });
 
@@ -2893,9 +3154,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
       }
 
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       function widgetPanelForKey(widgetKey) {
         if (widgetKey === "sky") {
           return skyPanelEl;
+        }
+        if (widgetKey === "box_metrics") {
+          return boxMetricsPanelEl;
         }
         if (widgetKey === "age_kde") {
           return ageKdePanelEl;
@@ -2913,6 +3186,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (widgetKey === "sky") {
           return Boolean(skySpec.enabled);
         }
+        if (widgetKey === "box_metrics") {
+          return Boolean(selectionBoxSpec.enabled);
+        }
         if (widgetKey === "age_kde") {
           return Boolean(ageKdeSpec.enabled);
         }
@@ -2929,6 +3205,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (widgetKey === "sky") {
           return skyPanelMode;
         }
+        if (widgetKey === "box_metrics") {
+          return boxMetricsPanelMode;
+        }
         if (widgetKey === "age_kde") {
           return ageKdePanelMode;
         }
@@ -2944,6 +3223,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function setWidgetModeValue(widgetKey, mode) {
         if (widgetKey === "sky") {
           skyPanelMode = mode;
+        } else if (widgetKey === "box_metrics") {
+          boxMetricsPanelMode = mode;
         } else if (widgetKey === "age_kde") {
           ageKdePanelMode = mode;
         } else if (widgetKey === "cluster_filter") {
@@ -2960,6 +3241,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             top: 72,
             width: Math.min(window.innerWidth * 0.38, 560),
             height: Math.min(window.innerHeight * 0.56, 560),
+          };
+        }
+        if (widgetKey === "box_metrics") {
+          return {
+            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.40, 580) - 18),
+            top: Math.max(72, window.innerHeight - Math.min(window.innerHeight * 0.46, 420) - 92),
+            width: Math.min(window.innerWidth * 0.40, 580),
+            height: Math.min(window.innerHeight * 0.46, 420),
           };
         }
         if (widgetKey === "age_kde") {
@@ -2987,6 +3276,94 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           };
         }
         return { left: 12, top: 72, width: 360, height: 260 };
+      }
+
+      function measuredScaleBarSize() {
+        if (!scaleBarEl) {
+          return { width: 0.0, height: 0.0 };
+        }
+        const rect = scaleBarEl.getBoundingClientRect();
+        const fallbackWidth = Number(scaleBarEl.offsetWidth) || 160.0;
+        const fallbackHeight = Number(scaleBarEl.offsetHeight) || 44.0;
+        return {
+          width: Math.max(Number(rect.width) || fallbackWidth, 1.0),
+          height: Math.max(Number(rect.height) || fallbackHeight, 1.0),
+        };
+      }
+
+      function clampScaleBarPosition(left, top, width, height) {
+        const rootRect = root.getBoundingClientRect();
+        const margin = 6.0;
+        return {
+          left: Math.min(Math.max(margin, Number(left) || 0.0), Math.max(margin, rootRect.width - width - margin)),
+          top: Math.min(Math.max(margin, Number(top) || 0.0), Math.max(margin, rootRect.height - height - margin)),
+        };
+      }
+
+      function defaultScaleBarPosition() {
+        if (!scaleBarEl) {
+          return { left: 18.0, top: 18.0 };
+        }
+        const rootRect = root.getBoundingClientRect();
+        const size = measuredScaleBarSize();
+        const computed = window.getComputedStyle(scaleBarEl);
+        let left = Number.parseFloat(computed.left);
+        let top = Number.parseFloat(computed.top);
+        if (!Number.isFinite(top)) {
+          const bottom = Number.parseFloat(computed.bottom);
+          if (Number.isFinite(bottom)) {
+            top = rootRect.height - size.height - bottom;
+          }
+        }
+        if (!Number.isFinite(left)) {
+          left = 18.0;
+        }
+        if (!Number.isFinite(top)) {
+          top = Math.max(6.0, rootRect.height - size.height - 86.0);
+        }
+        return clampScaleBarPosition(left, top, size.width, size.height);
+      }
+
+      function applyScaleBarPosition() {
+        if (!scaleBarEl) {
+          return;
+        }
+        const size = measuredScaleBarSize();
+        const next = scaleBarPosition && Number.isFinite(Number(scaleBarPosition.left)) && Number.isFinite(Number(scaleBarPosition.top))
+          ? clampScaleBarPosition(scaleBarPosition.left, scaleBarPosition.top, size.width, size.height)
+          : defaultScaleBarPosition();
+        scaleBarEl.style.left = `${next.left}px`;
+        scaleBarEl.style.top = `${next.top}px`;
+        scaleBarEl.style.right = "auto";
+        scaleBarEl.style.bottom = "auto";
+        if (scaleBarPosition) {
+          scaleBarPosition = { left: next.left, top: next.top };
+        }
+      }
+
+      function captureScaleBarState() {
+        if (!scaleBarEl) {
+          return null;
+        }
+        if (!scaleBarPosition) {
+          const rootRect = root.getBoundingClientRect();
+          const rect = scaleBarEl.getBoundingClientRect();
+          if ((Number(rect.width) || 0.0) > 0.0 && (Number(rect.height) || 0.0) > 0.0) {
+            scaleBarPosition = clampScaleBarPosition(
+              rect.left - rootRect.left,
+              rect.top - rootRect.top,
+              rect.width,
+              rect.height,
+            );
+          }
+        }
+        if (!scaleBarPosition) {
+          return null;
+        }
+        return {
+          left: Number(scaleBarPosition.left) || 0.0,
+          top: Number(scaleBarPosition.top) || 0.0,
+        };
       }
 
       function raiseWidget(widgetKey) {
@@ -3070,6 +3447,964 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         panelEl.style.bottom = "auto";
         panelEl.style.width = `${nextWidth}px`;
         panelEl.style.height = `${nextHeight}px`;
+      }
+
+      function buildSelectionBoxMetricTimeCenters() {
+        if (!selectionBoxMetricsSpec.enabled) {
+          return [];
+        }
+        const lookbackMax = Math.max(Number(selectionBoxMetricsSpec.lookback_max_myr) || 0.0, 0.0);
+        const stepMyr = Math.max(Number(selectionBoxMetricsSpec.step_myr) || 0.0, 0.0);
+        if (!(lookbackMax > 0.0) || !(stepMyr > 0.0)) {
+          return [];
+        }
+        const centers = [];
+        for (let center = 0.0; center <= lookbackMax + 1e-9; center += stepMyr) {
+          centers.push(Number(center.toFixed(6)));
+        }
+        if (!centers.length || Math.abs(centers[centers.length - 1] - lookbackMax) > 1e-6) {
+          centers.push(Number(lookbackMax.toFixed(6)));
+        }
+        return centers;
+      }
+
+      function normalizeSelectionBoxMetricEvents(eventSpec) {
+        const rawTimes = Array.isArray(eventSpec.time_of_death_myr) ? eventSpec.time_of_death_myr : [];
+        const rawX = Array.isArray(eventSpec.x_pc) ? eventSpec.x_pc : [];
+        const rawY = Array.isArray(eventSpec.y_pc) ? eventSpec.y_pc : [];
+        const rawZ = Array.isArray(eventSpec.z_pc) ? eventSpec.z_pc : [];
+        const rawSampleIds = Array.isArray(eventSpec.imf_sample_idx) ? eventSpec.imf_sample_idx : [];
+        const limit = Math.min(rawTimes.length, rawX.length, rawY.length, rawZ.length, rawSampleIds.length);
+        const lookbackMax = Math.max(Number(selectionBoxMetricsSpec.lookback_max_myr) || 0.0, 0.0);
+        const rows = [];
+        const sampleIdSet = new Set();
+        for (let index = 0; index < limit; index += 1) {
+          const time = Number(rawTimes[index]);
+          const lookback = -time;
+          const x = Number(rawX[index]);
+          const y = Number(rawY[index]);
+          const z = Number(rawZ[index]);
+          const sampleId = Math.round(Number(rawSampleIds[index]));
+          if (
+            !Number.isFinite(lookback)
+            || !Number.isFinite(x)
+            || !Number.isFinite(y)
+            || !Number.isFinite(z)
+            || !Number.isFinite(sampleId)
+          ) {
+            continue;
+          }
+          if (lookback < -1e-9 || lookback > lookbackMax + 1e-9) {
+            continue;
+          }
+          rows.push({ lookback, x, y, z, sampleId });
+          sampleIdSet.add(sampleId);
+        }
+        rows.sort((a, b) => a.lookback - b.lookback);
+        const sampleValues = Array.from(sampleIdSet).sort((a, b) => a - b);
+        const sampleIndexById = new Map(sampleValues.map((value, index) => [value, index]));
+        const lookback = new Float32Array(rows.length);
+        const x = new Float32Array(rows.length);
+        const y = new Float32Array(rows.length);
+        const z = new Float32Array(rows.length);
+        const sampleIds = new Int32Array(rows.length);
+        const sampleIndex = new Int32Array(rows.length);
+        rows.forEach((row, index) => {
+          lookback[index] = row.lookback;
+          x[index] = row.x;
+          y[index] = row.y;
+          z[index] = row.z;
+          sampleIds[index] = row.sampleId;
+          sampleIndex[index] = sampleIndexById.get(row.sampleId);
+        });
+        return {
+          count: rows.length,
+          lookback,
+          x,
+          y,
+          z,
+          sampleIds,
+          sampleIndex,
+          sampleValues,
+        };
+      }
+
+      function buildSelectionBoxRandomUnitCatalog(size, seed) {
+        const nPoints = Math.max(0, Math.round(Number(size) || 0));
+        const x = new Float32Array(nPoints);
+        const y = new Float32Array(nPoints);
+        const z = new Float32Array(nPoints);
+        let state = (Math.round(Number(seed) || 1) >>> 0) || 1;
+        function nextUnit() {
+          state = (state + 0x6D2B79F5) >>> 0;
+          let t = state;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        }
+        for (let index = 0; index < nPoints; index += 1) {
+          x[index] = 2.0 * nextUnit() - 1.0;
+          y[index] = 2.0 * nextUnit() - 1.0;
+          z[index] = 2.0 * nextUnit() - 1.0;
+        }
+        return { x, y, z };
+      }
+
+      function selectionBoxHalfWidthBounds() {
+        const minHalfWidthPc = Math.max(Number(selectionBoxSpec.min_half_width_pc) || 50.0, 10.0);
+        const maxHalfWidthPc = Math.max(
+          Number(selectionBoxSpec.max_half_width_pc) || Math.max(minHalfWidthPc, sceneSpec.max_span || 1000.0),
+          minHalfWidthPc
+        );
+        return { minHalfWidthPc, maxHalfWidthPc };
+      }
+
+      function clampSelectionBoxHalfWidth(value) {
+        const bounds = selectionBoxHalfWidthBounds();
+        return clampRange(Number(value) || bounds.minHalfWidthPc, bounds.minHalfWidthPc, bounds.maxHalfWidthPc);
+      }
+
+      function selectionBoxBandBounds() {
+        const { maxHalfWidthPc } = selectionBoxHalfWidthBounds();
+        const minBandPc = Math.max(Number(selectionBoxMetricsSpec.twopcf_min_pc) || 1.0, 0.0);
+        const maxBandPc = Math.max(
+          Number(selectionBoxMetricsSpec.twopcf_max_pc) || (2.0 * Math.sqrt(3.0) * maxHalfWidthPc),
+          minBandPc + 1.0
+        );
+        return { minBandPc, maxBandPc };
+      }
+
+      function normalizeSelectionBoxBand(bandLike) {
+        const bounds = selectionBoxBandBounds();
+        const defaultMin = Number(selectionBoxDefaultBandSpec[0]) || bounds.minBandPc;
+        const defaultMax = Number(selectionBoxDefaultBandSpec[1]) || Math.max(defaultMin + 1.0, bounds.maxBandPc);
+        let minValue;
+        let maxValue;
+        if (Array.isArray(bandLike)) {
+          minValue = Number(bandLike[0]);
+          maxValue = Number(bandLike[1]);
+        } else {
+          minValue = Number(bandLike && bandLike.min);
+          maxValue = Number(bandLike && bandLike.max);
+        }
+        if (!Number.isFinite(minValue)) {
+          minValue = defaultMin;
+        }
+        if (!Number.isFinite(maxValue)) {
+          maxValue = defaultMax;
+        }
+        if (maxValue < minValue) {
+          const swappedMin = maxValue;
+          maxValue = minValue;
+          minValue = swappedMin;
+        }
+        minValue = clampRange(minValue, bounds.minBandPc, bounds.maxBandPc - 1.0);
+        maxValue = clampRange(maxValue, minValue + 1.0, bounds.maxBandPc);
+        return [minValue, maxValue];
+      }
+
+      function activeSelectionBoxBandPc() {
+        return normalizeSelectionBoxBand(selectionBoxState.twopcfBandPc || selectionBoxDefaultBandSpec);
+      }
+
+      function formatSelectionBoxBandInputValue(value) {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) {
+          return "";
+        }
+        return Number.isInteger(numericValue) ? String(numericValue) : numericValue.toFixed(1);
+      }
+
+      function syncSelectionBoxBandInputs(force = false) {
+        const band = activeSelectionBoxBandPc();
+      }
+
+      function syncSelectionBoxVisibilityInput(force = false) {
+        if (!boxMetricsVisibleEl) {
+          return;
+        }
+        if (force || document.activeElement !== boxMetricsVisibleEl) {
+          boxMetricsVisibleEl.checked = selectionBoxState.visible !== false;
+        }
+      }
+
+      function updateSelectionBoxBandFromInputs(immediate = false) {
+        const currentBand = activeSelectionBoxBandPc();
+        const proposedBand = normalizeSelectionBoxBand([
+          boxMetricsBandMinEl ? Number(boxMetricsBandMinEl.value) : currentBand[0],
+          boxMetricsBandMaxEl ? Number(boxMetricsBandMaxEl.value) : currentBand[1],
+        ]);
+        selectionBoxState.twopcfBandPc = proposedBand;
+        syncSelectionBoxBandInputs();
+        renderBoxMetricsWidget();
+        scheduleSelectionBoxMetricsRecompute(immediate);
+      }
+
+      function buildDefaultSelectionBoxState() {
+        const defaultCenter = selectionBoxSpec.default_center_local_pc || {};
+        return {
+          center: {
+            x: Number(defaultCenter.x) || 0.0,
+            y: Number(defaultCenter.y) || 0.0,
+            z: Number(defaultCenter.z) || 0.0,
+          },
+          visible: selectionBoxSpec.default_visible !== false,
+          halfWidthPc: clampSelectionBoxHalfWidth(
+            Number(selectionBoxSpec.default_half_width_pc) || 500.0
+          ),
+          twopcfBandPc: normalizeSelectionBoxBand(selectionBoxDefaultBandSpec),
+        };
+      }
+
+      function selectionBoxPanelIsOpen() {
+        return widgetModeForKey("box_metrics") !== "hidden";
+      }
+
+      function selectionBoxShouldRender() {
+        return Boolean(selectionBoxSpec.enabled)
+          && selectionBoxPanelIsOpen()
+          && selectionBoxState.visible !== false;
+      }
+
+      function selectionBoxReferenceOrbitAtTime(timeMyr) {
+        const times = Array.isArray(selectionBoxReferenceOrbitSpec.time_myr)
+          ? selectionBoxReferenceOrbitSpec.time_myr
+          : [];
+        const xs = Array.isArray(selectionBoxReferenceOrbitSpec.x_gc_pc)
+          ? selectionBoxReferenceOrbitSpec.x_gc_pc
+          : [];
+        const ys = Array.isArray(selectionBoxReferenceOrbitSpec.y_gc_pc)
+          ? selectionBoxReferenceOrbitSpec.y_gc_pc
+          : [];
+        const zs = Array.isArray(selectionBoxReferenceOrbitSpec.z_gc_pc)
+          ? selectionBoxReferenceOrbitSpec.z_gc_pc
+          : [];
+        const nSamples = Math.min(times.length, xs.length, ys.length, zs.length);
+        if (!nSamples) {
+          return { x: 0.0, y: 0.0, z: 0.0 };
+        }
+        const targetTime = Number(timeMyr) || 0.0;
+        const firstTime = Number(times[0]);
+        const lastTime = Number(times[nSamples - 1]);
+        if (targetTime <= firstTime) {
+          return {
+            x: Number(xs[0]) || 0.0,
+            y: Number(ys[0]) || 0.0,
+            z: Number(zs[0]) || 0.0,
+          };
+        }
+        if (targetTime >= lastTime) {
+          return {
+            x: Number(xs[nSamples - 1]) || 0.0,
+            y: Number(ys[nSamples - 1]) || 0.0,
+            z: Number(zs[nSamples - 1]) || 0.0,
+          };
+        }
+        let rightIndex = 1;
+        while (rightIndex < nSamples && Number(times[rightIndex]) < targetTime) {
+          rightIndex += 1;
+        }
+        const leftIndex = Math.max(0, rightIndex - 1);
+        const leftTime = Number(times[leftIndex]);
+        const rightTime = Number(times[rightIndex]);
+        const fraction = Math.abs(rightTime - leftTime) <= 1e-12
+          ? 0.0
+          : (targetTime - leftTime) / (rightTime - leftTime);
+        function interp(values) {
+          const leftValue = Number(values[leftIndex]) || 0.0;
+          const rightValue = Number(values[rightIndex]) || leftValue;
+          return leftValue + (rightValue - leftValue) * fraction;
+        }
+        return {
+          x: interp(xs),
+          y: interp(ys),
+          z: interp(zs),
+        };
+      }
+
+      function selectionBoxRotatingLocalToDisplay(localPoint, timeMyr) {
+        const roKpc = Number(selectionBoxTransformSpec.ro_kpc) || 8.0;
+        const voKms = Number(selectionBoxTransformSpec.vo_kms) || 220.0;
+        const timeCodeFactor = Number(selectionBoxTransformSpec.time_code_factor) || 0.01022;
+        const rSunPc = 1000.0 * roKpc;
+        const omegaPerMyr = (voKms / Math.max(roKpc, 1e-9)) / 10.0;
+        const xRot = Number(localPoint && localPoint.x) || 0.0;
+        const yRot = Number(localPoint && localPoint.y) || 0.0;
+        const zRot = Number(localPoint && localPoint.z) || 0.0;
+        const localX = rSunPc - xRot;
+        const localY = yRot;
+        const rPc = Math.hypot(localX, localY);
+        const phi = Math.atan2(localY, localX);
+        const theta = phi + omegaPerMyr * (Number(timeMyr) || 0.0) * timeCodeFactor - 0.5 * Math.PI;
+        const xGc = rPc * Math.sin(theta);
+        const yGc = rPc * Math.cos(theta);
+        const refOrbit = selectionBoxReferenceOrbitAtTime(timeMyr);
+        return new THREE.Vector3(
+          xGc - refOrbit.x,
+          yGc - refOrbit.y,
+          zRot - refOrbit.z
+        );
+      }
+
+      function selectionBoxDisplayToRotatingLocal(displayPoint, timeMyr) {
+        const roKpc = Number(selectionBoxTransformSpec.ro_kpc) || 8.0;
+        const voKms = Number(selectionBoxTransformSpec.vo_kms) || 220.0;
+        const timeCodeFactor = Number(selectionBoxTransformSpec.time_code_factor) || 0.01022;
+        const rSunPc = 1000.0 * roKpc;
+        const omegaPerMyr = (voKms / Math.max(roKpc, 1e-9)) / 10.0;
+        const refOrbit = selectionBoxReferenceOrbitAtTime(timeMyr);
+        const xGc = (Number(displayPoint && displayPoint.x) || 0.0) + refOrbit.x;
+        const yGc = (Number(displayPoint && displayPoint.y) || 0.0) + refOrbit.y;
+        const zGc = (Number(displayPoint && displayPoint.z) || 0.0) + refOrbit.z;
+        const rPc = Math.hypot(xGc, yGc);
+        const theta = Math.atan2(xGc, yGc);
+        const phi = theta - omegaPerMyr * (Number(timeMyr) || 0.0) * timeCodeFactor + 0.5 * Math.PI;
+        const localX = rPc * Math.cos(phi);
+        const localY = rPc * Math.sin(phi);
+        return {
+          x: rSunPc - localX,
+          y: localY,
+          z: zGc,
+        };
+      }
+
+      function selectionBoxDisplayStateAtTime(timeMyr) {
+        if (!selectionBoxSpec.enabled) {
+          return null;
+        }
+        const centerLocal = selectionBoxState.center || { x: 0.0, y: 0.0, z: 0.0 };
+        const halfWidthPc = clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc);
+        const signs = [
+          [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+          [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+        ];
+        const cornersDisplay = signs.map((signsRow) => selectionBoxRotatingLocalToDisplay(
+          {
+            x: centerLocal.x + signsRow[0] * halfWidthPc,
+            y: centerLocal.y + signsRow[1] * halfWidthPc,
+            z: centerLocal.z + signsRow[2] * halfWidthPc,
+          },
+          timeMyr
+        ));
+        const centerDisplay = selectionBoxRotatingLocalToDisplay(centerLocal, timeMyr);
+        const basisXDisplay = selectionBoxRotatingLocalToDisplay(
+          { x: centerLocal.x + 1.0, y: centerLocal.y, z: centerLocal.z },
+          timeMyr
+        ).sub(centerDisplay.clone());
+        const angle = Math.atan2(basisXDisplay.y, basisXDisplay.x);
+        const edgePairs = [
+          [0, 1], [1, 2], [2, 3], [3, 0],
+          [4, 5], [5, 6], [6, 7], [7, 4],
+          [0, 4], [1, 5], [2, 6], [3, 7],
+        ];
+        const segments = edgePairs.map(([startIndex, endIndex]) => {
+          const start = cornersDisplay[startIndex];
+          const end = cornersDisplay[endIndex];
+          return [start.x, start.y, start.z, end.x, end.y, end.z];
+        });
+        return {
+          timeMyr: Number(timeMyr) || 0.0,
+          centerLocal: { x: centerLocal.x, y: centerLocal.y, z: centerLocal.z },
+          halfWidthPc,
+          centerDisplay,
+          cornersDisplay,
+          segments,
+          angle,
+        };
+      }
+
+      function selectionBoxSummaryText(cache, isPending = false) {
+        const state = cache || {
+          centerLocal: selectionBoxState.center,
+          halfWidthPc: selectionBoxState.halfWidthPc,
+          selectedEventCount: 0,
+          rate: null,
+          clustering: null,
+        };
+        const center = state.centerLocal || { x: 0.0, y: 0.0, z: 0.0 };
+        const sideKpc = (2.0 * (Number(state.halfWidthPc) || 0.0)) / 1000.0;
+        const volumeKpc3 = Number(state.volumeKpc3) > 0.0 ? Number(state.volumeKpc3) : Math.pow(sideKpc, 3);
+        const frame = currentFrame();
+        const currentLookback = Math.abs(Number(frame && frame.time) || 0.0);
+        let currentRateText = "";
+        let currentClusteringText = "";
+        if (state.rate && Array.isArray(state.rate.centers) && Array.isArray(state.rate.mean) && state.rate.centers.length) {
+          let bestIndex = 0;
+          let bestDelta = Infinity;
+          state.rate.centers.forEach((centerValue, index) => {
+            const delta = Math.abs(Number(centerValue) - currentLookback);
+            if (delta < bestDelta) {
+              bestDelta = delta;
+              bestIndex = index;
+            }
+          });
+          const rateValue = Number(state.rate.mean[bestIndex]);
+          if (Number.isFinite(rateValue)) {
+            currentRateText = `\\nCurrent-frame mean ccSN density: ${rateValue.toFixed(2)} Myr^-1 kpc^-3`;
+          }
+        }
+        if (
+          state.clustering
+          && Array.isArray(state.clustering.centers)
+          && Array.isArray(state.clustering.median)
+          && state.clustering.centers.length
+        ) {
+          let bestIndex = 0;
+          let bestDelta = Infinity;
+          state.clustering.centers.forEach((centerValue, index) => {
+            const delta = Math.abs(Number(centerValue) - currentLookback);
+            if (delta < bestDelta) {
+              bestDelta = delta;
+              bestIndex = index;
+            }
+          });
+          const clusteringValue = Number(state.clustering.median[bestIndex]);
+          if (Number.isFinite(clusteringValue)) {
+            currentClusteringText = `\\nCurrent-frame NN enhancement: ${clusteringValue.toFixed(2)}`;
+          }
+        }
+        const pendingText = isPending ? "\\nUpdating metrics..." : "";
+        return [
+          `Center (pc): (${formatTick(center.x)}, ${formatTick(center.y)}, ${formatTick(center.z)})`,
+          `Half-width: ${formatTick(state.halfWidthPc)} pc | Volume: ${volumeKpc3.toFixed(2)} kpc^3 | Events: ${formatCompactNumber(state.selectedEventCount || 0)}`,
+        ].join("\\n") + currentRateText + currentClusteringText + pendingText;
+      }
+
+      function selectionBoxRayHitFromEvent(event) {
+        if (!selectionBoxSpec.enabled || !selectionBoxHitObjects.length) {
+          return null;
+        }
+        pointerRayFromEvent(event);
+        const hits = raycaster.intersectObjects(selectionBoxHitObjects, false);
+        if (!hits.length) {
+          return null;
+        }
+        const hit = hits[0];
+        const handle = hit && hit.object && hit.object.userData
+          ? hit.object.userData.selectionBoxHandle
+          : null;
+        return handle ? { hit, handle } : null;
+      }
+
+      function selectionBoxPlanePointFromEvent(event, planeZ) {
+        pointerRayFromEvent(event);
+        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+          new THREE.Vector3(0.0, 0.0, 1.0),
+          new THREE.Vector3(0.0, 0.0, Number(planeZ) || 0.0)
+        );
+        const point = new THREE.Vector3();
+        return raycaster.ray.intersectPlane(plane, point) ? point : null;
+      }
+
+      function startSelectionBoxInteraction(event) {
+        if (!selectionBoxSpec.enabled || widgetPointerState || lassoState || event.button !== 0) {
+          return false;
+        }
+        const hitInfo = selectionBoxRayHitFromEvent(event);
+        if (!hitInfo) {
+          return false;
+        }
+        const frame = currentFrame();
+        const timeMyr = Number(frame && frame.time) || 0.0;
+        const displayState = selectionBoxDisplayStateAtTime(timeMyr);
+        if (!displayState) {
+          return false;
+        }
+        const sceneCenter = displayState.centerDisplay.clone().add(plotGroup.position);
+        const planePointScene = selectionBoxPlanePointFromEvent(event, sceneCenter.z) || hitInfo.hit.point.clone();
+        const planePointDisplay = planePointScene.clone().sub(plotGroup.position);
+        const planePointLocal = selectionBoxDisplayToRotatingLocal(planePointDisplay, timeMyr);
+        selectionBoxPointerState = {
+          pointerId: event.pointerId,
+          mode: String(hitInfo.handle.kind || "drag"),
+          timeMyr,
+          planeZ: sceneCenter.z,
+          startClientX: Number(event.clientX) || 0.0,
+          startClientY: Number(event.clientY) || 0.0,
+          startCenter: {
+            x: Number(selectionBoxState.center.x) || 0.0,
+            y: Number(selectionBoxState.center.y) || 0.0,
+            z: Number(selectionBoxState.center.z) || 0.0,
+          },
+          startHalfWidthPc: clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc),
+          dragOffsetLocal: {
+            x: planePointLocal.x - (Number(selectionBoxState.center.x) || 0.0),
+            y: planePointLocal.y - (Number(selectionBoxState.center.y) || 0.0),
+          },
+        };
+        controls.enabled = false;
+        document.body.style.userSelect = "none";
+        if (typeof canvas.setPointerCapture === "function" && event.pointerId !== undefined) {
+          try {
+            canvas.setPointerCapture(event.pointerId);
+          } catch (_err) {
+          }
+        }
+        suppressNextCanvasClick = true;
+        event.preventDefault();
+        return true;
+      }
+
+      function updateSelectionBoxInteraction(event) {
+        if (!selectionBoxPointerState) {
+          return false;
+        }
+        const planePointScene = selectionBoxPlanePointFromEvent(event, selectionBoxPointerState.planeZ);
+        if (!planePointScene) {
+          return true;
+        }
+        const planePointDisplay = planePointScene.clone().sub(plotGroup.position);
+        const planePointLocal = selectionBoxDisplayToRotatingLocal(planePointDisplay, selectionBoxPointerState.timeMyr);
+        if (selectionBoxPointerState.mode === "drag") {
+          selectionBoxState.center = {
+            x: planePointLocal.x - selectionBoxPointerState.dragOffsetLocal.x,
+            y: planePointLocal.y - selectionBoxPointerState.dragOffsetLocal.y,
+            z: selectionBoxPointerState.startCenter.z,
+          };
+        } else {
+          const dx = Math.abs(planePointLocal.x - selectionBoxPointerState.startCenter.x);
+          const dy = Math.abs(planePointLocal.y - selectionBoxPointerState.startCenter.y);
+          const resizePcPerPixel = Math.max(Number(selectionBoxSpec.resize_pc_per_pixel) || 4.0, 0.1);
+          const mouseDeltaPc = resizePcPerPixel * Math.max(
+            Math.abs(Number(event.clientX) - Number(selectionBoxPointerState.startClientX || event.clientX)),
+            Math.abs(Number(event.clientY) - Number(selectionBoxPointerState.startClientY || event.clientY))
+          );
+          const proposedHalfWidth = Math.max(dx, dy, 0.25 * mouseDeltaPc);
+          selectionBoxState.halfWidthPc = clampSelectionBoxHalfWidth(proposedHalfWidth);
+        }
+        renderFrame(currentFrameIndex);
+        scheduleSelectionBoxMetricsRecompute(false);
+        event.preventDefault();
+        return true;
+      }
+
+      function finishSelectionBoxInteraction(event) {
+        if (!selectionBoxPointerState) {
+          return false;
+        }
+        if (typeof canvas.releasePointerCapture === "function" && selectionBoxPointerState.pointerId !== undefined) {
+          try {
+            canvas.releasePointerCapture(selectionBoxPointerState.pointerId);
+          } catch (_err) {
+          }
+        }
+        selectionBoxPointerState = null;
+        controls.enabled = true;
+        document.body.style.userSelect = "";
+        scheduleSelectionBoxMetricsRecompute(true);
+        if (event) {
+          event.preventDefault();
+        }
+        return true;
+      }
+
+      function selectionBoxSubsampleWindow(relX, relY, relZ, startIndex, endIndex, maxPoints, seedOffset = 0) {
+        const count = Math.max(0, endIndex - startIndex);
+        const take = Math.min(count, Math.max(1, Math.round(Number(maxPoints) || 1)));
+        const outX = new Float32Array(take);
+        const outY = new Float32Array(take);
+        const outZ = new Float32Array(take);
+        if (!take) {
+          return { x: outX, y: outY, z: outZ };
+        }
+        if (count <= take) {
+          for (let index = 0; index < count; index += 1) {
+            outX[index] = relX[startIndex + index];
+            outY[index] = relY[startIndex + index];
+            outZ[index] = relZ[startIndex + index];
+          }
+          return { x: outX, y: outY, z: outZ };
+        }
+        const stride = count / take;
+        const jitter = (0.5 + 0.5 * Math.sin(12.9898 * (seedOffset + 1))) * stride;
+        let lastIndex = startIndex - 1;
+        for (let index = 0; index < take; index += 1) {
+          let sourceIndex = startIndex + Math.floor(jitter + index * stride);
+          if (sourceIndex <= lastIndex) {
+            sourceIndex = lastIndex + 1;
+          }
+          if (sourceIndex >= endIndex) {
+            sourceIndex = endIndex - 1;
+          }
+          lastIndex = sourceIndex;
+          outX[index] = relX[sourceIndex];
+          outY[index] = relY[sourceIndex];
+          outZ[index] = relZ[sourceIndex];
+        }
+        return { x: outX, y: outY, z: outZ };
+      }
+
+      function selectionBoxScaledRandomCatalog(halfWidthPc) {
+        const scale = Math.max(Number(halfWidthPc) || 0.0, 0.0);
+        const x = new Float32Array(selectionBoxRandomUnitCatalog.x.length);
+        const y = new Float32Array(selectionBoxRandomUnitCatalog.y.length);
+        const z = new Float32Array(selectionBoxRandomUnitCatalog.z.length);
+        for (let index = 0; index < x.length; index += 1) {
+          x[index] = selectionBoxRandomUnitCatalog.x[index] * scale;
+          y[index] = selectionBoxRandomUnitCatalog.y[index] * scale;
+          z[index] = selectionBoxRandomUnitCatalog.z[index] * scale;
+        }
+        return { x, y, z };
+      }
+
+      function selectionBoxCountPairsInBands(x, y, z, bandSq) {
+        const counts = new Float32Array(bandSq.length);
+        for (let i = 0; i < x.length - 1; i += 1) {
+          const xi = x[i];
+          const yi = y[i];
+          const zi = z[i];
+          for (let j = i + 1; j < x.length; j += 1) {
+            const dx = xi - x[j];
+            const dy = yi - y[j];
+            const dz = zi - z[j];
+            const distanceSq = dx * dx + dy * dy + dz * dz;
+            for (let bandIndex = 0; bandIndex < bandSq.length; bandIndex += 1) {
+              if (distanceSq >= bandSq[bandIndex][0] && distanceSq < bandSq[bandIndex][1]) {
+                counts[bandIndex] += 1.0;
+              }
+            }
+          }
+        }
+        return counts;
+      }
+
+      function selectionBoxCountCrossPairsInBands(dataX, dataY, dataZ, randX, randY, randZ, bandSq) {
+        const counts = new Float32Array(bandSq.length);
+        for (let i = 0; i < dataX.length; i += 1) {
+          const xi = dataX[i];
+          const yi = dataY[i];
+          const zi = dataZ[i];
+          for (let j = 0; j < randX.length; j += 1) {
+            const dx = xi - randX[j];
+            const dy = yi - randY[j];
+            const dz = zi - randZ[j];
+            const distanceSq = dx * dx + dy * dy + dz * dz;
+            for (let bandIndex = 0; bandIndex < bandSq.length; bandIndex += 1) {
+              if (distanceSq >= bandSq[bandIndex][0] && distanceSq < bandSq[bandIndex][1]) {
+                counts[bandIndex] += 1.0;
+              }
+            }
+          }
+        }
+        return counts;
+      }
+
+      function percentileSorted(values, fraction) {
+        if (!values.length) {
+          return NaN;
+        }
+        const clampedFraction = clampRange(Number(fraction) || 0.0, 0.0, 1.0);
+        const position = clampedFraction * (values.length - 1);
+        const lowIndex = Math.floor(position);
+        const highIndex = Math.ceil(position);
+        if (lowIndex === highIndex) {
+          return values[lowIndex];
+        }
+        const weight = position - lowIndex;
+        return values[lowIndex] + (values[highIndex] - values[lowIndex]) * weight;
+      }
+
+      function selectionBoxAxisBoundsWithFloor(values, startIndex, endIndex, minSpanPc) {
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (let index = startIndex; index < endIndex; index += 1) {
+          const value = Number(values[index]);
+          if (!Number.isFinite(value)) {
+            continue;
+          }
+          if (value < lo) {
+            lo = value;
+          }
+          if (value > hi) {
+            hi = value;
+          }
+        }
+        if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+          const half = 0.5 * Math.max(Number(minSpanPc) || 25.0, 1.0);
+          return [-half, half];
+        }
+        const span = hi - lo;
+        if (!Number.isFinite(span) || span < minSpanPc) {
+          const center = 0.5 * (lo + hi);
+          const half = 0.5 * Math.max(Number(minSpanPc) || 25.0, 1.0);
+          return [center - half, center + half];
+        }
+        return [lo, hi];
+      }
+
+      function selectionBoxMedianNearestNeighborDistance(x, y, z, startIndex = 0, endIndex = x.length) {
+        const nPoints = Math.max(0, endIndex - startIndex);
+        if (nPoints < 2) {
+          return NaN;
+        }
+        const minDistances = new Array(nPoints).fill(Infinity);
+        for (let i = startIndex; i < endIndex - 1; i += 1) {
+          const xi = Number(x[i]);
+          const yi = Number(y[i]);
+          const zi = Number(z[i]);
+          for (let j = i + 1; j < endIndex; j += 1) {
+            const dx = xi - Number(x[j]);
+            const dy = yi - Number(y[j]);
+            const dz = zi - Number(z[j]);
+            const distance = Math.hypot(dx, dy, dz);
+            const relI = i - startIndex;
+            const relJ = j - startIndex;
+            if (distance < minDistances[relI]) {
+              minDistances[relI] = distance;
+            }
+            if (distance < minDistances[relJ]) {
+              minDistances[relJ] = distance;
+            }
+          }
+        }
+        const finite = minDistances.filter((value) => Number.isFinite(value));
+        if (!finite.length) {
+          return NaN;
+        }
+        finite.sort((a, b) => a - b);
+        return percentileSorted(finite, 0.5);
+      }
+
+      function createSelectionBoxMetricRng(seed) {
+        let state = (Math.round(Number(seed) || 1) >>> 0) || 1;
+        return function nextUnit() {
+          state = (state + 0x6D2B79F5) >>> 0;
+          let t = state;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function selectionBoxRandomMedianNearestNeighborDistance(
+        nEvents,
+        xRangePc,
+        yRangePc,
+        zRangePc,
+        nRealizations,
+        seedBase
+      ) {
+        const nPoints = Math.max(0, Math.round(Number(nEvents) || 0));
+        const realizations = Math.max(1, Math.round(Number(nRealizations) || 1));
+        if (nPoints < 2) {
+          return NaN;
+        }
+        const medians = [];
+        for (let realizationIndex = 0; realizationIndex < realizations; realizationIndex += 1) {
+          const rng = createSelectionBoxMetricRng(
+            (Number(seedBase) || 1) + 7919 * (realizationIndex + 1)
+          );
+          const randX = new Float32Array(nPoints);
+          const randY = new Float32Array(nPoints);
+          const randZ = new Float32Array(nPoints);
+          for (let pointIndex = 0; pointIndex < nPoints; pointIndex += 1) {
+            randX[pointIndex] = Number(xRangePc[0]) + rng() * (Number(xRangePc[1]) - Number(xRangePc[0]));
+            randY[pointIndex] = Number(yRangePc[0]) + rng() * (Number(yRangePc[1]) - Number(yRangePc[0]));
+            randZ[pointIndex] = Number(zRangePc[0]) + rng() * (Number(zRangePc[1]) - Number(zRangePc[0]));
+          }
+          const medianDistance = selectionBoxMedianNearestNeighborDistance(randX, randY, randZ);
+          if (Number.isFinite(medianDistance)) {
+            medians.push(medianDistance);
+          }
+        }
+        if (!medians.length) {
+          return NaN;
+        }
+        medians.sort((a, b) => a - b);
+        return percentileSorted(medians, 0.5);
+      }
+
+      function computeSelectionBoxMetrics() {
+        const halfWidthPc = clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc);
+        const sideKpc = (2.0 * halfWidthPc) / 1000.0;
+        const volumeKpc3 = Math.max(Math.pow(sideKpc, 3), 1e-6);
+        const centerLocal = {
+          x: Number(selectionBoxState.center.x) || 0.0,
+          y: Number(selectionBoxState.center.y) || 0.0,
+          z: Number(selectionBoxState.center.z) || 0.0,
+        };
+        const source = selectionBoxMetricEvents;
+        const relLookback = [];
+        const relX = [];
+        const relY = [];
+        const relZ = [];
+        const relSampleIndex = [];
+        for (let index = 0; index < source.count; index += 1) {
+          const dx = source.x[index] - centerLocal.x;
+          const dy = source.y[index] - centerLocal.y;
+          const dz = source.z[index] - centerLocal.z;
+          if (
+            Math.abs(dx) > halfWidthPc
+            || Math.abs(dy) > halfWidthPc
+            || Math.abs(dz) > halfWidthPc
+          ) {
+            continue;
+          }
+          relLookback.push(source.lookback[index]);
+          relX.push(dx);
+          relY.push(dy);
+          relZ.push(dz);
+          relSampleIndex.push(source.sampleIndex[index]);
+        }
+
+        const nCenters = selectionBoxMetricTimeCenters.length;
+        const sampleCount = Math.max(
+          source.sampleValues.length,
+          Math.round(Number(selectionBoxMetricsSpec.n_imf_samples) || 0),
+          1
+        );
+        const perSample = Array.from({ length: sampleCount }, () => ({
+          lookback: [],
+          x: [],
+          y: [],
+          z: [],
+        }));
+        for (let index = 0; index < relLookback.length; index += 1) {
+          const sampleIndex = Number(relSampleIndex[index]);
+          if (!(sampleIndex >= 0 && sampleIndex < sampleCount)) {
+            continue;
+          }
+          perSample[sampleIndex].lookback.push(Number(relLookback[index]));
+          perSample[sampleIndex].x.push(Number(relX[index]));
+          perSample[sampleIndex].y.push(Number(relY[index]));
+          perSample[sampleIndex].z.push(Number(relZ[index]));
+        }
+
+        const rateCountsBySample = Array.from({ length: sampleCount }, () => new Float32Array(nCenters));
+        const windowMyr = Math.max(Number(selectionBoxMetricsSpec.window_myr) || 0.0, 1.0);
+        const lookbackMax = Math.max(Number(selectionBoxMetricsSpec.lookback_max_myr) || 0.0, 0.0);
+        const halfWindowMyr = 0.5 * windowMyr;
+        const rateMean = new Float32Array(nCenters);
+        const rateLo = new Float32Array(nCenters);
+        const rateHi = new Float32Array(nCenters);
+        const clusteringMedian = new Float32Array(nCenters).fill(NaN);
+        const clusteringLo = new Float32Array(nCenters).fill(NaN);
+        const clusteringHi = new Float32Array(nCenters).fill(NaN);
+        const rateScratch = new Array(sampleCount).fill(0.0);
+        const clusteringScratch = [];
+        const leftIndices = new Int32Array(sampleCount);
+        const rightIndices = new Int32Array(sampleCount);
+        const randomRealizations = Math.max(
+          1,
+          Math.round(Number(selectionBoxMetricsSpec.random_realizations) || 16)
+        );
+        const minAxisSpanPc = Math.max(Number(selectionBoxMetricsSpec.min_axis_span_pc) || 25.0, 1.0);
+
+        for (let centerIndex = 0; centerIndex < nCenters; centerIndex += 1) {
+          const centerTime = Number(selectionBoxMetricTimeCenters[centerIndex]);
+          const minTime = Math.max(0.0, centerTime - halfWindowMyr);
+          const maxTime = Math.min(lookbackMax, centerTime + halfWindowMyr);
+          const effectiveWindowMyr = Math.max(maxTime - minTime, 1e-6);
+          let rateSum = 0.0;
+          clusteringScratch.length = 0;
+
+          for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
+            const sample = perSample[sampleIndex];
+            const lookback = sample.lookback;
+            let leftIndex = leftIndices[sampleIndex];
+            let rightIndex = rightIndices[sampleIndex];
+            while (leftIndex < lookback.length && Number(lookback[leftIndex]) < minTime) {
+              leftIndex += 1;
+            }
+            if (rightIndex < leftIndex) {
+              rightIndex = leftIndex;
+            }
+            while (rightIndex < lookback.length && Number(lookback[rightIndex]) < maxTime) {
+              rightIndex += 1;
+            }
+            leftIndices[sampleIndex] = leftIndex;
+            rightIndices[sampleIndex] = rightIndex;
+
+            const nEvents = Math.max(0, rightIndex - leftIndex);
+            const rateValue = nEvents / (effectiveWindowMyr * volumeKpc3);
+            rateCountsBySample[sampleIndex][centerIndex] = rateValue;
+            rateScratch[sampleIndex] = rateValue;
+            rateSum += rateValue;
+
+            if (nEvents < 2) {
+              continue;
+            }
+            const dataMedian = selectionBoxMedianNearestNeighborDistance(
+              sample.x,
+              sample.y,
+              sample.z,
+              leftIndex,
+              rightIndex
+            );
+            if (!(Number.isFinite(dataMedian) && dataMedian > 0.0)) {
+              continue;
+            }
+            const xRange = selectionBoxAxisBoundsWithFloor(sample.x, leftIndex, rightIndex, minAxisSpanPc);
+            const yRange = selectionBoxAxisBoundsWithFloor(sample.y, leftIndex, rightIndex, minAxisSpanPc);
+            const zRange = selectionBoxAxisBoundsWithFloor(sample.z, leftIndex, rightIndex, minAxisSpanPc);
+            const randMedian = selectionBoxRandomMedianNearestNeighborDistance(
+              nEvents,
+              xRange,
+              yRange,
+              zRange,
+              randomRealizations,
+              734921 + 104729 * (sampleIndex + 1) + 7919 * (centerIndex + 1)
+            );
+            if (Number.isFinite(randMedian) && randMedian > 0.0) {
+              clusteringScratch.push(randMedian / dataMedian);
+            }
+          }
+
+          rateScratch.sort((a, b) => a - b);
+          rateMean[centerIndex] = rateSum / sampleCount;
+          rateLo[centerIndex] = percentileSorted(rateScratch, 0.16);
+          rateHi[centerIndex] = percentileSorted(rateScratch, 0.84);
+
+          if (clusteringScratch.length) {
+            clusteringScratch.sort((a, b) => a - b);
+            clusteringMedian[centerIndex] = percentileSorted(clusteringScratch, 0.5);
+            clusteringLo[centerIndex] = percentileSorted(clusteringScratch, 0.16);
+            clusteringHi[centerIndex] = percentileSorted(clusteringScratch, 0.84);
+          }
+        }
+
+        return {
+          centerLocal,
+          halfWidthPc,
+          volumeKpc3,
+          selectedEventCount: relLookback.length,
+          rate: {
+            centers: selectionBoxMetricTimeCenters.slice(),
+            mean: Array.from(rateMean),
+            lo: Array.from(rateLo),
+            hi: Array.from(rateHi),
+          },
+          clustering: {
+            centers: selectionBoxMetricTimeCenters.slice(),
+            median: Array.from(clusteringMedian),
+            lo: Array.from(clusteringLo),
+            hi: Array.from(clusteringHi),
+          },
+        };
+      }
+
+      function scheduleSelectionBoxMetricsRecompute(immediate = false) {
+        if (!selectionBoxMetricsSpec.enabled) {
+          return;
+        }
+        selectionBoxMetricsVersion += 1;
+        const currentVersion = selectionBoxMetricsVersion;
+        selectionBoxMetricsPending = true;
+        if (selectionBoxMetricsTimer) {
+          window.clearTimeout(selectionBoxMetricsTimer);
+        }
+        const delayMs = immediate ? 0 : 90;
+        selectionBoxMetricsTimer = window.setTimeout(() => {
+          selectionBoxMetricsTimer = null;
+          const nextMetrics = computeSelectionBoxMetrics();
+          if (currentVersion !== selectionBoxMetricsVersion) {
+            return;
+          }
+          selectionBoxMetricsCache = nextMetrics;
+          selectionBoxMetricsPending = false;
+          renderBoxMetricsWidget();
+        }, delayMs);
+        renderBoxMetricsWidget();
       }
 
       function restoreInitialLassoSelectionMask() {
@@ -3165,6 +4500,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (typeof initialState.lasso_armed === "boolean") {
           lassoArmed = initialState.lasso_armed;
         }
+        loadManualLabels(initialState.manual_labels, initialState.active_manual_label_id);
 
         const savedGlobalControls = initialState.global_controls;
         if (savedGlobalControls && typeof savedGlobalControls === "object") {
@@ -3198,12 +4534,34 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedGlobalControls.axes_visible === "boolean") {
             axesVisible = savedGlobalControls.axes_visible;
           }
+          if (typeof savedGlobalControls.galactic_reference_visible === "boolean") {
+            galacticReferenceVisible = savedGlobalControls.galactic_reference_visible;
+          }
+          if (typeof savedGlobalControls.nearby_region_labels_visible === "boolean") {
+            nearbyRegionLabelsVisible = savedGlobalControls.nearby_region_labels_visible;
+          }
+          if (typeof savedGlobalControls.camera_auto_orbit_enabled === "boolean") {
+            cameraAutoOrbitEnabled = savedGlobalControls.camera_auto_orbit_enabled;
+          }
           if (typeof savedGlobalControls.camera_view_mode === "string" && savedGlobalControls.camera_view_mode) {
             cameraViewMode = String(savedGlobalControls.camera_view_mode);
           }
           if (Number.isFinite(Number(savedGlobalControls.earth_view_focus_distance_pc))) {
             earthViewFocusDistance = Number(savedGlobalControls.earth_view_focus_distance_pc);
           }
+        }
+
+        const savedScaleBarState = initialState.scale_bar_state;
+        if (
+          savedScaleBarState
+          && typeof savedScaleBarState === "object"
+          && Number.isFinite(Number(savedScaleBarState.left))
+          && Number.isFinite(Number(savedScaleBarState.top))
+        ) {
+          scaleBarPosition = {
+            left: Number(savedScaleBarState.left),
+            top: Number(savedScaleBarState.top),
+          };
         }
 
         if (initialState.active_volume_key && volumeStateKeySet.has(String(initialState.active_volume_key))) {
@@ -3312,6 +4670,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             dendrogramThresholdAgeMyr = Number(savedDendrogramState.threshold_age_myr);
           }
         }
+        const savedSelectionBoxState = initialState.selection_box_state;
+        if (savedSelectionBoxState && typeof savedSelectionBoxState === "object") {
+          const savedCenter = savedSelectionBoxState.center_local_pc || {};
+          if (Number.isFinite(Number(savedCenter.x))) {
+            selectionBoxState.center.x = Number(savedCenter.x);
+          }
+          if (Number.isFinite(Number(savedCenter.y))) {
+            selectionBoxState.center.y = Number(savedCenter.y);
+          }
+          if (Number.isFinite(Number(savedCenter.z))) {
+            selectionBoxState.center.z = Number(savedCenter.z);
+          }
+          if (Number.isFinite(Number(savedSelectionBoxState.half_width_pc))) {
+            selectionBoxState.halfWidthPc = clampSelectionBoxHalfWidth(savedSelectionBoxState.half_width_pc);
+          }
+          if (savedSelectionBoxState.visible !== undefined) {
+            selectionBoxState.visible = Boolean(savedSelectionBoxState.visible);
+          }
+          if (savedSelectionBoxState.twopcf_band_pc !== undefined) {
+            selectionBoxState.twopcfBandPc = normalizeSelectionBoxBand(savedSelectionBoxState.twopcf_band_pc);
+          }
+        }
 
         currentSelections = uniqueSelections(Array.isArray(initialState.current_selections) ? initialState.current_selections : []);
         currentSelection = initialState.current_selection && typeof initialState.current_selection === "object"
@@ -3334,7 +4714,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         const savedWidgets = initialState.widgets;
         if (savedWidgets && typeof savedWidgets === "object") {
-          ["sky", "age_kde", "cluster_filter", "dendrogram"].forEach((widgetKey) => {
+          ["sky", "box_metrics", "age_kde", "cluster_filter", "dendrogram"].forEach((widgetKey) => {
             const panelState = savedWidgets[widgetKey];
             const panelEl = widgetPanelForKey(widgetKey);
             if (!panelEl || !panelState || typeof panelState !== "object") {
@@ -3475,6 +4855,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return safeJsonClone({
           current_group: currentGroup,
           current_frame_index: currentFrameIndex,
+          manual_labels: manualLabels,
+          active_manual_label_id: activeManualLabelId,
           legend_state: legendState,
           trace_style_state: traceStyleStateByKey,
           click_selection_enabled: clickSelectionEnabled,
@@ -3497,6 +4879,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             focus_trace_key: focusTraceKey,
             focus_selection_key: focusSelectionKey,
             axes_visible: axesVisible,
+            galactic_reference_visible: galacticReferenceVisible,
+            nearby_region_labels_visible: nearbyRegionLabelsVisible,
+            camera_auto_orbit_enabled: cameraAutoOrbitEnabled,
             camera_view_mode: cameraViewMode,
             earth_view_focus_distance_pc: earthViewFocusDistance,
           },
@@ -3519,9 +4904,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           zen_mode_enabled: zenModeEnabled,
           widgets: {
             sky: captureWidgetState("sky"),
+            box_metrics: captureWidgetState("box_metrics"),
             age_kde: captureWidgetState("age_kde"),
             cluster_filter: captureWidgetState("cluster_filter"),
             dendrogram: captureWidgetState("dendrogram"),
+          },
+          scale_bar_state: captureScaleBarState(),
+          selection_box_state: {
+            center_local_pc: {
+              x: Number(selectionBoxState.center.x) || 0.0,
+              y: Number(selectionBoxState.center.y) || 0.0,
+              z: Number(selectionBoxState.center.z) || 0.0,
+            },
+            visible: selectionBoxState.visible !== false,
+            half_width_pc: clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc),
+            twopcf_band_pc: activeSelectionBoxBandPc(),
           },
           cluster_filter_state: {
             parameter_key: clusterFilterParameterKey,
@@ -3981,14 +5378,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const activeSelections = uniqueSelections(selections);
         const clickHint = `Click select: ${clickSelectionEnabled ? "on" : "off"}`;
         const focusLabel = selectionKeyFor(focusSelection);
-        const dustHint = lassoVolumeSelectionEnabled
-          ? (hasActiveLassoSelectionMask() ? "Dust lasso: on" : "Dust lasso: armed")
-          : "Dust lasso: off";
+        const volumeHint = lassoVolumeSelectionEnabled
+          ? (hasActiveLassoSelectionMask() ? "Volume lasso: on" : "Volume lasso: armed")
+          : "Volume lasso: off";
         if (!activeSelections.length && !focusLabel) {
-          return `Shift+drag or use Lasso to select clusters on the current frame.\n${dustHint}\n${clickHint}`;
+          return `Shift+drag or use Lasso to select clusters on the current frame.\n${volumeHint}\n${clickHint}`;
         }
         if (!activeSelections.length && focusLabel) {
-          return `Focused: ${focusLabel}\n${dustHint}\n${clickHint}`;
+          return `Focused: ${focusLabel}\n${volumeHint}\n${clickHint}`;
         }
         const labels = activeSelections
           .map((selection) => selectionKeyFor(selection))
@@ -3996,16 +5393,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const preview = labels.slice(0, 4).join(", ");
         const suffix = labels.length > 4 ? ` +${labels.length - 4} more` : "";
         const focusText = focusLabel ? `\nFocused: ${focusLabel}` : "";
-        return `${labels.length} selected\n${preview}${suffix}${focusText}\n${dustHint}\n${clickHint}`;
+        return `${labels.length} selected\n${preview}${suffix}${focusText}\n${volumeHint}\n${clickHint}`;
       }
 
       function skyReadoutText(selections, catalogPayload, mode = "overview", volumeOverlay = null) {
         const activeSelections = uniqueSelections(selections);
         const clusterCatalogPayload = catalogPayload || [];
-        const dustPixelCount = volumeOverlay && Number.isFinite(Number(volumeOverlay.non_zero_pixels))
+        const overlayPixelCount = volumeOverlay && Number.isFinite(Number(volumeOverlay.non_zero_pixels))
           ? Number(volumeOverlay.non_zero_pixels)
           : 0;
-        const dustSampleCount = volumeOverlay && Number.isFinite(Number(volumeOverlay.sample_count))
+        const overlaySampleCount = volumeOverlay && Number.isFinite(Number(volumeOverlay.sample_count))
           ? Number(volumeOverlay.sample_count)
           : 0;
         const overviewText = (
@@ -4014,7 +5411,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           + `Survey: ${String(skySpec.survey || "P/DSS2/color")}`
         );
         if (mode !== "click") {
-          if (!activeSelections.length && !dustPixelCount) {
+          if (!activeSelections.length && !overlayPixelCount) {
             return overviewText;
           }
           const labels = activeSelections
@@ -4024,17 +5421,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             (total, catalog) => total + (((catalog && catalog.points) || []).length || 0),
             0
           );
-          const dustLine = dustPixelCount
-            ? `Dust sky pixels: ${dustPixelCount}${dustSampleCount ? ` from ${dustSampleCount} samples` : ""}\n`
+          const overlayLine = overlayPixelCount
+            ? `Sky overlay pixels: ${overlayPixelCount}${overlaySampleCount ? ` from ${overlaySampleCount} samples` : ""}\n`
             : "";
           if (!activeSelections.length) {
-            return dustLine + overviewText;
+            return overlayLine + overviewText;
           }
           return (
             `Clusters selected: ${labels.length}\n`
             + `${labels.slice(0, 6).join(", ")}${labels.length > 6 ? ` +${labels.length - 6} more` : ""}\n`
             + `Stars shown: ${starCount}\n`
-            + dustLine
+            + overlayLine
             + overviewText
           );
         }
@@ -4501,6 +5898,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const displayOffsetY = Number(plotGroup.position.y) || 0.0;
         const displayOffsetZ = Number(plotGroup.position.z) || 0.0;
         const collectedSamples = [];
+        const usedLayerNames = [];
         let usedLayerCount = 0;
 
         frameVolumeLayers(frame).forEach((layer) => {
@@ -4622,6 +6020,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
           if (layerUsed) {
             usedLayerCount += 1;
+            const baseName = volumeBaseNameForLayer(layer) || volumeStateNameForLayer(layer);
+            if (baseName && !usedLayerNames.includes(baseName)) {
+              usedLayerNames.push(baseName);
+            }
           }
         });
 
@@ -4772,9 +6174,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         overlayCtx.putImageData(imageData, 0, 0);
+        const overlayName = usedLayerNames.length === 1
+          ? `Selected ${usedLayerNames[0]}`
+          : (usedLayerCount > 1 ? "Selected Volume Intensity" : "Selected Volume");
         return {
           kind: "volume_image",
-          name: usedLayerCount > 1 ? "Selected Dust Intensity" : "Selected Dust",
+          name: overlayName,
           data_url: overlayCanvas.toDataURL("image/png"),
           width,
           height,
@@ -5181,11 +6586,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             && typeof aladin.setOverlayImageLayer === "function"
           ) {
             const imageLayer = A.image(String(volumeOverlay.data_url), {
-              name: String(volumeOverlay.name || "Selected Dust"),
+              name: String(volumeOverlay.name || "Selected Volume"),
               imgFormat: "png",
               wcs: volumeOverlay.wcs,
             });
-            aladin.setOverlayImageLayer(imageLayer, String(volumeOverlay.name || "Selected Dust"));
+            aladin.setOverlayImageLayer(imageLayer, String(volumeOverlay.name || "Selected Volume"));
           }
           payload.forEach((catDef) => {
             const baseSize = Math.max(Number(catDef.sourceSize) || 7, 3);
@@ -5295,6 +6700,184 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return Math.min(Math.max(numeric, minValue), maxValue);
       }
 
+      function clampManualLabelSize(value) {
+        return clampRange(value, MIN_MANUAL_LABEL_SIZE, MAX_MANUAL_LABEL_SIZE);
+      }
+
+      function sanitizeManualLabelText(value) {
+        return String(value ?? "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, MAX_MANUAL_LABEL_TEXT_LENGTH);
+      }
+
+      function manualLabelFallbackText(index) {
+        return `Label ${Math.max(1, Number(index) || 1)}`;
+      }
+
+      function trackManualLabelId(id, fallbackIndex = 0) {
+        const numericFallback = Math.max(0, Number(fallbackIndex) || 0);
+        const text = String(id || "");
+        const match = text.match(/manual-label-(\d+)$/);
+        if (match) {
+          manualLabelIdCounter = Math.max(manualLabelIdCounter, Number(match[1]) || numericFallback);
+        } else {
+          manualLabelIdCounter = Math.max(manualLabelIdCounter, numericFallback);
+        }
+      }
+
+      function nextManualLabelId() {
+        manualLabelIdCounter += 1;
+        return `manual-label-${manualLabelIdCounter}`;
+      }
+
+      function normalizeManualLabel(rawLabel, index) {
+        if (!rawLabel || typeof rawLabel !== "object") {
+          return null;
+        }
+        const fallbackIndex = index + 1;
+        const rawId = String(rawLabel.id || "");
+        const id = rawId || nextManualLabelId();
+        trackManualLabelId(id, fallbackIndex);
+        return {
+          id,
+          text: sanitizeManualLabelText(rawLabel.text) || manualLabelFallbackText(fallbackIndex),
+          x: Number.isFinite(Number(rawLabel.x)) ? Number(rawLabel.x) : 0.0,
+          y: Number.isFinite(Number(rawLabel.y)) ? Number(rawLabel.y) : 0.0,
+          z: Number.isFinite(Number(rawLabel.z)) ? Number(rawLabel.z) : 0.0,
+          size: clampManualLabelSize(rawLabel.size ?? DEFAULT_MANUAL_LABEL_SIZE),
+        };
+      }
+
+      function manualLabelById(labelId) {
+        const requestedId = String(labelId || "");
+        return manualLabels.find((label) => String(label.id) === requestedId) || null;
+      }
+
+      function activeManualLabel() {
+        return manualLabelById(activeManualLabelId);
+      }
+
+      function ensureActiveManualLabel(preferredId = "") {
+        const requestedId = String(preferredId || activeManualLabelId || "");
+        if (requestedId && manualLabelById(requestedId)) {
+          activeManualLabelId = requestedId;
+          return;
+        }
+        activeManualLabelId = manualLabels.length ? String(manualLabels[manualLabels.length - 1].id || "") : "";
+      }
+
+      function syncManualLabelDraftFromSelection() {
+        const selectedLabel = activeManualLabel();
+        if (selectedLabel) {
+          manualLabelDraftText = String(selectedLabel.text || "");
+          manualLabelDraftSize = clampManualLabelSize(selectedLabel.size);
+          return;
+        }
+        manualLabelDraftText = "";
+        manualLabelDraftSize = DEFAULT_MANUAL_LABEL_SIZE;
+      }
+
+      function loadManualLabels(labelState, preferredId = "") {
+        manualLabelIdCounter = 0;
+        manualLabels = Array.isArray(labelState)
+          ? labelState
+            .map((label, index) => normalizeManualLabel(label, index))
+            .filter(Boolean)
+          : [];
+        ensureActiveManualLabel(preferredId);
+        syncManualLabelDraftFromSelection();
+      }
+
+      function manualLabelScenePositionFromCurrentTarget() {
+        return controls.target.clone().sub(plotGroup.position);
+      }
+
+      function currentManualLabelDraftText(fallbackText) {
+        return sanitizeManualLabelText(manualLabelDraftText) || String(fallbackText || "");
+      }
+
+      function currentManualLabelDraftSize() {
+        return clampManualLabelSize(manualLabelDraftSize);
+      }
+
+      function renderManualLabelControls() {
+        if (!manualLabelSelectEl || !manualLabelTextEl || !manualLabelSizeEl) {
+          return;
+        }
+        ensureActiveManualLabel();
+        const selectedLabel = activeManualLabel();
+
+        manualLabelSelectEl.innerHTML = "";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = manualLabels.length ? "Select label" : "No manual labels";
+        manualLabelSelectEl.appendChild(placeholder);
+        manualLabels.forEach((label, index) => {
+          const option = document.createElement("option");
+          option.value = String(label.id || "");
+          option.textContent = `${index + 1}. ${String(label.text || manualLabelFallbackText(index + 1))}`;
+          manualLabelSelectEl.appendChild(option);
+        });
+        manualLabelSelectEl.disabled = manualLabels.length === 0;
+        manualLabelSelectEl.value = selectedLabel ? String(selectedLabel.id || "") : "";
+        manualLabelTextEl.value = String(manualLabelDraftText || "");
+        manualLabelSizeEl.value = String(Math.round(currentManualLabelDraftSize()));
+        if (manualLabelApplyButtonEl) {
+          manualLabelApplyButtonEl.disabled = !selectedLabel;
+        }
+        if (manualLabelDeleteButtonEl) {
+          manualLabelDeleteButtonEl.disabled = !selectedLabel;
+        }
+        if (manualLabelReadoutEl) {
+          if (selectedLabel) {
+            manualLabelReadoutEl.textContent = `Selected: ${selectedLabel.text} @ (${formatTick(selectedLabel.x)}, ${formatTick(selectedLabel.y)}, ${formatTick(selectedLabel.z)}) pc. Click and drag in the scene to reposition.`;
+          } else {
+            manualLabelReadoutEl.textContent = "Add a label at the current camera target, then drag it in the scene.";
+          }
+        }
+      }
+
+      function addManualLabelFromDraft() {
+        const position = manualLabelScenePositionFromCurrentTarget();
+        const nextLabel = {
+          id: nextManualLabelId(),
+          text: currentManualLabelDraftText(manualLabelFallbackText(manualLabels.length + 1)),
+          x: Number.isFinite(position.x) ? position.x : 0.0,
+          y: Number.isFinite(position.y) ? position.y : 0.0,
+          z: Number.isFinite(position.z) ? position.z : 0.0,
+          size: currentManualLabelDraftSize(),
+        };
+        manualLabels.push(nextLabel);
+        activeManualLabelId = nextLabel.id;
+        syncManualLabelDraftFromSelection();
+        renderManualLabelControls();
+        renderFrame(currentFrameIndex);
+      }
+
+      function applyManualLabelDraftToSelection() {
+        const selectedLabel = activeManualLabel();
+        if (!selectedLabel) {
+          return;
+        }
+        selectedLabel.text = currentManualLabelDraftText(selectedLabel.text || manualLabelFallbackText(1));
+        selectedLabel.size = currentManualLabelDraftSize();
+        syncManualLabelDraftFromSelection();
+        renderManualLabelControls();
+        renderFrame(currentFrameIndex);
+      }
+
+      function deleteActiveManualLabel() {
+        if (!activeManualLabel()) {
+          return;
+        }
+        manualLabels = manualLabels.filter((label) => String(label.id || "") !== String(activeManualLabelId || ""));
+        ensureActiveManualLabel();
+        syncManualLabelDraftFromSelection();
+        renderManualLabelControls();
+        renderFrame(currentFrameIndex);
+      }
+
       function themePresetForKey(themeKey) {
         const requestedKey = String(themeKey || "default");
         return themePresets[requestedKey] || themePresets.default || {};
@@ -5330,7 +6913,27 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         focusTraceKey = String(focusTraceKey || "");
         camera.fov = clampRange(camera.fov, 18.0, 90.0);
         controls.zoomSpeed = globalScrollSpeed;
+        controls.autoRotate = cameraAutoOrbitEnabled;
+        controls.autoRotateSpeed = CAMERA_AUTO_ORBIT_SPEED;
         camera.updateProjectionMatrix();
+      }
+
+      function syncCameraAutoOrbitUi() {
+        orbitCameraButtons.forEach((buttonEl) => {
+          buttonEl.dataset.active = cameraAutoOrbitEnabled ? "true" : "false";
+          buttonEl.setAttribute("aria-pressed", cameraAutoOrbitEnabled ? "true" : "false");
+          buttonEl.textContent = cameraAutoOrbitEnabled ? "Stop orbit" : "Orbit camera";
+          buttonEl.title = cameraAutoOrbitEnabled
+            ? "Stop rotating around the current camera target"
+            : "Rotate around the current camera target";
+        });
+      }
+
+      function setCameraAutoOrbitEnabled(enabled) {
+        cameraAutoOrbitEnabled = Boolean(enabled);
+        controls.autoRotate = cameraAutoOrbitEnabled;
+        controls.autoRotateSpeed = CAMERA_AUTO_ORBIT_SPEED;
+        syncCameraAutoOrbitUi();
       }
 
       function applyCameraViewMode() {
@@ -5341,6 +6944,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function resetCameraView() {
+        setCameraAutoOrbitEnabled(false);
         cameraViewMode = "free";
         earthViewFocusDistance = null;
         camera.position.copy(initialCameraState.position);
@@ -5505,6 +7109,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (axesVisibleToggleEl) {
           axesVisibleToggleEl.checked = axesVisible;
         }
+        if (galacticReferenceToggleEl) {
+          galacticReferenceToggleEl.checked = galacticReferenceVisible;
+        }
+        nearbyRegionLabelsToggleEls.forEach((toggleEl) => {
+          toggleEl.checked = nearbyRegionLabelsVisible;
+        });
+        renderManualLabelControls();
+        syncCameraAutoOrbitUi();
       }
 
       function setZenMode(enabled) {
@@ -5831,7 +7443,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
 
-        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || key === "?" || (key === "/" && event.shiftKey))) {
+        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "o" || key === "?" || (key === "/" && event.shiftKey))) {
           event.preventDefault();
           return;
         }
@@ -5901,6 +7513,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         if (lowerKey === "v") {
           viewFromEarth();
+          event.preventDefault();
+          return;
+        }
+        if (lowerKey === "o") {
+          setCameraAutoOrbitEnabled(!cameraAutoOrbitEnabled);
           event.preventDefault();
           return;
         }
@@ -5981,6 +7598,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const barLengthPc = worldPerPixel * 120.0;
         scaleLabelEl.textContent = formatDistanceLabelPc(barLengthPc);
         scaleBarEl.style.display = Number.isFinite(barLengthPc) ? "flex" : "none";
+        if (Number.isFinite(barLengthPc)) {
+          applyScaleBarPosition();
+        }
       }
 
       function clusterFilterParameterSpecForKey(parameterKey) {
@@ -6528,6 +8148,286 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
         }
 
+      }
+
+      function applyBoxMetricsPanelMode() {
+        applyWidgetMode("box_metrics");
+        if (boxMetricsFullButtonEl) {
+          boxMetricsFullButtonEl.setAttribute(
+            "title",
+            boxMetricsPanelMode === "fullscreen" ? "Restore box metrics panel" : "Maximize box metrics panel"
+          );
+          boxMetricsFullButtonEl.setAttribute(
+            "aria-label",
+            boxMetricsPanelMode === "fullscreen" ? "Restore box metrics panel" : "Maximize box metrics panel"
+          );
+        }
+      }
+
+      function renderBoxMetricsWidget() {
+        syncSelectionBoxVisibilityInput();
+        if (boxMetricsSummaryEl) {
+          boxMetricsSummaryEl.textContent = selectionBoxSummaryText(selectionBoxMetricsCache, selectionBoxMetricsPending);
+        }
+        if (!selectionBoxSpec.enabled || !boxMetricsCanvasEl || widgetModeForKey("box_metrics") === "hidden") {
+          return;
+        }
+
+        const rect = boxMetricsCanvasEl.getBoundingClientRect();
+        const cssWidth = Math.max(1, Math.round(rect.width));
+        const cssHeight = Math.max(1, Math.round(rect.height));
+        const dpr = Math.max(window.devicePixelRatio || 1, 1);
+        if (boxMetricsCanvasEl.width !== Math.round(cssWidth * dpr) || boxMetricsCanvasEl.height !== Math.round(cssHeight * dpr)) {
+          boxMetricsCanvasEl.width = Math.round(cssWidth * dpr);
+          boxMetricsCanvasEl.height = Math.round(cssHeight * dpr);
+        }
+        const ctx = boxMetricsCanvasEl.getContext("2d");
+        if (!ctx) {
+          return;
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
+        ctx.fillStyle = theme.scene_bgcolor || theme.paper_bgcolor || "#000000";
+        ctx.fillRect(0, 0, cssWidth, cssHeight);
+
+        const axisColor = String(theme.axis_color || "#808080");
+        const topLabelColor = String(theme.text_color || "#d0d0d0");
+        const frame = currentFrame();
+        const currentLookback = Math.abs(Number(frame && frame.time) || 0.0);
+        const margin = { left: 48, right: 14, top: 18, bottom: 28 };
+        const gap = 28;
+        const plotWidth = Math.max(80, cssWidth - margin.left - margin.right);
+        const totalPlotHeight = Math.max(80, cssHeight - margin.top - margin.bottom);
+        const panelHeight = Math.max(56, (totalPlotHeight - gap) / 2.0);
+        const rateRect = { x: margin.left, y: margin.top, width: plotWidth, height: panelHeight };
+        const corrRect = { x: margin.left, y: margin.top + panelHeight + gap, width: plotWidth, height: panelHeight };
+        const lookbackMax = Math.max(Number(selectionBoxMetricsSpec.lookback_max_myr) || 0.0, 1.0);
+
+        function xToPx(value) {
+          return rateRect.x + (clampRange(Number(value), 0.0, lookbackMax) / lookbackMax) * rateRect.width;
+        }
+
+        function yToPx(rectDef, value, yMin, yMax) {
+          const denom = Math.max(yMax - yMin, 1e-6);
+          return rectDef.y + rectDef.height - ((Number(value) - yMin) / denom) * rectDef.height;
+        }
+
+        function drawPanelAxes(rectDef, yMin, yMax, title, showXLabels, includeZeroLine = false) {
+          ctx.strokeStyle = axisColor;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.moveTo(rectDef.x, rectDef.y);
+          ctx.lineTo(rectDef.x, rectDef.y + rectDef.height);
+          ctx.lineTo(rectDef.x + rectDef.width, rectDef.y + rectDef.height);
+          ctx.stroke();
+          if (includeZeroLine && yMin < 0.0 && yMax > 0.0) {
+            const zeroY = yToPx(rectDef, 0.0, yMin, yMax);
+            ctx.save();
+            ctx.setLineDash([4, 4]);
+            ctx.globalAlpha = 0.45;
+            ctx.beginPath();
+            ctx.moveTo(rectDef.x, zeroY);
+            ctx.lineTo(rectDef.x + rectDef.width, zeroY);
+            ctx.stroke();
+            ctx.restore();
+          }
+          ctx.fillStyle = topLabelColor;
+          ctx.font = "11px Helvetica, Arial, sans-serif";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(title, rectDef.x, rectDef.y - 4);
+
+          ctx.textAlign = "right";
+          ctx.textBaseline = "middle";
+          [0.0, 0.5, 1.0].forEach((fraction) => {
+            const value = yMin + fraction * (yMax - yMin);
+            const yPx = yToPx(rectDef, value, yMin, yMax);
+            ctx.globalAlpha = 0.14;
+            ctx.beginPath();
+            ctx.moveTo(rectDef.x, yPx);
+            ctx.lineTo(rectDef.x + rectDef.width, yPx);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+            ctx.fillText(formatCompactNumber(value), rectDef.x - 8, yPx);
+          });
+
+          if (showXLabels) {
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            [0.0, 0.5 * lookbackMax, lookbackMax].forEach((value) => {
+              const xPx = xToPx(value);
+              ctx.fillText(formatCompactNumber(value), xPx, rectDef.y + rectDef.height + 8);
+            });
+            ctx.textAlign = "right";
+            ctx.fillText("Lookback Time (Myr)", rectDef.x + rectDef.width, rectDef.y + rectDef.height + 20);
+          }
+
+          const markerX = xToPx(currentLookback);
+          ctx.save();
+          ctx.setLineDash([6, 6]);
+          ctx.strokeStyle = axisColor;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.moveTo(markerX, rectDef.y);
+          ctx.lineTo(markerX, rectDef.y + rectDef.height);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        if (!selectionBoxMetricsCache) {
+          ctx.fillStyle = topLabelColor;
+          ctx.font = "12px Menlo, Monaco, Consolas, monospace";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(selectionBoxMetricsPending ? "Updating box metrics..." : "No box metrics available.", cssWidth / 2, cssHeight / 2);
+          return;
+        }
+
+        const rate = selectionBoxMetricsCache.rate || { centers: [], mean: [], lo: [], hi: [] };
+        const clustering = selectionBoxMetricsCache.clustering || { centers: [], median: [], lo: [], hi: [] };
+        const finiteRate = rate.mean.filter((value) => Number.isFinite(value));
+        const finiteRateHi = rate.hi.filter((value) => Number.isFinite(value));
+        const rateMax = Math.max(0.5, ...finiteRate, ...finiteRateHi, 0.0);
+        drawPanelAxes(rateRect, 0.0, rateMax * 1.08, "Mean ccSN Volume Density in Box (Myr^-1 kpc^-3)", false, false);
+
+        if (Array.isArray(rate.centers) && rate.centers.length && Array.isArray(rate.mean) && rate.mean.length === rate.centers.length) {
+          const fillStarted = [];
+          ctx.beginPath();
+          rate.centers.forEach((centerValue, index) => {
+            const loValue = Number(rate.lo[index]);
+            const hiValue = Number(rate.hi[index]);
+            if (!Number.isFinite(loValue) || !Number.isFinite(hiValue)) {
+              return;
+            }
+            const xPx = xToPx(centerValue);
+            const yPx = yToPx(rateRect, hiValue, 0.0, rateMax * 1.08);
+            if (!fillStarted.length) {
+              ctx.moveTo(xPx, yPx);
+              fillStarted.push(index);
+            } else {
+              ctx.lineTo(xPx, yPx);
+            }
+          });
+          for (let index = rate.centers.length - 1; index >= 0; index -= 1) {
+            const loValue = Number(rate.lo[index]);
+            const hiValue = Number(rate.hi[index]);
+            if (!Number.isFinite(loValue) || !Number.isFinite(hiValue)) {
+              continue;
+            }
+            const xPx = xToPx(rate.centers[index]);
+            const yPx = yToPx(rateRect, loValue, 0.0, rateMax * 1.08);
+            ctx.lineTo(xPx, yPx);
+          }
+          if (fillStarted.length) {
+            ctx.closePath();
+            ctx.fillStyle = cssColorWithAlpha("#73a3ff", 0.20, "#73a3ff");
+            ctx.fill();
+          }
+          ctx.beginPath();
+          rate.centers.forEach((centerValue, index) => {
+            const meanValue = Number(rate.mean[index]);
+            if (!Number.isFinite(meanValue)) {
+              return;
+            }
+            const xPx = xToPx(centerValue);
+            const yPx = yToPx(rateRect, meanValue, 0.0, rateMax * 1.08);
+            if (index === 0) {
+              ctx.moveTo(xPx, yPx);
+            } else {
+              ctx.lineTo(xPx, yPx);
+            }
+          });
+          ctx.strokeStyle = "#73a3ff";
+          ctx.lineWidth = 2.0;
+          ctx.stroke();
+        }
+
+        const finiteClustering = clustering.median.filter((value) => Number.isFinite(value));
+        const finiteClusteringHi = clustering.hi.filter((value) => Number.isFinite(value));
+        const clusteringMax = Math.max(1.25, ...finiteClustering, ...finiteClusteringHi, 1.0);
+        drawPanelAxes(corrRect, 0.0, clusteringMax * 1.08, "NN Clustering Enhancement in Box", false, true);
+
+        const unityY = yToPx(corrRect, 1.0, 0.0, clusteringMax * 1.08);
+        ctx.save();
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = cssColorWithAlpha(axisColor, 0.55, axisColor);
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(corrRect.x, unityY);
+        ctx.lineTo(corrRect.x + corrRect.width, unityY);
+        ctx.stroke();
+        ctx.restore();
+
+        if (
+          Array.isArray(clustering.centers)
+          && clustering.centers.length
+          && Array.isArray(clustering.lo)
+          && Array.isArray(clustering.hi)
+          && clustering.lo.length === clustering.centers.length
+          && clustering.hi.length === clustering.centers.length
+        ) {
+          let started = false;
+          ctx.beginPath();
+          clustering.centers.forEach((centerValue, index) => {
+            const loValue = Number(clustering.lo[index]);
+            const hiValue = Number(clustering.hi[index]);
+            if (!Number.isFinite(loValue) || !Number.isFinite(hiValue)) {
+              return;
+            }
+            const xPx = xToPx(centerValue);
+            const yPx = yToPx(corrRect, hiValue, 0.0, clusteringMax * 1.08);
+            if (!started) {
+              ctx.moveTo(xPx, yPx);
+              started = true;
+            } else {
+              ctx.lineTo(xPx, yPx);
+            }
+          });
+          for (let index = clustering.centers.length - 1; index >= 0; index -= 1) {
+            const loValue = Number(clustering.lo[index]);
+            const hiValue = Number(clustering.hi[index]);
+            if (!Number.isFinite(loValue) || !Number.isFinite(hiValue)) {
+              continue;
+            }
+            const xPx = xToPx(clustering.centers[index]);
+            const yPx = yToPx(corrRect, loValue, 0.0, clusteringMax * 1.08);
+            ctx.lineTo(xPx, yPx);
+          }
+          if (started) {
+            ctx.closePath();
+            ctx.fillStyle = cssColorWithAlpha("#9FB3C8", 0.24, "#9FB3C8");
+            ctx.fill();
+          }
+        }
+
+        if (
+          Array.isArray(clustering.centers)
+          && clustering.centers.length
+          && Array.isArray(clustering.median)
+          && clustering.median.length === clustering.centers.length
+        ) {
+          ctx.beginPath();
+          let moved = false;
+          clustering.centers.forEach((centerValue, index) => {
+            const metricValue = Number(clustering.median[index]);
+            if (!Number.isFinite(metricValue)) {
+              return;
+            }
+            const xPx = xToPx(centerValue);
+            const yPx = yToPx(corrRect, metricValue, 0.0, clusteringMax * 1.08);
+            if (!moved) {
+              ctx.moveTo(xPx, yPx);
+              moved = true;
+            } else {
+              ctx.lineTo(xPx, yPx);
+            }
+          });
+          if (moved) {
+            ctx.strokeStyle = "#1F2A44";
+            ctx.lineWidth = 2.0;
+            ctx.stroke();
+          }
+        }
       }
 
       function clusterFilterSliderValueToActual(sliderValue, parameter) {
@@ -7189,6 +9089,25 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return String(layer.state_name || layer.name || volumeStateKeyForLayer(layer));
       }
 
+      function volumeBaseNameForLayer(layer) {
+        if (!layer) {
+          return "";
+        }
+        const explicitBaseName = String(layer.base_state_name || "").trim();
+        if (explicitBaseName) {
+          return explicitBaseName;
+        }
+        const variantLabel = String(layer.variant_label || "").trim();
+        const stateName = volumeStateNameForLayer(layer);
+        if (variantLabel) {
+          const suffix = ` (${variantLabel})`;
+          if (stateName.endsWith(suffix)) {
+            return stateName.slice(0, -suffix.length);
+          }
+        }
+        return stateName;
+      }
+
       function frameVolumeLayers(frame = currentFrame()) {
         if (!frame || !Array.isArray(frame.decorations)) {
           return [];
@@ -7218,6 +9137,128 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return exactLayer;
         }
         return frameVolumeLayerForStateKey(layerKey);
+      }
+
+      function volumeVariantGroupForLayer(layer) {
+        return String((layer && layer.variant_group) || "").trim();
+      }
+
+      function volumeVariantLabelForLayer(layer) {
+        if (!layer) {
+          return "";
+        }
+        return String(layer.variant_label || volumeStateNameForLayer(layer) || "").trim();
+      }
+
+      function volumeVariantLayersForGroup(variantGroup) {
+        const groupKey = String(variantGroup || "").trim();
+        if (!groupKey) {
+          return [];
+        }
+        const variantLayers = [];
+        const seenStateKeys = new Set();
+        volumeStateKeys.forEach((stateKey) => {
+          const layer = volumeLayerForKey(stateKey);
+          if (!layer || volumeVariantGroupForLayer(layer) !== groupKey) {
+            return;
+          }
+          const resolvedStateKey = volumeStateKeyForLayer(layer);
+          if (!resolvedStateKey || seenStateKeys.has(resolvedStateKey)) {
+            return;
+          }
+          seenStateKeys.add(resolvedStateKey);
+          variantLayers.push(layer);
+        });
+        variantLayers.sort((left, right) => {
+          const leftOrder = Number(left.variant_order);
+          const rightOrder = Number(right.variant_order);
+          const leftHasOrder = Number.isFinite(leftOrder);
+          const rightHasOrder = Number.isFinite(rightOrder);
+          if (leftHasOrder || rightHasOrder) {
+            return (leftHasOrder ? leftOrder : Number.MAX_SAFE_INTEGER)
+              - (rightHasOrder ? rightOrder : Number.MAX_SAFE_INTEGER);
+          }
+          return volumeVariantLabelForLayer(left).localeCompare(volumeVariantLabelForLayer(right));
+        });
+        return variantLayers;
+      }
+
+      function firstVolumeVariantStateKey(variantGroup) {
+        const variantLayers = volumeVariantLayersForGroup(variantGroup);
+        if (!variantLayers.length) {
+          return "";
+        }
+        return volumeStateKeyForLayer(variantLayers[0]);
+      }
+
+      function activeVolumeControlKey() {
+        const layer = selectedVolumeLayer() || volumeLayerForKey(activeVolumeKey);
+        if (!layer) {
+          return "";
+        }
+        const variantGroup = volumeVariantGroupForLayer(layer);
+        if (variantGroup) {
+          return `variant:${variantGroup}`;
+        }
+        const stateKey = volumeStateKeyForLayer(layer);
+        return stateKey ? `state:${stateKey}` : "";
+      }
+
+      function volumeControlOptions() {
+        const options = [];
+        const seenControlKeys = new Set();
+        volumeStateKeys.forEach((stateKey) => {
+          const layer = volumeLayerForKey(stateKey);
+          if (!layer) {
+            return;
+          }
+          const variantGroup = volumeVariantGroupForLayer(layer);
+          if (variantGroup) {
+            const controlKey = `variant:${variantGroup}`;
+            if (seenControlKeys.has(controlKey)) {
+              return;
+            }
+            seenControlKeys.add(controlKey);
+            options.push({
+              controlKey,
+              label: volumeBaseNameForLayer(layer),
+            });
+            return;
+          }
+          const resolvedStateKey = volumeStateKeyForLayer(layer);
+          const controlKey = `state:${resolvedStateKey}`;
+          if (seenControlKeys.has(controlKey)) {
+            return;
+          }
+          seenControlKeys.add(controlKey);
+          options.push({
+            controlKey,
+            label: volumeStateNameForLayer(layer),
+          });
+        });
+        return options;
+      }
+
+      function setExclusiveVolumeVariantSelection(stateKey) {
+        const targetLayer = volumeLayerForKey(stateKey);
+        const variantGroup = volumeVariantGroupForLayer(targetLayer);
+        if (!variantGroup) {
+          return;
+        }
+        const targetStateKey = String(stateKey || "");
+        const stateKeysInGroup = new Set(
+          volumeLayers
+            .filter((layer) => volumeVariantGroupForLayer(layer) === variantGroup)
+            .map((layer) => volumeStateKeyForLayer(layer))
+            .filter(Boolean)
+        );
+        stateKeysInGroup.forEach((groupStateKey) => {
+          const state = volumeStateByKey[String(groupStateKey)];
+          if (!state) {
+            return;
+          }
+          state.visible = String(groupStateKey) === targetStateKey;
+        });
       }
 
       function volumeLegendColorForLayer(layer) {
@@ -8028,24 +10069,43 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         volumeSelectEl.innerHTML = "";
-        volumeStateKeys.forEach((stateKey) => {
-          const volumeLayer = volumeLayerForKey(stateKey);
-          if (!volumeLayer) {
-            return;
-          }
+        const controlOptions = volumeControlOptions();
+        const selectedControlKey = activeVolumeControlKey();
+        controlOptions.forEach((option) => {
           const optionEl = document.createElement("option");
-          optionEl.value = String(stateKey);
-          optionEl.textContent = volumeStateNameForLayer(volumeLayer);
-          if (String(stateKey) === String(activeVolumeKey)) {
+          optionEl.value = String(option.controlKey);
+          optionEl.textContent = String(option.label);
+          if (String(option.controlKey) === String(selectedControlKey)) {
             optionEl.selected = true;
           }
           volumeSelectEl.appendChild(optionEl);
         });
-        volumeSelectEl.disabled = !volumeSupported || volumeStateKeys.length <= 1;
+        volumeSelectEl.disabled = !volumeSupported || controlOptions.length <= 1;
 
         const controlLayer = layer || volumeLayerForKey(activeVolumeKey);
         if (!controlLayer) {
           return;
+        }
+        const controlVariantGroup = volumeVariantGroupForLayer(controlLayer);
+        const smoothingLayers = controlVariantGroup
+          ? volumeVariantLayersForGroup(controlVariantGroup)
+          : [];
+        const showSmoothingControl = smoothingLayers.length > 1;
+        if (volumeSmoothingFieldEl) {
+          volumeSmoothingFieldEl.style.display = showSmoothingControl ? "" : "none";
+        }
+        if (volumeSmoothingEl) {
+          volumeSmoothingEl.innerHTML = "";
+          smoothingLayers.forEach((variantLayer) => {
+            const optionEl = document.createElement("option");
+            optionEl.value = volumeStateKeyForLayer(variantLayer);
+            optionEl.textContent = volumeVariantLabelForLayer(variantLayer);
+            if (String(optionEl.value) === String(activeVolumeKey)) {
+              optionEl.selected = true;
+            }
+            volumeSmoothingEl.appendChild(optionEl);
+          });
+          volumeSmoothingEl.disabled = !volumeSupported || !showSmoothingControl;
         }
         volumeVisibleEl.checked = state.visible !== false;
         volumeColormapEl.innerHTML = "";
@@ -8970,6 +11030,66 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return line;
       }
 
+      function buildSelectionBoxGroupForFrame(timeMyr) {
+        selectionBoxHitObjects = [];
+        if (!selectionBoxShouldRender()) {
+          return null;
+        }
+        const displayState = selectionBoxDisplayStateAtTime(timeMyr);
+        if (!displayState) {
+          return null;
+        }
+        const group = new THREE.Group();
+        const line = makeLineObject({
+          key: "selection-box",
+          segments: displayState.segments,
+          line: {
+            color: String(selectionBoxSpec.line_color || "#ffffff"),
+            width: Math.max(Number(selectionBoxSpec.line_width) || 1.0, 1.0),
+            dash: "solid",
+          },
+          opacity: clamp01(selectionBoxSpec.line_opacity ?? 1.0),
+        }, frameLineMaterials);
+        if (line) {
+          group.add(line);
+        }
+
+        const cubeSidePc = 2.0 * displayState.halfWidthPc;
+        const dragMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(cubeSidePc, cubeSidePc, cubeSidePc),
+          new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.0,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          })
+        );
+        dragMesh.position.copy(displayState.centerDisplay);
+        dragMesh.rotation.z = displayState.angle;
+        dragMesh.userData.selectionBoxHandle = { kind: "drag" };
+        group.add(dragMesh);
+        selectionBoxHitObjects.push(dragMesh);
+
+        const handleRadiusPc = clampRange(displayState.halfWidthPc * 0.075, 14.0, 40.0);
+        displayState.cornersDisplay.forEach((cornerDisplay) => {
+          const handleMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(handleRadiusPc, 12, 10),
+            new THREE.MeshBasicMaterial({
+              color: 0xffffff,
+              transparent: true,
+              opacity: 0.0,
+              depthWrite: false,
+            })
+          );
+          handleMesh.position.copy(cornerDisplay);
+          handleMesh.userData.selectionBoxHandle = { kind: "resize" };
+          group.add(handleMesh);
+          selectionBoxHitObjects.push(handleMesh);
+        });
+        return group;
+      }
+
       function smoothstep01(value) {
         const t = clampRange(Number(value) || 0.0, 0.0, 1.0);
         return t * t * (3.0 - 2.0 * t);
@@ -9098,21 +11218,53 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         const group = new THREE.Group();
         const traceState = traceStyleStateForKey(trace.key);
+        const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
+        const opacityValue = traceState ? clamp01(traceState.opacity) : 1.0;
         trace.labels.forEach((label) => {
           if (!label.text) {
             return;
           }
           const sprite = makeTextSprite(label.text, {
             color: (traceState && traceState.color) || label.color || theme.axis_color,
-            size: label.size ?? 12,
+            size: (label.size ?? 12) * sizeScaleFactor,
             family: label.family ?? "Helvetica",
             screenStable: label.screen_stable === true,
             screenPixels: label.screen_px,
+            screenScaleMultiplier: sizeScaleFactor,
           });
+          sprite.material.opacity = opacityValue;
           sprite.position.set(label.x, label.y, label.z);
           if (label.screen_stable === true) {
             screenStableTextSprites.push(sprite);
           }
+          group.add(sprite);
+        });
+        parent.add(group);
+      }
+
+      function addManualLabels(parent) {
+        if (!manualLabels.length) {
+          return;
+        }
+        const group = new THREE.Group();
+        manualLabels.forEach((label, index) => {
+          if (!label || !label.text) {
+            return;
+          }
+          const sprite = makeTextSprite(label.text, {
+            color: theme.axis_color || "#808080",
+            size: label.size ?? DEFAULT_MANUAL_LABEL_SIZE,
+            family: "Helvetica",
+            screenStable: true,
+            screenPixels: clampManualLabelSize(label.size ?? DEFAULT_MANUAL_LABEL_SIZE),
+          });
+          sprite.position.set(label.x, label.y, label.z);
+          sprite.userData = {
+            hovertext: `<strong>${escapeHtml(label.text)}</strong><br/>Drag to reposition`,
+            manualLabelId: String(label.id || `manual-label-${index + 1}`),
+          };
+          screenStableTextSprites.push(sprite);
+          hoverTargets.push(sprite);
           group.add(sprite);
         });
         parent.add(group);
@@ -9361,6 +11513,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function traceVisible(trace) {
+        if (isGalacticReferenceTrace(trace) && !galacticReferenceVisible) {
+          return false;
+        }
+        if (isNearbyRegionLabelTrace(trace) && !nearbyRegionLabelsVisible) {
+          return false;
+        }
         const defaults = groupDefaults(currentGroup);
         const mode = defaults[trace.key];
         if (mode === false || mode === undefined) {
@@ -9370,6 +11528,25 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return Boolean(legendState[trace.key]);
         }
         return mode === true;
+      }
+
+      function isGalacticReferenceTrace(trace) {
+        if (!trace || typeof trace !== "object") {
+          return false;
+        }
+        const traceName = String(trace.name || "");
+        if (galacticReferenceTraceNames.has(traceName)) {
+          return true;
+        }
+        return traceName.startsWith("R = ") && traceName.endsWith("kpc");
+      }
+
+      function isNearbyRegionLabelTrace(trace) {
+        if (!trace || typeof trace !== "object") {
+          return false;
+        }
+        const traceName = String(trace.name || "");
+        return nearbyRegionLabelTraceNames.has(traceName);
       }
 
       function medianCoordinate(values) {
@@ -9478,24 +11655,33 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           renderFrame(currentFrameIndex);
         });
 
-        if (state.hasPoints) {
+        if (state.hasPoints || state.hasLabels) {
           const sizeInput = document.createElement("input");
           sizeInput.type = "range";
           sizeInput.min = "0.25";
           sizeInput.max = "4";
           sizeInput.step = "0.05";
           sizeInput.value = String(Math.max(Number(state.sizeScale), 0.25));
-          const sizeField = createLegendField(`Point size (${Number(state.sizeScale).toFixed(2)}x)`, sizeInput);
+          const sizeLabel = state.hasPoints && state.hasLabels
+            ? "Size"
+            : (state.hasLabels ? "Text size" : "Point size");
+          const sizeField = createLegendField(`${sizeLabel} (${Number(state.sizeScale).toFixed(2)}x)`, sizeInput);
           controls.appendChild(sizeField.field);
           sizeInput.addEventListener("input", () => {
             state.sizeScale = Math.max(Number(sizeInput.value), 0.05);
-            sizeField.label.textContent = `Point size (${state.sizeScale.toFixed(2)}x)`;
+            sizeField.label.textContent = `${sizeLabel} (${state.sizeScale.toFixed(2)}x)`;
             renderFrame(currentFrameIndex);
           });
 
           const summary = document.createElement("div");
           summary.className = "oviz-three-legend-summary";
-          summary.textContent = "Point size is applied as a multiplier on the original marker sizes.";
+          summary.textContent = state.hasPoints && state.hasLabels
+            ? "Size is applied as a multiplier on the original marker and label sizes."
+            : (
+              state.hasLabels
+                ? "Text size is applied as a multiplier on the original label sizes."
+                : "Point size is applied as a multiplier on the original marker sizes."
+            );
           controls.appendChild(summary);
         }
 
@@ -10014,6 +12200,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           addDecoration(plotGroup, decoration);
         });
 
+        const selectionBoxGroup = buildSelectionBoxGroupForFrame(frame ? frame.time : 0.0);
+        if (selectionBoxGroup) {
+          plotGroup.add(selectionBoxGroup);
+        }
+
+        addManualLabels(plotGroup);
+
         const focusOffset = focusTrackingOffsetForFrame(frame);
         if (focusOffset) {
           plotGroup.position.copy(focusOffset.multiplyScalar(-1.0));
@@ -10022,6 +12215,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         applySceneHoverState();
         resize();
         renderVolumeControls();
+        renderBoxMetricsWidget();
         renderAgeKdeWidget();
         renderClusterFilterWidget();
         renderDendrogramWidget();
@@ -10041,6 +12235,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         positionInspectorDock();
         updateScaleBar();
+        applyScaleBarPosition();
+        renderBoxMetricsWidget();
         renderAgeKdeWidget();
         renderClusterFilterWidget();
         renderDendrogramWidget();
@@ -10088,6 +12284,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         setWidgetModeValue(widgetKey, nextMode);
         if (widgetKey === "sky") {
           applySkyPanelMode();
+        } else if (widgetKey === "box_metrics") {
+          applyBoxMetricsPanelMode();
         } else if (widgetKey === "age_kde") {
           applyAgeKdePanelMode();
         } else if (widgetKey === "cluster_filter") {
@@ -10110,13 +12308,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           panelEl.style.height = "auto";
         }
         resize();
+        renderBoxMetricsWidget();
         if (widgetKey === "sky" && nextMode !== "hidden") {
           updateSkyPanel();
         }
+        renderBoxMetricsWidget();
         renderAgeKdeWidget();
         renderClusterFilterWidget();
         renderDendrogramWidget();
-        if (widgetKey === "dendrogram") {
+        if (widgetKey === "box_metrics" || widgetKey === "dendrogram") {
           renderFrame(currentFrameIndex);
         }
       }
@@ -10132,6 +12332,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const items = [];
         if (skySpec.enabled) {
           items.push({ key: "sky", label: "Sky View" });
+        }
+        if (selectionBoxSpec.enabled) {
+          items.push({ key: "box_metrics", label: "Box Metrics" });
         }
         if (ageKdeSpec.enabled) {
           items.push({ key: "age_kde", label: "Age KDE" });
@@ -10333,6 +12536,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             worldPoint,
             selection: hitObject.userData ? (hitObject.userData.selection || null) : null,
             selectionKey: hitObject.userData ? normalizeMemberKey(hitObject.userData.selectionKey || "") : "",
+            manualLabelId: hitObject.userData ? String(hitObject.userData.manualLabelId || "") : "",
           };
         }
 
@@ -10349,6 +12553,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
               worldPoint: hit.point.clone(),
               selection: null,
               selectionKey: "",
+              manualLabelId: "",
             };
           }
         }
@@ -10366,6 +12571,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
               worldPoint: planePoint,
               selection: null,
               selectionKey: "",
+              manualLabelId: "",
             };
           }
         }
@@ -10397,6 +12603,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (widgetPointerState || !clickSelectionEnabled) {
           return;
         }
+        if (selectionBoxRayHitFromEvent(event)) {
+          return;
+        }
         const hit = pickSprite(event);
         const selection = hit && hit.userData ? hit.userData.selection : null;
         if (!selection) {
@@ -10413,8 +12622,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (widgetPointerState || lassoState || event.button !== 0) {
           return;
         }
+        if (selectionBoxRayHitFromEvent(event)) {
+          return;
+        }
         const target = doubleClickTargetFromEvent(event);
         if (!target || !target.worldPoint) {
+          return;
+        }
+        if (target.manualLabelId) {
           return;
         }
         if (target.selectionKey) {
@@ -10480,6 +12695,68 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         event.stopPropagation();
       }
 
+      function onScaleBarPointerStart(event) {
+        if (!scaleBarEl || event.button !== 0) {
+          return;
+        }
+        const rect = scaleBarEl.getBoundingClientRect();
+        const rootRect = root.getBoundingClientRect();
+        scaleBarPointerState = {
+          startX: event.clientX,
+          startY: event.clientY,
+          startLeft: rect.left - rootRect.left,
+          startTop: rect.top - rootRect.top,
+          width: rect.width,
+          height: rect.height,
+        };
+        scaleBarEl.dataset.dragging = "true";
+        controls.enabled = false;
+        if (typeof scaleBarEl.setPointerCapture === "function" && event.pointerId !== undefined) {
+          try {
+            scaleBarEl.setPointerCapture(event.pointerId);
+          } catch (_err) {
+          }
+        }
+        document.body.style.userSelect = "none";
+        focusViewer();
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      function updateScaleBarInteraction(event) {
+        if (!scaleBarPointerState || !scaleBarEl) {
+          return false;
+        }
+        const left = scaleBarPointerState.startLeft + (event.clientX - scaleBarPointerState.startX);
+        const top = scaleBarPointerState.startTop + (event.clientY - scaleBarPointerState.startY);
+        const next = clampScaleBarPosition(left, top, scaleBarPointerState.width, scaleBarPointerState.height);
+        scaleBarPosition = { left: next.left, top: next.top };
+        scaleBarEl.style.left = `${next.left}px`;
+        scaleBarEl.style.top = `${next.top}px`;
+        scaleBarEl.style.right = "auto";
+        scaleBarEl.style.bottom = "auto";
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+      }
+
+      function finishScaleBarInteraction(event) {
+        if (!scaleBarPointerState || !scaleBarEl) {
+          return false;
+        }
+        if (typeof scaleBarEl.releasePointerCapture === "function" && event.pointerId !== undefined) {
+          try {
+            scaleBarEl.releasePointerCapture(event.pointerId);
+          } catch (_err) {
+          }
+        }
+        scaleBarEl.dataset.dragging = "false";
+        controls.enabled = true;
+        document.body.style.userSelect = "";
+        scaleBarPointerState = null;
+        return true;
+      }
+
       function onWidgetPointerMove(event) {
         if (!widgetPointerState) {
           return;
@@ -10498,6 +12775,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           widgetPointerState.panelEl.style.height = `${next.height}px`;
         }
         resize();
+        renderBoxMetricsWidget();
         renderAgeKdeWidget();
         event.preventDefault();
         event.stopPropagation();
@@ -10534,6 +12812,33 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           setWidgetMode("sky", skyPanelMode === "fullscreen" ? "normal" : "fullscreen");
         });
         applySkyPanelMode();
+      }
+
+      function initBoxMetricsPanel() {
+        if (!selectionBoxSpec.enabled) {
+          applyBoxMetricsPanelMode();
+          return;
+        }
+        boxMetricsHideButtonEl.addEventListener("click", () => setWidgetMode("box_metrics", "hidden"));
+        boxMetricsFullButtonEl.addEventListener("click", () => {
+          setWidgetMode("box_metrics", boxMetricsPanelMode === "fullscreen" ? "normal" : "fullscreen");
+        });
+        boxMetricsResetButtonEl.addEventListener("click", () => {
+          selectionBoxState = buildDefaultSelectionBoxState();
+          syncSelectionBoxVisibilityInput(true);
+          renderFrame(currentFrameIndex);
+          scheduleSelectionBoxMetricsRecompute(true);
+        });
+        if (boxMetricsVisibleEl) {
+          boxMetricsVisibleEl.addEventListener("change", () => {
+            selectionBoxState.visible = Boolean(boxMetricsVisibleEl.checked);
+            renderFrame(currentFrameIndex);
+            renderBoxMetricsWidget();
+          });
+        }
+        syncSelectionBoxVisibilityInput(true);
+        applyBoxMetricsPanelMode();
+        scheduleSelectionBoxMetricsRecompute(true);
       }
 
       function initAgeKdePanel() {
@@ -10773,9 +13078,31 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         volumeSelectEl.addEventListener("change", () => {
-          activeVolumeKey = String(volumeSelectEl.value);
+          const selectedControlKey = String(volumeSelectEl.value || "");
+          if (selectedControlKey.startsWith("variant:")) {
+            const variantGroup = selectedControlKey.slice("variant:".length);
+            const activeLayer = volumeLayerForKey(activeVolumeKey);
+            if (volumeVariantGroupForLayer(activeLayer) !== variantGroup) {
+              const nextStateKey = firstVolumeVariantStateKey(variantGroup);
+              if (nextStateKey) {
+                activeVolumeKey = nextStateKey;
+              }
+            }
+          } else if (selectedControlKey.startsWith("state:")) {
+            activeVolumeKey = selectedControlKey.slice("state:".length);
+          } else {
+            activeVolumeKey = selectedControlKey;
+          }
+          setExclusiveVolumeVariantSelection(activeVolumeKey);
           updateActiveVolumeRuntime();
         });
+        if (volumeSmoothingEl) {
+          volumeSmoothingEl.addEventListener("change", () => {
+            activeVolumeKey = String(volumeSmoothingEl.value || activeVolumeKey || "");
+            setExclusiveVolumeVariantSelection(activeVolumeKey);
+            updateActiveVolumeRuntime();
+          });
+        }
         volumeVisibleEl.addEventListener("change", () => {
           const state = selectedVolumeState();
           if (!state) {
@@ -10842,7 +13169,113 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
       }
 
+      function manualLabelHitFromEvent(event) {
+        const hitObject = pickSprite(event);
+        if (!hitObject || !hitObject.userData || !hitObject.userData.manualLabelId) {
+          return null;
+        }
+        const label = manualLabelById(hitObject.userData.manualLabelId);
+        if (!label) {
+          return null;
+        }
+        return { hitObject, label };
+      }
+
+      function manualLabelPlanePointFromEvent(event, plane) {
+        pointerRayFromEvent(event);
+        const point = new THREE.Vector3();
+        return raycaster.ray.intersectPlane(plane, point) ? point : null;
+      }
+
+      function startManualLabelInteraction(event) {
+        if (widgetPointerState || lassoState || event.button !== 0) {
+          return false;
+        }
+        const hitInfo = manualLabelHitFromEvent(event);
+        if (!hitInfo) {
+          return false;
+        }
+        activeManualLabelId = String(hitInfo.label.id || "");
+        syncManualLabelDraftFromSelection();
+        renderManualLabelControls();
+        const worldPosition = new THREE.Vector3();
+        hitInfo.hitObject.getWorldPosition(worldPosition);
+        const cameraDirection = new THREE.Vector3();
+        camera.getWorldDirection(cameraDirection);
+        if (cameraDirection.lengthSq() <= 1e-12) {
+          cameraDirection.set(0.0, 0.0, -1.0);
+        } else {
+          cameraDirection.normalize();
+        }
+        const dragPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(cameraDirection, worldPosition);
+        const planePoint = manualLabelPlanePointFromEvent(event, dragPlane) || worldPosition.clone();
+        manualLabelPointerState = {
+          pointerId: event.pointerId,
+          labelId: String(hitInfo.label.id || ""),
+          plane: dragPlane.clone(),
+          dragOffsetWorld: planePoint.clone().sub(worldPosition),
+        };
+        controls.enabled = false;
+        document.body.style.userSelect = "none";
+        if (typeof canvas.setPointerCapture === "function" && event.pointerId !== undefined) {
+          try {
+            canvas.setPointerCapture(event.pointerId);
+          } catch (_err) {
+          }
+        }
+        tooltipEl.style.display = "none";
+        suppressNextCanvasClick = true;
+        event.preventDefault();
+        return true;
+      }
+
+      function updateManualLabelInteraction(event) {
+        if (!manualLabelPointerState) {
+          return false;
+        }
+        const selectedLabel = manualLabelById(manualLabelPointerState.labelId);
+        if (!selectedLabel) {
+          return finishManualLabelInteraction(event);
+        }
+        const planePoint = manualLabelPlanePointFromEvent(event, manualLabelPointerState.plane);
+        if (!planePoint) {
+          return true;
+        }
+        const nextWorld = planePoint.clone().sub(manualLabelPointerState.dragOffsetWorld);
+        const nextLocal = nextWorld.sub(plotGroup.position);
+        selectedLabel.x = Number.isFinite(nextLocal.x) ? nextLocal.x : selectedLabel.x;
+        selectedLabel.y = Number.isFinite(nextLocal.y) ? nextLocal.y : selectedLabel.y;
+        selectedLabel.z = Number.isFinite(nextLocal.z) ? nextLocal.z : selectedLabel.z;
+        renderFrame(currentFrameIndex);
+        event.preventDefault();
+        return true;
+      }
+
+      function finishManualLabelInteraction(event) {
+        if (!manualLabelPointerState) {
+          return false;
+        }
+        if (typeof canvas.releasePointerCapture === "function" && manualLabelPointerState.pointerId !== undefined) {
+          try {
+            canvas.releasePointerCapture(manualLabelPointerState.pointerId);
+          } catch (_err) {
+          }
+        }
+        manualLabelPointerState = null;
+        controls.enabled = true;
+        document.body.style.userSelect = "";
+        renderManualLabelControls();
+        if (event) {
+          event.preventDefault();
+        }
+        return true;
+      }
+
       function onPointerMove(event) {
+        if (selectionBoxPointerState || manualLabelPointerState) {
+          tooltipEl.style.display = "none";
+          return;
+        }
         if (lassoState) {
           onLassoPointerMove(event);
           return;
@@ -11066,8 +13499,66 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           renderSceneControls();
           buildAxes();
         });
+        galacticReferenceToggleEl.addEventListener("change", () => {
+          galacticReferenceVisible = Boolean(galacticReferenceToggleEl.checked);
+          renderSceneControls();
+          renderFrame(currentFrameIndex);
+        });
+        nearbyRegionLabelsToggleEls.forEach((toggleEl) => {
+          toggleEl.addEventListener("change", () => {
+            nearbyRegionLabelsVisible = Boolean(toggleEl.checked);
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        });
+        if (manualLabelSelectEl) {
+          manualLabelSelectEl.addEventListener("change", () => {
+            activeManualLabelId = String(manualLabelSelectEl.value || "");
+            ensureActiveManualLabel(activeManualLabelId);
+            syncManualLabelDraftFromSelection();
+            renderManualLabelControls();
+          });
+        }
+        if (manualLabelTextEl) {
+          manualLabelTextEl.addEventListener("input", () => {
+            manualLabelDraftText = String(manualLabelTextEl.value || "").slice(0, MAX_MANUAL_LABEL_TEXT_LENGTH);
+          });
+        }
+        if (manualLabelSizeEl) {
+          manualLabelSizeEl.addEventListener("input", () => {
+            manualLabelDraftSize = clampManualLabelSize(manualLabelSizeEl.value);
+          });
+          manualLabelSizeEl.addEventListener("change", () => {
+            manualLabelDraftSize = clampManualLabelSize(manualLabelSizeEl.value);
+            renderManualLabelControls();
+          });
+        }
+        if (manualLabelAddButtonEl) {
+          manualLabelAddButtonEl.addEventListener("click", () => {
+            addManualLabelFromDraft();
+            focusViewer();
+          });
+        }
+        if (manualLabelApplyButtonEl) {
+          manualLabelApplyButtonEl.addEventListener("click", () => {
+            applyManualLabelDraftToSelection();
+            focusViewer();
+          });
+        }
+        if (manualLabelDeleteButtonEl) {
+          manualLabelDeleteButtonEl.addEventListener("click", () => {
+            deleteActiveManualLabel();
+            focusViewer();
+          });
+        }
         viewFromEarthButtonEl.addEventListener("click", () => {
           viewFromEarth();
+        });
+        orbitCameraButtons.forEach((buttonEl) => {
+          buttonEl.addEventListener("click", () => {
+            setCameraAutoOrbitEnabled(!cameraAutoOrbitEnabled);
+            focusViewer();
+          });
         });
         resetCameraButtonEl.addEventListener("click", () => {
           resetCameraView();
@@ -11082,6 +13573,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
           focusTraceKey = String(animationSpec.focus_trace_key_default || "");
           axesVisible = Boolean(sceneSpec.show_axes);
+          galacticReferenceVisible = true;
+          nearbyRegionLabelsVisible = true;
+          setCameraAutoOrbitEnabled(false);
           cameraViewMode = "free";
           earthViewFocusDistance = null;
           camera.fov = Number(initialCameraState.fov);
@@ -11101,10 +13595,25 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function onCanvasPointerDown(event) {
         focusViewer();
+        if (startSelectionBoxInteraction(event)) {
+          return;
+        }
+        if (startManualLabelInteraction(event)) {
+          return;
+        }
         startLassoSelection(event);
       }
 
       function onWindowPointerMove(event) {
+        if (updateSelectionBoxInteraction(event)) {
+          return;
+        }
+        if (updateManualLabelInteraction(event)) {
+          return;
+        }
+        if (updateScaleBarInteraction(event)) {
+          return;
+        }
         onWidgetPointerMove(event);
       }
 
@@ -11129,6 +13638,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function onWindowPointerEnd(event) {
+        if (finishSelectionBoxInteraction(event)) {
+          return;
+        }
+        if (finishManualLabelInteraction(event)) {
+          return;
+        }
+        if (finishScaleBarInteraction(event)) {
+          return;
+        }
         onWidgetPointerEnd(event);
         finishLassoSelection(event);
       }
@@ -11152,6 +13670,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       buildAxes();
       initControls();
       initSkyPanel();
+      initBoxMetricsPanel();
       initAgeKdePanel();
       initClusterFilterPanel();
       initDendrogramPanel();
@@ -11170,6 +13689,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       canvas.addEventListener("pointerleave", onPointerLeave);
       canvas.addEventListener("click", onCanvasClick);
       canvas.addEventListener("dblclick", onCanvasDoubleClick);
+      scaleBarEl.addEventListener("pointerdown", onScaleBarPointerStart);
       window.addEventListener("keydown", onKeyDown);
       window.addEventListener("keyup", onKeyUp);
       window.addEventListener("blur", clearPressedKeys);
