@@ -2086,6 +2086,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                     <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
                   </label>
                 </div>
+                <label class="oviz-three-controls-field">
+                  <span class="oviz-three-global-point-glow-label">Star glow</span>
+                  <input class="oviz-three-global-point-glow" type="range" min="0" max="4" step="0.02" />
+                </label>
                 <div class="oviz-three-controls-row">
                   <label class="oviz-three-controls-field">
                     <span>Focus group</span>
@@ -2119,7 +2123,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                   <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
                   <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
                 </div>
-                <div class="oviz-three-controls-hint">Point size and opacity act as multiplicative global factors on top of each trace's existing settings.</div>
+                <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
               </div>
             </div>
           </div>
@@ -2258,6 +2262,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                     <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
                   </label>
                 </div>
+                <label class="oviz-three-controls-field">
+                  <span class="oviz-three-global-point-glow-label">Star glow</span>
+                  <input class="oviz-three-global-point-glow" type="range" min="0" max="4" step="0.02" />
+                </label>
                 <div class="oviz-three-controls-row">
                   <label class="oviz-three-controls-field">
                     <span>Focus group</span>
@@ -2291,7 +2299,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                   <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
                   <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
                 </div>
-                <div class="oviz-three-controls-hint">Point size and opacity act as multiplicative global factors on top of each trace's existing settings.</div>
+                <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
               </div>
             </div>
           </div>
@@ -2648,6 +2656,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const globalPointSizeLabelEl = root.querySelector(".oviz-three-global-point-size-label");
       const globalPointOpacityEl = root.querySelector(".oviz-three-global-point-opacity");
       const globalPointOpacityLabelEl = root.querySelector(".oviz-three-global-point-opacity-label");
+      const globalPointGlowEl = root.querySelector(".oviz-three-global-point-glow");
+      const globalPointGlowLabelEl = root.querySelector(".oviz-three-global-point-glow-label");
       const focusGroupSelectEl = root.querySelector(".oviz-three-focus-group-select");
       const fadeTimeEl = root.querySelector(".oviz-three-fade-time");
       const fadeInOutToggleEl = root.querySelector(".oviz-three-fade-in-out-toggle");
@@ -2919,6 +2929,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const screenStableTextSprites = [];
       const markerTextureCache = new Map();
       const markerMaterialCache = new Map();
+      const starCoreTextureCache = new Map();
+      const starCoreMaterialCache = new Map();
+      const starGlowTextureCache = new Map();
+      const starGlowMaterialCache = new Map();
+      const starBloomMaterialCache = new Map();
       const textTextureCache = new Map();
       const galaxyTextureCache = new Map();
       const volumeScalarDataCache = new Map();
@@ -2970,6 +2985,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let manualLabelIdCounter = 0;
       let globalPointSizeScale = 1.0;
       let globalPointOpacityScale = 1.0;
+      let globalPointGlowStrength = 1.2;
       let globalScrollSpeed = 1.0;
       let cameraAutoOrbitEnabled = Boolean(
         initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled
@@ -4516,6 +4532,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (Number.isFinite(Number(savedGlobalControls.point_opacity_scale))) {
             globalPointOpacityScale = Number(savedGlobalControls.point_opacity_scale);
           }
+          if (Number.isFinite(Number(savedGlobalControls.point_glow_strength))) {
+            globalPointGlowStrength = Number(savedGlobalControls.point_glow_strength);
+          }
           if (Number.isFinite(Number(savedGlobalControls.fade_in_time_myr))) {
             fadeInTimeMyr = Number(savedGlobalControls.fade_in_time_myr);
           }
@@ -4874,6 +4893,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             camera_fov: camera.fov,
             point_size_scale: globalPointSizeScale,
             point_opacity_scale: globalPointOpacityScale,
+            point_glow_strength: globalPointGlowStrength,
             fade_in_time_myr: fadeInTimeMyr,
             fade_in_and_out_enabled: fadeInAndOutEnabled,
             focus_trace_key: focusTraceKey,
@@ -6909,6 +6929,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         globalScrollSpeed = clampRange(globalScrollSpeed, 0.2, 4.0);
         globalPointSizeScale = clampRange(globalPointSizeScale, 0.25, 4.0);
         globalPointOpacityScale = clampRange(globalPointOpacityScale, 0.0, 2.0);
+        globalPointGlowStrength = clampRange(globalPointGlowStrength, 0.0, 4.0);
         fadeInTimeMyr = Math.max(Number.isFinite(Number(fadeInTimeMyr)) ? Number(fadeInTimeMyr) : 0.0, 0.0);
         focusTraceKey = String(focusTraceKey || "");
         camera.fov = clampRange(camera.fov, 18.0, 90.0);
@@ -7096,6 +7117,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         if (globalPointOpacityLabelEl) {
           globalPointOpacityLabelEl.textContent = `Point opacity (${globalPointOpacityScale.toFixed(2)}x)`;
+        }
+        if (globalPointGlowEl) {
+          globalPointGlowEl.value = String(globalPointGlowStrength);
+        }
+        if (globalPointGlowLabelEl) {
+          globalPointGlowLabelEl.textContent = `Star glow (${globalPointGlowStrength.toFixed(2)}x)`;
         }
         if (focusGroupSelectEl) {
           focusGroupSelectEl.value = focusTraceKey;
@@ -10278,6 +10305,211 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return material;
       }
 
+      function starGlowTextureFor(kind = "realistic") {
+        const cacheKey = String(kind || "realistic");
+        if (starGlowTextureCache.has(cacheKey)) {
+          return starGlowTextureCache.get(cacheKey);
+        }
+
+        const canvasEl = document.createElement("canvas");
+        canvasEl.width = 256;
+        canvasEl.height = 256;
+        const ctx = canvasEl.getContext("2d");
+        const cx = canvasEl.width * 0.5;
+        const cy = canvasEl.height * 0.5;
+        const size = canvasEl.width;
+        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+        if (cacheKey === "bloom") {
+          const outerBloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.50);
+          outerBloom.addColorStop(0.0, "rgba(255,255,255,0.38)");
+          outerBloom.addColorStop(0.08, "rgba(255,255,255,0.26)");
+          outerBloom.addColorStop(0.24, "rgba(255,255,255,0.12)");
+          outerBloom.addColorStop(0.58, "rgba(255,255,255,0.035)");
+          outerBloom.addColorStop(1.0, "rgba(255,255,255,0.0)");
+          ctx.fillStyle = outerBloom;
+          ctx.beginPath();
+          ctx.arc(cx, cy, size * 0.50, 0, Math.PI * 2.0);
+          ctx.fill();
+        } else {
+          const outerHalo = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.50);
+          outerHalo.addColorStop(0.0, "rgba(255,255,255,0.92)");
+          outerHalo.addColorStop(0.06, "rgba(255,255,255,0.84)");
+          outerHalo.addColorStop(0.16, "rgba(255,255,255,0.50)");
+          outerHalo.addColorStop(0.38, "rgba(255,255,255,0.18)");
+          outerHalo.addColorStop(0.70, "rgba(255,255,255,0.05)");
+          outerHalo.addColorStop(1.0, "rgba(255,255,255,0.0)");
+          ctx.fillStyle = outerHalo;
+          ctx.beginPath();
+          ctx.arc(cx, cy, size * 0.50, 0, Math.PI * 2.0);
+          ctx.fill();
+
+          const innerHalo = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.24);
+          innerHalo.addColorStop(0.0, "rgba(255,255,255,0.95)");
+          innerHalo.addColorStop(0.10, "rgba(255,255,255,0.90)");
+          innerHalo.addColorStop(0.26, "rgba(255,255,255,0.62)");
+          innerHalo.addColorStop(0.54, "rgba(255,255,255,0.14)");
+          innerHalo.addColorStop(1.0, "rgba(255,255,255,0.0)");
+          ctx.fillStyle = innerHalo;
+          ctx.beginPath();
+          ctx.arc(cx, cy, size * 0.24, 0, Math.PI * 2.0);
+          ctx.fill();
+        }
+
+        const texture = new THREE.CanvasTexture(canvasEl);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.generateMipmaps = false;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.needsUpdate = true;
+        starGlowTextureCache.set(cacheKey, texture);
+        return texture;
+      }
+
+      function starCoreTextureFor(kind = "stellar_core") {
+        const cacheKey = String(kind || "stellar_core");
+        if (starCoreTextureCache.has(cacheKey)) {
+          return starCoreTextureCache.get(cacheKey);
+        }
+
+        const canvasEl = document.createElement("canvas");
+        canvasEl.width = 256;
+        canvasEl.height = 256;
+        const ctx = canvasEl.getContext("2d");
+        const cx = canvasEl.width * 0.5;
+        const cy = canvasEl.height * 0.5;
+        const size = canvasEl.width;
+        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+        const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.22);
+        core.addColorStop(0.0, "rgba(255,255,255,1.0)");
+        core.addColorStop(0.08, "rgba(255,255,255,1.0)");
+        core.addColorStop(0.18, "rgba(255,255,255,0.95)");
+        core.addColorStop(0.38, "rgba(255,255,255,0.56)");
+        core.addColorStop(0.72, "rgba(255,255,255,0.05)");
+        core.addColorStop(1.0, "rgba(255,255,255,0.0)");
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.arc(cx, cy, size * 0.22, 0, Math.PI * 2.0);
+        ctx.fill();
+
+        const bloom = ctx.createRadialGradient(cx, cy, size * 0.02, cx, cy, size * 0.34);
+        bloom.addColorStop(0.0, "rgba(255,255,255,0.45)");
+        bloom.addColorStop(0.16, "rgba(255,255,255,0.28)");
+        bloom.addColorStop(0.52, "rgba(255,255,255,0.07)");
+        bloom.addColorStop(1.0, "rgba(255,255,255,0.0)");
+        ctx.fillStyle = bloom;
+        ctx.beginPath();
+        ctx.arc(cx, cy, size * 0.34, 0, Math.PI * 2.0);
+        ctx.fill();
+
+        const texture = new THREE.CanvasTexture(canvasEl);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.generateMipmaps = false;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.needsUpdate = true;
+        starCoreTextureCache.set(cacheKey, texture);
+        return texture;
+      }
+
+      function starGlowMaterialFor(color, opacity) {
+        const cacheKey = [color ?? "#ffffff", Number(opacity ?? 0.0).toFixed(4)].join("|");
+        if (starGlowMaterialCache.has(cacheKey)) {
+          return starGlowMaterialCache.get(cacheKey);
+        }
+        const material = new THREE.SpriteMaterial({
+          map: starGlowTextureFor("halo"),
+          color: color ?? "#ffffff",
+          transparent: true,
+          opacity: opacity ?? 0.0,
+          depthWrite: false,
+          depthTest: true,
+          blending: THREE.AdditiveBlending,
+        });
+        material.userData = { cached: true, glow: true };
+        starGlowMaterialCache.set(cacheKey, material);
+        return material;
+      }
+
+      function starBloomMaterialFor(color, opacity) {
+        const cacheKey = [color ?? "#ffffff", Number(opacity ?? 0.0).toFixed(4)].join("|");
+        if (starBloomMaterialCache.has(cacheKey)) {
+          return starBloomMaterialCache.get(cacheKey);
+        }
+        const material = new THREE.SpriteMaterial({
+          map: starGlowTextureFor("bloom"),
+          color: color ?? "#ffffff",
+          transparent: true,
+          opacity: opacity ?? 0.0,
+          depthWrite: false,
+          depthTest: true,
+          blending: THREE.AdditiveBlending,
+        });
+        material.userData = { cached: true, glow: true, bloom: true };
+        starBloomMaterialCache.set(cacheKey, material);
+        return material;
+      }
+
+      function starCoreMaterialFor(color, opacity) {
+        const cacheKey = [Number(opacity ?? 0.0).toFixed(4)].join("|");
+        if (starCoreMaterialCache.has(cacheKey)) {
+          return starCoreMaterialCache.get(cacheKey);
+        }
+        const material = new THREE.SpriteMaterial({
+          map: starCoreTextureFor("stellar_core"),
+          color: "#ffffff",
+          transparent: true,
+          opacity: opacity ?? 0.0,
+          depthWrite: false,
+          depthTest: true,
+          blending: THREE.AdditiveBlending,
+        });
+        material.userData = { cached: true, glow: true, core: true };
+        starCoreMaterialCache.set(cacheKey, material);
+        return material;
+      }
+
+      function worldUnitsPerScreenPixelAt(position) {
+        const point = position instanceof THREE.Vector3
+          ? position
+          : new THREE.Vector3(
+            Number(position && position.x) || 0.0,
+            Number(position && position.y) || 0.0,
+            Number(position && position.z) || 0.0
+          );
+        const distance = Math.max(camera.position.distanceTo(point), 1e-3);
+        const viewportHeight = Math.max(renderer.domElement.clientHeight || root.clientHeight || 1, 1);
+        return (2.0 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5)) / viewportHeight;
+      }
+
+      function glowScaleForPoint(basePointScale, position, glowStrength) {
+        const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
+        const worldPerPixel = worldUnitsPerScreenPixelAt(position);
+        const desiredWorldScale = Number(basePointScale) * (1.45 + 1.18 * strength);
+        const minWorldScale = worldPerPixel * (9.0 + 9.0 * strength);
+        const maxWorldScale = worldPerPixel * (24.0 + 20.0 * strength);
+        return clampRange(desiredWorldScale, minWorldScale, maxWorldScale);
+      }
+
+      function starCoreScaleForPoint(basePointScale, position, glowStrength) {
+        const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
+        const worldPerPixel = worldUnitsPerScreenPixelAt(position);
+        const desiredWorldScale = Number(basePointScale) * (0.44 + 0.10 * strength);
+        const minWorldScale = worldPerPixel * (3.2 + 1.4 * strength);
+        const maxWorldScale = worldPerPixel * (6.8 + 2.2 * strength);
+        return clampRange(desiredWorldScale, minWorldScale, maxWorldScale);
+      }
+
+      function starBloomScaleForPoint(basePointScale, position, glowStrength) {
+        const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
+        const worldPerPixel = worldUnitsPerScreenPixelAt(position);
+        const desiredWorldScale = Number(basePointScale) * (2.10 + 1.65 * strength);
+        const minWorldScale = worldPerPixel * (18.0 + 16.0 * strength);
+        const maxWorldScale = worldPerPixel * (40.0 + 28.0 * strength);
+        return clampRange(desiredWorldScale, minWorldScale, maxWorldScale);
+      }
+
       function textTextureFor(text, color, size, family) {
         const cacheKey = [text, color ?? "#ffffff", size ?? 12, family ?? "Helvetica"].join("|");
         if (textTextureCache.has(cacheKey)) {
@@ -11185,28 +11417,116 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (effectiveOpacity <= 0.001) {
             return;
           }
-          const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, traceColor || point.color, effectiveOpacity));
           const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05);
           const scale = Math.max(pointState.size * sizeScaleFactor * globalPointSizeScale * pointScale, scaleFloor);
           const selectionKey = normalizedSelectionKeyFor(point.selection);
-          sprite.position.set(point.x, point.y, point.z);
-          sprite.scale.set(scale, scale, scale);
-          sprite.userData = {
-            hovertext: point.hovertext || trace.name || "",
-            selection: point.selection || null,
-            selectionKey,
-            baseScale: scale,
-          };
-          group.add(sprite);
-          hoverTargets.push(sprite);
-          if (selectionKey) {
-            if (!selectionSpriteEntriesByKey.has(selectionKey)) {
-              selectionSpriteEntriesByKey.set(selectionKey, []);
+          const glowStrength = Math.max(globalPointGlowStrength, 0.0);
+          let interactionSprite = null;
+          if (glowStrength > 0.02) {
+            const bloomOpacity = clampRange(effectiveOpacity * (0.08 + 0.16 * glowStrength), 0.0, 0.82);
+            const bloomSprite = new THREE.Sprite(starBloomMaterialFor(traceColor || point.color, bloomOpacity));
+            const bloomScale = starBloomScaleForPoint(
+              scale,
+              { x: point.x, y: point.y, z: point.z },
+              glowStrength
+            );
+            bloomSprite.position.set(point.x, point.y, point.z);
+            bloomSprite.scale.set(bloomScale, bloomScale, 1.0);
+            bloomSprite.renderOrder = -3;
+            bloomSprite.userData = {
+              selection: point.selection || null,
+              selectionKey,
+              baseScale: bloomScale,
+              isBloom: true,
+            };
+            group.add(bloomSprite);
+            if (selectionKey) {
+              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
+                selectionSpriteEntriesByKey.set(selectionKey, []);
+              }
+              selectionSpriteEntriesByKey.get(selectionKey).push({
+                sprite: bloomSprite,
+                baseScale: bloomScale,
+              });
             }
-            selectionSpriteEntriesByKey.get(selectionKey).push({
-              sprite,
+
+            const glowOpacity = clampRange(effectiveOpacity * (0.24 + 0.30 * glowStrength), 0.0, 0.98);
+            const glowSprite = new THREE.Sprite(starGlowMaterialFor(traceColor || point.color, glowOpacity));
+            const glowScale = glowScaleForPoint(
+              scale,
+              { x: point.x, y: point.y, z: point.z },
+              glowStrength
+            );
+            glowSprite.position.set(point.x, point.y, point.z);
+            glowSprite.scale.set(glowScale, glowScale, 1.0);
+            glowSprite.renderOrder = -2;
+            glowSprite.userData = {
+              selection: point.selection || null,
+              selectionKey,
+              baseScale: glowScale,
+              isGlow: true,
+            };
+            group.add(glowSprite);
+            if (selectionKey) {
+              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
+                selectionSpriteEntriesByKey.set(selectionKey, []);
+              }
+              selectionSpriteEntriesByKey.get(selectionKey).push({
+                sprite: glowSprite,
+                baseScale: glowScale,
+              });
+            }
+
+            const coreOpacity = clampRange(effectiveOpacity * (0.88 + 0.36 * glowStrength), 0.0, 1.0);
+            const coreSprite = new THREE.Sprite(starCoreMaterialFor("#ffffff", coreOpacity));
+            const coreScale = starCoreScaleForPoint(
+              scale,
+              { x: point.x, y: point.y, z: point.z },
+              glowStrength
+            );
+            coreSprite.position.set(point.x, point.y, point.z);
+            coreSprite.scale.set(coreScale, coreScale, 1.0);
+            coreSprite.userData = {
+              hovertext: point.hovertext || trace.name || "",
+              selection: point.selection || null,
+              selectionKey,
+              baseScale: coreScale,
+              isGlowCore: true,
+            };
+            group.add(coreSprite);
+            hoverTargets.push(coreSprite);
+            interactionSprite = coreSprite;
+            if (selectionKey) {
+              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
+                selectionSpriteEntriesByKey.set(selectionKey, []);
+              }
+              selectionSpriteEntriesByKey.get(selectionKey).push({
+                sprite: coreSprite,
+                baseScale: coreScale,
+              });
+            }
+          } else {
+            const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, traceColor || point.color, effectiveOpacity));
+            sprite.position.set(point.x, point.y, point.z);
+            sprite.scale.set(scale, scale, scale);
+            sprite.userData = {
+              hovertext: point.hovertext || trace.name || "",
+              selection: point.selection || null,
+              selectionKey,
               baseScale: scale,
-            });
+            };
+            group.add(sprite);
+            hoverTargets.push(sprite);
+            interactionSprite = sprite;
+            if (selectionKey) {
+              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
+                selectionSpriteEntriesByKey.set(selectionKey, []);
+              }
+              selectionSpriteEntriesByKey.get(selectionKey).push({
+                sprite,
+                baseScale: scale,
+              });
+            }
           }
         });
         parent.add(group);
@@ -13475,6 +13795,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           renderSceneControls();
           renderFrame(currentFrameIndex);
         });
+        globalPointGlowEl.addEventListener("input", () => {
+          globalPointGlowStrength = Number(globalPointGlowEl.value);
+          applyGlobalControlState();
+          renderSceneControls();
+          renderFrame(currentFrameIndex);
+        });
         focusGroupSelectEl.addEventListener("change", () => {
           focusTraceKey = String(focusGroupSelectEl.value || "");
           focusSelectionKey = "";
@@ -13569,6 +13895,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           globalScrollSpeed = 1.0;
           globalPointSizeScale = 1.0;
           globalPointOpacityScale = 1.0;
+          globalPointGlowStrength = 0.85;
           fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
           fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
           focusTraceKey = String(animationSpec.focus_trace_key_default || "");
