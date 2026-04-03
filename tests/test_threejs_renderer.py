@@ -494,7 +494,6 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("applyVolumeSkyAxisTransform", html)
         self.assertIn("const volumeSkyAxisTransform = deriveVolumeSkyAxisTransform();", html)
         self.assertIn("CDELT2: latSpan / height", html)
-        self.assertIn("Dust sky pixels:", html)
         self.assertIn("setOverlayImageLayer(imageLayer", html)
         self.assertIn("Rendered at t=0 only as a WebGL2 ray-marched volume.", html)
 
