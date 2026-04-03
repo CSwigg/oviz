@@ -171,7 +171,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(zero_frame["decorations"][0]["kind"], "milky_way_model")
         self.assertEqual(past_frame["decorations"], [])
 
-    def test_threejs_galactic_circles_keep_circles_but_drop_labels(self):
+    def test_threejs_galactic_circles_include_gc_marker_and_drop_radius_labels(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
         viz.make_plot(
             time=np.array([0.0, -1.0]),
@@ -188,15 +188,68 @@ class ThreeJSRendererTests(unittest.TestCase):
             for trace in zero_frame["traces"]
             for label in trace.get("labels", [])
         ]
+        gc_labels = [
+            label
+            for trace in zero_frame["traces"]
+            if trace.get("name") == "GC"
+            for label in trace.get("labels", [])
+        ]
 
         self.assertIn("R = 4 kpc", trace_names)
         self.assertIn("R = 8.12 kpc", trace_names)
         self.assertIn("R = 12 kpc", trace_names)
-        self.assertNotIn("GC", trace_names)
-        self.assertNotIn("GC", label_texts)
+        self.assertIn("GC", trace_names)
+        self.assertIn("GC Ring", trace_names)
+        self.assertIn("G.C.", label_texts)
+        self.assertTrue(gc_labels)
+        self.assertGreater(float(gc_labels[0].get("z", 0.0)), 0.0)
         self.assertNotIn("R = 4 kpc", label_texts)
         self.assertNotIn("R = 8.12 kpc", label_texts)
         self.assertNotIn("R = 12 kpc", label_texts)
+
+    def test_threejs_text_trace_can_be_a_single_legend_item(self):
+        viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
+        text_trace = go.Scatter3d(
+            x=[10.0, -20.0],
+            y=[5.0, 15.0],
+            z=[2.0, 8.0],
+            mode="text",
+            text=["Orion", "Sco-Cen"],
+            textfont={"color": "#d7dce2", "size": 30, "family": "Helvetica"},
+            name="Nearby Region Labels",
+            showlegend=True,
+            meta={"screen_stable_text": True, "screen_px": 28.0},
+            hoverinfo="skip",
+        )
+
+        viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            static_traces=[text_trace],
+            static_traces_times=[[0.0]],
+        )
+
+        legend_item = next(
+            item for item in viz.fig_dict["legend"]["items"] if item["name"] == "Nearby Region Labels"
+        )
+        zero_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == 0.0)
+        label_trace = next(trace for trace in zero_frame["traces"] if trace["name"] == "Nearby Region Labels")
+
+        self.assertTrue(legend_item["has_labels"])
+        self.assertFalse(legend_item["has_points"])
+        self.assertEqual([label["text"] for label in label_trace["labels"]], ["Orion", "Sco-Cen"])
+        self.assertTrue(all(label["screen_stable"] for label in label_trace["labels"]))
+
+    def test_threejs_renderer_scale_bar_is_draggable_and_saved(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(time=np.array([0.0, -1.0]), renderer="threejs", show=False)
+        html = fig.to_html()
+
+        self.assertIn('class="oviz-three-scale-bar" data-dragging="false"', html)
+        self.assertIn('scaleBarEl.addEventListener("pointerdown", onScaleBarPointerStart);', html)
+        self.assertIn("function captureScaleBarState()", html)
+        self.assertIn("scale_bar_state: captureScaleBarState()", html)
 
     def test_threejs_renderer_can_serialize_sky_panel_state(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
@@ -263,6 +316,23 @@ class ThreeJSRendererTests(unittest.TestCase):
         point = sky_panel["members_by_cluster"]["Cluster A"][0]
         self.assertTrue(np.isfinite(point["ra"]))
         self.assertTrue(np.isfinite(point["dec"]))
+
+    def test_threejs_renderer_allows_initial_state_overrides(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=True,
+            threejs_initial_state={"lasso_volume_selection_enabled": True},
+        )
+
+        html = fig.to_html()
+        self.assertTrue(viz.fig_dict["initial_state"]["lasso_volume_selection_enabled"])
+        self.assertIn('"lasso_volume_selection_enabled": true', html)
+        self.assertIn("Volume lasso", html)
+        self.assertNotIn("Dust lasso", html)
 
     def test_threejs_renderer_can_serialize_age_kde_widget(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")

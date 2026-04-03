@@ -29,6 +29,7 @@ GALACTIC_RADIUS_CIRCLE_DEFS = (
 GALACTIC_RADIUS_TRACE_NAMES = (
     {name for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
     | {f'{name} Label' for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
+    | {'GC Ring'}
 )
 
 SPIRAL_ARMS = {
@@ -177,6 +178,7 @@ class Animate3D:
         sky_survey='P/DSS2/color',
         cluster_members_file=None,
         volumes=None,
+        threejs_initial_state=None,
     ):
         """
         Main method to generate a 3D animated plot. Integrates orbits if necessary and
@@ -228,6 +230,7 @@ class Animate3D:
         self.cluster_members_file = cluster_members_file
         self.sky_members_by_cluster = None
         self.volume_configs = _normalize_threejs_volume_configs(volumes)
+        self.threejs_initial_state = copy.deepcopy(threejs_initial_state) if threejs_initial_state else {}
         if age_kde_bandwidth_myr <= 0:
             raise ValueError("age_kde_bandwidth_myr must be > 0.")
         self.age_kde_bandwidth_myr = float(age_kde_bandwidth_myr)
@@ -555,6 +558,74 @@ class Animate3D:
             (self.ro * 1000.0) - float(x_rf),
             0.0 - float(y_rf),
             0.0 - float(z_rf)
+        )
+
+    def _galactic_center_label_trace(
+        self,
+        t,
+        x_rf,
+        y_rf,
+        z_rf,
+        coord_system='centered',
+        z_offset_pc=300.0,
+    ):
+        """Center anchor and label for the Galactic Center."""
+        x_gc, y_gc, z_gc = self._galactic_center_position(
+            t=t,
+            x_rf=x_rf,
+            y_rf=y_rf,
+            z_rf=z_rf,
+            coord_system=coord_system,
+        )
+        line_color = self._reference_line_color()
+        return go.Scatter3d(
+            x=[x_gc],
+            y=[y_gc],
+            z=[float(z_gc) + float(z_offset_pc)],
+            mode='text',
+            text=['G.C.'],
+            textposition='middle center',
+            textfont=dict(color=line_color, size=48, family='helvetica'),
+            opacity=0.9,
+            name='GC',
+            showlegend=False,
+            hoverinfo='skip'
+        )
+
+    def _galactic_center_ring_trace(
+        self,
+        t,
+        x_rf,
+        y_rf,
+        z_rf,
+        coord_system='centered',
+        radius_pc=250.0,
+        npts=96,
+    ):
+        """Small open-circle ring around the Galactic Center."""
+        x_gc, y_gc, z_gc = self._galactic_center_position(
+            t=t,
+            x_rf=x_rf,
+            y_rf=y_rf,
+            z_rf=z_rf,
+            coord_system=coord_system,
+        )
+        theta = np.linspace(0.0, 2.0 * np.pi, int(npts), endpoint=True)
+        x_vals = float(x_gc) + float(radius_pc) * np.cos(theta)
+        y_vals = float(y_gc) + float(radius_pc) * np.sin(theta)
+        z_vals = np.full_like(x_vals, float(z_gc))
+        line_color = self._reference_line_color()
+        return go.Scatter3d(
+            x=x_vals,
+            y=y_vals,
+            z=z_vals,
+            mode='lines',
+            line=dict(color=line_color, width=self._reference_line_width(), dash='solid'),
+            opacity=0.9,
+            visible=True,
+            name='GC Ring',
+            showlegend=False,
+            hoverinfo='skip'
         )
 
     def _radius_label_trace(
@@ -1488,6 +1559,16 @@ class Animate3D:
 
         if show_reference_lines:
             if galactic_mode:
+                scatter_list.append(
+                    self._galactic_center_label_trace(
+                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+                    )
+                )
+                scatter_list.append(
+                    self._galactic_center_ring_trace(
+                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+                    )
+                )
                 scatter_list.extend(
                     self._build_galactic_circles_with_labels(
                         t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
@@ -1525,7 +1606,8 @@ class Animate3D:
         """
         for i, st in enumerate(static_traces):
             st_copy = copy.deepcopy(st)
-            st_copy['meta'] = {'static': True}
+            existing_meta = st_copy.meta if isinstance(getattr(st_copy, 'meta', None), dict) else {}
+            st_copy['meta'] = {**existing_meta, 'static': True}
 
             # Re-center if focusing on a group (except for tracks)
             if (self.focus_group is not None) and (st_copy.name) and not st_copy.name.endswith('Track'):
@@ -1645,6 +1727,7 @@ class Animate3D:
                     'kind': 'trace',
                     'has_points': bool(trace_spec.get('points')),
                     'has_segments': bool(trace_spec.get('segments')),
+                    'has_labels': bool(trace_spec.get('labels')),
                     'default_color': trace_spec.get('legend_color'),
                     'default_opacity': float(trace_spec.get('default_opacity', 1.0)),
                     'default_point_size': trace_spec.get('default_point_size'),
@@ -1765,6 +1848,7 @@ class Animate3D:
             'playback_interval_ms': 500,
             'camera_up': {'x': 0.0, 'y': 0.0, 'z': 1.0},
             'sky_panel': self._build_threejs_sky_panel_spec(default_sky_catalog),
+            'selection_box': copy.deepcopy(getattr(self, 'selection_box_spec', {'enabled': False})),
             'age_kde': self._build_threejs_age_kde_spec(trace_key_by_name),
             'cluster_filter': self._build_threejs_cluster_filter_spec(trace_key_by_name),
             'dendrogram': self._build_threejs_dendrogram_spec(trace_key_by_name),
@@ -1794,6 +1878,7 @@ class Animate3D:
             },
             'initial_state': {
                 'click_selection_enabled': True,
+                **copy.deepcopy(getattr(self, 'threejs_initial_state', {}) or {}),
             },
             'note': self._threejs_note_text(),
         }
@@ -2158,6 +2243,8 @@ class Animate3D:
         note = 'Three.js modules are loaded from a CDN in this renderer path.'
         if getattr(self, 'enable_sky_panel', False):
             note += ' Use the widget menu to open Aladin Lite.'
+        if getattr(self, 'selection_box_spec', None):
+            note += ' Drag the co-rotating box to probe local SN-rate and nearest-neighbor clustering histories.'
         if getattr(self, 'show_age_kde_inset', False):
             note += ' The widget menu also opens the age KDE view.'
         if getattr(self, 'volume_configs', None):
@@ -2779,8 +2866,24 @@ def _labels_from_trace(trace_json):
     font_size = _coerce_float(textfont.get('size'), 12.0)
     font_family = textfont.get('family', 'helvetica')
     trace_name = str(trace_json.get('name') or '')
+    trace_meta = trace_json.get('meta') if isinstance(trace_json.get('meta'), dict) else {}
     is_gc_label = trace_name == 'GC'
     is_galactic_radius_label = trace_name.startswith('R=') and trace_name.endswith(' Label')
+    is_screen_stable_label = bool(
+        is_gc_label
+        or is_galactic_radius_label
+        or trace_meta.get('screen_stable_text')
+    )
+    screen_px = None
+    if is_gc_label:
+        screen_px = 36.0
+    elif is_galactic_radius_label:
+        screen_px = 9.0
+    elif trace_meta.get('screen_px') is not None:
+        try:
+            screen_px = float(trace_meta.get('screen_px'))
+        except Exception:
+            screen_px = None
 
     labels = []
     for idx in range(n_labels):
@@ -2804,8 +2907,8 @@ def _labels_from_trace(trace_json):
             'color': color,
             'size': font_size,
             'family': font_family,
-            'screen_stable': bool(is_gc_label or is_galactic_radius_label),
-            'screen_px': 10.0 if is_gc_label else (9.0 if is_galactic_radius_label else None),
+            'screen_stable': is_screen_stable_label,
+            'screen_px': screen_px,
         })
 
     return labels
