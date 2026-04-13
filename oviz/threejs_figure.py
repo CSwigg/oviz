@@ -591,34 +591,154 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         z-index: 6;
         display: flex;
         align-items: center;
-        gap: 10px;
-        width: min(88vw, 1100px);
-        padding: 8px 12px;
+        justify-content: center;
+        gap: 12px;
+        width: auto;
+        max-width: calc(100vw - 28px);
+        padding: 0;
         border-radius: 999px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        backdrop-filter: blur(6px);
+        border: 0;
+        background: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
       }
       #__ROOT_ID__ .oviz-three-footer button {
-        border: 1px solid var(--oviz-panel-border);
-        border-radius: 999px;
-        background: transparent;
+        border: 0;
+        border-radius: 0;
+        background: none;
         color: var(--oviz-text);
         cursor: pointer;
         font-size: 15px;
         width: 34px;
         height: 34px;
         line-height: 1;
+        margin-top: 0;
+        padding: 0;
+        box-shadow: none;
+        -webkit-appearance: none;
+        appearance: none;
       }
       #__ROOT_ID__ .oviz-three-time-label {
-        min-width: 136px;
+        min-width: 132px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         font-size: 15px;
         color: var(--oviz-text);
         white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+      }
+      #__ROOT_ID__ .oviz-three-slider-shell {
+        position: relative;
+        flex: 0 0 clamp(180px, 24vw, 260px);
+        width: clamp(180px, 24vw, 260px);
+        max-width: clamp(180px, 24vw, 260px);
+        display: block;
+        min-width: 0;
+        height: 34px;
+      }
+      #__ROOT_ID__ .oviz-three-slider-track-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        height: 34px;
       }
       #__ROOT_ID__ .oviz-three-slider {
-        flex: 1 1 auto;
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        margin: 0;
         accent-color: var(--oviz-axis);
+        background: transparent;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      #__ROOT_ID__ .oviz-three-slider::-webkit-slider-runnable-track {
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+      }
+      #__ROOT_ID__ .oviz-three-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        margin-top: -5px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 50%;
+        background: var(--oviz-axis);
+        box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.18);
+      }
+      #__ROOT_ID__ .oviz-three-slider::-moz-range-track {
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+      }
+      #__ROOT_ID__ .oviz-three-slider::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 50%;
+        background: var(--oviz-axis);
+        box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.18);
+      }
+      #__ROOT_ID__ .oviz-three-slider-ticks,
+      #__ROOT_ID__ .oviz-three-slider-labels {
+        position: absolute;
+        left: 7px;
+        right: 7px;
+        pointer-events: none;
+        display: none;
+      }
+      #__ROOT_ID__ .oviz-three-slider-ticks {
+        inset-block: 0;
+      }
+      #__ROOT_ID__ .oviz-three-slider-labels {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 34px;
+        height: 16px;
+      }
+      #__ROOT_ID__ .oviz-three-slider-tick {
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%);
+      }
+      #__ROOT_ID__ .oviz-three-slider-tick-label {
+        position: absolute;
+        transform: translateX(-50%);
+      }
+      #__ROOT_ID__ .oviz-three-slider-tick {
+        width: 2px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.34);
+      }
+      #__ROOT_ID__ .oviz-three-slider-tick-minor {
+        height: 6px;
+        opacity: 0.78;
+      }
+      #__ROOT_ID__ .oviz-three-slider-tick-major {
+        height: 11px;
+        background: rgba(255, 255, 255, 0.56);
+      }
+      #__ROOT_ID__ .oviz-three-slider-tick[data-active="true"] {
+        background: var(--oviz-axis);
+        opacity: 0.95;
+      }
+      #__ROOT_ID__ .oviz-three-slider-tick-label {
+        top: 0;
+        color: var(--oviz-muted-text);
+        font: 500 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        white-space: nowrap;
+        letter-spacing: 0.01em;
+        font-variant-numeric: tabular-nums;
+      }
+      #__ROOT_ID__ .oviz-three-slider-tick-label[data-active="true"] {
+        color: var(--oviz-text);
       }
       #__ROOT_ID__ .oviz-three-tooltip {
         position: absolute;
@@ -653,7 +773,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-scale-bar {
         position: absolute;
         left: 18px;
-        bottom: 86px;
+        bottom: 22px;
         z-index: 6;
         display: flex;
         flex-direction: column;
@@ -1257,6 +1377,50 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: blur(18px) saturate(125%);
         -webkit-backdrop-filter: blur(18px) saturate(125%);
       }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"]::before {
+        background:
+          radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.014), transparent 18%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.006), transparent 14%);
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-title {
+        padding: 5px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        background: rgba(20, 22, 26, 0.90);
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
+        backdrop-filter: blur(4px) saturate(105%);
+        -webkit-backdrop-filter: blur(4px) saturate(105%);
+        font: 600 13px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: -0.015em;
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu {
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        background: rgba(20, 22, 26, 0.90);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.10);
+        backdrop-filter: blur(4px) saturate(104%);
+        -webkit-backdrop-filter: blur(4px) saturate(104%);
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu button,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu select,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-tools-toggle,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-controls-toggle {
+        height: 30px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(29, 32, 37, 0.98);
+        box-shadow: none;
+        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu button:hover,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu select:hover,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-tools-toggle:hover,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-controls-toggle:hover {
+        background: rgba(38, 42, 48, 0.98);
+        border-color: rgba(255, 255, 255, 0.10);
+      }
       #__ROOT_ID__ .oviz-three-widget-menu button,
       #__ROOT_ID__ .oviz-three-widget-menu select,
       #__ROOT_ID__ .oviz-three-tools-toggle,
@@ -1339,15 +1503,33 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: blur(22px) saturate(120%);
         -webkit-backdrop-filter: blur(22px) saturate(120%);
       }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-inspector-panel,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-popover,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-tools-drawer,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-controls-drawer,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-panel {
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 11px;
+        background: rgba(18, 20, 24, 0.76);
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+        backdrop-filter: blur(8px) saturate(108%);
+        -webkit-backdrop-filter: blur(8px) saturate(108%);
+      }
       #__ROOT_ID__ .oviz-three-legend-panel {
         position: absolute;
         top: 14px;
         left: 14px;
         z-index: 6;
-        width: min(212px, 20vw);
+        width: min(220px, 19vw);
+        min-width: 176px;
+        min-height: 112px;
         display: flex;
         flex-direction: column;
         overflow: hidden;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] {
+        min-height: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-panel-head {
         display: flex;
@@ -1356,11 +1538,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         gap: 10px;
         padding: 10px 12px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        cursor: grab;
+        user-select: none;
+        touch-action: auto;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel[data-dragging="true"] .oviz-three-legend-panel-head {
+        cursor: grabbing;
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-head {
+        padding: 8px 10px;
+        border-bottom-color: rgba(255, 255, 255, 0.05);
       }
       #__ROOT_ID__ .oviz-three-legend-panel-title {
         color: var(--oviz-text);
         font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         letter-spacing: -0.01em;
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-title {
+        font-size: 12px;
       }
       #__ROOT_ID__ .oviz-three-legend-panel-toggle {
         width: 24px;
@@ -1370,14 +1565,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(255, 255, 255, 0.05);
         color: var(--oviz-muted-text);
         font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        cursor: pointer;
+        position: relative;
+        z-index: 1;
+        touch-action: manipulation;
       }
       #__ROOT_ID__ .oviz-three-legend-panel-body {
         display: flex;
         flex-direction: column;
-        max-height: min(31vh, 320px);
+        flex: 1 1 auto;
+        min-height: 0;
         padding: 6px 8px 8px;
         overflow: auto;
         transition: max-height 0.18s ease, padding 0.18s ease, opacity 0.18s ease;
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-body {
+        padding: 5px 7px 7px;
       }
       #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] .oviz-three-legend-panel-body {
         max-height: 0;
@@ -1389,7 +1592,29 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 5px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section[data-empty="true"] {
+        display: none;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-title {
+        padding: 1px 2px 0;
+        color: var(--oviz-muted-text);
+        font: 600 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      #__ROOT_ID__ .oviz-three-legend-volume-list .oviz-three-legend-entry {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.016));
+      }
+      #__ROOT_ID__ .oviz-three-legend-volume-section {
+        padding-top: 6px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
       }
       #__ROOT_ID__ .oviz-three-legend-group-field {
         display: flex;
@@ -1419,6 +1644,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(255, 255, 255, 0.022);
         transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
       }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-entry {
+        gap: 4px;
+        padding: 4px 6px;
+        border-radius: 8px;
+        border-color: rgba(255, 255, 255, 0.04);
+        background: rgba(255, 255, 255, 0.01);
+      }
       #__ROOT_ID__ .oviz-three-legend-entry[data-active="false"] {
         opacity: 0.46;
       }
@@ -1439,12 +1671,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
         background: rgba(255, 255, 255, 0.05);
       }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-item:hover,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-entry[data-editor-open="true"] {
+        background: rgba(255, 255, 255, 0.028);
+      }
       #__ROOT_ID__ .oviz-three-legend-swatch {
         flex: 0 0 auto;
         width: 8px;
         height: 8px;
         border-radius: 999px;
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-swatch {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
       }
       #__ROOT_ID__ .oviz-three-legend-meta {
         display: flex;
@@ -1466,6 +1707,87 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(255, 255, 255, 0.05);
         color: var(--oviz-muted-text);
         font: 700 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-edit,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-toggle {
+        border-radius: 7px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(255, 255, 255, 0.024);
+      }
+      #__ROOT_ID__ .oviz-three-legend-resize {
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        z-index: 1;
+        touch-action: none;
+      }
+      #__ROOT_ID__ .oviz-three-legend-resize[data-dir="nw"] {
+        top: -1px;
+        left: -1px;
+        cursor: nwse-resize;
+      }
+      #__ROOT_ID__ .oviz-three-legend-resize[data-dir="ne"] {
+        top: -1px;
+        right: -1px;
+        cursor: nesw-resize;
+      }
+      #__ROOT_ID__ .oviz-three-legend-resize[data-dir="sw"] {
+        left: -1px;
+        bottom: -1px;
+        cursor: nesw-resize;
+      }
+      #__ROOT_ID__ .oviz-three-legend-resize[data-dir="se"] {
+        right: -1px;
+        bottom: -1px;
+        cursor: nwse-resize;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] .oviz-three-legend-resize {
+        pointer-events: none;
+        opacity: 0;
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-tools-drawer,
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-controls-drawer {
+        top: calc(100% + 8px);
+        width: min(320px, calc(100vw - 32px));
+        padding: 10px;
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-drag {
+        height: 34px;
+        padding: 0 10px;
+        text-transform: none;
+        letter-spacing: 0;
+        font: 500 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        color: var(--oviz-text);
+        background: rgba(24, 26, 30, 0.96);
+        border-bottom: 1px solid var(--oviz-panel-border);
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-footer {
+        border-radius: 8px;
+        background: rgba(18, 20, 24, 0.94);
+        box-shadow: 0 5px 14px rgba(0, 0, 0, 0.12);
+        backdrop-filter: blur(4px) saturate(103%);
+        -webkit-backdrop-filter: blur(4px) saturate(103%);
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-footer button {
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-scale-bar {
+        border-radius: 4px;
+        background: rgba(18, 20, 24, 0.92);
+        backdrop-filter: blur(4px) saturate(103%);
+        -webkit-backdrop-filter: blur(4px) saturate(103%);
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-note {
+        border-radius: 4px;
+        background: rgba(18, 20, 24, 0.92);
+        box-shadow: 0 5px 14px rgba(0, 0, 0, 0.12);
+        backdrop-filter: blur(4px) saturate(103%);
+        -webkit-backdrop-filter: blur(4px) saturate(103%);
+      }
+      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-sky-frame {
+        top: 32px;
+        height: calc(100% - 32px);
       }
       #__ROOT_ID__ .oviz-three-inspector-dock {
         display: none !important;
@@ -1910,26 +2232,27 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-footer {
         left: 50%;
         bottom: 18px;
-        width: min(72vw, 980px);
-        padding: 10px 14px;
+        width: auto;
+        max-width: calc(100vw - 36px);
+        padding: 0;
         border-radius: 24px;
-        background: linear-gradient(180deg, rgba(28, 34, 42, 0.70), rgba(17, 21, 27, 0.52));
-        box-shadow: var(--oviz-shadow-lg);
-        backdrop-filter: blur(22px) saturate(140%);
-        -webkit-backdrop-filter: blur(22px) saturate(140%);
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
       }
       #__ROOT_ID__ .oviz-three-footer button {
         width: 38px;
         height: 38px;
-        background: rgba(255, 255, 255, 0.04);
+        background: none;
       }
       #__ROOT_ID__ .oviz-three-time-label {
-        min-width: 152px;
+        min-width: 136px;
         font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-scale-bar {
         left: 18px;
-        bottom: 110px;
+        bottom: 22px;
         padding: 10px 12px;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 16px;
@@ -2019,7 +2342,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
     </style>
   </head>
   <body>
-    <div id="__ROOT_ID__" tabindex="0" data-zen="false">
+    <div id="__ROOT_ID__" tabindex="0" data-zen="false" data-ui-design-key="default">
       <div class="oviz-three-topbar">
         <div class="oviz-three-topbar-brand">
           <span class="oviz-three-topbar-dot" aria-hidden="true"></span>
@@ -2050,10 +2373,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           <div class="oviz-three-controls-shell" data-open="false">
             <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
             <div class="oviz-three-controls-drawer">
-              <div class="oviz-three-controls">
-                <div class="oviz-three-controls-title">Controls</div>
-                <label class="oviz-three-controls-field">
-                  <span>Theme</span>
+                <div class="oviz-three-controls">
+                  <div class="oviz-three-controls-title">Controls</div>
+                  <label class="oviz-three-controls-field">
+                    <span>Theme</span>
                   <select class="oviz-three-theme-select">
                     <option value="default">Default</option>
                     <option value="dark">Dark</option>
@@ -2105,6 +2428,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                   <span>Fade in and out</span>
                 </label>
                 <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
+                  <span>Size points by n_stars</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
                   <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
                   <span>Show axes</span>
                 </label>
@@ -2135,8 +2462,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           </select>
         </div>
       </div>
-      <div class="oviz-three-legend-panel" data-open="true">
-        <div class="oviz-three-legend-panel-head">
+      <div class="oviz-three-legend-panel" data-open="true" data-dragging="false">
+        <div class="oviz-three-legend-panel-head oviz-three-legend-panel-drag">
           <div class="oviz-three-legend-panel-title">Legend</div>
           <button class="oviz-three-legend-panel-toggle" type="button" title="Collapse or expand the legend">▾</button>
         </div>
@@ -2145,8 +2472,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             <span>Group</span>
             <select class="oviz-three-group-select"></select>
           </label>
-          <div class="oviz-three-legend"></div>
+          <div class="oviz-three-legend-section oviz-three-legend-trace-section" data-empty="false">
+            <div class="oviz-three-legend-section-title">Traces</div>
+            <div class="oviz-three-legend oviz-three-legend-trace-list"></div>
+          </div>
+          <div class="oviz-three-legend-section oviz-three-legend-volume-section" data-empty="false">
+            <div class="oviz-three-legend-section-title">Volumes</div>
+            <div class="oviz-three-legend oviz-three-legend-volume-list"></div>
+          </div>
         </div>
+        <div class="oviz-three-legend-resize" data-dir="nw"></div>
+        <div class="oviz-three-legend-resize" data-dir="ne"></div>
+        <div class="oviz-three-legend-resize" data-dir="sw"></div>
+        <div class="oviz-three-legend-resize" data-dir="se"></div>
       </div>
       <div class="oviz-three-inspector-dock" data-open="false">
         <button class="oviz-three-inspector-toggle" type="button" title="Open settings">Settings</button>
@@ -2281,6 +2619,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                   <span>Fade in and out</span>
                 </label>
                 <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
+                  <span>Size points by n_stars</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
                   <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
                   <span>Show axes</span>
                 </label>
@@ -2356,9 +2698,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
       <div class="oviz-three-footer">
         <button class="oviz-three-play" type="button" title="Play">▶</button>
-        <button class="oviz-three-pause" type="button" title="Pause">⏸</button>
         <span class="oviz-three-time-label"></span>
-        <input class="oviz-three-slider" type="range" min="0" max="0" step="1" value="0" />
+        <div class="oviz-three-slider-shell">
+          <div class="oviz-three-slider-track-wrap">
+            <div class="oviz-three-slider-ticks oviz-three-slider-ticks-minor"></div>
+            <div class="oviz-three-slider-ticks oviz-three-slider-ticks-major"></div>
+            <input class="oviz-three-slider" type="range" min="0" max="0" step="1" value="0" />
+          </div>
+          <div class="oviz-three-slider-labels"></div>
+        </div>
       </div>
       <div class="oviz-three-note"></div>
       <div class="oviz-three-sky-panel oviz-three-widget-panel" data-widget-key="sky" data-mode="hidden">
@@ -2623,7 +2971,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const widgetSelectEl = root.querySelector(".oviz-three-widget-select");
       const legendPanelEl = root.querySelector(".oviz-three-legend-panel");
       const legendPanelToggleEl = root.querySelector(".oviz-three-legend-panel-toggle");
-      const legendEl = root.querySelector(".oviz-three-legend");
+      const legendPanelBodyEl = root.querySelector(".oviz-three-legend-panel-body");
+      const legendTraceSectionEl = root.querySelector(".oviz-three-legend-trace-section");
+      const legendVolumeSectionEl = root.querySelector(".oviz-three-legend-volume-section");
+      const legendTraceListEl = root.querySelector(".oviz-three-legend-trace-list");
+      const legendVolumeListEl = root.querySelector(".oviz-three-legend-volume-list");
+      const legendDragHandleEl = root.querySelector(".oviz-three-legend-panel-drag");
+      const legendResizeEls = Array.from(root.querySelectorAll(".oviz-three-legend-resize"));
       const inspectorDockEl = root.querySelector(".oviz-three-inspector-dock");
       const inspectorToggleEl = root.querySelector(".oviz-three-inspector-toggle");
       const legendPopoverEl = root.querySelector(".oviz-three-legend-popover");
@@ -2635,6 +2989,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const controlsShellEl = root.querySelector(".oviz-three-controls-shell");
       const controlsToggleEl = root.querySelector(".oviz-three-controls-toggle");
       const sliderEl = root.querySelector(".oviz-three-slider");
+      const sliderTrackWrapEl = root.querySelector(".oviz-three-slider-track-wrap");
+      const sliderMinorTicksEl = root.querySelector(".oviz-three-slider-ticks-minor");
+      const sliderMajorTicksEl = root.querySelector(".oviz-three-slider-ticks-major");
+      const sliderLabelsEl = root.querySelector(".oviz-three-slider-labels");
       const timeLabelEl = root.querySelector(".oviz-three-time-label");
       const playButtonEl = root.querySelector(".oviz-three-play");
       const pauseButtonEl = root.querySelector(".oviz-three-pause");
@@ -2658,6 +3016,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const globalPointOpacityLabelEl = root.querySelector(".oviz-three-global-point-opacity-label");
       const globalPointGlowEl = root.querySelector(".oviz-three-global-point-glow");
       const globalPointGlowLabelEl = root.querySelector(".oviz-three-global-point-glow-label");
+      const sizeByStarsToggleEl = root.querySelector(".oviz-three-size-by-stars-toggle");
       const focusGroupSelectEl = root.querySelector(".oviz-three-focus-group-select");
       const fadeTimeEl = root.querySelector(".oviz-three-fade-time");
       const fadeInOutToggleEl = root.querySelector(".oviz-three-fade-in-out-toggle");
@@ -2830,9 +3189,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         root.style.setProperty("--oviz-scene-bg", theme.scene_bgcolor || theme.paper_bgcolor || "#000000");
         root.style.setProperty("--oviz-text", theme.text_color || "#d0d0d0");
         root.style.setProperty("--oviz-axis", theme.axis_color || "#808080");
+        root.style.setProperty("--oviz-muted-text", theme.muted_text || "rgba(238, 242, 247, 0.58)");
+        root.style.setProperty("--oviz-accent", theme.accent || "#d8dde6");
+        root.style.setProperty("--oviz-accent-strong", theme.accent_strong || "#eef1f5");
         root.style.setProperty("--oviz-panel-bg", theme.panel_bg || "rgba(0, 0, 0, 0.45)");
         root.style.setProperty("--oviz-panel-border", theme.panel_border || "rgba(128, 128, 128, 0.50)");
         root.style.setProperty("--oviz-panel-solid", theme.panel_solid || theme.paper_bgcolor || "#121212");
+        root.style.setProperty("--oviz-shadow-md", theme.shadow_md || "0 18px 42px rgba(0, 0, 0, 0.24)");
+        root.style.setProperty("--oviz-shadow-lg", theme.shadow_lg || "0 24px 70px rgba(0, 0, 0, 0.34)");
         root.style.setProperty("--oviz-footprint", theme.footprint || "#6ec5ff");
       }
 
@@ -2962,6 +3326,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let clusterFilterPanelMode = "hidden";
       let dendrogramPanelMode = "hidden";
       let widgetPointerState = null;
+      let legendPointerState = null;
       let scaleBarPointerState = null;
       let widgetZIndexCounter = 8;
       let selectionBoxPointerState = null;
@@ -2973,6 +3338,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let skyHoveredClusterKey = "";
       let lastSentSkyHoverClusterKey = null;
       let scaleBarPosition = null;
+      let legendPanelRectState = null;
+      let activeUiDesignKey = String(sceneSpec.ui_design_key || "uncodixified");
       let activeThemeKey = "default";
       let axesVisible = Boolean(sceneSpec.show_axes);
       let galacticReferenceVisible = true;
@@ -2986,6 +3353,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let globalPointSizeScale = 1.0;
       let globalPointOpacityScale = 1.0;
       let globalPointGlowStrength = 1.2;
+      let sizePointsByStarsEnabled = false;
       let globalScrollSpeed = 1.0;
       let cameraAutoOrbitEnabled = Boolean(
         initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled
@@ -3119,6 +3487,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           hasPoints: Boolean(item.has_points),
           hasSegments: Boolean(item.has_segments),
           hasLabels: Boolean(item.has_labels),
+          hasNStars: Boolean(item.has_n_stars),
+          sizeByNStarsDefault: Boolean(item.size_by_n_stars_default),
         };
       });
 
@@ -3335,9 +3705,265 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           left = 18.0;
         }
         if (!Number.isFinite(top)) {
-          top = Math.max(6.0, rootRect.height - size.height - 86.0);
+          top = Math.max(6.0, rootRect.height - size.height - 22.0);
         }
         return clampScaleBarPosition(left, top, size.width, size.height);
+      }
+
+      function clampLegendPanelRect(left, top, width, height) {
+        const margin = 8.0;
+        const minWidth = Math.min(196.0, Math.max(160.0, root.clientWidth - 2 * margin));
+        const minHeight = Math.min(132.0, Math.max(72.0, root.clientHeight - 2 * margin));
+        const nextWidth = clampRange(Number(width) || minWidth, minWidth, Math.max(minWidth, root.clientWidth - 2 * margin));
+        const nextHeight = clampRange(Number(height) || minHeight, minHeight, Math.max(minHeight, root.clientHeight - 2 * margin));
+        return {
+          left: clampRange(Number(left) || margin, margin, Math.max(margin, root.clientWidth - nextWidth - margin)),
+          top: clampRange(Number(top) || margin, margin, Math.max(margin, root.clientHeight - nextHeight - margin)),
+          width: nextWidth,
+          height: nextHeight,
+        };
+      }
+
+      function defaultLegendPanelRect() {
+        const width = Math.min(Math.max(root.clientWidth * 0.17, 194.0), 232.0);
+        const visibleItems = visibleLegendItemsForCurrentGroup();
+        const traceCount = visibleItems.filter((item) => !volumeLayerForKey(item.key)).length;
+        const volumeCount = visibleItems.length - traceCount;
+        const preferredTraceRows = clampRange(Math.max(Math.min(traceCount, 5), 5), 5, 5);
+        const preferredVolumeRows = clampRange(Math.min(volumeCount, 2), 0, 2);
+        const estimatedHeight = 122 + preferredTraceRows * 38 + preferredVolumeRows * 34 + (volumeCount ? 20 : 0);
+        const height = Math.min(Math.max(estimatedHeight, 332.0), Math.min(root.clientHeight - 18.0, 460.0));
+        return clampLegendPanelRect(14.0, 14.0, width, height);
+      }
+
+      function applyLegendPanelRect(rectState) {
+        if (!legendPanelEl) {
+          return;
+        }
+        const next = clampLegendPanelRect(
+          rectState && rectState.left,
+          rectState && rectState.top,
+          rectState && rectState.width,
+          rectState && rectState.height,
+        );
+        legendPanelRectState = next;
+        legendPanelEl.style.left = `${next.left}px`;
+        legendPanelEl.style.top = `${next.top}px`;
+        legendPanelEl.style.width = `${next.width}px`;
+        if (legendPanelOpen) {
+          legendPanelEl.style.height = `${next.height}px`;
+          legendPanelEl.dataset.expandedHeight = String(next.height);
+        } else {
+          const headerHeight = legendDragHandleEl
+            ? Math.max(legendDragHandleEl.getBoundingClientRect().height || 0.0, 36.0)
+            : 36.0;
+          legendPanelEl.style.height = `${headerHeight}px`;
+          legendPanelEl.dataset.expandedHeight = String(next.height);
+        }
+        legendPanelEl.style.right = "auto";
+        legendPanelEl.style.bottom = "auto";
+      }
+
+      function captureLegendPanelState() {
+        if (!legendPanelEl) {
+          return null;
+        }
+        if (!legendPanelRectState) {
+          const rootRect = root.getBoundingClientRect();
+          const rect = legendPanelEl.getBoundingClientRect();
+          const expandedHeight = Number(legendPanelEl.dataset.expandedHeight);
+          legendPanelRectState = clampLegendPanelRect(
+            rect.left - rootRect.left,
+            rect.top - rootRect.top,
+            rect.width,
+            Number.isFinite(expandedHeight) ? expandedHeight : rect.height,
+          );
+        }
+        return safeJsonClone(legendPanelRectState, null);
+      }
+
+      function resizeLegendRect(state, clientX, clientY) {
+        const margin = 8.0;
+        const minWidth = Math.min(196.0, Math.max(160.0, root.clientWidth - 2 * margin));
+        const minHeight = Math.min(112.0, Math.max(64.0, root.clientHeight - 2 * margin));
+        let left = state.startLeft;
+        let right = state.startRight;
+        let top = state.startTop;
+        let bottom = state.startBottom;
+        const dx = clientX - state.startX;
+        const dy = clientY - state.startY;
+        const dir = state.dir || "se";
+
+        if (dir.includes("w")) {
+          left = Math.max(margin, Math.min(state.startLeft + dx, state.startRight - minWidth));
+        } else if (dir.includes("e")) {
+          right = Math.min(root.clientWidth - margin, Math.max(state.startRight + dx, state.startLeft + minWidth));
+        }
+        if (dir.includes("n")) {
+          top = Math.max(margin, Math.min(state.startTop + dy, state.startBottom - minHeight));
+        } else if (dir.includes("s")) {
+          bottom = Math.min(root.clientHeight - margin, Math.max(state.startBottom + dy, state.startTop + minHeight));
+        }
+
+        return clampLegendPanelRect(left, top, right - left, bottom - top);
+      }
+
+      function niceFrameStep(rawStep) {
+        const numericStep = Math.max(Number(rawStep) || 1, 1);
+        const exponent = Math.floor(Math.log10(numericStep));
+        const magnitude = Math.pow(10, exponent);
+        const normalized = numericStep / magnitude;
+        if (normalized <= 1) {
+          return 1 * magnitude;
+        }
+        if (normalized <= 2) {
+          return 2 * magnitude;
+        }
+        if (normalized <= 5) {
+          return 5 * magnitude;
+        }
+        return 10 * magnitude;
+      }
+
+      function formatTimelineTickLabel(frame) {
+        if (!frame) {
+          return "";
+        }
+        const numericTime = Number(frame.time);
+        if (Number.isFinite(numericTime)) {
+          return formatTick(numericTime).replace(/^-/, "−");
+        }
+        return String(frame.name || "");
+      }
+
+      function renderTimeSliderTicks() {
+        if (!sliderMinorTicksEl || !sliderMajorTicksEl || !sliderLabelsEl) {
+          return;
+        }
+        sliderMinorTicksEl.innerHTML = "";
+        sliderMajorTicksEl.innerHTML = "";
+        sliderLabelsEl.innerHTML = "";
+      }
+
+      function updatePlaybackToggleButton() {
+        if (!playButtonEl) {
+          return;
+        }
+        const isPlaying = Boolean(playbackTimer);
+        playButtonEl.textContent = isPlaying ? "⏸" : "▶";
+        playButtonEl.setAttribute("title", isPlaying ? "Pause" : "Play");
+        playButtonEl.setAttribute("aria-label", isPlaying ? "Pause" : "Play");
+      }
+
+      function updateTimeSliderTickState() {
+        if (!sliderTrackWrapEl) {
+          return;
+        }
+        const activeIndex = String(currentFrameIndex);
+        sliderTrackWrapEl.querySelectorAll(".oviz-three-slider-tick, .oviz-three-slider-tick-label").forEach((el) => {
+          el.dataset.active = el.dataset.frameIndex === activeIndex ? "true" : "false";
+        });
+      }
+
+      function beginLegendPanelInteraction(state, event) {
+        legendPointerState = state;
+        if (legendPanelEl) {
+          legendPanelEl.dataset.dragging = "true";
+        }
+        document.body.style.userSelect = "none";
+        if (event) {
+          event.preventDefault();
+        }
+      }
+
+      function onLegendPointerStart(event) {
+        if (!legendPanelEl || !legendDragHandleEl || event.button !== 0) {
+          return false;
+        }
+        const target = event.target;
+        if (!target) {
+          return false;
+        }
+        if (target.closest && target.closest(".oviz-three-legend-panel-toggle")) {
+          return false;
+        }
+        const panelRect = legendPanelEl.getBoundingClientRect();
+        const rootRect = root.getBoundingClientRect();
+        const startLeft = panelRect.left - rootRect.left;
+        const startTop = panelRect.top - rootRect.top;
+        const startWidth = panelRect.width;
+        const startHeight = Number(legendPanelEl.dataset.expandedHeight) || panelRect.height;
+        const resizeHandle = target.closest ? target.closest(".oviz-three-legend-resize") : null;
+        if (resizeHandle) {
+          if (!legendPanelOpen) {
+            return false;
+          }
+          beginLegendPanelInteraction({
+            mode: "resize",
+            dir: String(resizeHandle.dataset.dir || "se"),
+            startX: event.clientX,
+            startY: event.clientY,
+            startLeft,
+            startTop,
+            startRight: startLeft + startWidth,
+            startBottom: startTop + startHeight,
+          }, event);
+          return true;
+        }
+        if (target !== legendDragHandleEl && !(legendDragHandleEl.contains && legendDragHandleEl.contains(target))) {
+          return false;
+        }
+        beginLegendPanelInteraction({
+          mode: "move",
+          startX: event.clientX,
+          startY: event.clientY,
+          offsetX: event.clientX - startLeft,
+          offsetY: event.clientY - startTop,
+          width: startWidth,
+          height: startHeight,
+        }, event);
+        return true;
+      }
+
+      function updateLegendPanelInteraction(event) {
+        if (!legendPointerState) {
+          return false;
+        }
+        let nextRect = null;
+        if (legendPointerState.mode === "move") {
+          nextRect = clampLegendPanelRect(
+            event.clientX - legendPointerState.offsetX,
+            event.clientY - legendPointerState.offsetY,
+            legendPointerState.width,
+            legendPointerState.height,
+          );
+        } else if (legendPointerState.mode === "resize") {
+          nextRect = resizeLegendRect(legendPointerState, event.clientX, event.clientY);
+        }
+        if (nextRect) {
+          applyLegendPanelRect(nextRect);
+          if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
+            positionLegendPopover(legendEditButtonByKey.get(activeLegendEditorKey));
+          }
+          positionInspectorDock();
+        }
+        event.preventDefault();
+        return true;
+      }
+
+      function finishLegendPanelInteraction(event) {
+        if (!legendPointerState) {
+          return false;
+        }
+        legendPointerState = null;
+        if (legendPanelEl) {
+          legendPanelEl.dataset.dragging = "false";
+        }
+        document.body.style.userSelect = "";
+        if (event) {
+          event.preventDefault();
+        }
+        return true;
       }
 
       function applyScaleBarPosition() {
@@ -4535,6 +5161,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (Number.isFinite(Number(savedGlobalControls.point_glow_strength))) {
             globalPointGlowStrength = Number(savedGlobalControls.point_glow_strength);
           }
+          if (typeof savedGlobalControls.size_points_by_stars_enabled === "boolean") {
+            sizePointsByStarsEnabled = savedGlobalControls.size_points_by_stars_enabled;
+          }
           if (Number.isFinite(Number(savedGlobalControls.fade_in_time_myr))) {
             fadeInTimeMyr = Number(savedGlobalControls.fade_in_time_myr);
           }
@@ -4580,6 +5209,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           scaleBarPosition = {
             left: Number(savedScaleBarState.left),
             top: Number(savedScaleBarState.top),
+          };
+        }
+
+        const savedLegendPanelState = initialState.legend_panel_state;
+        if (
+          savedLegendPanelState
+          && typeof savedLegendPanelState === "object"
+          && Number.isFinite(Number(savedLegendPanelState.left))
+          && Number.isFinite(Number(savedLegendPanelState.top))
+          && Number.isFinite(Number(savedLegendPanelState.width))
+          && Number.isFinite(Number(savedLegendPanelState.height))
+        ) {
+          legendPanelRectState = {
+            left: Number(savedLegendPanelState.left),
+            top: Number(savedLegendPanelState.top),
+            width: Number(savedLegendPanelState.width),
+            height: Number(savedLegendPanelState.height),
           };
         }
 
@@ -4811,6 +5457,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         clampClusterFilterRangeForParameter(activeClusterFilterParameterSpec());
         pruneSelectionsToActiveClusterFilter();
         applyCameraViewMode();
+        applyUiDesignPreset(activeUiDesignKey, { syncInput: false });
         applyThemePreset(activeThemeKey, { rerender: false, syncInput: false });
         renderSceneControls();
         setLegendPanelOpen(legendPanelOpen);
@@ -4894,6 +5541,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             point_size_scale: globalPointSizeScale,
             point_opacity_scale: globalPointOpacityScale,
             point_glow_strength: globalPointGlowStrength,
+            size_points_by_stars_enabled: sizePointsByStarsEnabled,
             fade_in_time_myr: fadeInTimeMyr,
             fade_in_and_out_enabled: fadeInAndOutEnabled,
             focus_trace_key: focusTraceKey,
@@ -4921,6 +5569,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             pinned: inspectorPinned,
           },
           legend_open: legendPanelOpen,
+          legend_panel_state: captureLegendPanelState(),
           zen_mode_enabled: zenModeEnabled,
           widgets: {
             sky: captureWidgetState("sky"),
@@ -6903,6 +7552,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return themePresets[requestedKey] || themePresets.default || {};
       }
 
+      function uiDesignPresetForKey(uiDesignKey) {
+        const requestedKey = String(uiDesignKey || "default");
+        return requestedKey === "uncodixified" ? "uncodixified" : "default";
+      }
+
+      function applyUiDesignPreset(uiDesignKey, options = {}) {
+        activeUiDesignKey = uiDesignPresetForKey(uiDesignKey);
+        root.dataset.uiDesignKey = activeUiDesignKey;
+      }
+
       function applyThemePreset(themeKey, options = {}) {
         activeThemeKey = Object.prototype.hasOwnProperty.call(themePresets, String(themeKey))
           ? String(themeKey)
@@ -6912,6 +7571,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           delete theme[key];
         });
         Object.assign(theme, nextTheme);
+        root.dataset.themeKey = activeThemeKey;
         applyThemeCssVars();
         scene.background = new THREE.Color(theme.scene_bgcolor || theme.paper_bgcolor || "#000000");
         if (options.syncInput !== false && themeSelectEl) {
@@ -7123,6 +7783,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         if (globalPointGlowLabelEl) {
           globalPointGlowLabelEl.textContent = `Star glow (${globalPointGlowStrength.toFixed(2)}x)`;
+        }
+        if (sizeByStarsToggleEl) {
+          sizeByStarsToggleEl.checked = sizePointsByStarsEnabled;
         }
         if (focusGroupSelectEl) {
           focusGroupSelectEl.value = focusTraceKey;
@@ -11379,6 +12042,51 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         };
       }
 
+      function starSizeStatsForTrace(trace) {
+        if (!trace || !Array.isArray(trace.points)) {
+          return { hasValues: false, median: 1.0 };
+        }
+        if (trace._starSizeStats) {
+          return trace._starSizeStats;
+        }
+        const values = trace.points
+          .map((item) => Number(item && item.n_stars))
+          .filter((value) => Number.isFinite(value) && value > 0.0)
+          .sort((a, b) => a - b);
+        if (!values.length) {
+          trace._starSizeStats = { hasValues: false, median: 1.0 };
+          return trace._starSizeStats;
+        }
+        const mid = Math.floor(values.length / 2);
+        const median = values.length % 2
+          ? values[mid]
+          : 0.5 * (values[mid - 1] + values[mid]);
+        trace._starSizeStats = {
+          hasValues: true,
+          median: Math.max(Number(median) || 1.0, 1e-3),
+        };
+        return trace._starSizeStats;
+      }
+
+      function sizeByStarsFactorForPoint(point, trace, traceState) {
+        if (!traceState || !traceState.hasNStars) {
+          return 1.0;
+        }
+        const nStars = Number(point && point.n_stars);
+        if (!Number.isFinite(nStars) || nStars <= 0.0) {
+          return 1.0;
+        }
+        const stats = starSizeStatsForTrace(trace);
+        if (!stats.hasValues) {
+          return 1.0;
+        }
+        const factor = clampRange(Math.sqrt(nStars / stats.median), 0.35, 2.75);
+        if (sizePointsByStarsEnabled) {
+          return traceState.sizeByNStarsDefault ? 1.0 : factor;
+        }
+        return traceState.sizeByNStarsDefault ? (1.0 / factor) : 1.0;
+      }
+
       function addMarkerTrace(parent, trace) {
         if (!trace.points || !trace.points.length) {
           return;
@@ -11418,7 +12126,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             return;
           }
           const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05);
-          const scale = Math.max(pointState.size * sizeScaleFactor * globalPointSizeScale * pointScale, scaleFloor);
+          const starsFactor = sizeByStarsFactorForPoint(point, trace, traceState);
+          const scale = Math.max(
+            pointState.size * sizeScaleFactor * starsFactor * globalPointSizeScale * pointScale,
+            scaleFloor
+          );
           const selectionKey = normalizedSelectionKeyFor(point.selection);
           const glowStrength = Math.max(globalPointGlowStrength, 0.0);
           let interactionSprite = null;
@@ -12263,6 +12975,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (legendPanelEl) {
           legendPanelEl.dataset.open = legendPanelOpen ? "true" : "false";
         }
+        if (legendPanelBodyEl) {
+          legendPanelBodyEl.style.display = legendPanelOpen ? "flex" : "none";
+        }
         if (legendPanelToggleEl) {
           legendPanelToggleEl.textContent = legendPanelOpen ? "▾" : "▸";
           legendPanelToggleEl.setAttribute(
@@ -12271,9 +12986,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           );
           legendPanelToggleEl.setAttribute("aria-expanded", legendPanelOpen ? "true" : "false");
         }
+        if (legendPanelEl) {
+          const rect = legendPanelRectState || defaultLegendPanelRect();
+          applyLegendPanelRect(rect);
+        }
         if (!legendPanelOpen) {
           closeLegendPopover();
         }
+        legendResizeEls.forEach((handle) => {
+          handle.style.display = legendPanelOpen ? "" : "none";
+        });
         window.requestAnimationFrame(positionInspectorDock);
       }
 
@@ -12355,23 +13077,34 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function renderLegend() {
-        if (!legendEl) {
+        if (!legendTraceListEl || !legendVolumeListEl) {
           return;
         }
         const items = visibleLegendItemsForCurrentGroup();
-        legendEl.innerHTML = "";
+        const traceItems = items.filter((item) => !volumeLayerForKey(item.key));
+        const volumeItems = items.filter((item) => volumeLayerForKey(item.key));
+        legendTraceListEl.innerHTML = "";
+        legendVolumeListEl.innerHTML = "";
         legendEditButtonByKey.clear();
 
-        if (!items.length) {
+        if (legendTraceSectionEl) {
+          legendTraceSectionEl.dataset.empty = traceItems.length ? "false" : "true";
+        }
+        if (legendVolumeSectionEl) {
+          legendVolumeSectionEl.dataset.empty = volumeItems.length ? "false" : "true";
+        }
+
+        if (!traceItems.length && !volumeItems.length) {
           const emptyState = document.createElement("div");
           emptyState.className = "oviz-three-legend-title";
           emptyState.textContent = "No visible traces for this group.";
-          legendEl.appendChild(emptyState);
+          legendTraceListEl.appendChild(emptyState);
           closeLegendPopover();
           return;
         }
 
-        items.forEach((item) => {
+        function appendLegendEntries(targetEl, sectionItems) {
+          sectionItems.forEach((item) => {
           const itemKey = String(item.key);
           const entry = document.createElement("div");
           const itemColor = legendColorForItem(item);
@@ -12444,8 +13177,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           entry.appendChild(editButton);
 
           legendEditButtonByKey.set(itemKey, editButton);
-          legendEl.appendChild(entry);
-        });
+            targetEl.appendChild(entry);
+          });
+        }
+
+        appendLegendEntries(legendTraceListEl, traceItems);
+        appendLegendEntries(legendVolumeListEl, volumeItems);
 
         if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
           const activeItem = items.find((item) => String(item.key) === activeLegendEditorKey);
@@ -12481,6 +13218,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         sliderEl.value = String(currentFrameIndex);
         const frame = frameSpecs[currentFrameIndex];
         timeLabelEl.textContent = `Time (Myr): ${frame.name}`;
+        updateTimeSliderTickState();
         tooltipEl.style.display = "none";
         hoverTargets.length = 0;
         selectionSpriteEntriesByKey.clear();
@@ -12550,10 +13288,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         [...axisLineMaterials, ...frameLineMaterials].forEach((material) => {
           material.resolution.set(width, height);
         });
+        if (legendPanelEl) {
+          applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
+        }
         if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
           positionLegendPopover(legendEditButtonByKey.get(activeLegendEditorKey));
         }
         positionInspectorDock();
+        renderTimeSliderTicks();
         updateScaleBar();
         applyScaleBarPosition();
         renderBoxMetricsWidget();
@@ -12570,6 +13312,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           const nextIndex = (currentFrameIndex + 1) % frameSpecs.length;
           renderFrame(nextIndex);
         }, sceneSpec.playback_interval_ms || 500);
+        updatePlaybackToggleButton();
       }
 
       function pause() {
@@ -12577,6 +13320,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           window.clearInterval(playbackTimer);
           playbackTimer = null;
         }
+        updatePlaybackToggleButton();
       }
 
       function applyWidgetMode(widgetKey) {
@@ -13627,6 +14371,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         setToolsDrawerOpen(toolsShellEl.dataset.open === "true");
         setControlsDrawerOpen(controlsShellEl.dataset.open === "true");
         setLegendPanelOpen(legendPanelOpen);
+        applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
         setInspectorPinned(inspectorPinned, { syncOpen: false });
         setInspectorOpen(inspectorPinned || inspectorOpen);
         groupSelectEl.innerHTML = "";
@@ -13686,13 +14431,33 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
 
         sliderEl.max = String(Math.max(frameSpecs.length - 1, 0));
-        legendPanelToggleEl.addEventListener("click", () => {
+        renderTimeSliderTicks();
+        const handleLegendPanelToggle = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
           setLegendPanelOpen(!legendPanelOpen);
           if (activeLegendEditorKey) {
             renderLegend();
           }
           focusViewer();
+        };
+        legendPanelToggleEl.addEventListener("pointerdown", (event) => {
+          event.stopPropagation();
         });
+        legendPanelToggleEl.addEventListener("click", handleLegendPanelToggle);
+        legendPanelEl.addEventListener("click", (event) => {
+          const toggleButton = event.target && event.target.closest
+            ? event.target.closest(".oviz-three-legend-panel-toggle")
+            : null;
+          if (!toggleButton) {
+            return;
+          }
+          handleLegendPanelToggle(event);
+        });
+        if (legendDragHandleEl) {
+          legendDragHandleEl.addEventListener("pointerdown", onLegendPointerStart);
+        }
+        legendResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onLegendPointerStart));
         inspectorToggleEl.addEventListener("click", () => {
           if (inspectorPinned) {
             setInspectorPinned(false);
@@ -13731,8 +14496,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           pause();
           renderFrame(Number(sliderEl.value));
         });
-        playButtonEl.addEventListener("click", play);
-        pauseButtonEl.addEventListener("click", pause);
+        playButtonEl.addEventListener("click", () => {
+          if (playbackTimer) {
+            pause();
+          } else {
+            play();
+          }
+        });
+        if (pauseButtonEl) {
+          pauseButtonEl.addEventListener("click", pause);
+        }
         toolsToggleEl.addEventListener("click", () => {
           setToolsDrawerOpen(toolsShellEl.dataset.open !== "true");
         });
@@ -13801,6 +14574,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           renderSceneControls();
           renderFrame(currentFrameIndex);
         });
+        if (sizeByStarsToggleEl) {
+          sizeByStarsToggleEl.addEventListener("change", () => {
+            sizePointsByStarsEnabled = Boolean(sizeByStarsToggleEl.checked);
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
         focusGroupSelectEl.addEventListener("change", () => {
           focusTraceKey = String(focusGroupSelectEl.value || "");
           focusSelectionKey = "";
@@ -13896,6 +14676,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           globalPointSizeScale = 1.0;
           globalPointOpacityScale = 1.0;
           globalPointGlowStrength = 0.85;
+          sizePointsByStarsEnabled = false;
           fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
           fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
           focusTraceKey = String(animationSpec.focus_trace_key_default || "");
@@ -13938,6 +14719,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (updateManualLabelInteraction(event)) {
           return;
         }
+        if (updateLegendPanelInteraction(event)) {
+          return;
+        }
         if (updateScaleBarInteraction(event)) {
           return;
         }
@@ -13969,6 +14753,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
         if (finishManualLabelInteraction(event)) {
+          return;
+        }
+        if (finishLegendPanelInteraction(event)) {
           return;
         }
         if (finishScaleBarInteraction(event)) {
@@ -14005,6 +14792,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       await restoreInitialLassoSelectionMask();
       renderLegend();
       updateSelectionUI();
+      updatePlaybackToggleButton();
       renderFrame(currentFrameIndex);
       resize();
       window.setTimeout(() => focusViewer(), 0);
