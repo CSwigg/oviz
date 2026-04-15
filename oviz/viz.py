@@ -78,6 +78,7 @@ CUSTOMDATA_IDX_Y0 = 6
 CUSTOMDATA_IDX_Z0 = 7
 CUSTOMDATA_IDX_CLUSTER_NAME = 8
 CUSTOMDATA_IDX_CLUSTER_COLOR = 9
+CUSTOMDATA_IDX_N_STARS = 10
 MAX_SELECTED_MEMBER_POINTS = 1200
 DEFAULT_THREEJS_VOLUME_COLORMAPS = (
     'inferno',
@@ -179,6 +180,7 @@ class Animate3D:
         cluster_members_file=None,
         volumes=None,
         threejs_initial_state=None,
+        threejs_ui_design='uncodixified',
     ):
         """
         Main method to generate a 3D animated plot. Integrates orbits if necessary and
@@ -231,6 +233,7 @@ class Animate3D:
         self.sky_members_by_cluster = None
         self.volume_configs = _normalize_threejs_volume_configs(volumes)
         self.threejs_initial_state = copy.deepcopy(threejs_initial_state) if threejs_initial_state else {}
+        self.threejs_ui_design = str(threejs_ui_design or 'uncodixified')
         if age_kde_bandwidth_myr <= 0:
             raise ValueError("age_kde_bandwidth_myr must be > 0.")
         self.age_kde_bandwidth_myr = float(age_kde_bandwidth_myr)
@@ -1527,6 +1530,10 @@ class Animate3D:
             trace_color = cluster_group.color if isinstance(cluster_group.color, str) else 'white'
             cluster_names = df_t['name'].astype(str).to_numpy(dtype=object)
             trace_colors = np.repeat(trace_color, len(df_t)).astype(object)
+            if 'n_stars' in df_t.columns:
+                n_star_values = pd.to_numeric(df_t['n_stars'], errors='coerce').to_numpy(dtype=float)
+            else:
+                n_star_values = np.full(len(df_t), np.nan, dtype=float)
 
             scatter_list.append(
                 go.Scatter3d(
@@ -1545,9 +1552,13 @@ class Animate3D:
                         y0,
                         z0,
                         cluster_names,
-                        trace_colors
+                        trace_colors,
+                        n_star_values,
                     )),
-                    meta={'trace_kind': 'cluster'},
+                    meta={
+                        'trace_kind': 'cluster',
+                        'size_by_n_stars': bool(getattr(cluster_group, 'size_by_n_stars', False)),
+                    },
                     hovertext=hovertext,
                     hoverinfo='text',  # This removes default x, y, z
                     hovertemplate='%{hovertext}<extra></extra>',  # This ensures only custom hovertext is shown
@@ -1728,6 +1739,8 @@ class Animate3D:
                     'has_points': bool(trace_spec.get('points')),
                     'has_segments': bool(trace_spec.get('segments')),
                     'has_labels': bool(trace_spec.get('labels')),
+                    'has_n_stars': bool(trace_spec.get('has_n_stars')),
+                    'size_by_n_stars_default': bool(trace_spec.get('size_by_n_stars_default')),
                     'default_color': trace_spec.get('legend_color'),
                     'default_opacity': float(trace_spec.get('default_opacity', 1.0)),
                     'default_point_size': trace_spec.get('default_point_size'),
@@ -1765,7 +1778,7 @@ class Animate3D:
         for group_name in group_visibility:
             for layer in volume_layers:
                 state_key = str(layer.get('state_key') or layer.get('key'))
-                group_visibility[group_name][state_key] = bool(layer.get('visible', True))
+                group_visibility[group_name][state_key] = "legendonly"
 
         frames_by_time = {}
         for time_val, frame in zip(self.time, frames):
@@ -1799,7 +1812,7 @@ class Animate3D:
                 ),
             })
 
-        default_group = list(self.trace_grouping_dict.keys())[0]
+        default_group = 'Clusters' if 'Clusters' in self.trace_grouping_dict else list(self.trace_grouping_dict.keys())[0]
         initial_frame_index = 0
         for idx, frame_spec in enumerate(frame_specs):
             if np.isclose(float(frame_spec['time']), 0.0, atol=1e-9):
@@ -1876,8 +1889,10 @@ class Animate3D:
                     )
                 ],
             },
+            'ui_design_key': str(getattr(self, 'threejs_ui_design', 'uncodixified') or 'uncodixified'),
             'initial_state': {
                 'click_selection_enabled': True,
+                'current_group': default_group,
                 **copy.deepcopy(getattr(self, 'threejs_initial_state', {}) or {}),
             },
             'note': self._threejs_note_text(),
@@ -2375,10 +2390,12 @@ class Animate3D:
             return None
 
         mode = str(trace_json.get('mode', 'markers'))
+        trace_meta = trace_json.get('meta') if isinstance(trace_json.get('meta'), dict) else {}
         spec = {
             'key': trace_key,
             'name': trace_json.get('name') or trace_key,
             'showlegend': bool(trace_json.get('showlegend', True)),
+            'size_by_n_stars_default': bool(trace_meta.get('size_by_n_stars')),
         }
         legend_color = None
 
@@ -2413,6 +2430,9 @@ class Animate3D:
                 ]
                 if point_sizes:
                     spec['default_point_size'] = float(np.median(point_sizes))
+                spec['has_n_stars'] = any(
+                    np.isfinite(_coerce_float(point.get('n_stars'), np.nan)) for point in points
+                )
                 point_opacities = [
                     float(point.get('opacity'))
                     for point in points
@@ -2678,6 +2698,9 @@ def _selection_from_customdata_row(row):
     cluster_color = None
     if len(values) > CUSTOMDATA_IDX_CLUSTER_COLOR and values[CUSTOMDATA_IDX_CLUSTER_COLOR] not in (None, ''):
         cluster_color = str(values[CUSTOMDATA_IDX_CLUSTER_COLOR])
+    n_stars = np.nan
+    if len(values) > CUSTOMDATA_IDX_N_STARS:
+        n_stars = _coerce_float(values[CUSTOMDATA_IDX_N_STARS], np.nan)
 
     return {
         'l_deg': float(l_deg),
@@ -2693,6 +2716,7 @@ def _selection_from_customdata_row(row):
         'dec_deg': float(dec_deg) if np.isfinite(dec_deg) else np.nan,
         'cluster_name': cluster_name,
         'cluster_color': cluster_color,
+        'n_stars': float(n_stars) if np.isfinite(n_stars) else np.nan,
     }
 
 
@@ -2797,6 +2821,9 @@ def _points_from_trace(trace_json, default_opacity=1.0, include_selection=False)
                 motion = _motion_from_selection(selection)
                 if motion is not None:
                     points[-1]['motion'] = motion
+                n_stars = _coerce_float(selection.get('n_stars'), np.nan)
+                if np.isfinite(n_stars):
+                    points[-1]['n_stars'] = float(n_stars)
             if include_selection:
                 points[-1]['selection'] = selection
 

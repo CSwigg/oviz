@@ -24,6 +24,7 @@ class _FakeCluster:
         self.opacity = 0.8
         self.marker_style = "circle"
         self.integrated = True
+        self.size_by_n_stars = False
         self.min_size = 2
         self.max_size = 6
         self.colormap = None
@@ -37,6 +38,7 @@ class _FakeCluster:
                 "U": [0.0],
                 "V": [0.0],
                 "W": [0.0],
+                "n_stars": [42.0],
             }
         )
         self.df_int = pd.DataFrame(
@@ -54,6 +56,7 @@ class _FakeCluster:
                 "name": ["member_1", "member_1"],
                 "time": [0.0, -1.0],
                 "size": [6.0, 4.0],
+                "n_stars": [42.0, 42.0],
             }
         )
 
@@ -113,6 +116,10 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("focusSelectionKey", html)
         self.assertIn("Camera FOV", html)
         self.assertIn("Focus group", html)
+        self.assertIn("Star glow", html)
+        self.assertIn("Size points by n_stars", html)
+        self.assertIn('"n_stars": 42.0', html)
+        self.assertIn('"has_n_stars"', html)
         self.assertIn("Fade time (Myr)", html)
         self.assertIn("Fade in and out", html)
         self.assertIn("Cluster Filter", html)
@@ -151,7 +158,9 @@ class ThreeJSRendererTests(unittest.TestCase):
             out_file = Path(tmp_dir) / "threejs_scene.html"
             fig.write_html(out_file)
             self.assertTrue(out_file.exists())
-            self.assertIn("Three.js modules are loaded from a CDN", out_file.read_text())
+            html_text = out_file.read_text()
+            self.assertIn("oviz-three-legend-panel", html_text)
+            self.assertNotIn("Three.js modules are loaded from a CDN", html_text)
 
     def test_threejs_milky_way_model_is_t0_only(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
@@ -476,7 +485,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(zero_frame["decorations"][0]["kind"], "volume_layer")
         self.assertIn("Dust Cube", [item["name"] for item in scene_spec["legend"]["items"]])
         self.assertIn("oviz-three-volume", html)
-        self.assertIn("Show at t=0", html)
+        self.assertIn("Show volume", html)
         self.assertIn("Stretch", html)
         self.assertIn("DataTexture3D", html)
         self.assertIn("Alpha coef", html)
@@ -493,7 +502,6 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("applyVolumeSkyAxisTransform", html)
         self.assertIn("const volumeSkyAxisTransform = deriveVolumeSkyAxisTransform();", html)
         self.assertIn("CDELT2: latSpan / height", html)
-        self.assertIn("Dust sky pixels:", html)
         self.assertIn("setOverlayImageLayer(imageLayer", html)
         self.assertIn("Rendered at t=0 only as a WebGL2 ray-marched volume.", html)
 
