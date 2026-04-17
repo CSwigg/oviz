@@ -48,119 +48,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         height: 100%;
         outline: none;
       }
-      #__ROOT_ID__ .oviz-three-title {
-        position: absolute;
-        top: 12px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 5;
-        font-size: 20px;
-        font-weight: 500;
-        color: var(--oviz-text);
-        pointer-events: none;
-        white-space: nowrap;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        z-index: 6;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        max-width: min(320px, 32vw);
-      }
-      #__ROOT_ID__ .oviz-three-widget-menu {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        z-index: 6;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      #__ROOT_ID__ .oviz-three-tools-shell,
-      #__ROOT_ID__ .oviz-three-controls-shell {
-        position: relative;
-        min-height: 34px;
-      }
-      #__ROOT_ID__ .oviz-three-tools-toggle,
-      #__ROOT_ID__ .oviz-three-controls-toggle {
-        border: 1px solid var(--oviz-panel-border);
-        border-radius: 8px;
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        cursor: pointer;
-        font: 12px Helvetica, Arial, sans-serif;
-        padding: 7px 11px;
-      }
-      #__ROOT_ID__ .oviz-three-tools-drawer,
-      #__ROOT_ID__ .oviz-three-controls-drawer {
-        position: absolute;
-        top: 0;
-        left: 52px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        width: min(320px, 32vw);
-        transform: translateX(-20px);
-        opacity: 0;
-        pointer-events: none;
-        transition: transform 0.18s ease, opacity 0.18s ease;
-      }
-      #__ROOT_ID__ .oviz-three-tools-shell[data-open="true"] .oviz-three-tools-drawer,
-      #__ROOT_ID__ .oviz-three-controls-shell[data-open="true"] .oviz-three-controls-drawer {
-        transform: translateX(0);
-        opacity: 1;
-        pointer-events: auto;
-      }
-      #__ROOT_ID__ .oviz-three-group-select,
-      #__ROOT_ID__ .oviz-three-widget-select {
-        min-width: 180px;
-        padding: 6px 10px;
-        border-radius: 6px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        font-size: 14px;
-        font-family: inherit;
-      }
-      #__ROOT_ID__ .oviz-three-save-state {
-        padding: 7px 11px;
-        border-radius: 8px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        cursor: pointer;
-        font: 12px Helvetica, Arial, sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-zen-mode {
-        padding: 7px 11px;
-        border-radius: 8px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        cursor: pointer;
-        font: 12px Helvetica, Arial, sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-reset-view {
-        padding: 7px 11px;
-        border-radius: 8px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        cursor: pointer;
-        font: 12px Helvetica, Arial, sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-zen-mode[data-active="true"] {
-        border-color: var(--oviz-axis);
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
-      }
       #__ROOT_ID__ .oviz-three-save-state:disabled {
         opacity: 0.55;
         cursor: default;
       }
-      #__ROOT_ID__[data-zen="true"] .oviz-three-toolbar,
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel {
         display: none !important;
@@ -218,10 +109,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         gap: 6px;
         padding-bottom: 6px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      }
-      #__ROOT_ID__ .oviz-three-legend-entry:last-child {
-        padding-bottom: 0;
-        border-bottom: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-row {
         display: flex;
@@ -524,10 +411,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         white-space: nowrap;
       }
       #__ROOT_ID__ .oviz-three-volume {
-        display: none !important;
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 2px 2px;
       }
       #__ROOT_ID__ .oviz-three-volume[data-enabled="true"] {
-        display: none !important;
+        display: flex;
       }
       #__ROOT_ID__ .oviz-three-volume-title {
         font-size: 14px;
@@ -582,69 +472,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         line-height: 1.45;
         white-space: pre-wrap;
         opacity: 0.88;
-      }
-      #__ROOT_ID__ .oviz-three-footer {
-        position: absolute;
-        left: 50%;
-        bottom: 14px;
-        transform: translateX(-50%);
-        z-index: 6;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        width: auto;
-        max-width: calc(100vw - 28px);
-        padding: 0;
-        border-radius: 999px;
-        border: 0;
-        background: transparent;
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
-      }
-      #__ROOT_ID__ .oviz-three-footer button {
-        border: 0;
-        border-radius: 0;
-        background: none;
-        color: var(--oviz-text);
-        cursor: pointer;
-        font-size: 15px;
-        width: 34px;
-        height: 34px;
-        line-height: 1;
-        margin-top: 0;
-        padding: 0;
-        box-shadow: none;
-        -webkit-appearance: none;
-        appearance: none;
-      }
-      #__ROOT_ID__ .oviz-three-time-label {
-        min-width: 132px;
-        height: 34px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 15px;
-        color: var(--oviz-text);
-        white-space: nowrap;
-        font-variant-numeric: tabular-nums;
-        text-align: center;
-      }
-      #__ROOT_ID__ .oviz-three-slider-shell {
-        position: relative;
-        flex: 0 0 clamp(180px, 24vw, 260px);
-        width: clamp(180px, 24vw, 260px);
-        max-width: clamp(180px, 24vw, 260px);
-        display: block;
-        min-width: 0;
-        height: 34px;
-      }
-      #__ROOT_ID__ .oviz-three-slider-track-wrap {
-        position: relative;
-        display: flex;
-        align-items: center;
-        min-width: 0;
-        height: 34px;
       }
       #__ROOT_ID__ .oviz-three-slider {
         position: relative;
@@ -756,37 +583,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         pointer-events: none;
         white-space: normal;
       }
-      #__ROOT_ID__ .oviz-three-note {
-        position: absolute;
-        right: 12px;
-        bottom: 64px;
-        z-index: 6;
-        max-width: min(340px, 34vw);
-        padding: 8px 10px;
-        border-radius: 8px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        font-size: 12px;
-        display: none;
-      }
-      #__ROOT_ID__ .oviz-three-scale-bar {
-        position: absolute;
-        left: 18px;
-        bottom: 22px;
-        z-index: 6;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
-        pointer-events: auto;
-        cursor: grab;
-        user-select: none;
-        touch-action: none;
-      }
-      #__ROOT_ID__ .oviz-three-scale-bar[data-dragging="true"] {
-        cursor: grabbing;
-      }
       #__ROOT_ID__ .oviz-three-scale-label {
         color: var(--oviz-text);
         font: 12px Helvetica, Arial, sans-serif;
@@ -888,26 +684,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         width: min(40vw, 580px);
         height: min(46vh, 420px);
       }
-      #__ROOT_ID__ .oviz-three-widget-drag {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 34px;
-        z-index: 2;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 0 12px;
-        font-size: 11px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--oviz-text);
-        background: linear-gradient(to bottom, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.0));
-        cursor: grab;
-        user-select: none;
-      }
       #__ROOT_ID__ .oviz-three-widget-title {
         flex: 1 1 auto;
         min-width: 0;
@@ -920,9 +696,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         align-items: center;
         gap: 6px;
         flex: 0 0 auto;
-      }
-      #__ROOT_ID__ .oviz-three-widget-panel[data-mode="fullscreen"] .oviz-three-widget-drag {
-        cursor: default;
       }
       #__ROOT_ID__ .oviz-three-sky-frame {
         position: absolute;
@@ -1341,6 +1114,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: radial-gradient(circle at 35% 35%, #ffffff, #d3d8df 62%, #9ea7b3);
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 14px rgba(255, 255, 255, 0.12);
       }
+      #__ROOT_ID__::before {
+        background:
+          radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.014), transparent 18%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.006), transparent 14%);
+      }
       #__ROOT_ID__ .oviz-three-title {
         position: static;
         transform: none;
@@ -1348,15 +1126,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         text-align: center;
         justify-self: center;
         align-self: start;
-        padding: 7px 12px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 999px;
-        background: rgba(18, 22, 28, 0.20);
-        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
-        backdrop-filter: blur(16px) saturate(126%);
-        -webkit-backdrop-filter: blur(16px) saturate(126%);
-        font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
-        letter-spacing: -0.02em;
+        padding: 5px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        background: rgba(20, 22, 26, 0.90);
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
+        backdrop-filter: blur(4px) saturate(105%);
+        -webkit-backdrop-filter: blur(4px) saturate(105%);
+        font: 600 13px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: -0.015em;
         color: var(--oviz-text);
         pointer-events: none;
       }
@@ -1368,32 +1146,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         justify-self: end;
         justify-content: flex-end;
         flex-wrap: wrap;
-        gap: 6px;
-        padding: 5px 6px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 999px;
-        background: rgba(18, 22, 28, 0.18);
-        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
-        backdrop-filter: blur(18px) saturate(125%);
-        -webkit-backdrop-filter: blur(18px) saturate(125%);
-      }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"]::before {
-        background:
-          radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.014), transparent 18%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.006), transparent 14%);
-      }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-title {
-        padding: 5px 10px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 4px;
-        background: rgba(20, 22, 26, 0.90);
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
-        backdrop-filter: blur(4px) saturate(105%);
-        -webkit-backdrop-filter: blur(4px) saturate(105%);
-        font: 600 13px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        letter-spacing: -0.015em;
-      }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu {
         gap: 4px;
         padding: 4px;
         border: 1px solid rgba(255, 255, 255, 0.05);
@@ -1403,42 +1155,25 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: blur(4px) saturate(104%);
         -webkit-backdrop-filter: blur(4px) saturate(104%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu button,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu select,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-tools-toggle,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-controls-toggle {
-        height: 30px;
-        border-radius: 4px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(29, 32, 37, 0.98);
-        box-shadow: none;
-        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-      }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu button:hover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu select:hover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-tools-toggle:hover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-controls-toggle:hover {
-        background: rgba(38, 42, 48, 0.98);
-        border-color: rgba(255, 255, 255, 0.10);
-      }
       #__ROOT_ID__ .oviz-three-widget-menu button,
       #__ROOT_ID__ .oviz-three-widget-menu select,
       #__ROOT_ID__ .oviz-three-tools-toggle,
       #__ROOT_ID__ .oviz-three-controls-toggle {
-        height: 34px;
-        border-radius: 11px;
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+        height: 30px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(29, 32, 37, 0.98);
         color: var(--oviz-text);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        cursor: pointer;
+        box-shadow: none;
         font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-widget-menu button:hover,
       #__ROOT_ID__ .oviz-three-widget-menu select:hover,
       #__ROOT_ID__ .oviz-three-tools-toggle:hover,
       #__ROOT_ID__ .oviz-three-controls-toggle:hover {
-        border-color: rgba(255, 255, 255, 0.18);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05));
+        background: rgba(38, 42, 48, 0.98);
+        border-color: rgba(255, 255, 255, 0.10);
       }
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell,
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell {
@@ -1494,7 +1229,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-panel,
-      #__ROOT_ID__ .oviz-three-inspector-panel,
       #__ROOT_ID__ .oviz-three-legend-popover {
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 20px;
@@ -1503,14 +1237,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: blur(22px) saturate(120%);
         -webkit-backdrop-filter: blur(22px) saturate(120%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-inspector-panel,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-popover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-tools-drawer,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-controls-drawer,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-panel {
+      #__ROOT_ID__ .oviz-three-legend-panel,
+      #__ROOT_ID__ .oviz-three-legend-popover,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer,
+      #__ROOT_ID__ .oviz-three-widget-panel {
         border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 11px;
+        border-radius: 10px;
         background: rgba(18, 20, 24, 0.76);
         box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
         backdrop-filter: blur(8px) saturate(108%);
@@ -1545,7 +1278,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-panel[data-dragging="true"] .oviz-three-legend-panel-head {
         cursor: grabbing;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-head {
+      #__ROOT_ID__ .oviz-three-legend-panel-head {
         padding: 8px 10px;
         border-bottom-color: rgba(255, 255, 255, 0.05);
       }
@@ -1554,7 +1287,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         letter-spacing: -0.01em;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-title {
+      #__ROOT_ID__ .oviz-three-legend-panel-title {
         font-size: 12px;
       }
       #__ROOT_ID__ .oviz-three-legend-panel-toggle {
@@ -1579,8 +1312,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         overflow: auto;
         transition: max-height 0.18s ease, padding 0.18s ease, opacity 0.18s ease;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-body {
+      #__ROOT_ID__ .oviz-three-legend-panel-body {
         padding: 5px 7px 7px;
+        scroll-padding-bottom: 8px;
       }
       #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] .oviz-three-legend-panel-body {
         max-height: 0;
@@ -1592,29 +1326,57 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend {
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 6px;
       }
       #__ROOT_ID__ .oviz-three-legend-section {
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 6px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section[data-open="false"] {
+        gap: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-section[data-empty="true"] {
         display: none;
       }
-      #__ROOT_ID__ .oviz-three-legend-section-title {
+      #__ROOT_ID__ .oviz-three-legend-section-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
         padding: 1px 2px 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-title {
         color: var(--oviz-muted-text);
         font: 600 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
+      #__ROOT_ID__ .oviz-three-legend-section-chevron {
+        flex: 0 0 auto;
+        color: var(--oviz-muted-text);
+        font: 600 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        transition: transform 0.16s ease;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section[data-open="false"] .oviz-three-legend {
+        display: none;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section[data-open="false"] .oviz-three-legend-section-chevron {
+        transform: rotate(-90deg);
+      }
       #__ROOT_ID__ .oviz-three-legend-volume-list .oviz-three-legend-entry {
         background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.016));
       }
       #__ROOT_ID__ .oviz-three-legend-volume-section {
-        padding-top: 6px;
+        padding-top: 7px;
         border-top: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      #__ROOT_ID__ .oviz-three-legend-section:last-child {
+        padding-bottom: 2px;
       }
       #__ROOT_ID__ .oviz-three-legend-group-field {
         display: flex;
@@ -1627,6 +1389,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-group-field select {
         height: 30px;
         width: 100%;
+      }
+      #__ROOT_ID__ .oviz-three-group-select {
+        height: 30px;
+        width: 100%;
+        padding: 0 28px 0 12px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(29, 32, 37, 0.98);
+        color: var(--oviz-text);
+        cursor: pointer;
+        box-shadow: none;
+        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      #__ROOT_ID__ .oviz-three-group-select:hover {
+        background: rgba(38, 42, 48, 0.98);
+        border-color: rgba(255, 255, 255, 0.10);
       }
       #__ROOT_ID__ .oviz-three-legend-title {
         padding: 0 2px 6px;
@@ -1644,10 +1424,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(255, 255, 255, 0.022);
         transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-entry {
+      #__ROOT_ID__ .oviz-three-legend-entry {
         gap: 4px;
         padding: 4px 6px;
-        border-radius: 8px;
+        border-radius: 7px;
         border-color: rgba(255, 255, 255, 0.04);
         background: rgba(255, 255, 255, 0.01);
       }
@@ -1671,8 +1451,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
         background: rgba(255, 255, 255, 0.05);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-item:hover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-entry[data-editor-open="true"] {
+      #__ROOT_ID__ .oviz-three-legend-item:hover,
+      #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
         background: rgba(255, 255, 255, 0.028);
       }
       #__ROOT_ID__ .oviz-three-legend-swatch {
@@ -1682,7 +1462,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-radius: 999px;
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-swatch {
+      #__ROOT_ID__ .oviz-three-legend-swatch {
         width: 7px;
         height: 7px;
         border-radius: 999px;
@@ -1708,9 +1488,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-muted-text);
         font: 700 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-edit,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-toggle {
-        border-radius: 7px;
+      #__ROOT_ID__ .oviz-three-legend-edit,
+      #__ROOT_ID__ .oviz-three-legend-panel-toggle {
+        border-radius: 6px;
         border: 1px solid rgba(255, 255, 255, 0.06);
         background: rgba(255, 255, 255, 0.024);
       }
@@ -1745,13 +1525,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         pointer-events: none;
         opacity: 0;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-tools-drawer,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-controls-drawer {
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
         top: calc(100% + 8px);
         width: min(320px, calc(100vw - 32px));
         padding: 10px;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-drag {
+      #__ROOT_ID__ .oviz-three-widget-drag {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
         height: 34px;
         padding: 0 10px;
         text-transform: none;
@@ -1760,68 +1549,121 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-text);
         background: rgba(24, 26, 30, 0.96);
         border-bottom: 1px solid var(--oviz-panel-border);
+        cursor: grab;
+        user-select: none;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-footer {
+      #__ROOT_ID__ .oviz-three-widget-panel[data-mode="fullscreen"] .oviz-three-widget-drag {
+        cursor: default;
+      }
+      #__ROOT_ID__ .oviz-three-footer {
+        position: absolute;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: auto;
+        max-width: calc(100vw - 28px);
+        padding: 5px 10px;
         border-radius: 8px;
         background: rgba(18, 20, 24, 0.94);
         box-shadow: 0 5px 14px rgba(0, 0, 0, 0.12);
         backdrop-filter: blur(4px) saturate(103%);
         -webkit-backdrop-filter: blur(4px) saturate(103%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-footer button {
+      #__ROOT_ID__ .oviz-three-footer button {
+        width: 32px;
+        height: 32px;
+        line-height: 1;
+        padding: 0;
         border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.04);
         background: rgba(255, 255, 255, 0.02);
+        -webkit-appearance: none;
+        appearance: none;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-scale-bar {
+      #__ROOT_ID__ .oviz-three-time-label {
+        min-width: 124px;
+        height: 30px;
+        font-size: 13px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+      }
+      #__ROOT_ID__ .oviz-three-slider-shell {
+        position: relative;
+        flex: 0 0 clamp(196px, 25vw, 288px);
+        width: clamp(196px, 25vw, 288px);
+        max-width: clamp(196px, 25vw, 288px);
+        display: flex;
+        align-items: center;
+        height: 38px;
+        min-width: 0;
+      }
+      #__ROOT_ID__ .oviz-three-slider-track-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        width: 100%;
+        height: 24px;
+      }
+      #__ROOT_ID__ .oviz-three-slider-labels {
+        top: 24px;
+        height: 12px;
+      }
+      #__ROOT_ID__ .oviz-three-scale-bar {
+        position: absolute;
+        left: 18px;
+        bottom: 22px;
+        z-index: 6;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        pointer-events: auto;
+        cursor: grab;
+        user-select: none;
+        touch-action: none;
         border-radius: 4px;
         background: rgba(18, 20, 24, 0.92);
         backdrop-filter: blur(4px) saturate(103%);
         -webkit-backdrop-filter: blur(4px) saturate(103%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-note {
+      #__ROOT_ID__ .oviz-three-scale-bar[data-dragging="true"] {
+        cursor: grabbing;
+      }
+      #__ROOT_ID__ .oviz-three-note {
+        position: absolute;
+        right: 12px;
+        bottom: 64px;
+        z-index: 6;
+        max-width: min(340px, 34vw);
+        padding: 8px 10px;
+        display: none;
+        color: var(--oviz-text);
+        font-size: 12px;
         border-radius: 4px;
         background: rgba(18, 20, 24, 0.92);
         box-shadow: 0 5px 14px rgba(0, 0, 0, 0.12);
         backdrop-filter: blur(4px) saturate(103%);
         -webkit-backdrop-filter: blur(4px) saturate(103%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-sky-frame {
+      #__ROOT_ID__ .oviz-three-sky-frame {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        border: 0;
+        display: block;
+        background: var(--oviz-panel-solid);
         top: 32px;
         height: calc(100% - 32px);
-      }
-      #__ROOT_ID__ .oviz-three-inspector-dock {
-        display: none !important;
-      }
-      #__ROOT_ID__ .oviz-three-inspector-dock[data-open="true"] {
-        transform: translateX(0);
-      }
-      #__ROOT_ID__ .oviz-three-inspector-dock[data-pinned="true"] .oviz-three-inspector-toggle {
-        border-color: rgba(255, 255, 255, 0.16);
-        background: linear-gradient(180deg, rgba(36, 40, 46, 0.54), rgba(18, 21, 26, 0.32));
-      }
-      #__ROOT_ID__ .oviz-three-inspector-toggle {
-        position: absolute;
-        top: 12px;
-        right: -32px;
-        width: 32px;
-        height: 108px;
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        border-radius: 0 16px 16px 0;
-        background: linear-gradient(180deg, rgba(23, 28, 34, 0.40), rgba(14, 17, 22, 0.20));
-        color: var(--oviz-text);
-        font: 600 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        writing-mode: vertical-rl;
-        text-orientation: mixed;
-      }
-      #__ROOT_ID__ .oviz-three-inspector-panel {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        max-height: min(56vh, 620px);
-        padding-right: 4px;
-        overflow: auto;
       }
       #__ROOT_ID__ .oviz-three-widget-select,
       #__ROOT_ID__ .oviz-three-group-select,
@@ -1839,173 +1681,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-text);
         font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
-      #__ROOT_ID__ .oviz-three-toolbar {
-        top: 74px;
-        left: 14px;
-        z-index: 6;
-        gap: 0;
-        width: min(312px, 31vw);
-        max-width: min(312px, 31vw);
-        max-height: none;
-        padding-right: 0;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 42px;
-        align-items: start;
-        overflow: visible;
-        transform: translateX(calc(-100% + 42px));
-        transition: transform 0.18s ease;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar[data-expanded="true"] {
-        transform: translateX(0);
-      }
-      #__ROOT_ID__ .oviz-three-toolbar[data-pinned="true"] .oviz-three-toolbar-rail {
-        border-color: rgba(255, 255, 255, 0.16);
-        background: linear-gradient(180deg, rgba(28, 33, 40, 0.48), rgba(15, 18, 23, 0.28));
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-rail {
-        order: 2;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: 8px 4px 8px 2px;
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-left: 0;
-        border-radius: 0 16px 16px 0;
-        background: linear-gradient(180deg, rgba(26, 30, 36, 0.42), rgba(14, 17, 20, 0.24));
-        box-shadow: 0 16px 28px rgba(0, 0, 0, 0.18);
-        backdrop-filter: blur(18px) saturate(128%);
-        -webkit-backdrop-filter: blur(18px) saturate(128%);
-        align-self: flex-start;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-tab {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        width: 100%;
-        min-height: 72px;
-        padding: 8px 0 6px;
-        border: 0;
-        background: transparent;
-        color: transparent;
-        font-size: 0;
-        text-align: center;
-        cursor: pointer;
-        user-select: none;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-tab:focus-visible {
-        outline: 1px solid rgba(255, 255, 255, 0.22);
-        outline-offset: -3px;
-        border-radius: 12px;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-tab::before {
-        content: "▸";
-        display: block;
-        margin-bottom: 8px;
-        color: rgba(238, 242, 247, 0.82);
-        font: 600 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar[data-expanded="true"] .oviz-three-toolbar-tab::before {
-        content: "◂";
-      }
-      #__ROOT_ID__ .oviz-three-toolbar[data-pinned="true"] .oviz-three-toolbar-tab::before {
-        color: rgba(255, 255, 255, 0.96);
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-tab::after {
-        content: "Scene";
-        color: var(--oviz-muted-text);
-        font: 600 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: 2px 4px 8px 1px;
-        max-height: min(58vh, 620px);
-        overflow: auto;
-        align-items: center;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 5px;
-        width: 34px;
-        padding: 6px 0 7px;
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        border-radius: 15px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.040), rgba(255, 255, 255, 0.022));
-        color: var(--oviz-text);
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-item[data-active="false"] {
-        opacity: 0.46;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-item[data-editor-open="true"] {
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.082), rgba(255, 255, 255, 0.036));
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 18px rgba(0, 0, 0, 0.16);
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-toggle,
-      #__ROOT_ID__ .oviz-three-legend-peek-edit {
-        border: 0;
-        background: transparent;
-        color: inherit;
-        cursor: pointer;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-toggle {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 5px;
-        width: 100%;
-        padding: 0;
-        font: 700 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        text-align: center;
-        letter-spacing: 0.08em;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-edit {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 19px;
-        height: 15px;
-        margin-top: 1px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.055);
-        color: rgba(238, 242, 247, 0.72);
-        font: 700 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-swatch {
-        flex: 0 0 auto;
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-label {
-        display: block;
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-panel {
-        order: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        min-width: 0;
-        max-height: min(70vh, 760px);
-        padding-right: 6px;
-        overflow: auto;
-        overscroll-behavior: contain;
-      }
-      #__ROOT_ID__ .oviz-three-inspector-card,
       #__ROOT_ID__ .oviz-three-tools-shell,
       #__ROOT_ID__ .oviz-three-controls-shell {
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2102,7 +1777,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         width: 26px;
         height: 26px;
         border: 0;
-        border-radius: 999px;
+        border-radius: 6px;
         background: rgba(255, 255, 255, 0.05);
         color: var(--oviz-muted-text);
         font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -2119,41 +1794,48 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: transparent;
         max-height: none;
         min-height: 0;
+        overflow: visible;
       }
       #__ROOT_ID__ .oviz-three-legend-controls {
-        gap: 9px;
-        padding: 8px 9px;
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.025);
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.022);
       }
       #__ROOT_ID__ .oviz-three-legend-title {
         position: sticky;
         top: 0;
         z-index: 1;
-        padding: 7px 8px;
+        padding: 5px 7px;
         border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.022);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.018);
         color: var(--oviz-muted-text);
         font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         letter-spacing: 0.02em;
       }
       #__ROOT_ID__ .oviz-three-legend-entry {
-        gap: 8px;
-        padding: 8px 9px;
+        gap: 5px;
+        padding: 5px 7px;
         border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 13px;
-        background: rgba(255, 255, 255, 0.028);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.022);
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry:last-child {
+        padding-bottom: 5px;
+        border-bottom-width: 1px;
+        border-bottom-style: solid;
+        border-bottom-color: rgba(255, 255, 255, 0.05);
       }
       #__ROOT_ID__ .oviz-three-legend-item {
         display: flex;
         align-items: center;
-        gap: 9px;
-        font: 600 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        gap: 7px;
+        font: 600 11px/1.18 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-legend-swatch {
-        width: 9px;
-        height: 9px;
+        width: 8px;
+        height: 8px;
         border-radius: 999px;
       }
       #__ROOT_ID__ .oviz-three-legend-meta {
@@ -2172,10 +1854,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-legend-controls {
-        gap: 10px;
-        padding: 10px;
-        border-radius: 12px;
-        background: rgba(0, 0, 0, 0.20);
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.16);
       }
       #__ROOT_ID__ .oviz-three-tools-shell,
       #__ROOT_ID__ .oviz-three-controls-shell {
@@ -2244,7 +1926,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-footer button {
         width: 38px;
         height: 38px;
+        border: 0;
+        border-radius: 0;
         background: none;
+        color: var(--oviz-text);
+        cursor: pointer;
+        font-size: 15px;
+        line-height: 1;
+        margin-top: 0;
+        padding: 0;
+        box-shadow: none;
+        -webkit-appearance: none;
+        appearance: none;
       }
       #__ROOT_ID__ .oviz-three-time-label {
         min-width: 136px;
@@ -2253,9 +1946,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-scale-bar {
         left: 18px;
         bottom: 22px;
-        padding: 10px 12px;
+        padding: 8px 10px;
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 16px;
+        border-radius: 10px;
         background: rgba(14, 17, 22, 0.26);
         backdrop-filter: blur(16px) saturate(135%);
         -webkit-backdrop-filter: blur(16px) saturate(135%);
@@ -2291,7 +1984,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-legend-panel,
-      #__ROOT_ID__[data-zen="true"] .oviz-three-inspector-dock,
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel,
       #__ROOT_ID__[data-zen="true"] .oviz-three-note,
@@ -2310,39 +2002,151 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         #__ROOT_ID__ .oviz-three-title {
           grid-area: title;
           justify-self: center;
+          max-width: calc(100vw - 28px);
         }
         #__ROOT_ID__ .oviz-three-widget-menu {
           grid-area: actions;
-          justify-self: end;
+          justify-self: center;
+          justify-content: center;
+          width: min(calc(100vw - 28px), 920px);
+          max-width: calc(100vw - 28px);
         }
         #__ROOT_ID__ .oviz-three-legend-panel {
           width: min(244px, calc(100vw - 28px));
-        }
-        #__ROOT_ID__ .oviz-three-inspector-dock {
-          width: min(332px, calc(100vw - 28px));
         }
         #__ROOT_ID__ .oviz-three-footer {
           width: min(calc(100vw - 28px), 920px);
         }
       }
+      @media (max-width: 860px) {
+        #__ROOT_ID__ .oviz-three-widget-menu {
+          row-gap: 4px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu button,
+        #__ROOT_ID__ .oviz-three-widget-menu select,
+        #__ROOT_ID__ .oviz-three-tools-toggle,
+        #__ROOT_ID__ .oviz-three-controls-toggle {
+          height: 30px;
+          font-size: 10.5px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-toggle,
+        #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-toggle {
+          padding: 0 10px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-select,
+        #__ROOT_ID__ .oviz-three-group-select {
+          min-width: 138px;
+        }
+        #__ROOT_ID__ .oviz-three-footer {
+          width: min(calc(100vw - 24px), 760px);
+        }
+      }
       @media (max-width: 720px) {
+        #__ROOT_ID__ .oviz-three-title {
+          font-size: 12px;
+          padding: 5px 9px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu {
+          width: min(calc(100vw - 20px), 640px);
+          max-width: calc(100vw - 20px);
+          padding: 4px;
+          gap: 4px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu button,
+        #__ROOT_ID__ .oviz-three-widget-menu select,
+        #__ROOT_ID__ .oviz-three-tools-toggle,
+        #__ROOT_ID__ .oviz-three-controls-toggle {
+          height: 28px;
+          font-size: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-select,
+        #__ROOT_ID__ .oviz-three-group-select {
+          min-width: 120px;
+        }
         #__ROOT_ID__ .oviz-three-legend-panel {
-          top: 66px;
+          top: 74px;
+          left: 12px;
           width: min(220px, calc(100vw - 24px));
         }
-        #__ROOT_ID__ .oviz-three-inspector-dock {
-          top: auto;
-          bottom: 110px;
-          width: min(312px, calc(100vw - 22px));
+        #__ROOT_ID__ .oviz-three-footer {
+          bottom: 12px;
+          width: min(calc(100vw - 20px), 620px);
         }
         #__ROOT_ID__ .oviz-three-scale-bar {
           display: none;
         }
       }
+      @media (max-width: 560px) {
+        #__ROOT_ID__ .oviz-three-footer {
+          display: grid;
+          grid-template-columns: 32px auto minmax(0, 1fr);
+          align-items: center;
+          gap: 8px;
+          width: min(calc(100vw - 16px), 520px);
+        }
+        #__ROOT_ID__ .oviz-three-footer button {
+          width: 32px;
+          height: 32px;
+        }
+        #__ROOT_ID__ .oviz-three-time-label {
+          min-width: 96px;
+          font-size: 12px;
+        }
+        #__ROOT_ID__ .oviz-three-slider-shell {
+          width: auto;
+          max-width: none;
+          min-width: 0;
+        }
+        #__ROOT_ID__ .oviz-three-legend-panel {
+          width: min(206px, calc(100vw - 20px));
+        }
+      }
+      @media (max-height: 760px) {
+        #__ROOT_ID__ .oviz-three-topbar {
+          top: 10px;
+          left: 10px;
+          right: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu {
+          max-width: min(calc(100vw - 20px), 760px);
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
+        #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
+          max-height: min(62vh, 560px);
+        }
+        #__ROOT_ID__ .oviz-three-legend-panel {
+          top: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-footer {
+          bottom: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-note {
+          display: none;
+        }
+      }
+      @media (max-height: 620px) {
+        #__ROOT_ID__ .oviz-three-title {
+          font-size: 12px;
+          padding: 5px 9px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu button,
+        #__ROOT_ID__ .oviz-three-widget-menu select,
+        #__ROOT_ID__ .oviz-three-tools-toggle,
+        #__ROOT_ID__ .oviz-three-controls-toggle {
+          height: 28px;
+          font-size: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-legend-panel {
+          width: min(212px, calc(100vw - 20px));
+        }
+        #__ROOT_ID__ .oviz-three-footer {
+          bottom: 8px;
+        }
+      }
     </style>
   </head>
   <body>
-    <div id="__ROOT_ID__" tabindex="0" data-zen="false" data-ui-design-key="default">
+    <div id="__ROOT_ID__" tabindex="0" data-zen="false">
       <div class="oviz-three-topbar">
         <div class="oviz-three-topbar-brand">
           <span class="oviz-three-topbar-dot" aria-hidden="true"></span>
@@ -2355,7 +2159,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="oviz-three-tools-drawer">
               <div class="oviz-three-selection">
                 <div class="oviz-three-selection-row">
-                  <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
                   <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
                 </div>
                 <label class="oviz-three-selection-toggle">
@@ -2366,7 +2169,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                   <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
                   <span>Lasso volumetric data</span>
                 </label>
-                <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters on the current frame.</div>
               </div>
             </div>
           </div>
@@ -2472,12 +2274,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             <span>Group</span>
             <select class="oviz-three-group-select"></select>
           </label>
-          <div class="oviz-three-legend-section oviz-three-legend-trace-section" data-empty="false">
-            <div class="oviz-three-legend-section-title">Traces</div>
+          <div class="oviz-three-legend-section oviz-three-legend-trace-section" data-empty="false" data-open="true">
+            <button class="oviz-three-legend-section-toggle oviz-three-legend-trace-section-toggle" type="button" title="Collapse or expand traces">
+              <span class="oviz-three-legend-section-title">Traces</span>
+              <span class="oviz-three-legend-section-chevron" aria-hidden="true">▾</span>
+            </button>
             <div class="oviz-three-legend oviz-three-legend-trace-list"></div>
           </div>
-          <div class="oviz-three-legend-section oviz-three-legend-volume-section" data-empty="false">
-            <div class="oviz-three-legend-section-title">Volumes</div>
+          <div class="oviz-three-legend-section oviz-three-legend-volume-section" data-empty="false" data-open="true">
+            <button class="oviz-three-legend-section-toggle oviz-three-legend-volume-section-toggle" type="button" title="Collapse or expand volumes">
+              <span class="oviz-three-legend-section-title">Volumes</span>
+              <span class="oviz-three-legend-section-chevron" aria-hidden="true">▾</span>
+            </button>
             <div class="oviz-three-legend oviz-three-legend-volume-list"></div>
           </div>
         </div>
@@ -2485,167 +2293,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="oviz-three-legend-resize" data-dir="ne"></div>
         <div class="oviz-three-legend-resize" data-dir="sw"></div>
         <div class="oviz-three-legend-resize" data-dir="se"></div>
-      </div>
-      <div class="oviz-three-inspector-dock" data-open="false">
-        <button class="oviz-three-inspector-toggle" type="button" title="Open settings">Settings</button>
-        <div class="oviz-three-inspector-panel">
-          <div class="oviz-three-scene-card oviz-three-inspector-card">
-            <div class="oviz-three-card-head">
-              <div class="oviz-three-card-eyebrow">Scene</div>
-              <div class="oviz-three-card-caption">Groups and view settings</div>
-            </div>
-            <div class="oviz-three-scene-meta">
-              <label class="oviz-three-sidebar-field">
-                <span>Group</span>
-                <select class="oviz-three-group-select"></select>
-              </label>
-            </div>
-          </div>
-          <div class="oviz-three-tools-shell oviz-three-inspector-card" data-open="false">
-            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
-            <div class="oviz-three-tools-drawer">
-              <div class="oviz-three-selection">
-                <div class="oviz-three-selection-row">
-                  <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
-                  <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
-                </div>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-click-select-toggle" type="checkbox" />
-                  <span>Enable click select</span>
-                </label>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
-                  <span>Lasso volumetric data</span>
-                </label>
-                <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters on the current frame.</div>
-              </div>
-              <div class="oviz-three-volume" data-enabled="false">
-                <div class="oviz-three-volume-title">Volume</div>
-                <label class="oviz-three-volume-field">
-                  <span>Layer</span>
-                  <select class="oviz-three-volume-select"></select>
-                </label>
-                <label class="oviz-three-volume-field oviz-three-volume-smoothing-field">
-                  <span>Smoothing</span>
-                  <select class="oviz-three-volume-smoothing"></select>
-                </label>
-                <label class="oviz-three-volume-toggle">
-                  <input class="oviz-three-volume-visible" type="checkbox" />
-                  <span>Show volume</span>
-                </label>
-                <label class="oviz-three-volume-field">
-                  <span>Colormap</span>
-                  <select class="oviz-three-volume-colormap"></select>
-                </label>
-                <label class="oviz-three-volume-field">
-                  <span>Stretch</span>
-                  <select class="oviz-three-volume-stretch"></select>
-                </label>
-                <div class="oviz-three-volume-row">
-                  <label class="oviz-three-volume-field">
-                    <span>vmin</span>
-                    <input class="oviz-three-volume-vmin" type="number" step="any" />
-                  </label>
-                  <label class="oviz-three-volume-field">
-                    <span>vmax</span>
-                    <input class="oviz-three-volume-vmax" type="number" step="any" />
-                  </label>
-                </div>
-                <label class="oviz-three-volume-field">
-                  <span class="oviz-three-volume-opacity-label">Opacity</span>
-                  <input class="oviz-three-volume-opacity" type="range" min="0" max="1" step="0.01" />
-                </label>
-                <label class="oviz-three-volume-field">
-                  <span class="oviz-three-volume-alpha-label">Alpha coef</span>
-                  <input class="oviz-three-volume-alpha" type="range" min="1" max="200" step="1" />
-                </label>
-                <label class="oviz-three-volume-field">
-                  <span class="oviz-three-volume-steps-label">Samples</span>
-                  <input class="oviz-three-volume-steps" type="range" min="24" max="768" step="8" />
-                </label>
-                <div class="oviz-three-volume-summary"></div>
-              </div>
-            </div>
-          </div>
-          <div class="oviz-three-controls-shell oviz-three-inspector-card" data-open="false">
-            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
-            <div class="oviz-three-controls-drawer">
-              <div class="oviz-three-controls">
-                <div class="oviz-three-controls-title">Controls</div>
-                <label class="oviz-three-controls-field">
-                  <span>Theme</span>
-                  <select class="oviz-three-theme-select">
-                    <option value="default">Default</option>
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                  </select>
-                </label>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-scroll-speed-label">Scroll speed</span>
-                    <input class="oviz-three-scroll-speed" type="range" min="0.2" max="4" step="0.05" />
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-camera-fov-label">Camera FOV</span>
-                    <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
-                  </label>
-                </div>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-global-point-size-label">Point size</span>
-                    <input class="oviz-three-global-point-size" type="range" min="0.25" max="4" step="0.05" />
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-global-point-opacity-label">Point opacity</span>
-                    <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
-                  </label>
-                </div>
-                <label class="oviz-three-controls-field">
-                  <span class="oviz-three-global-point-glow-label">Star glow</span>
-                  <input class="oviz-three-global-point-glow" type="range" min="0" max="4" step="0.02" />
-                </label>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span>Focus group</span>
-                    <select class="oviz-three-focus-group-select"></select>
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span>Fade time (Myr)</span>
-                    <input class="oviz-three-fade-time" type="number" min="0" step="0.5" />
-                  </label>
-                </div>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-fade-in-out-toggle" type="checkbox" />
-                  <span>Fade in and out</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
-                  <span>Size points by n_stars</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
-                  <span>Show axes</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-galactic-reference-toggle" type="checkbox" checked />
-                  <span>Show GC/radius overlays</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
-                  <span>Show region labels</span>
-                </label>
-                <div class="oviz-three-controls-actions">
-                  <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
-                  <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
-                  <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
-                  <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
-                  <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
-                </div>
-                <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
       <div class="oviz-three-legend-popover" data-open="false"></div>
       <div class="oviz-three-key-help" data-open="false">
@@ -2974,12 +2621,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const legendPanelBodyEl = root.querySelector(".oviz-three-legend-panel-body");
       const legendTraceSectionEl = root.querySelector(".oviz-three-legend-trace-section");
       const legendVolumeSectionEl = root.querySelector(".oviz-three-legend-volume-section");
+      const legendTraceSectionToggleEl = root.querySelector(".oviz-three-legend-trace-section-toggle");
+      const legendVolumeSectionToggleEl = root.querySelector(".oviz-three-legend-volume-section-toggle");
       const legendTraceListEl = root.querySelector(".oviz-three-legend-trace-list");
       const legendVolumeListEl = root.querySelector(".oviz-three-legend-volume-list");
       const legendDragHandleEl = root.querySelector(".oviz-three-legend-panel-drag");
       const legendResizeEls = Array.from(root.querySelectorAll(".oviz-three-legend-resize"));
-      const inspectorDockEl = root.querySelector(".oviz-three-inspector-dock");
-      const inspectorToggleEl = root.querySelector(".oviz-three-inspector-toggle");
       const legendPopoverEl = root.querySelector(".oviz-three-legend-popover");
       const keyHelpEl = root.querySelector(".oviz-three-key-help");
       const keyHelpButtonEl = root.querySelector(".oviz-three-key-help-button");
@@ -3000,8 +2647,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const scaleBarEl = root.querySelector(".oviz-three-scale-bar");
       const scaleLabelEl = root.querySelector(".oviz-three-scale-label");
       const noteEl = root.querySelector(".oviz-three-note");
-      const selectionReadoutEl = root.querySelector(".oviz-three-selection-readout");
-      const lassoButtonEl = root.querySelector(".oviz-three-lasso-button");
       const clearSelectionButtonEl = root.querySelector(".oviz-three-selection-clear");
       const clickSelectToggleEl = root.querySelector(".oviz-three-click-select-toggle");
       const volumeLassoToggleEl = root.querySelector(".oviz-three-volume-lasso-toggle");
@@ -3219,7 +2864,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const ageKdeSpec = sceneSpec.age_kde || { enabled: false };
       const clusterFilterSpec = sceneSpec.cluster_filter || { enabled: false };
       const dendrogramSpec = sceneSpec.dendrogram || { enabled: false };
-      const volumeLayers = ((sceneSpec.volumes || {}).layers || []);
+      const volumeSpec = sceneSpec.volumes || { enabled: false, layers: [] };
+      const volumeLayers = (volumeSpec.layers || []);
+      const volumeCoRotationRateRadPerMyr = Number(volumeSpec.co_rotation_rate_rad_per_myr);
       const volumeLayersByKey = new Map(volumeLayers.map((layer) => [String(layer.key), layer]));
       const volumeStateKeyForRawLayer = (layer) => String((layer && (layer.state_key || layer.key)) || "");
       const volumeStateKeys = Array.from(
@@ -3287,6 +2934,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const themePresets = buildThemePresets(baseTheme);
       const pointScale = Math.max(sceneSpec.max_span || 1, 1) / 4000.0;
       const hoverTargets = [];
+      const cameraResponsivePointEntries = [];
       const selectionSpriteEntriesByKey = new Map();
       const axisLineMaterials = [];
       const frameLineMaterials = [];
@@ -3307,6 +2955,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const volumeColorBytesCache = new Map();
       const volumeRuntimeByKey = new Map();
       const DEFAULT_MANUAL_LABEL_SIZE = 24.0;
+      const LEGEND_MAX_VISIBLE_ITEMS = 5;
       const MIN_MANUAL_LABEL_SIZE = 8.0;
       const MAX_MANUAL_LABEL_SIZE = 120.0;
       const MAX_MANUAL_LABEL_TEXT_LENGTH = 80;
@@ -3339,7 +2988,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let lastSentSkyHoverClusterKey = null;
       let scaleBarPosition = null;
       let legendPanelRectState = null;
-      let activeUiDesignKey = String(sceneSpec.ui_design_key || "uncodixified");
+      let legendPanelUserSized = false;
+      let legendSectionOpenState = { traces: true, volumes: true };
       let activeThemeKey = "default";
       let axesVisible = Boolean(sceneSpec.show_axes);
       let galacticReferenceVisible = true;
@@ -3359,11 +3009,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled
       );
       let zenModeEnabled = Boolean(initialState.zen_mode_enabled);
-      let inspectorOpen = Boolean(initialState.inspector_open);
-      let inspectorPinned = Boolean(initialState.inspector_pinned);
       let legendPanelOpen = initialState.legend_open === undefined ? true : Boolean(initialState.legend_open);
-      let inspectorHoverOpenTimer = null;
-      let inspectorHoverCloseTimer = null;
       let fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
       let fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
       let focusTraceKey = String(animationSpec.focus_trace_key_default || "");
@@ -3472,6 +3118,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           gradientStep: Number(defaults.gradient_step),
           stretch: normalizeVolumeStretch(defaults.stretch),
           colormap: String(defaults.colormap || (((layer.colormap_options || [])[0] || {}).name || "inferno")),
+          showAllTimes: Boolean(defaults.show_all_times),
         };
       });
 
@@ -3725,27 +3372,154 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function defaultLegendPanelRect() {
-        const width = Math.min(Math.max(root.clientWidth * 0.17, 194.0), 232.0);
+        const width = Math.min(Math.max(root.clientWidth * 0.18, 204.0), 240.0);
         const visibleItems = visibleLegendItemsForCurrentGroup();
         const traceCount = visibleItems.filter((item) => !volumeLayerForKey(item.key)).length;
         const volumeCount = visibleItems.length - traceCount;
-        const preferredTraceRows = clampRange(Math.max(Math.min(traceCount, 5), 5), 5, 5);
-        const preferredVolumeRows = clampRange(Math.min(volumeCount, 2), 0, 2);
-        const estimatedHeight = 122 + preferredTraceRows * 38 + preferredVolumeRows * 34 + (volumeCount ? 20 : 0);
-        const height = Math.min(Math.max(estimatedHeight, 332.0), Math.min(root.clientHeight - 18.0, 460.0));
+        const preferredTraceRows = traceCount ? clampRange(traceCount, 4, 8) : 0;
+        const preferredVolumeRows = volumeCount ? clampRange(volumeCount, 1, 3) : 0;
+        const estimatedHeight = 108 + preferredTraceRows * 34 + preferredVolumeRows * 32 + ((traceCount && volumeCount) ? 14 : 0);
+        const minHeight = volumeCount ? 304.0 : 272.0;
+        const height = Math.min(Math.max(estimatedHeight, minHeight), Math.min(root.clientHeight - 18.0, 520.0));
         return clampLegendPanelRect(14.0, 14.0, width, height);
       }
 
-      function applyLegendPanelRect(rectState) {
+      function legendSectionDefs() {
+        return [
+          {
+            key: "traces",
+            sectionEl: legendTraceSectionEl,
+            toggleEl: legendTraceSectionToggleEl,
+            listEl: legendTraceListEl,
+            label: "Traces",
+          },
+          {
+            key: "volumes",
+            sectionEl: legendVolumeSectionEl,
+            toggleEl: legendVolumeSectionToggleEl,
+            listEl: legendVolumeListEl,
+            label: "Volumes",
+          },
+        ];
+      }
+
+      function applyLegendSectionState(sectionKey) {
+        const section = legendSectionDefs().find((item) => item.key === sectionKey);
+        if (!section || !section.sectionEl || !section.toggleEl) {
+          return;
+        }
+        const isOpen = legendSectionOpenState[sectionKey] !== false;
+        section.sectionEl.dataset.open = isOpen ? "true" : "false";
+        section.toggleEl.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        section.toggleEl.setAttribute(
+          "title",
+          `${isOpen ? "Collapse" : "Expand"} ${String(section.label || sectionKey).toLowerCase()}`
+        );
+        const chevronEl = section.toggleEl.querySelector(".oviz-three-legend-section-chevron");
+        if (chevronEl) {
+          chevronEl.textContent = isOpen ? "▾" : "▸";
+        }
+      }
+
+      function setLegendSectionOpen(sectionKey, isOpen) {
+        legendSectionOpenState[sectionKey] = Boolean(isOpen);
+        applyLegendSectionState(sectionKey);
+        if (legendPanelOpen) {
+          applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
+        }
+      }
+
+      function legendPanelPreferredExpandedHeight(maxVisibleEntries = LEGEND_MAX_VISIBLE_ITEMS) {
+        if (!legendPanelEl || !legendPanelBodyEl || !legendPanelOpen) {
+          return 0.0;
+        }
+        const headerHeight = legendDragHandleEl
+          ? Math.max(legendDragHandleEl.getBoundingClientRect().height || 0.0, 36.0)
+          : 36.0;
+        const hiddenEntries = [];
+        const hiddenSections = [];
+        let remainingEntries = Math.max(0, Number(maxVisibleEntries) || 0);
+
+        legendSectionDefs().forEach(({ sectionEl, listEl }) => {
+          if (!sectionEl || sectionEl.dataset.empty === "true") {
+            return;
+          }
+          if (sectionEl.dataset.open === "false" || !listEl) {
+            return;
+          }
+          const entries = Array.from(listEl.children).filter(
+            (child) => child && child.classList && child.classList.contains("oviz-three-legend-entry")
+          );
+          const visibleCount = Math.min(entries.length, remainingEntries);
+          if (visibleCount <= 0) {
+            hiddenSections.push([sectionEl, sectionEl.style.display]);
+            sectionEl.style.display = "none";
+            return;
+          }
+          remainingEntries -= visibleCount;
+          entries.slice(visibleCount).forEach((entry) => {
+            hiddenEntries.push([entry, entry.style.display]);
+            entry.style.display = "none";
+          });
+        });
+
+        const bodyHeight = Math.max(legendPanelBodyEl.scrollHeight || 0.0, 0.0);
+
+        hiddenEntries.forEach(([entry, previousDisplay]) => {
+          entry.style.display = previousDisplay;
+        });
+        hiddenSections.forEach(([sectionEl, previousDisplay]) => {
+          sectionEl.style.display = previousDisplay;
+        });
+
+        return headerHeight + bodyHeight + 2.0;
+      }
+
+      function legendPanelOverflowHeight(expandedHeight) {
+        if (!legendPanelEl || !legendPanelBodyEl || !legendPanelOpen) {
+          return 0.0;
+        }
+        const headerHeight = legendDragHandleEl
+          ? Math.max(legendDragHandleEl.getBoundingClientRect().height || 0.0, 36.0)
+          : 36.0;
+        const availableBodyHeight = Math.max(Number(expandedHeight) - headerHeight, 0.0);
+        const contentBodyHeight = Math.max(legendPanelBodyEl.scrollHeight || 0.0, 0.0);
+        return Math.max(contentBodyHeight - availableBodyHeight, 0.0);
+      }
+
+      function applyLegendPanelRect(rectState, options = {}) {
         if (!legendPanelEl) {
           return;
         }
-        const next = clampLegendPanelRect(
+        const allowAutoCap = options.allowAutoCap !== false;
+        const requestedHeight = rectState && rectState.height;
+        const base = clampLegendPanelRect(
           rectState && rectState.left,
           rectState && rectState.top,
           rectState && rectState.width,
-          rectState && rectState.height,
+          requestedHeight,
         );
+        let next = base;
+        if (legendPanelOpen && allowAutoCap && !legendPanelUserSized) {
+          const preferredExpandedHeight = legendPanelPreferredExpandedHeight(LEGEND_MAX_VISIBLE_ITEMS);
+          let targetHeight = preferredExpandedHeight > 0.0
+            ? Math.min(base.height, preferredExpandedHeight)
+            : base.height;
+          const overflowHeight = legendPanelOverflowHeight(targetHeight);
+          if (overflowHeight > 1.0) {
+            targetHeight = preferredExpandedHeight > 0.0
+              ? Math.min(targetHeight + overflowHeight + 2.0, preferredExpandedHeight)
+              : targetHeight + overflowHeight + 2.0;
+          }
+          if (Math.abs(targetHeight - base.height) > 0.5) {
+            next = clampLegendPanelRect(
+              base.left,
+              base.top,
+              base.width,
+              targetHeight,
+            );
+          }
+        }
         legendPanelRectState = next;
         legendPanelEl.style.left = `${next.left}px`;
         legendPanelEl.style.top = `${next.top}px`;
@@ -3938,14 +3712,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             legendPointerState.height,
           );
         } else if (legendPointerState.mode === "resize") {
+          legendPanelUserSized = true;
           nextRect = resizeLegendRect(legendPointerState, event.clientX, event.clientY);
         }
         if (nextRect) {
-          applyLegendPanelRect(nextRect);
+          applyLegendPanelRect(nextRect, { allowAutoCap: false });
           if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
             positionLegendPopover(legendEditButtonByKey.get(activeLegendEditorKey));
           }
-          positionInspectorDock();
         }
         event.preventDefault();
         return true;
@@ -5228,6 +5002,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             height: Number(savedLegendPanelState.height),
           };
         }
+        if (typeof initialState.legend_panel_user_sized === "boolean") {
+          legendPanelUserSized = initialState.legend_panel_user_sized;
+        }
+
+        const savedLegendSectionsOpen = initialState.legend_sections_open;
+        if (savedLegendSectionsOpen && typeof savedLegendSectionsOpen === "object") {
+          if (typeof savedLegendSectionsOpen.traces === "boolean") {
+            legendSectionOpenState.traces = savedLegendSectionsOpen.traces;
+          }
+          if (typeof savedLegendSectionsOpen.volumes === "boolean") {
+            legendSectionOpenState.volumes = savedLegendSectionsOpen.volumes;
+          }
+        }
 
         if (initialState.active_volume_key && volumeStateKeySet.has(String(initialState.active_volume_key))) {
           activeVolumeKey = String(initialState.active_volume_key);
@@ -5289,6 +5076,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             }
             if (Number.isFinite(Number(state.gradientStep))) {
               target.gradientStep = Number(state.gradientStep);
+            }
+            if (typeof state.showAllTimes === "boolean") {
+              target.showAllTimes = state.showAllTimes;
             }
             if (typeof state.stretch === "string" && state.stretch) {
               target.stretch = normalizeVolumeStretch(state.stretch);
@@ -5433,22 +5223,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
         }
 
-        const savedInspector = initialState.inspector;
-        if (savedInspector && typeof savedInspector === "object") {
-          if (typeof savedInspector.pinned === "boolean") {
-            inspectorPinned = savedInspector.pinned;
-          }
-          if (typeof savedInspector.open === "boolean") {
-            inspectorOpen = savedInspector.open;
-          }
-        }
-
-        if (typeof initialState.inspector_pinned === "boolean") {
-          inspectorPinned = initialState.inspector_pinned;
-        }
-        if (typeof initialState.inspector_open === "boolean") {
-          inspectorOpen = initialState.inspector_open;
-        }
         if (typeof initialState.legend_open === "boolean") {
           legendPanelOpen = initialState.legend_open;
         }
@@ -5457,12 +5231,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         clampClusterFilterRangeForParameter(activeClusterFilterParameterSpec());
         pruneSelectionsToActiveClusterFilter();
         applyCameraViewMode();
-        applyUiDesignPreset(activeUiDesignKey, { syncInput: false });
         applyThemePreset(activeThemeKey, { rerender: false, syncInput: false });
         renderSceneControls();
         setLegendPanelOpen(legendPanelOpen);
-        setInspectorPinned(inspectorPinned, { syncOpen: false });
-        setInspectorOpen(inspectorPinned || inspectorOpen);
         setZenMode(zenModeEnabled);
       }
 
@@ -5562,14 +5333,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             tools_open: toolsShellEl.dataset.open === "true",
             controls_open: controlsShellEl.dataset.open === "true",
           },
-          inspector_open: inspectorOpen,
-          inspector_pinned: inspectorPinned,
-          inspector: {
-            open: inspectorOpen,
-            pinned: inspectorPinned,
-          },
           legend_open: legendPanelOpen,
           legend_panel_state: captureLegendPanelState(),
+          legend_panel_user_sized: legendPanelUserSized,
+          legend_sections_open: safeJsonClone(legendSectionOpenState, { traces: true, volumes: true }),
           zen_mode_enabled: zenModeEnabled,
           widgets: {
             sky: captureWidgetState("sky"),
@@ -5834,14 +5601,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function applySceneHoverState() {
-        const activeKeys = activeHoveredClusterKeys();
-        selectionSpriteEntriesByKey.forEach((entries, key) => {
-          const isActive = activeKeys.has(key);
-          entries.forEach((entry) => {
-            const scale = entry.baseScale * (isActive ? 1.45 : 1.0);
-            entry.sprite.scale.set(scale, scale, scale);
-          });
-        });
+        updateCameraResponsivePointSprites();
       }
 
       function interpolateDendrogramPosition(entry, targetTimeMyr) {
@@ -7336,10 +7096,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function updateSelectionUI() {
-        selectionReadoutEl.textContent = selectionToolbarText(currentSelections, currentSelection);
         clearSelectionButtonEl.disabled = currentSelections.length === 0 && !currentSelection && !hasActiveLassoSelectionMask();
-        lassoButtonEl.dataset.active = lassoArmed ? "true" : "false";
-        lassoButtonEl.setAttribute("aria-pressed", lassoArmed ? "true" : "false");
         clickSelectToggleEl.checked = clickSelectionEnabled;
         volumeLassoToggleEl.checked = lassoVolumeSelectionEnabled;
       }
@@ -7550,16 +7307,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function themePresetForKey(themeKey) {
         const requestedKey = String(themeKey || "default");
         return themePresets[requestedKey] || themePresets.default || {};
-      }
-
-      function uiDesignPresetForKey(uiDesignKey) {
-        const requestedKey = String(uiDesignKey || "default");
-        return requestedKey === "uncodixified" ? "uncodixified" : "default";
-      }
-
-      function applyUiDesignPreset(uiDesignKey, options = {}) {
-        activeUiDesignKey = uiDesignPresetForKey(uiDesignKey);
-        root.dataset.uiDesignKey = activeUiDesignKey;
       }
 
       function applyThemePreset(themeKey, options = {}) {
@@ -9979,7 +9726,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           ? (
             Number.isFinite(Number(layer.time_myr))
               ? "Rendered as a time-resolved WebGL2 ray-marched volume matched to the current animation frame."
-              : "Rendered at t=0 only as a WebGL2 ray-marched volume."
+              : (
+                state.showAllTimes
+                  ? (
+                    layer.co_rotate_with_frame
+                      ? "Rendered across all animation frames with a co-rotating local reference frame."
+                      : "Rendered across all animation frames as a static WebGL2 ray-marched volume."
+                  )
+                  : "Rendered at t=0 only as a WebGL2 ray-marched volume."
+              )
           )
           : "Volume rendering requires WebGL2 support in the browser.";
         const resampleMethod = String(layer.downsample_method || "resampled");
@@ -10407,6 +10162,58 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return { low, high };
       }
 
+      function volumeSupportsShowAllTimes(layer) {
+        return Boolean(
+          layer
+          && layer.supports_show_all_times
+          && !Number.isFinite(Number(layer.time_myr))
+        );
+      }
+
+      function volumeVisibleForFrame(layer, state, frame = currentFrame()) {
+        if (!layer || !state || state.visible === false) {
+          return false;
+        }
+        const frameTime = frame ? Number(frame.time) : 0.0;
+        const layerTime = Number(layer.time_myr);
+        if (Number.isFinite(layerTime)) {
+          return approximatelyZero(frameTime - layerTime);
+        }
+        if (state.showAllTimes && volumeSupportsShowAllTimes(layer)) {
+          return true;
+        }
+        if (layer.only_at_t0 === false) {
+          return true;
+        }
+        return approximatelyZero(frameTime);
+      }
+
+      function volumeRotationAngleForFrame(layer, state, frame = currentFrame()) {
+        if (
+          !layer
+          || !state
+          || !state.showAllTimes
+          || !layer.co_rotate_with_frame
+          || !volumeSupportsShowAllTimes(layer)
+          || !Number.isFinite(volumeCoRotationRateRadPerMyr)
+        ) {
+          return 0.0;
+        }
+        const frameTime = frame ? Number(frame.time) : 0.0;
+        if (!Number.isFinite(frameTime)) {
+          return 0.0;
+        }
+        const referenceTime = Number.isFinite(Number(layer.reference_time_myr))
+          ? Number(layer.reference_time_myr)
+          : 0.0;
+        return volumeCoRotationRateRadPerMyr * (frameTime - referenceTime);
+      }
+
+      function volumeQuaternionForZRotation(angleRad) {
+        const halfAngle = 0.5 * (Number.isFinite(angleRad) ? angleRad : 0.0);
+        return new THREE.Vector4(0.0, 0.0, Math.sin(halfAngle), Math.cos(halfAngle));
+      }
+
       const VOLUME_VERTEX_SHADER = `
         uniform vec4 rotation;
         uniform vec4 translation;
@@ -10449,6 +10256,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         uniform float stretch_mode;
         uniform vec4 scale;
         uniform vec4 translation;
+        uniform vec4 rotation;
         uniform bool useSelectionPolygon;
         uniform mat4 selectionViewProjectionMatrix;
         uniform float selectionDimOutside;
@@ -10502,6 +10310,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         float sampleVolume(vec3 pos) {
           return texture(volumeTexture, clamp(pos, vec3(0.0), vec3(1.0))).x;
+        }
+
+        vec3 rotate_vertex_position(vec3 pos, vec3 t, vec4 q) {
+          vec3 p = pos.xyz - t.xyz;
+          return p.xyz + 2.0 * cross(cross(p.xyz, q.xyz) + q.w * p.xyz, q.xyz) + t.xyz;
+        }
+
+        vec3 inverse_rotate_vertex_position(vec3 pos, vec3 t, vec4 q) {
+          return rotate_vertex_position(pos, t, vec4(-q.xyz, q.w));
         }
 
         float asinhStretch(float value) {
@@ -10591,7 +10408,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             if (scaled_px > 0.0) {
               scaled_px = applyStretch(min(scaled_px, 0.999));
               pxColor = texture(colormap, vec2(scaled_px, 0.5));
-              vec3 worldPos = (textcoord - vec3(0.5)) * scale.xyz + translation.xyz;
+              vec3 worldPos = inverse_rotate_vertex_position(
+                (textcoord - vec3(0.5)) * scale.xyz + translation.xyz,
+                translation.xyz,
+                rotation
+              );
               bool insideSelection = sampleInsideSelectionPolygon(worldPos);
               if (!insideSelection && selectionDimOutside <= 0.001) {
                 continue;
@@ -10710,21 +10531,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(centerX, centerY, centerZ);
         mesh.scale.set(sizeX, sizeY, sizeZ);
-        mesh.visible = state.visible !== false;
         mesh.renderOrder = -30;
         mesh.frustumCulled = false;
         const runtime = { mesh, material, geometry, layer };
+        applyVolumeStateToRuntime(layer, runtime);
         return runtime;
       }
 
-      function applyVolumeStateToRuntime(layer, runtime) {
+      function applyVolumeStateToRuntime(layer, runtime, frame = currentFrame()) {
         if (!runtime || !runtime.material || !runtime.mesh) {
           return;
         }
         const state = volumeStateByKey[volumeStateKeyForLayer(layer)] || {};
         const option = volumeColormapOptionFor(layer, state.colormap);
         const windowState = normalizedVolumeWindowFor(layer, state);
-        runtime.mesh.visible = state.visible !== false;
+        runtime.mesh.visible = volumeVisibleForFrame(layer, state, frame);
         runtime.material.uniforms.low.value = Number(windowState.low);
         runtime.material.uniforms.high.value = Number(windowState.high);
         runtime.material.uniforms.opacity.value = Number(state.opacity);
@@ -10732,6 +10553,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         runtime.material.uniforms.alpha_coef.value = Number(state.alphaCoef);
         runtime.material.uniforms.gradient_step.value = Number(state.gradientStep);
         runtime.material.uniforms.stretch_mode.value = volumeStretchModeValue(state.stretch);
+        runtime.material.uniforms.rotation.value.copy(
+          volumeQuaternionForZRotation(volumeRotationAngleForFrame(layer, state, frame))
+        );
         applyLassoSelectionMaskUniforms(runtime.material.uniforms, activeVolumeLassoSelectionMask());
         if (option) {
           runtime.material.uniforms.colormap.value = volumeColorTextureFor(option);
@@ -10739,6 +10563,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function renderVolumeControls() {
+        if (
+          !volumePanelEl
+          || !volumeSelectEl
+          || !volumeVisibleEl
+          || !volumeColormapEl
+          || !volumeStretchEl
+          || !volumeVMinEl
+          || !volumeVMaxEl
+          || !volumeOpacityEl
+          || !volumeAlphaEl
+          || !volumeStepsEl
+          || !volumeOpacityLabelEl
+          || !volumeAlphaLabelEl
+          || !volumeStepsLabelEl
+          || !volumeSummaryEl
+        ) {
+          return;
+        }
         const enabled = volumeStateKeys.length > 0;
         volumePanelEl.dataset.enabled = enabled ? "true" : "false";
         if (!enabled) {
@@ -11146,31 +10988,105 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return (2.0 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5)) / viewportHeight;
       }
 
+      function apparentPixelSpanForPoint(basePointScale, position) {
+        const worldPerPixel = Math.max(worldUnitsPerScreenPixelAt(position), 1e-6);
+        return Math.max(Number(basePointScale) || 0.0, 0.0) / worldPerPixel;
+      }
+
+      function screenPixelsToWorldScale(pixelSpan, position) {
+        return Math.max(Number(pixelSpan) || 0.0, 0.0) * Math.max(worldUnitsPerScreenPixelAt(position), 1e-6);
+      }
+
+      // Optical point-spread functions are set primarily by the imaging system
+      // (diffraction / seeing / detector sampling), not by the source's 3D distance.
+      // So keep a persistent screen-space halo floor and only let apparent size gently
+      // broaden the core and wings as a source becomes more resolved on screen.
       function glowScaleForPoint(basePointScale, position, glowStrength) {
         const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
-        const worldPerPixel = worldUnitsPerScreenPixelAt(position);
-        const desiredWorldScale = Number(basePointScale) * (1.45 + 1.18 * strength);
-        const minWorldScale = worldPerPixel * (9.0 + 9.0 * strength);
-        const maxWorldScale = worldPerPixel * (24.0 + 20.0 * strength);
-        return clampRange(desiredWorldScale, minWorldScale, maxWorldScale);
+        const apparentPixels = apparentPixelSpanForPoint(basePointScale, position);
+        const targetPixels = (7.0 + 4.5 * strength)
+          + Math.min(apparentPixels * (0.32 + 0.05 * strength), 6.0 + 2.0 * strength);
+        const clampedPixels = clampRange(targetPixels, 7.0 + 4.5 * strength, 18.0 + 8.0 * strength);
+        return screenPixelsToWorldScale(clampedPixels, position);
       }
 
       function starCoreScaleForPoint(basePointScale, position, glowStrength) {
         const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
-        const worldPerPixel = worldUnitsPerScreenPixelAt(position);
-        const desiredWorldScale = Number(basePointScale) * (0.44 + 0.10 * strength);
-        const minWorldScale = worldPerPixel * (3.2 + 1.4 * strength);
-        const maxWorldScale = worldPerPixel * (6.8 + 2.2 * strength);
-        return clampRange(desiredWorldScale, minWorldScale, maxWorldScale);
+        const apparentPixels = apparentPixelSpanForPoint(basePointScale, position);
+        const targetPixels = Math.max(
+          3.0 + 1.0 * strength,
+          apparentPixels * (0.72 + 0.04 * strength)
+        );
+        const clampedPixels = clampRange(targetPixels, 3.0 + 0.8 * strength, 18.0 + 2.0 * strength);
+        return screenPixelsToWorldScale(clampedPixels, position);
       }
 
       function starBloomScaleForPoint(basePointScale, position, glowStrength) {
         const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
-        const worldPerPixel = worldUnitsPerScreenPixelAt(position);
-        const desiredWorldScale = Number(basePointScale) * (2.10 + 1.65 * strength);
-        const minWorldScale = worldPerPixel * (18.0 + 16.0 * strength);
-        const maxWorldScale = worldPerPixel * (40.0 + 28.0 * strength);
-        return clampRange(desiredWorldScale, minWorldScale, maxWorldScale);
+        const apparentPixels = apparentPixelSpanForPoint(basePointScale, position);
+        const targetPixels = (14.0 + 8.0 * strength)
+          + Math.min(apparentPixels * (0.48 + 0.08 * strength), 12.0 + 5.0 * strength);
+        const clampedPixels = clampRange(targetPixels, 14.0 + 8.0 * strength, 34.0 + 14.0 * strength);
+        return screenPixelsToWorldScale(clampedPixels, position);
+      }
+
+      function registerCameraResponsivePointSprite(sprite, scaleKind, position, pointScaleValue, selectionKey) {
+        const entry = {
+          sprite,
+          scaleKind,
+          position: position instanceof THREE.Vector3 ? position.clone() : new THREE.Vector3(
+            Number(position && position.x) || 0.0,
+            Number(position && position.y) || 0.0,
+            Number(position && position.z) || 0.0,
+          ),
+          pointScale: Math.max(Number(pointScaleValue) || 0.0, 0.0),
+          baseScale: Math.max(Number(pointScaleValue) || 0.0, 0.0),
+          selectionKey: selectionKey ? String(selectionKey) : "",
+        };
+        cameraResponsivePointEntries.push(entry);
+        if (entry.selectionKey) {
+          if (!selectionSpriteEntriesByKey.has(entry.selectionKey)) {
+            selectionSpriteEntriesByKey.set(entry.selectionKey, []);
+          }
+          selectionSpriteEntriesByKey.get(entry.selectionKey).push(entry);
+        }
+        return entry;
+      }
+
+      function cameraResponsivePointBaseScale(entry) {
+        if (!entry || !entry.sprite) {
+          return 0.0;
+        }
+        if (entry.scaleKind === "bloom") {
+          return starBloomScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
+        }
+        if (entry.scaleKind === "glow") {
+          return glowScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
+        }
+        if (entry.scaleKind === "core") {
+          return starCoreScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
+        }
+        return Math.max(Number(entry.pointScale) || 0.0, 0.0);
+      }
+
+      function updateCameraResponsivePointSprites() {
+        if (!cameraResponsivePointEntries.length) {
+          return;
+        }
+        const activeKeys = activeHoveredClusterKeys();
+        cameraResponsivePointEntries.forEach((entry) => {
+          if (!entry || !entry.sprite) {
+            return;
+          }
+          const baseScale = cameraResponsivePointBaseScale(entry);
+          entry.baseScale = baseScale;
+          if (entry.sprite.userData && typeof entry.sprite.userData === "object") {
+            entry.sprite.userData.baseScale = baseScale;
+          }
+          const isActive = entry.selectionKey && activeKeys.has(entry.selectionKey);
+          const scale = baseScale * (isActive ? 1.45 : 1.0);
+          entry.sprite.scale.set(scale, scale, 1.0);
+        });
       }
 
       function textTextureFor(text, color, size, family) {
@@ -12132,6 +12048,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             scaleFloor
           );
           const selectionKey = normalizedSelectionKeyFor(point.selection);
+          const pointPosition = new THREE.Vector3(point.x, point.y, point.z);
           const glowStrength = Math.max(globalPointGlowStrength, 0.0);
           let interactionSprite = null;
           if (glowStrength > 0.02) {
@@ -12139,10 +12056,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             const bloomSprite = new THREE.Sprite(starBloomMaterialFor(traceColor || point.color, bloomOpacity));
             const bloomScale = starBloomScaleForPoint(
               scale,
-              { x: point.x, y: point.y, z: point.z },
+              pointPosition,
               glowStrength
             );
-            bloomSprite.position.set(point.x, point.y, point.z);
+            bloomSprite.position.copy(pointPosition);
             bloomSprite.scale.set(bloomScale, bloomScale, 1.0);
             bloomSprite.renderOrder = -3;
             bloomSprite.userData = {
@@ -12152,24 +12069,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
               isBloom: true,
             };
             group.add(bloomSprite);
-            if (selectionKey) {
-              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
-                selectionSpriteEntriesByKey.set(selectionKey, []);
-              }
-              selectionSpriteEntriesByKey.get(selectionKey).push({
-                sprite: bloomSprite,
-                baseScale: bloomScale,
-              });
-            }
+            registerCameraResponsivePointSprite(bloomSprite, "bloom", pointPosition, scale, selectionKey);
 
             const glowOpacity = clampRange(effectiveOpacity * (0.24 + 0.30 * glowStrength), 0.0, 0.98);
             const glowSprite = new THREE.Sprite(starGlowMaterialFor(traceColor || point.color, glowOpacity));
             const glowScale = glowScaleForPoint(
               scale,
-              { x: point.x, y: point.y, z: point.z },
+              pointPosition,
               glowStrength
             );
-            glowSprite.position.set(point.x, point.y, point.z);
+            glowSprite.position.copy(pointPosition);
             glowSprite.scale.set(glowScale, glowScale, 1.0);
             glowSprite.renderOrder = -2;
             glowSprite.userData = {
@@ -12179,24 +12088,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
               isGlow: true,
             };
             group.add(glowSprite);
-            if (selectionKey) {
-              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
-                selectionSpriteEntriesByKey.set(selectionKey, []);
-              }
-              selectionSpriteEntriesByKey.get(selectionKey).push({
-                sprite: glowSprite,
-                baseScale: glowScale,
-              });
-            }
+            registerCameraResponsivePointSprite(glowSprite, "glow", pointPosition, scale, selectionKey);
 
             const coreOpacity = clampRange(effectiveOpacity * (0.88 + 0.36 * glowStrength), 0.0, 1.0);
             const coreSprite = new THREE.Sprite(starCoreMaterialFor("#ffffff", coreOpacity));
             const coreScale = starCoreScaleForPoint(
               scale,
-              { x: point.x, y: point.y, z: point.z },
+              pointPosition,
               glowStrength
             );
-            coreSprite.position.set(point.x, point.y, point.z);
+            coreSprite.position.copy(pointPosition);
             coreSprite.scale.set(coreScale, coreScale, 1.0);
             coreSprite.userData = {
               hovertext: point.hovertext || trace.name || "",
@@ -12208,18 +12109,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             group.add(coreSprite);
             hoverTargets.push(coreSprite);
             interactionSprite = coreSprite;
-            if (selectionKey) {
-              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
-                selectionSpriteEntriesByKey.set(selectionKey, []);
-              }
-              selectionSpriteEntriesByKey.get(selectionKey).push({
-                sprite: coreSprite,
-                baseScale: coreScale,
-              });
-            }
+            registerCameraResponsivePointSprite(coreSprite, "core", pointPosition, scale, selectionKey);
           } else {
             const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, traceColor || point.color, effectiveOpacity));
-            sprite.position.set(point.x, point.y, point.z);
+            sprite.position.copy(pointPosition);
             sprite.scale.set(scale, scale, scale);
             sprite.userData = {
               hovertext: point.hovertext || trace.name || "",
@@ -12230,15 +12123,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             group.add(sprite);
             hoverTargets.push(sprite);
             interactionSprite = sprite;
-            if (selectionKey) {
-              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
-                selectionSpriteEntriesByKey.set(selectionKey, []);
-              }
-              selectionSpriteEntriesByKey.get(selectionKey).push({
-                sprite,
-                baseScale: scale,
-              });
-            }
+            registerCameraResponsivePointSprite(sprite, "marker", pointPosition, scale, selectionKey);
           }
         });
         parent.add(group);
@@ -12741,6 +12626,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         visibleToggle.appendChild(visibleText);
         controls.appendChild(visibleToggle);
 
+        let showAllTimesInput = null;
+        let showAllTimesToggle = null;
+        let showAllTimesText = null;
+        if (volumeSupportsShowAllTimes(layer)) {
+          showAllTimesToggle = document.createElement("label");
+          showAllTimesToggle.className = "oviz-three-legend-toggle";
+          showAllTimesInput = document.createElement("input");
+          showAllTimesInput.type = "checkbox";
+          showAllTimesToggle.appendChild(showAllTimesInput);
+          showAllTimesText = document.createElement("span");
+          showAllTimesText.textContent = layer.co_rotate_with_frame
+            ? "Show at all times (co-rotating)"
+            : "Show at all times";
+          showAllTimesToggle.appendChild(showAllTimesText);
+          controls.appendChild(showAllTimesToggle);
+        }
+
         const colormapSelect = document.createElement("select");
         ((layer.colormap_options || [])).forEach((option) => {
           const optionEl = document.createElement("option");
@@ -12809,6 +12711,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           clampVolumeStateForLayer(summaryLayer, state);
           if (syncInputs) {
             visibleInput.checked = state.visible !== false;
+            if (showAllTimesInput) {
+              showAllTimesInput.checked = Boolean(state.showAllTimes);
+            }
             colormapSelect.value = String(state.colormap);
             stretchSelect.value = String(state.stretch);
             vminInput.value = formatVolumeNumber(state.vmin);
@@ -12839,6 +12744,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           refreshVolumeControls(false);
           updateVolumeFromLegend(false);
         });
+        if (showAllTimesInput) {
+          showAllTimesInput.addEventListener("change", () => {
+            state.showAllTimes = Boolean(showAllTimesInput.checked);
+            refreshVolumeControls(false);
+            updateVolumeFromLegend(false);
+          });
+        }
         colormapSelect.addEventListener("change", () => {
           state.colormap = String(colormapSelect.value);
           refreshVolumeControls(false);
@@ -12884,20 +12796,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           legendPopoverEl.dataset.open = "false";
           legendPopoverEl.innerHTML = "";
         }
-      }
-
-      function positionInspectorDock() {
-        if (!inspectorDockEl || !legendPanelEl) {
-          return;
-        }
-        if (window.matchMedia("(max-width: 720px)").matches) {
-          inspectorDockEl.style.top = "";
-          return;
-        }
-        const rootRect = root.getBoundingClientRect();
-        const legendRect = legendPanelEl.getBoundingClientRect();
-        const nextTop = Math.max(142, Math.round(legendRect.bottom - rootRect.top + 12));
-        inspectorDockEl.style.top = `${nextTop}px`;
       }
 
       function positionLegendPopover(anchorEl) {
@@ -12996,76 +12894,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         legendResizeEls.forEach((handle) => {
           handle.style.display = legendPanelOpen ? "" : "none";
         });
-        window.requestAnimationFrame(positionInspectorDock);
-      }
-
-      function clearInspectorTimers() {
-        if (inspectorHoverOpenTimer !== null) {
-          window.clearTimeout(inspectorHoverOpenTimer);
-          inspectorHoverOpenTimer = null;
-        }
-        if (inspectorHoverCloseTimer !== null) {
-          window.clearTimeout(inspectorHoverCloseTimer);
-          inspectorHoverCloseTimer = null;
-        }
-      }
-
-      function setInspectorOpen(isOpen) {
-        inspectorOpen = Boolean(isOpen);
-        if (inspectorDockEl) {
-          inspectorDockEl.dataset.open = inspectorOpen ? "true" : "false";
-        }
-        if (inspectorToggleEl) {
-          inspectorToggleEl.setAttribute("aria-expanded", inspectorOpen ? "true" : "false");
-          inspectorToggleEl.setAttribute(
-            "title",
-            inspectorPinned
-              ? "Settings pinned open. Click to unpin."
-              : "Hover to preview the settings. Click to pin them open."
-          );
-        }
-      }
-
-      function setInspectorPinned(isPinned, options = {}) {
-        inspectorPinned = Boolean(isPinned);
-        const syncOpen = options.syncOpen !== false;
-        if (inspectorDockEl) {
-          inspectorDockEl.dataset.pinned = inspectorPinned ? "true" : "false";
-        }
-        if (syncOpen) {
-          clearInspectorTimers();
-          setInspectorOpen(inspectorPinned || inspectorOpen);
-        } else if (inspectorToggleEl) {
-          inspectorToggleEl.setAttribute(
-            "title",
-            inspectorPinned
-              ? "Settings pinned open. Click to unpin."
-              : "Hover to preview the settings. Click to pin them open."
-          );
-        }
-      }
-
-      function scheduleInspectorOpen(delayMs = 90) {
-        if (inspectorPinned) {
-          setInspectorOpen(true);
-          return;
-        }
-        clearInspectorTimers();
-        inspectorHoverOpenTimer = window.setTimeout(() => {
-          inspectorHoverOpenTimer = null;
-          setInspectorOpen(true);
-        }, delayMs);
-      }
-
-      function scheduleInspectorClose(delayMs = 160) {
-        if (inspectorPinned) {
-          return;
-        }
-        clearInspectorTimers();
-        inspectorHoverCloseTimer = window.setTimeout(() => {
-          inspectorHoverCloseTimer = null;
-          setInspectorOpen(false);
-        }, delayMs);
       }
 
       function visibleLegendItemsForCurrentGroup() {
@@ -13093,6 +12921,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (legendVolumeSectionEl) {
           legendVolumeSectionEl.dataset.empty = volumeItems.length ? "false" : "true";
         }
+        applyLegendSectionState("traces");
+        applyLegendSectionState("volumes");
 
         if (!traceItems.length && !volumeItems.length) {
           const emptyState = document.createElement("div");
@@ -13190,7 +13020,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         } else {
           closeLegendPopover();
         }
-        window.requestAnimationFrame(positionInspectorDock);
+        if (legendPanelOpen && legendPanelEl) {
+          applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
+        }
       }
 
       function setToolsDrawerOpen(isOpen) {
@@ -13221,6 +13053,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         updateTimeSliderTickState();
         tooltipEl.style.display = "none";
         hoverTargets.length = 0;
+        cameraResponsivePointEntries.length = 0;
         selectionSpriteEntriesByKey.clear();
         screenStableTextSprites.length = 0;
         clearGroup(plotGroup);
@@ -13294,7 +13127,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
           positionLegendPopover(legendEditButtonByKey.get(activeLegendEditorKey));
         }
-        positionInspectorDock();
         renderTimeSliderTicks();
         updateScaleBar();
         applyScaleBarPosition();
@@ -14136,6 +13968,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function initVolumeControls() {
+        if (
+          !volumePanelEl
+          || !volumeSelectEl
+          || !volumeVisibleEl
+          || !volumeColormapEl
+          || !volumeStretchEl
+          || !volumeVMinEl
+          || !volumeVMaxEl
+          || !volumeOpacityEl
+          || !volumeAlphaEl
+          || !volumeStepsEl
+        ) {
+          return;
+        }
         renderVolumeControls();
         if (!volumeStateKeys.length) {
           return;
@@ -14372,8 +14218,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         setControlsDrawerOpen(controlsShellEl.dataset.open === "true");
         setLegendPanelOpen(legendPanelOpen);
         applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
-        setInspectorPinned(inspectorPinned, { syncOpen: false });
-        setInspectorOpen(inspectorPinned || inspectorOpen);
         groupSelectEl.innerHTML = "";
         const groups = sceneSpec.group_order || [defaultGroup];
         groups.forEach((groupName) => {
@@ -14454,44 +14298,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
           handleLegendPanelToggle(event);
         });
+        if (legendTraceSectionToggleEl) {
+          legendTraceSectionToggleEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setLegendSectionOpen("traces", !(legendSectionOpenState.traces !== false));
+            focusViewer();
+          });
+        }
+        if (legendVolumeSectionToggleEl) {
+          legendVolumeSectionToggleEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setLegendSectionOpen("volumes", !(legendSectionOpenState.volumes !== false));
+            focusViewer();
+          });
+        }
         if (legendDragHandleEl) {
           legendDragHandleEl.addEventListener("pointerdown", onLegendPointerStart);
         }
         legendResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onLegendPointerStart));
-        inspectorToggleEl.addEventListener("click", () => {
-          if (inspectorPinned) {
-            setInspectorPinned(false);
-            setInspectorOpen(false);
-          } else {
-            setInspectorPinned(true);
-            setInspectorOpen(true);
-          }
-          focusViewer();
-        });
-        inspectorToggleEl.addEventListener("pointerenter", () => {
-          if (!inspectorPinned) {
-            scheduleInspectorOpen();
-          }
-        });
-        inspectorDockEl.addEventListener("pointerenter", () => {
-          if (!inspectorPinned) {
-            clearInspectorTimers();
-          }
-        });
-        inspectorDockEl.addEventListener("pointerleave", () => {
-          scheduleInspectorClose();
-        });
-        inspectorDockEl.addEventListener("focusin", () => {
-          clearInspectorTimers();
-          setInspectorOpen(true);
-        });
-        inspectorDockEl.addEventListener("focusout", () => {
-          window.setTimeout(() => {
-            if (!inspectorDockEl.contains(document.activeElement)) {
-              scheduleInspectorClose(120);
-            }
-          }, 0);
-        });
         sliderEl.addEventListener("input", () => {
           pause();
           renderFrame(Number(sliderEl.value));
@@ -14522,10 +14348,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         keyHelpCloseEl.addEventListener("click", () => {
           setKeyHelpOpen(false);
           focusViewer();
-        });
-        lassoButtonEl.addEventListener("click", () => {
-          lassoArmed = !lassoArmed;
-          updateSelectionUI();
         });
         clearSelectionButtonEl.addEventListener("click", clearClusterSelections);
         clickSelectToggleEl.addEventListener("change", () => {
@@ -14774,6 +14596,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         lastAnimationTimestamp = now;
         updateKeyboardMotion(deltaSeconds);
         controls.update();
+        updateCameraResponsivePointSprites();
         updateScreenStableTextSprites();
         updateScaleBar();
         renderAgeKdeWidget();

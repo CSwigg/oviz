@@ -180,7 +180,6 @@ class Animate3D:
         cluster_members_file=None,
         volumes=None,
         threejs_initial_state=None,
-        threejs_ui_design='uncodixified',
     ):
         """
         Main method to generate a 3D animated plot. Integrates orbits if necessary and
@@ -233,7 +232,6 @@ class Animate3D:
         self.sky_members_by_cluster = None
         self.volume_configs = _normalize_threejs_volume_configs(volumes)
         self.threejs_initial_state = copy.deepcopy(threejs_initial_state) if threejs_initial_state else {}
-        self.threejs_ui_design = str(threejs_ui_design or 'uncodixified')
         if age_kde_bandwidth_myr <= 0:
             raise ValueError("age_kde_bandwidth_myr must be > 0.")
         self.age_kde_bandwidth_myr = float(age_kde_bandwidth_myr)
@@ -955,8 +953,10 @@ class Animate3D:
             domain=x2_domain,
             anchor='y2',
             range=self.kde_x_range,
-            title='',
-            titlefont=dict(color=axis_color, size=10, family='helvetica'),
+            title=dict(
+                text='',
+                font=dict(color=axis_color, size=10, family='helvetica'),
+            ),
             tickfont=dict(color=axis_color, size=9, family='helvetica'),
             showgrid=False,
             zeroline=False,
@@ -971,8 +971,10 @@ class Animate3D:
             domain=y2_domain,
             anchor='x2',
             range=[0.0, self.kde_y_max],
-            title='Relative SFH',
-            titlefont=dict(color=axis_color, size=10, family='helvetica'),
+            title=dict(
+                text='Relative SFH',
+                font=dict(color=axis_color, size=10, family='helvetica'),
+            ),
             tickfont=dict(color=axis_color, size=9, family='helvetica'),
             showgrid=False,
             zeroline=False,
@@ -1868,6 +1870,7 @@ class Animate3D:
             'volumes': {
                 'enabled': bool(volume_layers),
                 'layers': volume_layers,
+                'co_rotation_rate_rad_per_myr': float((self.vo / self.ro) * 0.001022) if self.ro else 0.0,
             },
             'animation': {
                 'fade_in_time_default': float(self.fade_in_time),
@@ -1889,7 +1892,6 @@ class Animate3D:
                     )
                 ],
             },
-            'ui_design_key': str(getattr(self, 'threejs_ui_design', 'uncodixified') or 'uncodixified'),
             'initial_state': {
                 'click_selection_enabled': False,
                 'current_group': default_group,
@@ -2274,6 +2276,11 @@ class Animate3D:
             if layer_time is not None:
                 if not np.isclose(float(time_value), float(layer_time), atol=1e-9):
                     continue
+            elif (
+                layer.get('supports_show_all_times', False)
+                and layer.get('time_myr') in (None, '', False)
+            ):
+                pass
             elif layer.get('only_at_t0', True) and (not np.isclose(float(time_value), 0.0, atol=1e-9)):
                 continue
             decorations.append({
@@ -3272,6 +3279,9 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
         'legend_color': colormap_options[0].get('legend_color'),
         'visible': bool(volume_cfg.get('visible', True)),
         'only_at_t0': bool(volume_cfg.get('only_at_t0', time_myr is None)),
+        'supports_show_all_times': bool(volume_cfg.get('supports_show_all_times', time_myr is None)),
+        'co_rotate_with_frame': bool(volume_cfg.get('co_rotate_with_frame', False)),
+        'reference_time_myr': float(_coerce_float(volume_cfg.get('reference_time_myr'), 0.0)),
         'interpolation': bool(volume_cfg.get('interpolation', True)),
         'sky_overlay_data_b64': None,
         'sky_overlay_data_encoding': None,
@@ -3288,6 +3298,7 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
             'gradient_step': float(default_gradient_step),
             'stretch': str(default_stretch),
             'colormap': colormap_options[0]['name'],
+            'show_all_times': bool(volume_cfg.get('show_all_times', False)),
         },
         'colormap_options': colormap_options,
     }
@@ -3498,6 +3509,9 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         'legend_color': colormap_options[0].get('legend_color'),
         'visible': bool(volume_cfg.get('visible', True)),
         'only_at_t0': bool(volume_cfg.get('only_at_t0', time_myr is None)),
+        'supports_show_all_times': bool(volume_cfg.get('supports_show_all_times', time_myr is None)),
+        'co_rotate_with_frame': bool(volume_cfg.get('co_rotate_with_frame', False)),
+        'reference_time_myr': float(_coerce_float(volume_cfg.get('reference_time_myr'), 0.0)),
         'interpolation': bool(volume_cfg.get('interpolation', True)),
         'sky_overlay_data_b64': sky_overlay_b64,
         'sky_overlay_data_encoding': sky_overlay_encoding,
@@ -3530,6 +3544,7 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
             'gradient_step': float(default_gradient_step),
             'stretch': str(default_stretch),
             'colormap': colormap_options[0]['name'],
+            'show_all_times': bool(volume_cfg.get('show_all_times', False)),
         },
         'colormap_options': colormap_options,
     }

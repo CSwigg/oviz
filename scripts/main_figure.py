@@ -4,42 +4,60 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 
-REPO_ROOT = Path("/Users/cam/Desktop/oviz")
-NOTEBOOK_PATH = Path("/Users/cam/Desktop/astro_research/radcliffe/oviz_notebooks/main_figure.ipynb")
-SUPERNOVAE_ROOT = Path("/Users/cam/Desktop/astro_research/supernovae_map")
+HOME_DIR = Path.home()
+REPO_ROOT = HOME_DIR / "Desktop" / "oviz"
+NOTEBOOK_PATH = HOME_DIR / "Desktop" / "astro_research" / "radcliffe" / "oviz_notebooks" / "main_figure.ipynb"
+SUPERNOVAE_ROOT = HOME_DIR / "Desktop" / "astro_research" / "supernovae_map"
 SUPERNOVAE_CATALOG_PATH = SUPERNOVAE_ROOT / "paper" / "solar_encounter_catalog_current.csv.gz"
-DEFAULT_OUTPUT_HTML = Path("/tmp/main_figure_uncodixified.html")
-DEFAULT_UI_DESIGN_KEY = "uncodixified"
+DESKTOP_ROOT = HOME_DIR / "Desktop"
+DEFAULT_OUTPUT_HTML = Path("/tmp/main_figure.html")
 
 
-def convert_notebook_to_script(notebook_path: Path, workdir: Path) -> Path:
-    subprocess.run(
-        [
-            "jupyter",
-            "nbconvert",
-            "--to",
-            "script",
-            str(notebook_path),
-            "--output",
-            "main_figure_nb.py",
-            "--output-dir",
-            str(workdir),
-        ],
-        check=True,
-        cwd=str(workdir),
-    )
-    candidates = sorted(workdir.glob("main_figure_nb.py*"))
-    if not candidates:
-        raise FileNotFoundError("nbconvert did not produce a Python script.")
-    return candidates[0]
+def _sanitize_notebook_cell_source(source: str) -> str:
+    lines = source.splitlines()
+    for line in lines:
+        stripped = line.lstrip()
+        if not stripped:
+            continue
+        if stripped.startswith("%%"):
+            return "\n".join(f"# {cell_line}" if cell_line else "" for cell_line in lines).strip()
+        break
+
+    sanitized_lines = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("%") or stripped.startswith("!"):
+            sanitized_lines.append(f"# {line}")
+            continue
+        sanitized_lines.append(line)
+
+    return "\n".join(sanitized_lines).strip()
+
+
+def convert_notebook_to_script_source(notebook_path: Path) -> str:
+    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+    cells = notebook.get("cells", [])
+    code_blocks = []
+
+    for cell in cells:
+        if cell.get("cell_type") != "code":
+            continue
+        cell_source = "".join(cell.get("source", []))
+        sanitized = _sanitize_notebook_cell_source(cell_source)
+        if sanitized:
+            code_blocks.append(sanitized)
+
+    if not code_blocks:
+        raise RuntimeError(f"No code cells found in notebook: {notebook_path}")
+
+    return "\n\n".join(code_blocks) + "\n"
 
 
 def build_supernova_volume_source_block() -> str:
@@ -281,7 +299,8 @@ def _sn_build_supernova_volume_layers(
 
 def _build_supernova_volumes_for_main_figure(time_values):
     if not SUPERNOVAE_CATALOG_PATH.exists():
-        raise FileNotFoundError(f"Missing supernova catalog: {{SUPERNOVAE_CATALOG_PATH}}")
+        print(f"Skipping supernova volumes; missing catalog: {{SUPERNOVAE_CATALOG_PATH}}")
+        return []
 
     time_grid = np.asarray(time_values, dtype=float)
     orbit_cfg = OrbitConfig(backend="galpy", spiral_model="none")
@@ -313,7 +332,10 @@ supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)
 """.strip()
 
 
-def patch_script_source(source: str, output_html: Path, ui_design_key: str | None, theme_key: str | None) -> str:
+def patch_script_source(source: str, output_html: Path, theme_key: str | None) -> str:
+    source = source.replace("/Users/cam", str(HOME_DIR))
+    source = source.replace("/Users/cam/Desktop", str(DESKTOP_ROOT))
+
     output_html_str = str(output_html)
     source, replaced = re.subn(
         r"(?m)^save_name\s*=\s*['\"][^'\"]+['\"]",
@@ -328,28 +350,21 @@ def patch_script_source(source: str, output_html: Path, ui_design_key: str | Non
     if theme_key:
         control_bits.append(f"'theme_key': {theme_key!r}")
 
-    make_plot_injections = []
-    if ui_design_key:
-        make_plot_injections.append(f"threejs_ui_design={ui_design_key!r}")
-
     if "threejs_initial_state=" not in source:
         initial_state_bits = [
             "'current_group': 'Clusters'",
             "'click_selection_enabled': False",
-            "'active_volume_key': 'supernova-density'",
-            "'legend_state': {'volume-0': False, 'supernova-density': True}",
-            "'volume_state_by_key': {'volume-0': {'visible': False}, 'supernova-density': {'visible': True}}",
+            "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
+            "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
+            "'volume_state_by_key': ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}})",
         ]
         if control_bits:
             initial_state_bits.append("'global_controls': {" + ", ".join(control_bits) + "}")
-        injection_lines = []
-        if make_plot_injections:
-            injection_lines.extend(f"    {entry},\n" for entry in make_plot_injections)
-        injection_lines.append(
+        injection_lines = [
             '    threejs_initial_state={'
             + ", ".join(initial_state_bits)
             + '},\n'
-        )
+        ]
         source, injected = re.subn(
             r'(renderer\s*=\s*"threejs",\s*\n)',
             (
@@ -361,15 +376,6 @@ def patch_script_source(source: str, output_html: Path, ui_design_key: str | Non
         )
         if injected != 1:
             raise RuntimeError("Could not inject threejs_initial_state into make_plot call.")
-    elif make_plot_injections and "threejs_ui_design=" not in source:
-        source, injected = re.subn(
-            r'(renderer\s*=\s*"threejs",\s*\n)',
-            '\\1' + "".join(f"    {entry},\n" for entry in make_plot_injections),
-            source,
-            count=1,
-        )
-        if injected != 1:
-            raise RuntimeError("Could not inject threejs_ui_design into make_plot call.")
 
     if "df_hunt_good" in source and "Full Cluster Catalog" not in source:
         catalog_trace_block = """
@@ -450,6 +456,15 @@ trace_groupings = {
     if replaced_supernova_volumes != 1:
         raise RuntimeError("Could not replace notebook volume list with supernova volumes.")
 
+    source, edenhofer_time_patch = re.subn(
+        r'("colormap"\s*:\s*greys_cmap,\s*# or just "ice"\s*\n)(\s*})',
+        r'\1    "supports_show_all_times": True,\n    "co_rotate_with_frame": True,\n\2',
+        source,
+        count=1,
+    )
+    if edenhofer_time_patch != 1:
+        raise RuntimeError("Could not patch Edenhofer volume frame behavior.")
+
     return source
 
 
@@ -471,11 +486,6 @@ def parse_args() -> argparse.Namespace:
         help="HTML output path for the rendered figure.",
     )
     parser.add_argument(
-        "--ui-design-key",
-        default=DEFAULT_UI_DESIGN_KEY,
-        help="Three.js UI design preset to force into the figure initial state.",
-    )
-    parser.add_argument(
         "--theme-key",
         default=None,
         help="Optional Three.js color theme preset to force into the figure initial state.",
@@ -490,15 +500,17 @@ def main() -> None:
     os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
     os.environ.setdefault("MPLBACKEND", "Agg")
 
-    with tempfile.TemporaryDirectory(prefix="oviz_main_figure_") as tmp_dir:
-        tmp_path = Path(tmp_dir)
-        script_path = convert_notebook_to_script(NOTEBOOK_PATH, tmp_path)
-        patched_source = patch_script_source(
-            script_path.read_text(encoding="utf-8"),
-            output_html=args.output_html,
-            ui_design_key=args.ui_design_key,
-            theme_key=args.theme_key,
-        )
+    if not NOTEBOOK_PATH.exists():
+        raise FileNotFoundError(f"Missing notebook: {NOTEBOOK_PATH}")
+    if not REPO_ROOT.exists():
+        raise FileNotFoundError(f"Missing repo root: {REPO_ROOT}")
+
+    notebook_source = convert_notebook_to_script_source(NOTEBOOK_PATH)
+    patched_source = patch_script_source(
+        notebook_source,
+        output_html=args.output_html,
+        theme_key=args.theme_key,
+    )
 
     run_script_source(patched_source)
     print(f"Wrote {args.output_html}")
