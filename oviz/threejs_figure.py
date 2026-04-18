@@ -9,6 +9,133 @@ from pathlib import Path
 from typing import Any
 
 
+_THREEJS_TOPBAR_HTML = """
+      <div class="oviz-three-topbar">
+        <div class="oviz-three-topbar-brand">
+          <span class="oviz-three-topbar-dot" aria-hidden="true"></span>
+          <span>oviz</span>
+        </div>
+        <div class="oviz-three-title"></div>
+        <div class="oviz-three-widget-menu">
+          <div class="oviz-three-tools-shell" data-open="false">
+            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
+            <div class="oviz-three-tools-drawer">
+              <div class="oviz-three-selection">
+                <div class="oviz-three-selection-row">
+                  <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
+                </div>
+                <label class="oviz-three-selection-toggle">
+                  <input class="oviz-three-click-select-toggle" type="checkbox" />
+                  <span>Enable click select</span>
+                </label>
+                <label class="oviz-three-selection-toggle">
+                  <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
+                  <span>Lasso volumetric data</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="oviz-three-controls-shell" data-open="false">
+            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
+            <div class="oviz-three-controls-drawer">
+                <div class="oviz-three-controls">
+                  <div class="oviz-three-controls-title">Controls</div>
+                  <label class="oviz-three-controls-field">
+                    <span>Theme</span>
+                  <select class="oviz-three-theme-select">
+                    <option value="default">Default</option>
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="midnight">Midnight</option>
+                    <option value="glacier">Glacier</option>
+                    <option value="ember">Ember</option>
+                    <option value="graphite">Graphite</option>
+                    <option value="aurora">Aurora</option>
+                    <option value="paper">Paper</option>
+                  </select>
+                </label>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-scroll-speed-label">Scroll speed</span>
+                    <input class="oviz-three-scroll-speed" type="range" min="0.2" max="4" step="0.05" />
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-camera-fov-label">Camera FOV</span>
+                    <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
+                  </label>
+                </div>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-global-point-size-label">Point size</span>
+                    <input class="oviz-three-global-point-size" type="range" min="0.25" max="4" step="0.05" />
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-global-point-opacity-label">Point opacity</span>
+                    <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
+                  </label>
+                </div>
+                <label class="oviz-three-controls-field">
+                  <span class="oviz-three-global-point-glow-label">Star glow</span>
+                  <input class="oviz-three-global-point-glow" type="range" min="0" max="4" step="0.02" />
+                </label>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span>Focus group</span>
+                    <select class="oviz-three-focus-group-select"></select>
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span>Fade time (Myr)</span>
+                    <input class="oviz-three-fade-time" type="number" min="0" step="0.5" />
+                  </label>
+                </div>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-fade-in-out-toggle" type="checkbox" />
+                  <span>Fade in and out</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
+                  <span>Size points by n_stars</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
+                  <span>Show axes</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-galactic-reference-toggle" type="checkbox" checked />
+                  <span>Show GC/radius overlays</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
+                  <span>Show region labels</span>
+                </label>
+                <div class="oviz-three-controls-actions">
+                  <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
+                  <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
+                  <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
+                  <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
+                  <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
+                </div>
+                <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
+              </div>
+            </div>
+          </div>
+          <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
+          <button class="oviz-three-reset-view" type="button" title="Reset the camera and clear current lasso and click selections">Reset</button>
+          <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
+          <select class="oviz-three-widget-select">
+            <option value="">Widgets</option>
+          </select>
+        </div>
+      </div>
+""".strip()
+
+_THREEJS_MINIMAL_TOPBAR_HTML = """
+      <div class="oviz-three-topbar">
+        <div class="oviz-three-title"></div>
+      </div>
+""".strip()
+
+
 _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -76,6 +203,176 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-menu {
         justify-self: end;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-topbar,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-key-help,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-note,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-popover,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-widget-panel,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-resize {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-lasso-overlay {
+        display: none;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-panel {
+        top: 12px;
+        left: 12px;
+        width: auto;
+        min-width: 0;
+        min-height: 0;
+        border: 0 !important;
+        border-radius: 0;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-panel-head {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-panel-body {
+        gap: 0;
+        padding: 0;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-group-field {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section {
+        gap: 0;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section-toggle {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section-chevron {
+        display: none;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section-title {
+        font-size: 9px;
+        letter-spacing: 0.08em;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-trace-section {
+        display: block;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-volume-section {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-volume-list {
+        gap: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        max-height: none;
+        overflow: visible;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-entry,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-volume-list .oviz-three-legend-entry {
+        display: block;
+        padding: 0;
+        border: 0 !important;
+        border-radius: 0;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-item {
+        display: block;
+        width: auto;
+        gap: 0;
+        padding: 1px 0;
+        font: 650 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        cursor: pointer;
+        pointer-events: auto;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        appearance: none;
+        -webkit-appearance: none;
+        outline: none;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-swatch {
+        display: none;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-row,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-meta {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-meta {
+        display: inline-block !important;
+        min-width: auto !important;
+        max-width: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-name {
+        display: inline-block !important;
+        min-width: auto !important;
+        max-width: none !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        white-space: normal !important;
+        opacity: 1 !important;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-item[data-active="false"] .oviz-three-legend-name {
+        opacity: 0.58 !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-item:hover,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-entry[data-editor-open="true"] {
+        background: transparent !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-edit,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-panel-toggle {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-footer {
+        left: 68%;
+        bottom: clamp(84px, 16vh, 132px);
+        transform: translateX(-50%);
+        width: auto;
+        max-width: min(calc(100vw - 32px), 580px);
+        gap: 14px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-footer button {
+        width: 46px;
+        height: 46px;
+        font-size: 18px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-time-label {
+        min-width: 156px;
+        font: 600 16px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider-shell {
+        flex: 0 0 clamp(220px, 26vw, 300px);
+        width: clamp(220px, 26vw, 300px);
+        max-width: clamp(220px, 26vw, 300px);
+        height: 44px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider-track-wrap {
+        height: 30px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-webkit-slider-runnable-track {
+        height: 5px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-webkit-slider-thumb {
+        width: 16px;
+        height: 16px;
+        margin-top: -6px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-moz-range-track {
+        height: 5px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
       }
       #__ROOT_ID__ .oviz-three-legend {
         display: flex;
@@ -1585,6 +1882,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         -webkit-appearance: none;
         appearance: none;
       }
+      #__ROOT_ID__ .oviz-three-footer button[data-active="true"] {
+        color: var(--oviz-axis);
+        border-color: rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.08);
+      }
       #__ROOT_ID__ .oviz-three-time-label {
         min-width: 124px;
         height: 30px;
@@ -2076,10 +2378,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           display: none;
         }
       }
+      @media (max-width: 1100px), (max-height: 760px) {
+        #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-footer {
+          left: 50%;
+          bottom: 14px;
+          max-width: calc(100vw - 28px);
+        }
+      }
       @media (max-width: 560px) {
         #__ROOT_ID__ .oviz-three-footer {
           display: grid;
-          grid-template-columns: 32px auto minmax(0, 1fr);
+          grid-template-columns: 32px 32px auto minmax(0, 1fr);
           align-items: center;
           gap: 8px;
           width: min(calc(100vw - 16px), 520px);
@@ -2146,124 +2455,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
     </style>
   </head>
   <body>
-    <div id="__ROOT_ID__" tabindex="0" data-zen="false">
-      <div class="oviz-three-topbar">
-        <div class="oviz-three-topbar-brand">
-          <span class="oviz-three-topbar-dot" aria-hidden="true"></span>
-          <span>oviz</span>
-        </div>
-        <div class="oviz-three-title"></div>
-        <div class="oviz-three-widget-menu">
-          <div class="oviz-three-tools-shell" data-open="false">
-            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
-            <div class="oviz-three-tools-drawer">
-              <div class="oviz-three-selection">
-                <div class="oviz-three-selection-row">
-                  <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
-                </div>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-click-select-toggle" type="checkbox" />
-                  <span>Enable click select</span>
-                </label>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
-                  <span>Lasso volumetric data</span>
-                </label>
-              </div>
-            </div>
-          </div>
-          <div class="oviz-three-controls-shell" data-open="false">
-            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
-            <div class="oviz-three-controls-drawer">
-                <div class="oviz-three-controls">
-                  <div class="oviz-three-controls-title">Controls</div>
-                  <label class="oviz-three-controls-field">
-                    <span>Theme</span>
-                  <select class="oviz-three-theme-select">
-                    <option value="default">Default</option>
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                    <option value="midnight">Midnight</option>
-                    <option value="glacier">Glacier</option>
-                    <option value="ember">Ember</option>
-                    <option value="graphite">Graphite</option>
-                    <option value="aurora">Aurora</option>
-                    <option value="paper">Paper</option>
-                  </select>
-                </label>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-scroll-speed-label">Scroll speed</span>
-                    <input class="oviz-three-scroll-speed" type="range" min="0.2" max="4" step="0.05" />
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-camera-fov-label">Camera FOV</span>
-                    <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
-                  </label>
-                </div>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-global-point-size-label">Point size</span>
-                    <input class="oviz-three-global-point-size" type="range" min="0.25" max="4" step="0.05" />
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-global-point-opacity-label">Point opacity</span>
-                    <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
-                  </label>
-                </div>
-                <label class="oviz-three-controls-field">
-                  <span class="oviz-three-global-point-glow-label">Star glow</span>
-                  <input class="oviz-three-global-point-glow" type="range" min="0" max="4" step="0.02" />
-                </label>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span>Focus group</span>
-                    <select class="oviz-three-focus-group-select"></select>
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span>Fade time (Myr)</span>
-                    <input class="oviz-three-fade-time" type="number" min="0" step="0.5" />
-                  </label>
-                </div>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-fade-in-out-toggle" type="checkbox" />
-                  <span>Fade in and out</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
-                  <span>Size points by n_stars</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
-                  <span>Show axes</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-galactic-reference-toggle" type="checkbox" checked />
-                  <span>Show GC/radius overlays</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
-                  <span>Show region labels</span>
-                </label>
-                <div class="oviz-three-controls-actions">
-                  <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
-                  <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
-                  <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
-                  <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
-                  <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
-                </div>
-                <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
-              </div>
-            </div>
-          </div>
-          <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
-          <button class="oviz-three-reset-view" type="button" title="Reset the camera and clear current lasso and click selections">Reset</button>
-          <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
-          <select class="oviz-three-widget-select">
-            <option value="">Widgets</option>
-          </select>
-        </div>
-      </div>
+    <div id="__ROOT_ID__" tabindex="0" data-zen="false" __ROOT_MINIMAL_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__>
+      __TOPBAR_HTML__
       <div class="oviz-three-legend-panel" data-open="true" data-dragging="false">
         <div class="oviz-three-legend-panel-head oviz-three-legend-panel-drag">
           <div class="oviz-three-legend-panel-title">Legend</div>
@@ -2344,7 +2537,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="oviz-three-scale-line"></div>
       </div>
       <div class="oviz-three-footer">
-        <button class="oviz-three-play" type="button" title="Play">▶</button>
+        <button class="oviz-three-play oviz-three-play-backward" type="button" title="Play backward">◀</button>
+        <button class="oviz-three-play oviz-three-play-forward" type="button" title="Play forward">▶</button>
         <span class="oviz-three-time-label"></span>
         <div class="oviz-three-slider-shell">
           <div class="oviz-three-slider-track-wrap">
@@ -2607,8 +2801,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       /*__SCENE_SPEC_START__*/const sceneSpec = __SCENE_JSON__;/*__SCENE_SPEC_END__*/
-      const initialState = sceneSpec.initial_state || {};
       const root = document.getElementById("__ROOT_ID__");
+      const initialState = sceneSpec.initial_state || {};
+      const minimalModeEnabled = Boolean(initialState.minimal_mode_enabled);
+      const galacticSimpleSpec = sceneSpec.galactic_simple && typeof sceneSpec.galactic_simple === "object"
+        ? sceneSpec.galactic_simple
+        : {};
+      const galacticSimpleModeEnabled = Boolean(galacticSimpleSpec.enabled);
+      const galacticSimpleTracksOrbitTargetToSun = Boolean(galacticSimpleSpec.track_orbit_target_to_sun);
+      root.dataset.minimal = minimalModeEnabled ? "true" : "false";
+      root.dataset.galacticSimple = galacticSimpleModeEnabled ? "true" : "false";
+      const initialZoomAnchorSpec = initialState.initial_zoom_anchor && typeof initialState.initial_zoom_anchor === "object"
+        ? initialState.initial_zoom_anchor
+        : null;
       const canvas = root.querySelector(".oviz-three-canvas");
       const titleEl = root.querySelector(".oviz-three-title");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
@@ -2641,8 +2846,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const sliderMajorTicksEl = root.querySelector(".oviz-three-slider-ticks-major");
       const sliderLabelsEl = root.querySelector(".oviz-three-slider-labels");
       const timeLabelEl = root.querySelector(".oviz-three-time-label");
-      const playButtonEl = root.querySelector(".oviz-three-play");
-      const pauseButtonEl = root.querySelector(".oviz-three-pause");
+      const playBackwardButtonEl = root.querySelector(".oviz-three-play-backward");
+      const playForwardButtonEl = root.querySelector(".oviz-three-play-forward");
       const tooltipEl = root.querySelector(".oviz-three-tooltip");
       const scaleBarEl = root.querySelector(".oviz-three-scale-bar");
       const scaleLabelEl = root.querySelector(".oviz-three-scale-label");
@@ -2740,7 +2945,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       const baseTheme = safeJsonClone(sceneSpec.theme || {}, {});
       const theme = safeJsonClone(baseTheme, {});
-      titleEl.textContent = sceneSpec.title || "";
+      if (titleEl) {
+        titleEl.textContent = sceneSpec.title || "";
+      }
 
       function buildThemePresets(sourceTheme) {
         const defaultTheme = safeJsonClone(sourceTheme || {}, {});
@@ -2846,7 +3053,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       applyThemeCssVars();
-      titleEl.style.display = sceneSpec.title ? "block" : "none";
+      if (titleEl) {
+        titleEl.style.display = sceneSpec.title ? "block" : "none";
+      }
 
       if (sceneSpec.note) {
         noteEl.textContent = sceneSpec.note;
@@ -2868,6 +3077,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const volumeLayers = (volumeSpec.layers || []);
       const volumeCoRotationRateRadPerMyr = Number(volumeSpec.co_rotation_rate_rad_per_myr);
       const volumeLayersByKey = new Map(volumeLayers.map((layer) => [String(layer.key), layer]));
+      const imagePlaneSpecs = Array.isArray(sceneSpec.image_planes) ? sceneSpec.image_planes : [];
+      const imagePlaneSpecByKey = new Map(
+        imagePlaneSpecs
+          .map((spec) => {
+            const key = String((spec && spec.key) || "");
+            return key ? [key, spec] : null;
+          })
+          .filter(Boolean)
+      );
       const volumeStateKeyForRawLayer = (layer) => String((layer && (layer.state_key || layer.key)) || "");
       const volumeStateKeys = Array.from(
         new Set(
@@ -2935,6 +3153,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const pointScale = Math.max(sceneSpec.max_span || 1, 1) / 4000.0;
       const hoverTargets = [];
       const cameraResponsivePointEntries = [];
+      const cameraResponsiveImagePlaneEntries = [];
       const selectionSpriteEntriesByKey = new Map();
       const axisLineMaterials = [];
       const frameLineMaterials = [];
@@ -2948,6 +3167,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const starBloomMaterialCache = new Map();
       const textTextureCache = new Map();
       const galaxyTextureCache = new Map();
+      const imagePlaneTextureCache = new Map();
       const volumeScalarDataCache = new Map();
       const volumeScalarDataPendingCache = new Map();
       const volumeTextureCache = new Map();
@@ -2968,7 +3188,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let currentSelectionMode = "none";
       let clickSelectionEnabled = false;
       let lassoVolumeSelectionEnabled = false;
-      let playbackTimer = null;
+      let playbackDirection = 0;
+      let displayedFrameValue = currentFrameIndex;
+      let frameTransitionState = null;
+      let lastPlaybackAdvanceTimestamp = null;
+      let lastTransitionRenderTimestamp = null;
+      let pendingSliderFrameIndex = null;
+      let sliderScrubRenderHandle = null;
       let skyPanelMode = "hidden";
       let boxMetricsPanelMode = "hidden";
       let ageKdePanelMode = "hidden";
@@ -2987,6 +3213,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let skyHoveredClusterKey = "";
       let lastSentSkyHoverClusterKey = null;
       let scaleBarPosition = null;
+      let currentScaleBarLengthPc = NaN;
+      let currentZoomAnchorPoint = null;
+      let galacticSimpleOrbitTargetTrackingActive = false;
       let legendPanelRectState = null;
       let legendPanelUserSized = false;
       let legendSectionOpenState = { traces: true, volumes: true };
@@ -3019,6 +3248,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let currentLassoSelectionMask = null;
       const pressedKeys = new Set();
       let lastAnimationTimestamp = null;
+      const playbackIntervalMs = Math.max(Number(sceneSpec.playback_interval_ms) || 240, 80);
       let clusterFilterParameterKey = String(clusterFilterSpec.default_parameter_key || "");
       const clusterFilterRangeStateByKey = {};
       let dendrogramTraceKey = String(dendrogramSpec.default_trace_key || "");
@@ -3155,6 +3385,55 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       const raycaster = new THREE.Raycaster();
       const pointer = new THREE.Vector2(2, 2);
+      const initialZoomAnchorPoint = (
+        initialZoomAnchorSpec
+        && Number.isFinite(Number(initialZoomAnchorSpec.x))
+        && Number.isFinite(Number(initialZoomAnchorSpec.y))
+        && Number.isFinite(Number(initialZoomAnchorSpec.z))
+      )
+        ? new THREE.Vector3(
+          Number(initialZoomAnchorSpec.x),
+          Number(initialZoomAnchorSpec.y),
+          Number(initialZoomAnchorSpec.z)
+        )
+        : null;
+      currentZoomAnchorPoint = initialZoomAnchorPoint ? initialZoomAnchorPoint.clone() : null;
+      const initialZoomAnchorTargetSpec = initialState.camera
+        && typeof initialState.camera === "object"
+        && initialState.camera.target
+        && typeof initialState.camera.target === "object"
+        ? initialState.camera.target
+        : null;
+      const initialZoomAnchorCameraSpec = initialState.camera
+        && typeof initialState.camera === "object"
+        && initialState.camera.position
+        && typeof initialState.camera.position === "object"
+        ? initialState.camera.position
+        : null;
+      const initialZoomAnchorTargetPoint = (
+        initialZoomAnchorTargetSpec
+        && Number.isFinite(Number(initialZoomAnchorTargetSpec.x))
+        && Number.isFinite(Number(initialZoomAnchorTargetSpec.y))
+        && Number.isFinite(Number(initialZoomAnchorTargetSpec.z))
+      )
+        ? new THREE.Vector3(
+          Number(initialZoomAnchorTargetSpec.x),
+          Number(initialZoomAnchorTargetSpec.y),
+          Number(initialZoomAnchorTargetSpec.z)
+        )
+        : null;
+      const initialZoomAnchorCameraPoint = (
+        initialZoomAnchorCameraSpec
+        && Number.isFinite(Number(initialZoomAnchorCameraSpec.x))
+        && Number.isFinite(Number(initialZoomAnchorCameraSpec.y))
+        && Number.isFinite(Number(initialZoomAnchorCameraSpec.z))
+      )
+        ? new THREE.Vector3(
+          Number(initialZoomAnchorCameraSpec.x),
+          Number(initialZoomAnchorCameraSpec.y),
+          Number(initialZoomAnchorCameraSpec.z)
+        )
+        : null;
 
       function formatTick(value) {
         if (!Number.isFinite(value)) {
@@ -3173,6 +3452,58 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function currentFrame() {
         return frameSpecs[Math.max(0, Math.min(currentFrameIndex, frameSpecs.length - 1))] || null;
+      }
+
+      function clampFrameIndex(value) {
+        return Math.max(0, Math.min(Math.round(Number(value) || 0.0), Math.max(frameSpecs.length - 1, 0)));
+      }
+
+      function clampFrameValue(value) {
+        return Math.max(0.0, Math.min(Number(value) || 0.0, Math.max(frameSpecs.length - 1, 0)));
+      }
+
+      function wrapFrameValue(value) {
+        const frameCount = Math.max(frameSpecs.length, 0);
+        if (frameCount <= 1) {
+          return 0.0;
+        }
+        let wrapped = Number(value) || 0.0;
+        wrapped %= frameCount;
+        if (wrapped < 0.0) {
+          wrapped += frameCount;
+        }
+        if (wrapped >= frameCount) {
+          wrapped = 0.0;
+        }
+        return wrapped;
+      }
+
+      function frameValueState(frameValue) {
+        const clampedValue = clampFrameValue(frameValue);
+        const lowerIndex = Math.floor(clampedValue);
+        const upperIndex = Math.min(lowerIndex + 1, Math.max(frameSpecs.length - 1, 0));
+        const alpha = Math.max(0.0, Math.min(clampedValue - lowerIndex, 1.0));
+        return {
+          value: clampedValue,
+          lowerIndex,
+          upperIndex,
+          alpha,
+        };
+      }
+
+      function frameTimeForValue(frameValue) {
+        const state = frameValueState(frameValue);
+        const lowerFrame = frameSpecs[state.lowerIndex] || null;
+        const upperFrame = frameSpecs[state.upperIndex] || lowerFrame;
+        const lowerTime = Number(lowerFrame && lowerFrame.time);
+        const upperTime = Number(upperFrame && upperFrame.time);
+        if (!Number.isFinite(lowerTime)) {
+          return Number.isFinite(upperTime) ? upperTime : 0.0;
+        }
+        if (!Number.isFinite(upperTime) || state.upperIndex === state.lowerIndex) {
+          return lowerTime;
+        }
+        return lowerTime + (upperTime - lowerTime) * state.alpha;
       }
 
       function sceneSpecMarkerWrappedJson(exportSceneSpec) {
@@ -3359,8 +3690,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function clampLegendPanelRect(left, top, width, height) {
         const margin = 8.0;
-        const minWidth = Math.min(196.0, Math.max(160.0, root.clientWidth - 2 * margin));
-        const minHeight = Math.min(132.0, Math.max(72.0, root.clientHeight - 2 * margin));
+        const minWidth = minimalModeEnabled
+          ? Math.min(140.0, Math.max(96.0, root.clientWidth - 2 * margin))
+          : Math.min(196.0, Math.max(160.0, root.clientWidth - 2 * margin));
+        const minHeight = minimalModeEnabled
+          ? Math.min(48.0, Math.max(18.0, root.clientHeight - 2 * margin))
+          : Math.min(132.0, Math.max(72.0, root.clientHeight - 2 * margin));
         const nextWidth = clampRange(Number(width) || minWidth, minWidth, Math.max(minWidth, root.clientWidth - 2 * margin));
         const nextHeight = clampRange(Number(height) || minHeight, minHeight, Math.max(minHeight, root.clientHeight - 2 * margin));
         return {
@@ -3372,6 +3707,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function defaultLegendPanelRect() {
+        if (minimalModeEnabled) {
+          const visibleItems = visibleLegendItemsForCurrentGroup();
+          const estimatedHeight = Math.max(visibleItems.length * 16 + 8, 24);
+          const width = Math.min(Math.max(root.clientWidth * 0.18, 140.0), 240.0);
+          const height = Math.min(estimatedHeight, Math.max(root.clientHeight - 24.0, 24.0));
+          return clampLegendPanelRect(12.0, 12.0, width, height);
+        }
         const width = Math.min(Math.max(root.clientWidth * 0.18, 204.0), 240.0);
         const visibleItems = visibleLegendItemsForCurrentGroup();
         const traceCount = visibleItems.filter((item) => !volumeLayerForKey(item.key)).length;
@@ -3408,7 +3750,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (!section || !section.sectionEl || !section.toggleEl) {
           return;
         }
-        const isOpen = legendSectionOpenState[sectionKey] !== false;
+        const isOpen = minimalModeEnabled ? true : (legendSectionOpenState[sectionKey] !== false);
         section.sectionEl.dataset.open = isOpen ? "true" : "false";
         section.toggleEl.setAttribute("aria-expanded", isOpen ? "true" : "false");
         section.toggleEl.setAttribute(
@@ -3619,21 +3961,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         sliderLabelsEl.innerHTML = "";
       }
 
-      function updatePlaybackToggleButton() {
-        if (!playButtonEl) {
-          return;
+      function updatePlaybackButtons() {
+        const isReverse = playbackDirection < 0;
+        const isForward = playbackDirection > 0;
+        if (playBackwardButtonEl) {
+          playBackwardButtonEl.dataset.active = isReverse ? "true" : "false";
+          playBackwardButtonEl.textContent = isReverse ? "⏸" : "◀";
+          playBackwardButtonEl.setAttribute("title", isReverse ? "Pause reverse playback" : "Play backward");
+          playBackwardButtonEl.setAttribute("aria-label", isReverse ? "Pause reverse playback" : "Play backward");
         }
-        const isPlaying = Boolean(playbackTimer);
-        playButtonEl.textContent = isPlaying ? "⏸" : "▶";
-        playButtonEl.setAttribute("title", isPlaying ? "Pause" : "Play");
-        playButtonEl.setAttribute("aria-label", isPlaying ? "Pause" : "Play");
+        if (playForwardButtonEl) {
+          playForwardButtonEl.dataset.active = isForward ? "true" : "false";
+          playForwardButtonEl.textContent = isForward ? "⏸" : "▶";
+          playForwardButtonEl.setAttribute("title", isForward ? "Pause forward playback" : "Play forward");
+          playForwardButtonEl.setAttribute("aria-label", isForward ? "Pause forward playback" : "Play forward");
+        }
       }
 
-      function updateTimeSliderTickState() {
+      function updateTimeSliderTickState(activeFrameIndex = currentFrameIndex) {
         if (!sliderTrackWrapEl) {
           return;
         }
-        const activeIndex = String(currentFrameIndex);
+        const activeIndex = String(clampFrameIndex(activeFrameIndex));
         sliderTrackWrapEl.querySelectorAll(".oviz-three-slider-tick, .oviz-three-slider-tick-label").forEach((el) => {
           el.dataset.active = el.dataset.frameIndex === activeIndex ? "true" : "false";
         });
@@ -4077,7 +4426,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function selectionBoxShouldRender() {
-        return Boolean(selectionBoxSpec.enabled)
+        return !minimalModeEnabled
+          && Boolean(selectionBoxSpec.enabled)
           && selectionBoxPanelIsOpen()
           && selectionBoxState.visible !== false;
       }
@@ -4824,6 +5174,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function restoreInitialLassoSelectionMask() {
+        if (minimalModeEnabled) {
+          disposeLassoSelectionMask(currentLassoSelectionMask);
+          currentLassoSelectionMask = null;
+          return Promise.resolve();
+        }
         const savedMask = initialState && typeof initialState === "object"
           ? initialState.lasso_selection_mask
           : null;
@@ -4893,6 +5248,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function applyInitialStateSync() {
         resetLegendState(currentGroup);
         if (!initialState || typeof initialState !== "object") {
+          if (minimalModeEnabled) {
+            clickSelectionEnabled = false;
+            lassoVolumeSelectionEnabled = false;
+            lassoArmed = false;
+          currentSelection = null;
+          currentSelections = [];
+          selectedClusterKeys = new Set();
+          focusSelectionKey = "";
+          legendPanelRectState = null;
+          legendPanelUserSized = false;
+          ["sky", "box_metrics", "age_kde", "cluster_filter", "dendrogram"].forEach((widgetKey) => {
+            setWidgetModeValue(widgetKey, "hidden");
+          });
+            setToolsDrawerOpen(false);
+            setControlsDrawerOpen(false);
+            legendPanelOpen = true;
+          }
           return;
         }
 
@@ -5211,6 +5583,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
           camera.lookAt(controls.target);
           controls.update();
+          initialCameraState.position.copy(camera.position);
+          initialCameraState.target.copy(controls.target);
+          initialCameraState.up.copy(camera.up);
+          initialCameraState.fov = Number(camera.fov);
         }
 
         const savedDrawers = initialState.drawers;
@@ -5225,6 +5601,25 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         if (typeof initialState.legend_open === "boolean") {
           legendPanelOpen = initialState.legend_open;
+        }
+
+        if (minimalModeEnabled) {
+          clickSelectionEnabled = false;
+          lassoVolumeSelectionEnabled = false;
+          lassoArmed = false;
+          currentSelection = null;
+          currentSelections = [];
+          selectedClusterKeys = new Set();
+          focusSelectionKey = "";
+          activeLegendEditorKey = "";
+          legendPanelRectState = null;
+          legendPanelUserSized = false;
+          ["sky", "box_metrics", "age_kde", "cluster_filter", "dendrogram"].forEach((widgetKey) => {
+            setWidgetModeValue(widgetKey, "hidden");
+          });
+          setToolsDrawerOpen(false);
+          setControlsDrawerOpen(false);
+          legendPanelOpen = true;
         }
 
         applyGlobalControlState();
@@ -5330,8 +5725,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             up: { x: camera.up.x, y: camera.up.y, z: camera.up.z },
           },
           drawers: {
-            tools_open: toolsShellEl.dataset.open === "true",
-            controls_open: controlsShellEl.dataset.open === "true",
+            tools_open: Boolean(toolsShellEl && toolsShellEl.dataset.open === "true"),
+            controls_open: Boolean(controlsShellEl && controlsShellEl.dataset.open === "true"),
           },
           legend_open: legendPanelOpen,
           legend_panel_state: captureLegendPanelState(),
@@ -7096,6 +7491,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function updateSelectionUI() {
+        if (!clearSelectionButtonEl || !clickSelectToggleEl || !volumeLassoToggleEl) {
+          return;
+        }
+        if (minimalModeEnabled) {
+          clearSelectionButtonEl.disabled = true;
+          clickSelectToggleEl.checked = false;
+          clickSelectToggleEl.disabled = true;
+          volumeLassoToggleEl.checked = false;
+          volumeLassoToggleEl.disabled = true;
+          return;
+        }
         clearSelectionButtonEl.disabled = currentSelections.length === 0 && !currentSelection && !hasActiveLassoSelectionMask();
         clickSelectToggleEl.checked = clickSelectionEnabled;
         volumeLassoToggleEl.checked = lassoVolumeSelectionEnabled;
@@ -7371,10 +7777,77 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         controls.enablePan = !isEarthView;
       }
 
+      function trackedZoomAnchorPointForFrame(frame) {
+        const frameTraces = frame && Array.isArray(frame.traces) ? frame.traces : [];
+        for (const trace of frameTraces) {
+          if (!trace || String(trace.name || "") !== "Sun") {
+            continue;
+          }
+          const points = Array.isArray(trace.points) ? trace.points : [];
+          if (!points.length) {
+            continue;
+          }
+          const point = points[0] || {};
+          const x = Number(point.x);
+          const y = Number(point.y);
+          const z = Number(point.z);
+          if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+            return new THREE.Vector3(x, y, z);
+          }
+        }
+        return initialZoomAnchorPoint ? initialZoomAnchorPoint.clone() : null;
+      }
+
+      function initialZoomAnchorActive() {
+        return Boolean(
+          currentZoomAnchorPoint
+          && cameraViewMode === "free"
+          && controls
+          && controls.target
+        );
+      }
+
+      function zoomCameraTowardPoint(anchorPoint, zoomFactor) {
+        if (!(anchorPoint instanceof THREE.Vector3) || !Number.isFinite(Number(zoomFactor)) || zoomFactor <= 0.0) {
+          return false;
+        }
+        const cameraOffset = camera.position.clone().sub(anchorPoint);
+        const targetOffset = controls.target.clone().sub(anchorPoint);
+        const viewOffset = controls.target.clone().sub(camera.position);
+        const viewDistance = viewOffset.length();
+        if (!(viewDistance > 1e-9)) {
+          return false;
+        }
+        const maxSpan = Math.max(sceneSpec.max_span || 1, 1);
+        const minDistance = Math.max(maxSpan * 1e-5, 0.05);
+        const maxDistance = Math.max(maxSpan * 12.0, 10.0);
+        const nextViewDistance = clampRange(viewDistance * zoomFactor, minDistance, maxDistance);
+        const appliedFactor = nextViewDistance / Math.max(viewDistance, 1e-9);
+        camera.position.copy(anchorPoint.clone().add(cameraOffset.multiplyScalar(appliedFactor)));
+        controls.target.copy(anchorPoint.clone().add(targetOffset.multiplyScalar(appliedFactor)));
+        camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
+        controls.update();
+        updateScaleBar();
+        return true;
+      }
+
+      function enableGalacticSimpleOrbitTargetTracking() {
+        if (!galacticSimpleModeEnabled || !galacticSimpleTracksOrbitTargetToSun) {
+          return false;
+        }
+        if (!(currentZoomAnchorPoint instanceof THREE.Vector3) || !controls || !controls.target) {
+          return false;
+        }
+        galacticSimpleOrbitTargetTrackingActive = true;
+        controls.target.copy(currentZoomAnchorPoint);
+        return true;
+      }
+
       function resetCameraView() {
         setCameraAutoOrbitEnabled(false);
         cameraViewMode = "free";
         earthViewFocusDistance = null;
+        galacticSimpleOrbitTargetTrackingActive = false;
         camera.position.copy(initialCameraState.position);
         controls.target.copy(initialCameraState.target);
         camera.up.copy(initialCameraState.up);
@@ -7622,6 +8095,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function toggleLegendItemByIndex(index, solo = false) {
+        if (minimalModeEnabled) {
+          return false;
+        }
         const items = keyboardLegendItems();
         if (index < 0 || index >= items.length) {
           return false;
@@ -7693,6 +8169,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function rotateCameraYaw(sign, fast = false) {
+        if (galacticSimpleModeEnabled && galacticSimpleTracksOrbitTargetToSun) {
+          enableGalacticSimpleOrbitTargetTracking();
+        }
         const angle = (fast ? 0.12 : 0.04) * sign;
         const offset = camera.position.clone().sub(controls.target);
         if (offset.lengthSq() <= 1e-18) {
@@ -7735,6 +8214,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if ((!Number.isFinite(deltaTheta) || Math.abs(deltaTheta) <= 1e-12) && (!Number.isFinite(deltaPhi) || Math.abs(deltaPhi) <= 1e-12)) {
           return;
         }
+        if (galacticSimpleModeEnabled && galacticSimpleTracksOrbitTargetToSun) {
+          enableGalacticSimpleOrbitTargetTracking();
+        }
         const offset = camera.position.clone().sub(controls.target);
         if (offset.lengthSq() <= 1e-18) {
           return;
@@ -7760,6 +8242,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function zoomCameraByKeyboard(sign, deltaSeconds) {
         if (!Number.isFinite(sign) || Math.abs(sign) <= 1e-12 || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0.0) {
           return;
+        }
+        if (galacticSimpleModeEnabled && galacticSimpleTracksOrbitTargetToSun) {
+          enableGalacticSimpleOrbitTargetTracking();
+        }
+        if (initialZoomAnchorActive()) {
+          const speedScale = Math.max(globalScrollSpeed, 0.2);
+          const zoomFactor = Math.exp(sign * deltaSeconds * 1.8 * speedScale);
+          if (zoomCameraTowardPoint(currentZoomAnchorPoint, zoomFactor)) {
+            return;
+          }
         }
         const offset = camera.position.clone().sub(controls.target);
         const distance = offset.length();
@@ -7885,7 +8377,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
 
-        if (key === "?" || (key === "/" && event.shiftKey)) {
+        if (!minimalModeEnabled && (key === "?" || (key === "/" && event.shiftKey))) {
           clearPressedKeys();
           setKeyHelpOpen(true);
           event.preventDefault();
@@ -7908,10 +8400,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         if (key === " ") {
-          if (playbackTimer) {
+          if (playbackDirection !== 0) {
             pause();
           } else {
-            play();
+            play(1);
           }
           event.preventDefault();
           return;
@@ -7933,6 +8425,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (handled) {
             event.preventDefault();
           }
+          return;
+        }
+
+        if (minimalModeEnabled) {
           return;
         }
 
@@ -8027,12 +8523,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (!scaleBarEl || !scaleLabelEl) {
           return;
         }
-        const canvasHeight = Math.max(canvas.clientHeight || root.clientHeight || 0, 1);
-        const distance = cameraViewMode === "earth" && Number.isFinite(earthViewFocusDistance) && earthViewFocusDistance > 0.0
-          ? earthViewFocusDistance
-          : Math.max(camera.position.distanceTo(controls.target), 1e-6);
-        const worldPerPixel = (2.0 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5))) / canvasHeight;
-        const barLengthPc = worldPerPixel * 120.0;
+        const barLengthPc = scaleBarLengthPcForCurrentView();
+        currentScaleBarLengthPc = barLengthPc;
         scaleLabelEl.textContent = formatDistanceLabelPc(barLengthPc);
         scaleBarEl.style.display = Number.isFinite(barLengthPc) ? "flex" : "none";
         if (Number.isFinite(barLengthPc)) {
@@ -9765,6 +10257,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function setClusterSelections(selections, mode = "click") {
+        if (minimalModeEnabled) {
+          currentSelection = null;
+          currentSelections = [];
+          selectedClusterKeys = new Set();
+          currentSelectionMode = "none";
+          updateSelectionUI();
+          return;
+        }
         const nextSelections = uniqueSelections(selections);
         const normalizedMode = String(mode || "click");
 
@@ -11089,6 +11589,55 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
       }
 
+      function registerCameraResponsiveImagePlane(mesh, options = {}) {
+        if (!mesh || !mesh.material) {
+          return null;
+        }
+        const entry = {
+          mesh,
+          baseOpacity: clamp01(Number(options.baseOpacity) || 0.0),
+          hideBelowScaleBarPc: Math.max(Number(options.hideBelowScaleBarPc) || 0.0, 0.0),
+          fadeStartScaleBarPc: Math.max(Number(options.fadeStartScaleBarPc) || 0.0, 0.0),
+        };
+        cameraResponsiveImagePlaneEntries.push(entry);
+        return entry;
+      }
+
+      function scaleBarLengthPcForCurrentView() {
+        const canvasHeight = Math.max(canvas.clientHeight || root.clientHeight || 0, 1);
+        const distance = cameraViewMode === "earth" && Number.isFinite(earthViewFocusDistance) && earthViewFocusDistance > 0.0
+          ? earthViewFocusDistance
+          : Math.max(camera.position.distanceTo(controls.target), 1e-6);
+        const worldPerPixel = (2.0 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5))) / canvasHeight;
+        return worldPerPixel * 120.0;
+      }
+
+      function updateCameraResponsiveImagePlanes() {
+        if (!cameraResponsiveImagePlaneEntries.length) {
+          return;
+        }
+        cameraResponsiveImagePlaneEntries.forEach((entry) => {
+          const mesh = entry && entry.mesh;
+          const material = mesh && mesh.material;
+          if (!mesh || !material) {
+            return;
+          }
+          const hideBelow = Math.max(Number(entry.hideBelowScaleBarPc) || 0.0, 0.0);
+          const fadeStart = Math.max(Number(entry.fadeStartScaleBarPc) || hideBelow, hideBelow);
+          let fadeFactor = 1.0;
+          if (hideBelow > 0.0 && Number.isFinite(currentScaleBarLengthPc)) {
+            if (currentScaleBarLengthPc <= hideBelow) {
+              fadeFactor = 0.0;
+            } else if (fadeStart > hideBelow && currentScaleBarLengthPc < fadeStart) {
+              fadeFactor = (currentScaleBarLengthPc - hideBelow) / Math.max(fadeStart - hideBelow, 1e-6);
+            }
+          }
+          const effectiveOpacity = clamp01(Number(entry.baseOpacity) || 0.0) * clamp01(fadeFactor);
+          material.opacity = effectiveOpacity;
+          mesh.visible = effectiveOpacity > 1e-4;
+        });
+      }
+
       function textTextureFor(text, color, size, family) {
         const cacheKey = [text, color ?? "#ffffff", size ?? 12, family ?? "Helvetica"].join("|");
         if (textTextureCache.has(cacheKey)) {
@@ -11807,6 +12356,76 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return group;
       }
 
+      function imagePlaneSpecForDecoration(decoration) {
+        const key = String((decoration && decoration.key) || "");
+        if (!key) {
+          return null;
+        }
+        return imagePlaneSpecByKey.get(key) || null;
+      }
+
+      function imagePlaneTextureFor(imagePlaneSpec) {
+        const dataUrl = String(imagePlaneSpec && imagePlaneSpec.image_data_url ? imagePlaneSpec.image_data_url : "");
+        if (!dataUrl) {
+          return null;
+        }
+        if (imagePlaneTextureCache.has(dataUrl)) {
+          return imagePlaneTextureCache.get(dataUrl);
+        }
+        const texture = new THREE.TextureLoader().load(dataUrl);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = true;
+        if ("colorSpace" in texture && THREE.SRGBColorSpace) {
+          texture.colorSpace = THREE.SRGBColorSpace;
+        } else if ("encoding" in texture && THREE.sRGBEncoding) {
+          texture.encoding = THREE.sRGBEncoding;
+        }
+        imagePlaneTextureCache.set(dataUrl, texture);
+        return texture;
+      }
+
+      function createImagePlane(decoration) {
+        const imagePlaneSpec = imagePlaneSpecForDecoration(decoration);
+        const texture = imagePlaneTextureFor(imagePlaneSpec);
+        if (!texture) {
+          return null;
+        }
+        const width = Math.max(Number(imagePlaneSpec && imagePlaneSpec.width_pc) || 0.0, 1.0);
+        const height = Math.max(Number(imagePlaneSpec && imagePlaneSpec.height_pc) || 0.0, 1.0);
+        const opacity = clamp01(Number(decoration.opacity) || 0.0);
+        if (!(opacity > 0.0)) {
+          return null;
+        }
+        const center = decoration.center || { x: 0.0, y: 0.0, z: 0.0 };
+        const geometry = new THREE.PlaneGeometry(width, height, 1, 1);
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          toneMapped: false,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(
+          Number(center.x) || 0.0,
+          Number(center.y) || 0.0,
+          Number(center.z) || 0.0
+        );
+        mesh.rotation.z = Number(decoration.rotation_rad) || 0.0;
+        const renderOrder = Number.isFinite(Number(decoration.render_order))
+          ? Number(decoration.render_order)
+          : Number(imagePlaneSpec && imagePlaneSpec.render_order);
+        mesh.renderOrder = Number.isFinite(renderOrder) ? renderOrder : -20;
+        registerCameraResponsiveImagePlane(mesh, {
+          baseOpacity: opacity,
+          hideBelowScaleBarPc: Number(imagePlaneSpec && imagePlaneSpec.hide_below_scale_bar_pc),
+          fadeStartScaleBarPc: Number(imagePlaneSpec && imagePlaneSpec.fade_start_scale_bar_pc),
+        });
+        return mesh;
+      }
+
       function makeLineObject(trace, materialBucket) {
         if (!trace.segments || !trace.segments.length) {
           return null;
@@ -11839,6 +12458,173 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         line.computeLineDistances();
         materialBucket.push(material);
         return line;
+      }
+
+      function makeSingleSegmentLine(startPoint, endPoint, options = {}, materialBucket = frameLineMaterials) {
+        if (!(startPoint instanceof THREE.Vector3) || !(endPoint instanceof THREE.Vector3)) {
+          return null;
+        }
+        const positions = [
+          startPoint.x, startPoint.y, startPoint.z,
+          endPoint.x, endPoint.y, endPoint.z,
+        ];
+        const geometry = new LineSegmentsGeometry();
+        geometry.setPositions(positions);
+        const material = new LineMaterial({
+          color: String(options.color || "#ffffff"),
+          linewidth: Math.max(Number(options.widthPx) || 1.0, 0.25),
+          dashed: false,
+          transparent: clamp01(Number(options.opacity) || 1.0) < 1.0,
+          opacity: clamp01(Number(options.opacity) || 1.0),
+          worldUnits: false,
+        });
+        material.resolution.set(root.clientWidth, root.clientHeight);
+        const line = new LineSegments2(geometry, material);
+        line.computeLineDistances();
+        materialBucket.push(material);
+        if (Number.isFinite(Number(options.renderOrder))) {
+          line.renderOrder = Number(options.renderOrder);
+        }
+        return line;
+      }
+
+      function createTaperedPolyline(decoration) {
+        const rawPoints = Array.isArray(decoration && decoration.points) ? decoration.points : [];
+        if (rawPoints.length < 2) {
+          return null;
+        }
+        const points = rawPoints
+          .map((point) => new THREE.Vector3(
+            Number(point && point.x) || 0.0,
+            Number(point && point.y) || 0.0,
+            Number(point && point.z) || 0.0
+          ));
+        const segmentCount = Math.max(points.length - 1, 1);
+        const startWidth = Math.max(Number(decoration.start_width_px) || 2.0, 0.25);
+        const endWidth = Math.max(Number(decoration.end_width_px) || 0.5, 0.1);
+        const baseOpacity = clamp01(Number(decoration.opacity) || 1.0);
+        const color = String(decoration.color || "#ffffff");
+        const renderOrder = Number.isFinite(Number(decoration.render_order))
+          ? Number(decoration.render_order)
+          : -6;
+        const group = new THREE.Group();
+        for (let index = 0; index < segmentCount; index += 1) {
+          const alpha = segmentCount <= 1 ? 0.0 : (index / (segmentCount - 1));
+          const line = makeSingleSegmentLine(
+            points[index],
+            points[index + 1],
+            {
+              color,
+              widthPx: startWidth + (endWidth - startWidth) * alpha,
+              opacity: baseOpacity,
+              renderOrder,
+            },
+            frameLineMaterials,
+          );
+          if (line) {
+            group.add(line);
+          }
+        }
+        return group;
+      }
+
+      function createSolarSystemMarker(decoration) {
+        const base = decoration && decoration.base ? decoration.base : {};
+        const x = Number(base.x);
+        const y = Number(base.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          return null;
+        }
+        const bottomZ = Number.isFinite(Number(decoration.bottom_z)) ? Number(decoration.bottom_z) : -400.0;
+        const topZ = Number.isFinite(Number(decoration.top_z)) ? Number(decoration.top_z) : 1800.0;
+        const labelZ = Number.isFinite(Number(decoration.label_z)) ? Number(decoration.label_z) : (topZ + 320.0);
+        const color = String(decoration.color || "#ffe45c");
+        const renderOrder = Number.isFinite(Number(decoration.render_order))
+          ? Number(decoration.render_order)
+          : 8;
+        const hideBelowScaleBarPc = Math.max(Number(decoration.hide_below_scale_bar_pc) || 0.0, 0.0);
+        const fadeStartScaleBarPc = Math.max(Number(decoration.fade_start_scale_bar_pc) || 0.0, 0.0);
+        const startPoint = new THREE.Vector3(x, y, bottomZ);
+        const endPoint = new THREE.Vector3(x, y, topZ);
+        const group = new THREE.Group();
+
+        const core = makeSingleSegmentLine(startPoint, endPoint, {
+          color,
+          widthPx: 1.55,
+          opacity: 0.92,
+          renderOrder: renderOrder + 0.1,
+        }, frameLineMaterials);
+        if (core) {
+          registerCameraResponsiveImagePlane(core, {
+            baseOpacity: 0.92,
+            hideBelowScaleBarPc,
+            fadeStartScaleBarPc,
+          });
+          group.add(core);
+        }
+
+        const labelText = String(decoration.label || "Solar System");
+        const label = makeTextSprite(labelText, {
+          color,
+          size: 26,
+          family: "Helvetica",
+          screenStable: true,
+          screenPixels: 28,
+          screenScaleMultiplier: 1.0,
+        });
+        label.material.opacity = 0.98;
+        label.position.set(x, y, labelZ);
+        label.renderOrder = renderOrder + 0.2;
+        registerCameraResponsiveImagePlane(label, {
+          baseOpacity: 0.98,
+          hideBelowScaleBarPc,
+          fadeStartScaleBarPc,
+        });
+        screenStableTextSprites.push(label);
+        group.add(label);
+
+        return group;
+      }
+
+      function createGalacticCenterAxes(decoration) {
+        const center = decoration && decoration.center ? decoration.center : {};
+        const x = Number(center.x);
+        const y = Number(center.y);
+        const z = Number(center.z);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+          return null;
+        }
+        const halfLengthXY = Math.max(Number(decoration.half_length_xy) || 0.0, 1.0);
+        const halfLengthZ = Math.max(Number(decoration.half_length_z) || 0.0, 1.0);
+        const color = String(decoration.color || "#7a8089");
+        const opacity = clamp01(Number(decoration.opacity) || 0.62);
+        const widthPx = Math.max(Number(decoration.width_px) || 1.0, 0.25);
+        const renderOrder = Number.isFinite(Number(decoration.render_order))
+          ? Number(decoration.render_order)
+          : -8;
+        const group = new THREE.Group();
+        const segments = [
+          [new THREE.Vector3(x - halfLengthXY, y, z), new THREE.Vector3(x + halfLengthXY, y, z)],
+          [new THREE.Vector3(x, y - halfLengthXY, z), new THREE.Vector3(x, y + halfLengthXY, z)],
+          [new THREE.Vector3(x, y, z - halfLengthZ), new THREE.Vector3(x, y, z + halfLengthZ)],
+        ];
+        segments.forEach(([startPoint, endPoint]) => {
+          const line = makeSingleSegmentLine(
+            startPoint,
+            endPoint,
+            {
+              color,
+              widthPx,
+              opacity,
+              renderOrder,
+            },
+            frameLineMaterials,
+          );
+          if (line) {
+            group.add(line);
+          }
+        });
+        return group;
       }
 
       function buildSelectionBoxGroupForFrame(timeMyr) {
@@ -12210,6 +12996,34 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         if (decoration.kind === "milky_way_model") {
           parent.add(createMilkyWayModel(decoration));
+          return;
+        }
+        if (decoration.kind === "tapered_polyline") {
+          const polyline = createTaperedPolyline(decoration);
+          if (polyline) {
+            parent.add(polyline);
+          }
+          return;
+        }
+        if (decoration.kind === "solar_system_marker") {
+          const marker = createSolarSystemMarker(decoration);
+          if (marker) {
+            parent.add(marker);
+          }
+          return;
+        }
+        if (decoration.kind === "galactic_center_axes") {
+          const axes = createGalacticCenterAxes(decoration);
+          if (axes) {
+            parent.add(axes);
+          }
+          return;
+        }
+        if (decoration.kind === "image_plane") {
+          const imagePlane = createImagePlane(decoration);
+          if (imagePlane) {
+            parent.add(imagePlane);
+          }
         }
       }
 
@@ -12822,6 +13636,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function renderLegendPopover(item, toggleButton) {
+        if (minimalModeEnabled) {
+          closeLegendPopover();
+          return;
+        }
         if (!legendPopoverEl || !item || !toggleButton) {
           closeLegendPopover();
           return;
@@ -12869,7 +13687,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function setLegendPanelOpen(isOpen) {
-        legendPanelOpen = Boolean(isOpen);
+        legendPanelOpen = minimalModeEnabled ? true : Boolean(isOpen);
         if (legendPanelEl) {
           legendPanelEl.dataset.open = legendPanelOpen ? "true" : "false";
         }
@@ -12909,8 +13727,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
         const items = visibleLegendItemsForCurrentGroup();
-        const traceItems = items.filter((item) => !volumeLayerForKey(item.key));
-        const volumeItems = items.filter((item) => volumeLayerForKey(item.key));
+        const traceItems = minimalModeEnabled
+          ? items
+          : items.filter((item) => !volumeLayerForKey(item.key));
+        const volumeItems = minimalModeEnabled
+          ? []
+          : items.filter((item) => volumeLayerForKey(item.key));
         legendTraceListEl.innerHTML = "";
         legendVolumeListEl.innerHTML = "";
         legendEditButtonByKey.clear();
@@ -12947,7 +13769,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           toggleButton.type = "button";
           toggleButton.className = "oviz-three-legend-item";
           toggleButton.dataset.active = legendState[itemKey] ? "true" : "false";
-          toggleButton.title = `${String(item.name || "")}: click to show or hide`;
+          toggleButton.title = minimalModeEnabled
+            ? String(item.name || "")
+            : `${String(item.name || "")}: click to show or hide`;
 
           const swatch = document.createElement("span");
           swatch.className = "oviz-three-legend-swatch";
@@ -12969,7 +13793,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             renderLegend();
             renderFrame(currentFrameIndex);
           });
-          if (!volumeLayerForKey(item.key)) {
+          if (!minimalModeEnabled && !volumeLayerForKey(item.key)) {
             toggleButton.addEventListener("dblclick", () => {
               const traceItems = items.filter((candidate) => !volumeLayerForKey(candidate.key));
               const onlyThisVisible = traceItems.every((candidate) => {
@@ -12986,27 +13810,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
           entry.appendChild(toggleButton);
 
-          const editButton = document.createElement("button");
-          editButton.type = "button";
-          editButton.className = "oviz-three-legend-edit";
-          editButton.textContent = activeLegendEditorKey === itemKey ? "×" : "›";
-          editButton.title = activeLegendEditorKey === itemKey
-            ? "Close legend editor"
-            : `Edit ${String(item.name || "item")}`;
-          editButton.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (activeLegendEditorKey === itemKey) {
-              closeLegendPopover();
+          if (!minimalModeEnabled) {
+            const editButton = document.createElement("button");
+            editButton.type = "button";
+            editButton.className = "oviz-three-legend-edit";
+            editButton.textContent = activeLegendEditorKey === itemKey ? "×" : "›";
+            editButton.title = activeLegendEditorKey === itemKey
+              ? "Close legend editor"
+              : `Edit ${String(item.name || "item")}`;
+            editButton.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (activeLegendEditorKey === itemKey) {
+                closeLegendPopover();
+                renderLegend();
+                return;
+              }
+              activeLegendEditorKey = itemKey;
               renderLegend();
-              return;
-            }
-            activeLegendEditorKey = itemKey;
-            renderLegend();
-          });
-          entry.appendChild(editButton);
-
-          legendEditButtonByKey.set(itemKey, editButton);
+            });
+            entry.appendChild(editButton);
+            legendEditButtonByKey.set(itemKey, editButton);
+          }
             targetEl.appendChild(entry);
           });
         }
@@ -13026,34 +13851,246 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function setToolsDrawerOpen(isOpen) {
-        const nextOpen = Boolean(isOpen);
+        if (!toolsShellEl || !toolsToggleEl) {
+          return;
+        }
+        const nextOpen = minimalModeEnabled ? false : Boolean(isOpen);
         toolsShellEl.dataset.open = nextOpen ? "true" : "false";
         toolsToggleEl.textContent = nextOpen ? "Selection ▾" : "Selection ▸";
-        if (nextOpen && controlsShellEl.dataset.open === "true") {
+        if (nextOpen && controlsShellEl && controlsShellEl.dataset.open === "true") {
           controlsShellEl.dataset.open = "false";
-          controlsToggleEl.textContent = "Controls ▸";
+          if (controlsToggleEl) {
+            controlsToggleEl.textContent = "Controls ▸";
+          }
         }
       }
 
       function setControlsDrawerOpen(isOpen) {
-        const nextOpen = Boolean(isOpen);
+        if (!controlsShellEl || !controlsToggleEl) {
+          return;
+        }
+        const nextOpen = minimalModeEnabled ? false : Boolean(isOpen);
         controlsShellEl.dataset.open = nextOpen ? "true" : "false";
         controlsToggleEl.textContent = nextOpen ? "Controls ▾" : "Controls ▸";
-        if (nextOpen && toolsShellEl.dataset.open === "true") {
+        if (nextOpen && toolsShellEl && toolsShellEl.dataset.open === "true") {
           toolsShellEl.dataset.open = "false";
-          toolsToggleEl.textContent = "Selection ▸";
+          if (toolsToggleEl) {
+            toolsToggleEl.textContent = "Selection ▸";
+          }
         }
       }
 
-      function renderFrame(index) {
-        currentFrameIndex = Math.max(0, Math.min(index, frameSpecs.length - 1));
-        sliderEl.value = String(currentFrameIndex);
-        const frame = frameSpecs[currentFrameIndex];
-        timeLabelEl.textContent = `Time (Myr): ${frame.name}`;
-        updateTimeSliderTickState();
+      function formatDisplayedTimeLabel(timeValue) {
+        return formatTick(timeValue).replace(/^-/, "−");
+      }
+
+      function updateTimelineUi(frameValue, timeValue = frameTimeForValue(frameValue)) {
+        const clampedValue = clampFrameValue(frameValue);
+        if (sliderEl) {
+          sliderEl.value = String(clampedValue);
+        }
+        if (timeLabelEl) {
+          timeLabelEl.textContent = `Time (Myr): ${formatDisplayedTimeLabel(timeValue)}`;
+        }
+        updateTimeSliderTickState(clampFrameIndex(clampedValue));
+      }
+
+      function interpolateNumber(fromValue, toValue, alpha, fallbackValue = 0.0) {
+        const fromNumber = Number(fromValue);
+        const toNumber = Number(toValue);
+        if (Number.isFinite(fromNumber) && Number.isFinite(toNumber)) {
+          return fromNumber + (toNumber - fromNumber) * alpha;
+        }
+        if (Number.isFinite(fromNumber)) {
+          return fromNumber;
+        }
+        if (Number.isFinite(toNumber)) {
+          return toNumber;
+        }
+        return Number(fallbackValue) || 0.0;
+      }
+
+      function cloneTracePoint(point) {
+        if (!point || typeof point !== "object") {
+          return point;
+        }
+        const clone = Object.assign({}, point);
+        if (point.motion && typeof point.motion === "object") {
+          clone.motion = Object.assign({}, point.motion);
+        }
+        if (point.selection && typeof point.selection === "object") {
+          clone.selection = Object.assign({}, point.selection);
+        }
+        return clone;
+      }
+
+      function cloneTraceLabel(label) {
+        return label && typeof label === "object" ? Object.assign({}, label) : label;
+      }
+
+      function interpolateTracePoint(pointA, pointB, alpha, timeValue) {
+        const fallbackPoint = alpha < 0.5 ? pointA : pointB;
+        if (!pointA || !pointB) {
+          return cloneTracePoint(fallbackPoint);
+        }
+        const keyA = clusterFilterSelectionKeyForPoint(pointA);
+        const keyB = clusterFilterSelectionKeyForPoint(pointB);
+        if (keyA && keyB && keyA !== keyB) {
+          return cloneTracePoint(fallbackPoint);
+        }
+        const blended = cloneTracePoint(fallbackPoint);
+        blended.x = interpolateNumber(pointA.x, pointB.x, alpha, fallbackPoint && fallbackPoint.x);
+        blended.y = interpolateNumber(pointA.y, pointB.y, alpha, fallbackPoint && fallbackPoint.y);
+        blended.z = interpolateNumber(pointA.z, pointB.z, alpha, fallbackPoint && fallbackPoint.z);
+        blended.size = interpolateNumber(pointA.size, pointB.size, alpha, fallbackPoint && fallbackPoint.size);
+        blended.opacity = interpolateNumber(pointA.opacity, pointB.opacity, alpha, fallbackPoint && fallbackPoint.opacity);
+        if (blended.motion && typeof blended.motion === "object") {
+          blended.motion.time_myr = Number.isFinite(timeValue) ? timeValue : Number(blended.motion.time_myr) || 0.0;
+          const ageNowMyr = Number(blended.motion.age_now_myr);
+          if (Number.isFinite(ageNowMyr) && Number.isFinite(blended.motion.time_myr)) {
+            blended.motion.age_at_t_myr = ageNowMyr + blended.motion.time_myr;
+          }
+        }
+        return blended;
+      }
+
+      function interpolateTraceLabel(labelA, labelB, alpha) {
+        const fallbackLabel = alpha < 0.5 ? labelA : labelB;
+        if (!labelA || !labelB) {
+          return cloneTraceLabel(fallbackLabel);
+        }
+        if (String(labelA.text || "") !== String(labelB.text || "")) {
+          return cloneTraceLabel(fallbackLabel);
+        }
+        const blended = cloneTraceLabel(fallbackLabel);
+        blended.x = interpolateNumber(labelA.x, labelB.x, alpha, fallbackLabel && fallbackLabel.x);
+        blended.y = interpolateNumber(labelA.y, labelB.y, alpha, fallbackLabel && fallbackLabel.y);
+        blended.z = interpolateNumber(labelA.z, labelB.z, alpha, fallbackLabel && fallbackLabel.z);
+        blended.size = interpolateNumber(labelA.size, labelB.size, alpha, fallbackLabel && fallbackLabel.size);
+        return blended;
+      }
+
+      function interpolateTraceSpec(traceA, traceB, alpha, timeValue) {
+        const fallbackTrace = alpha < 0.5 ? traceA : traceB;
+        if (!traceA || !traceB) {
+          return fallbackTrace || null;
+        }
+        const blended = Object.assign({}, fallbackTrace);
+        blended.opacity = interpolateNumber(traceA.opacity, traceB.opacity, alpha, fallbackTrace && fallbackTrace.opacity);
+        blended.default_opacity = interpolateNumber(
+          traceA.default_opacity,
+          traceB.default_opacity,
+          alpha,
+          fallbackTrace && fallbackTrace.default_opacity
+        );
+        blended.default_point_size = interpolateNumber(
+          traceA.default_point_size,
+          traceB.default_point_size,
+          alpha,
+          fallbackTrace && fallbackTrace.default_point_size
+        );
+
+        if (Array.isArray(traceA.segments) && Array.isArray(traceB.segments) && traceA.segments.length === traceB.segments.length) {
+          blended.segments = traceA.segments.map((segmentA, index) => {
+            const segmentB = traceB.segments[index];
+            if (!Array.isArray(segmentA) || !Array.isArray(segmentB) || segmentA.length !== 6 || segmentB.length !== 6) {
+              return alpha < 0.5 ? segmentA : segmentB;
+            }
+            return segmentA.map((value, coordinateIndex) => (
+              interpolateNumber(value, segmentB[coordinateIndex], alpha, value)
+            ));
+          });
+        }
+
+        if (Array.isArray(traceA.points) && Array.isArray(traceB.points) && traceA.points.length === traceB.points.length) {
+          blended.points = traceA.points.map((pointA, index) => (
+            interpolateTracePoint(pointA, traceB.points[index], alpha, timeValue)
+          ));
+        }
+
+        if (Array.isArray(traceA.labels) && Array.isArray(traceB.labels) && traceA.labels.length === traceB.labels.length) {
+          blended.labels = traceA.labels.map((labelA, index) => (
+            interpolateTraceLabel(labelA, traceB.labels[index], alpha)
+          ));
+        }
+
+        return blended;
+      }
+
+      function interpolatedFrameSpecForValue(frameValue, timeValue) {
+        const state = frameValueState(frameValue);
+        const lowerFrame = frameSpecs[state.lowerIndex] || null;
+        const upperFrame = frameSpecs[state.upperIndex] || lowerFrame;
+        const easedAlpha = smoothstep01(state.alpha);
+        if (!lowerFrame) {
+          return null;
+        }
+        if (!upperFrame || state.upperIndex === state.lowerIndex || easedAlpha <= 1e-6) {
+          return lowerFrame;
+        }
+        if (easedAlpha >= 1.0 - 1e-6) {
+          return upperFrame;
+        }
+
+        const lowerTraces = Array.isArray(lowerFrame.traces) ? lowerFrame.traces : [];
+        const upperTraces = Array.isArray(upperFrame.traces) ? upperFrame.traces : [];
+        const upperTraceByKey = new Map(upperTraces.map((trace) => [String(trace && trace.key), trace]));
+        const usedUpperKeys = new Set();
+        const blendedTraces = [];
+
+        lowerTraces.forEach((lowerTrace, index) => {
+          const traceKey = String(lowerTrace && lowerTrace.key);
+          let upperTrace = traceKey ? upperTraceByKey.get(traceKey) : null;
+          if (!upperTrace && index < upperTraces.length) {
+            upperTrace = upperTraces[index];
+          }
+          if (traceKey && upperTrace) {
+            usedUpperKeys.add(traceKey);
+          }
+          const blendedTrace = interpolateTraceSpec(lowerTrace, upperTrace, easedAlpha, timeValue);
+          if (blendedTrace) {
+            blendedTraces.push(blendedTrace);
+          }
+        });
+
+        upperTraces.forEach((upperTrace, index) => {
+          const traceKey = String(upperTrace && upperTrace.key);
+          if ((traceKey && usedUpperKeys.has(traceKey)) || index < lowerTraces.length) {
+            return;
+          }
+          if (upperTrace) {
+            blendedTraces.push(upperTrace);
+          }
+        });
+
+        const decorationFrame = easedAlpha < 0.5 ? lowerFrame : upperFrame;
+        return {
+          name: formatTick(timeValue),
+          time: timeValue,
+          traces: blendedTraces,
+          decorations: decorationFrame && Array.isArray(decorationFrame.decorations)
+            ? decorationFrame.decorations
+            : [],
+        };
+      }
+
+      function renderFrameScene(frame, displayedTimeMyr, options = {}) {
+        const updateWidgets = options.updateWidgets !== false;
+        if (!frame) {
+          return;
+        }
+        currentZoomAnchorPoint = trackedZoomAnchorPointForFrame(frame);
+        if (galacticSimpleOrbitTargetTrackingActive && currentZoomAnchorPoint instanceof THREE.Vector3) {
+          const orbitTargetDelta = currentZoomAnchorPoint.clone().sub(controls.target);
+          if (orbitTargetDelta.lengthSq() > 1e-12) {
+            controls.target.add(orbitTargetDelta);
+            camera.position.add(orbitTargetDelta);
+          }
+        }
         tooltipEl.style.display = "none";
         hoverTargets.length = 0;
         cameraResponsivePointEntries.length = 0;
+        cameraResponsiveImagePlaneEntries.length = 0;
         selectionSpriteEntriesByKey.clear();
         screenStableTextSprites.length = 0;
         clearGroup(plotGroup);
@@ -13080,7 +14117,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
         });
 
-        if (currentSelectionMode === "click" && currentSelection && approximatelyZero(Number(frame.time))) {
+        if (currentSelectionMode === "click" && currentSelection && approximatelyZero(displayedTimeMyr)) {
           const footprint = buildSelectionFootprint(currentSelection, frameLineMaterials);
           if (footprint) {
             plotGroup.add(footprint);
@@ -13091,7 +14128,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           addDecoration(plotGroup, decoration);
         });
 
-        const selectionBoxGroup = buildSelectionBoxGroupForFrame(frame ? frame.time : 0.0);
+        const selectionBoxGroup = buildSelectionBoxGroupForFrame(displayedTimeMyr);
         if (selectionBoxGroup) {
           plotGroup.add(selectionBoxGroup);
         }
@@ -13104,12 +14141,39 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         applySceneHoverState();
-        resize();
-        renderVolumeControls();
-        renderBoxMetricsWidget();
-        renderAgeKdeWidget();
-        renderClusterFilterWidget();
-        renderDendrogramWidget();
+        if (updateWidgets) {
+          resize();
+          renderVolumeControls();
+          renderBoxMetricsWidget();
+          renderAgeKdeWidget();
+          renderClusterFilterWidget();
+          renderDendrogramWidget();
+        }
+      }
+
+      function renderInterpolatedFrameValue(frameValue, options = {}) {
+        displayedFrameValue = clampFrameValue(frameValue);
+        currentFrameIndex = clampFrameIndex(displayedFrameValue);
+        const displayedTimeMyr = frameTimeForValue(displayedFrameValue);
+        const frame = interpolatedFrameSpecForValue(displayedFrameValue, displayedTimeMyr);
+        updateTimelineUi(displayedFrameValue, displayedTimeMyr);
+        renderFrameScene(frame, displayedTimeMyr, options);
+      }
+
+      function renderFrame(index) {
+        currentFrameIndex = clampFrameIndex(index);
+        displayedFrameValue = currentFrameIndex;
+        frameTransitionState = null;
+        lastTransitionRenderTimestamp = null;
+        pendingSliderFrameIndex = null;
+        if (sliderScrubRenderHandle !== null) {
+          window.cancelAnimationFrame(sliderScrubRenderHandle);
+          sliderScrubRenderHandle = null;
+        }
+        const frame = frameSpecs[currentFrameIndex] || null;
+        const displayedTimeMyr = Number(frame && frame.time) || 0.0;
+        updateTimelineUi(displayedFrameValue, displayedTimeMyr);
+        renderFrameScene(frame, displayedTimeMyr, { updateWidgets: true });
       }
 
       function resize() {
@@ -13136,23 +14200,74 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         renderDendrogramWidget();
       }
 
-      function play() {
-        if (playbackTimer || frameSpecs.length <= 1) {
-          return;
-        }
-        playbackTimer = window.setInterval(() => {
-          const nextIndex = (currentFrameIndex + 1) % frameSpecs.length;
-          renderFrame(nextIndex);
-        }, sceneSpec.playback_interval_ms || 500);
-        updatePlaybackToggleButton();
+      function animateToFrame(targetIndex, options = {}) {
+        const clampedTarget = clampFrameIndex(targetIndex);
+        renderFrame(clampedTarget);
       }
 
-      function pause() {
-        if (playbackTimer) {
-          window.clearInterval(playbackTimer);
-          playbackTimer = null;
+      function pause(options = {}) {
+        const snapToFrame = options.snap !== false;
+        playbackDirection = 0;
+        lastPlaybackAdvanceTimestamp = null;
+        if (sliderScrubRenderHandle !== null && !snapToFrame) {
+          window.cancelAnimationFrame(sliderScrubRenderHandle);
+          sliderScrubRenderHandle = null;
         }
-        updatePlaybackToggleButton();
+        if (frameTransitionState) {
+          const snappedIndex = clampFrameIndex(displayedFrameValue);
+          frameTransitionState = null;
+          if (snapToFrame) {
+            renderFrame(snappedIndex);
+          }
+        } else if (snapToFrame) {
+          const snappedIndex = clampFrameIndex(displayedFrameValue);
+          if (Math.abs(displayedFrameValue - snappedIndex) > 1e-6) {
+            renderFrame(snappedIndex);
+          }
+        }
+        updatePlaybackButtons();
+      }
+
+      function play(direction = 1) {
+        if (frameSpecs.length <= 1) {
+          return;
+        }
+        const nextDirection = direction < 0 ? -1 : 1;
+        if (playbackDirection === nextDirection) {
+          pause();
+          return;
+        }
+        frameTransitionState = null;
+        pendingSliderFrameIndex = null;
+        if (sliderScrubRenderHandle !== null) {
+          window.cancelAnimationFrame(sliderScrubRenderHandle);
+          sliderScrubRenderHandle = null;
+        }
+        playbackDirection = nextDirection;
+        const now = window.performance ? window.performance.now() : Date.now();
+        lastPlaybackAdvanceTimestamp = now;
+        updatePlaybackButtons();
+        const nextIndex = (currentFrameIndex + playbackDirection + frameSpecs.length) % frameSpecs.length;
+        renderFrame(nextIndex);
+      }
+
+      function scheduleSliderScrubRender(index) {
+        const clampedIndex = clampFrameIndex(index);
+        pendingSliderFrameIndex = clampedIndex;
+        displayedFrameValue = clampedIndex;
+        currentFrameIndex = clampedIndex;
+        updateTimelineUi(clampedIndex, frameTimeForValue(clampedIndex));
+        if (sliderScrubRenderHandle !== null) {
+          return;
+        }
+        sliderScrubRenderHandle = window.requestAnimationFrame(() => {
+          sliderScrubRenderHandle = null;
+          const targetIndex = pendingSliderFrameIndex;
+          pendingSliderFrameIndex = null;
+          if (targetIndex !== null && targetIndex !== undefined) {
+            renderFrame(targetIndex);
+          }
+        });
       }
 
       function applyWidgetMode(widgetKey) {
@@ -13165,6 +14280,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function setWidgetMode(widgetKey, mode) {
+        if (minimalModeEnabled) {
+          setWidgetModeValue(widgetKey, "hidden");
+          applyWidgetMode(widgetKey);
+          return;
+        }
         if (!widgetEnabled(widgetKey)) {
           return;
         }
@@ -13218,6 +14338,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function renderWidgetMenu() {
+        if (!widgetSelectEl) {
+          return;
+        }
+        if (minimalModeEnabled) {
+          widgetSelectEl.innerHTML = "";
+          widgetSelectEl.style.display = "none";
+          widgetSelectEl.value = "";
+          return;
+        }
         widgetSelectEl.innerHTML = "";
         const placeholder = document.createElement("option");
         placeholder.value = "";
@@ -13254,7 +14383,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function currentFrameAllowsSelection() {
         const frame = currentFrame();
-        return Boolean(frame);
+        return !minimalModeEnabled && Boolean(frame);
       }
 
       function canvasPointFromEvent(event) {
@@ -13496,7 +14625,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           suppressNextCanvasClick = false;
           return;
         }
-        if (widgetPointerState || !clickSelectionEnabled) {
+        if (minimalModeEnabled || widgetPointerState || !clickSelectionEnabled) {
           return;
         }
         if (selectionBoxRayHitFromEvent(event)) {
@@ -13515,7 +14644,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function onCanvasDoubleClick(event) {
-        if (widgetPointerState || lassoState || event.button !== 0) {
+        if (minimalModeEnabled || widgetPointerState || lassoState || event.button !== 0) {
           return;
         }
         if (selectionBoxRayHitFromEvent(event)) {
@@ -13537,6 +14666,30 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           recenterCameraTarget(target.worldPoint);
         }
         event.preventDefault();
+      }
+
+      function onCanvasWheel(event) {
+        if (galacticSimpleModeEnabled && galacticSimpleTracksOrbitTargetToSun) {
+          enableGalacticSimpleOrbitTargetTracking();
+        }
+        if (!initialZoomAnchorActive()) {
+          return;
+        }
+        const deltaY = Number(event.deltaY);
+        if (!Number.isFinite(deltaY) || Math.abs(deltaY) <= 1e-6) {
+          return;
+        }
+        const speedScale = Math.max(globalScrollSpeed, 0.2);
+        const clampedDelta = clampRange(deltaY, -240.0, 240.0);
+        const zoomFactor = Math.exp(clampedDelta * 0.0015 * speedScale);
+        if (!zoomCameraTowardPoint(currentZoomAnchorPoint, zoomFactor)) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === "function") {
+          event.stopImmediatePropagation();
+        }
       }
 
       function onWidgetPointerStart(event) {
@@ -14098,7 +15251,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function startManualLabelInteraction(event) {
-        if (widgetPointerState || lassoState || event.button !== 0) {
+        if (minimalModeEnabled || widgetPointerState || lassoState || event.button !== 0) {
           return false;
         }
         const hitInfo = manualLabelHitFromEvent(event);
@@ -14214,8 +15367,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function initControls() {
-        setToolsDrawerOpen(toolsShellEl.dataset.open === "true");
-        setControlsDrawerOpen(controlsShellEl.dataset.open === "true");
+        setToolsDrawerOpen(Boolean(toolsShellEl && toolsShellEl.dataset.open === "true"));
+        setControlsDrawerOpen(Boolean(controlsShellEl && controlsShellEl.dataset.open === "true"));
         setLegendPanelOpen(legendPanelOpen);
         applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
         groupSelectEl.innerHTML = "";
@@ -14228,17 +15381,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
         groupSelectEl.value = currentGroup;
         groupSelectEl.style.display = groups.length > 1 ? "block" : "none";
-        focusGroupSelectEl.innerHTML = "";
-        const focusNoneOption = document.createElement("option");
-        focusNoneOption.value = "";
-        focusNoneOption.textContent = "None";
-        focusGroupSelectEl.appendChild(focusNoneOption);
-        (animationSpec.focus_options || []).forEach((item) => {
-          const option = document.createElement("option");
-          option.value = String(item.key || "");
-          option.textContent = String(item.name || item.key || "");
-          focusGroupSelectEl.appendChild(option);
-        });
+        if (focusGroupSelectEl) {
+          focusGroupSelectEl.innerHTML = "";
+          const focusNoneOption = document.createElement("option");
+          focusNoneOption.value = "";
+          focusNoneOption.textContent = "None";
+          focusGroupSelectEl.appendChild(focusNoneOption);
+          (animationSpec.focus_options || []).forEach((item) => {
+            const option = document.createElement("option");
+            option.value = String(item.key || "");
+            option.textContent = String(item.name || item.key || "");
+            focusGroupSelectEl.appendChild(option);
+          });
+        }
         renderWidgetMenu();
         groupSelectEl.addEventListener("change", () => {
           currentGroup = groupSelectEl.value;
@@ -14247,32 +15402,40 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           renderFrame(currentFrameIndex);
         });
         renderSceneControls();
-        widgetSelectEl.addEventListener("change", () => {
-          const widgetKey = String(widgetSelectEl.value || "");
-          if (widgetKey) {
-            setWidgetMode(widgetKey, "normal");
-          }
-          widgetSelectEl.value = "";
-        });
-        zenModeButtonEl.addEventListener("click", () => {
-          setZenMode(!zenModeEnabled);
-          focusViewer();
-        });
-        resetViewButtonEl.addEventListener("click", () => {
-          resetCameraAndSelections();
-          focusViewer();
-        });
-        saveStateButtonEl.addEventListener("click", async () => {
-          saveStateButtonEl.disabled = true;
-          const previousText = saveStateButtonEl.textContent;
-          saveStateButtonEl.textContent = "Saving...";
-          try {
-            await saveSceneStateToHtml();
-          } finally {
-            saveStateButtonEl.disabled = false;
-            saveStateButtonEl.textContent = previousText;
-          }
-        });
+        if (widgetSelectEl) {
+          widgetSelectEl.addEventListener("change", () => {
+            const widgetKey = String(widgetSelectEl.value || "");
+            if (widgetKey) {
+              setWidgetMode(widgetKey, "normal");
+            }
+            widgetSelectEl.value = "";
+          });
+        }
+        if (zenModeButtonEl) {
+          zenModeButtonEl.addEventListener("click", () => {
+            setZenMode(!zenModeEnabled);
+            focusViewer();
+          });
+        }
+        if (resetViewButtonEl) {
+          resetViewButtonEl.addEventListener("click", () => {
+            resetCameraAndSelections();
+            focusViewer();
+          });
+        }
+        if (saveStateButtonEl) {
+          saveStateButtonEl.addEventListener("click", async () => {
+            saveStateButtonEl.disabled = true;
+            const previousText = saveStateButtonEl.textContent;
+            saveStateButtonEl.textContent = "Saving...";
+            try {
+              await saveSceneStateToHtml();
+            } finally {
+              saveStateButtonEl.disabled = false;
+              saveStateButtonEl.textContent = previousText;
+            }
+          });
+        }
 
         sliderEl.max = String(Math.max(frameSpecs.length - 1, 0));
         renderTimeSliderTicks();
@@ -14285,10 +15448,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
           focusViewer();
         };
-        legendPanelToggleEl.addEventListener("pointerdown", (event) => {
-          event.stopPropagation();
-        });
-        legendPanelToggleEl.addEventListener("click", handleLegendPanelToggle);
+        if (legendPanelToggleEl) {
+          legendPanelToggleEl.addEventListener("pointerdown", (event) => {
+            event.stopPropagation();
+          });
+          legendPanelToggleEl.addEventListener("click", handleLegendPanelToggle);
+        }
         legendPanelEl.addEventListener("click", (event) => {
           const toggleButton = event.target && event.target.closest
             ? event.target.closest(".oviz-three-legend-panel-toggle")
@@ -14319,83 +15484,109 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         legendResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onLegendPointerStart));
         sliderEl.addEventListener("input", () => {
-          pause();
-          renderFrame(Number(sliderEl.value));
+          pause({ snap: false });
+          scheduleSliderScrubRender(Number(sliderEl.value));
         });
-        playButtonEl.addEventListener("click", () => {
-          if (playbackTimer) {
-            pause();
-          } else {
-            play();
-          }
-        });
-        if (pauseButtonEl) {
-          pauseButtonEl.addEventListener("click", pause);
+        if (playBackwardButtonEl) {
+          playBackwardButtonEl.addEventListener("click", () => {
+            play(-1);
+          });
         }
-        toolsToggleEl.addEventListener("click", () => {
-          setToolsDrawerOpen(toolsShellEl.dataset.open !== "true");
-        });
-        controlsToggleEl.addEventListener("click", () => {
-          setControlsDrawerOpen(controlsShellEl.dataset.open !== "true");
-        });
-        keyHelpButtonEl.addEventListener("click", () => {
-          const nextOpen = keyHelpEl.dataset.open !== "true";
-          setKeyHelpOpen(nextOpen);
-          if (!nextOpen) {
+        if (playForwardButtonEl) {
+          playForwardButtonEl.addEventListener("click", () => {
+            play(1);
+          });
+        }
+        if (toolsToggleEl && toolsShellEl) {
+          toolsToggleEl.addEventListener("click", () => {
+            setToolsDrawerOpen(toolsShellEl.dataset.open !== "true");
+          });
+        }
+        if (controlsToggleEl && controlsShellEl) {
+          controlsToggleEl.addEventListener("click", () => {
+            setControlsDrawerOpen(controlsShellEl.dataset.open !== "true");
+          });
+        }
+        if (keyHelpButtonEl && keyHelpEl) {
+          keyHelpButtonEl.addEventListener("click", () => {
+            const nextOpen = keyHelpEl.dataset.open !== "true";
+            setKeyHelpOpen(nextOpen);
+            if (!nextOpen) {
+              focusViewer();
+            }
+          });
+        }
+        if (keyHelpCloseEl) {
+          keyHelpCloseEl.addEventListener("click", () => {
+            setKeyHelpOpen(false);
             focusViewer();
-          }
-        });
-        keyHelpCloseEl.addEventListener("click", () => {
-          setKeyHelpOpen(false);
-          focusViewer();
-        });
-        clearSelectionButtonEl.addEventListener("click", clearClusterSelections);
-        clickSelectToggleEl.addEventListener("change", () => {
-          clickSelectionEnabled = Boolean(clickSelectToggleEl.checked);
-          updateSelectionUI();
-        });
-        volumeLassoToggleEl.addEventListener("change", () => {
-          lassoVolumeSelectionEnabled = Boolean(volumeLassoToggleEl.checked);
-          updateSelectionUI();
-          const frame = currentFrame();
-          if (frame && frameVolumeLayers(frame).length) {
+          });
+        }
+        if (clearSelectionButtonEl) {
+          clearSelectionButtonEl.addEventListener("click", clearClusterSelections);
+        }
+        if (clickSelectToggleEl) {
+          clickSelectToggleEl.addEventListener("change", () => {
+            clickSelectionEnabled = Boolean(clickSelectToggleEl.checked);
+            updateSelectionUI();
+          });
+        }
+        if (volumeLassoToggleEl) {
+          volumeLassoToggleEl.addEventListener("change", () => {
+            lassoVolumeSelectionEnabled = Boolean(volumeLassoToggleEl.checked);
+            updateSelectionUI();
+            const frame = currentFrame();
+            if (frame && frameVolumeLayers(frame).length) {
+              renderFrame(currentFrameIndex);
+            }
+            if (skySpec.enabled && !currentSelection) {
+              updateSkyPanel();
+            }
+          });
+        }
+        if (themeSelectEl) {
+          themeSelectEl.addEventListener("change", () => {
+            applyThemePreset(themeSelectEl.value);
+          });
+        }
+        if (scrollSpeedEl) {
+          scrollSpeedEl.addEventListener("input", () => {
+            globalScrollSpeed = Number(scrollSpeedEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+          });
+        }
+        if (cameraFovEl) {
+          cameraFovEl.addEventListener("input", () => {
+            camera.fov = Number(cameraFovEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+          });
+        }
+        if (globalPointSizeEl) {
+          globalPointSizeEl.addEventListener("input", () => {
+            globalPointSizeScale = Number(globalPointSizeEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
             renderFrame(currentFrameIndex);
-          }
-          if (skySpec.enabled && !currentSelection) {
-            updateSkyPanel();
-          }
-        });
-        themeSelectEl.addEventListener("change", () => {
-          applyThemePreset(themeSelectEl.value);
-        });
-        scrollSpeedEl.addEventListener("input", () => {
-          globalScrollSpeed = Number(scrollSpeedEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-        });
-        cameraFovEl.addEventListener("input", () => {
-          camera.fov = Number(cameraFovEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-        });
-        globalPointSizeEl.addEventListener("input", () => {
-          globalPointSizeScale = Number(globalPointSizeEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        globalPointOpacityEl.addEventListener("input", () => {
-          globalPointOpacityScale = Number(globalPointOpacityEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        globalPointGlowEl.addEventListener("input", () => {
-          globalPointGlowStrength = Number(globalPointGlowEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
+          });
+        }
+        if (globalPointOpacityEl) {
+          globalPointOpacityEl.addEventListener("input", () => {
+            globalPointOpacityScale = Number(globalPointOpacityEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
+        if (globalPointGlowEl) {
+          globalPointGlowEl.addEventListener("input", () => {
+            globalPointGlowStrength = Number(globalPointGlowEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
         if (sizeByStarsToggleEl) {
           sizeByStarsToggleEl.addEventListener("change", () => {
             sizePointsByStarsEnabled = Boolean(sizeByStarsToggleEl.checked);
@@ -14403,35 +15594,45 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             renderFrame(currentFrameIndex);
           });
         }
-        focusGroupSelectEl.addEventListener("change", () => {
-          focusTraceKey = String(focusGroupSelectEl.value || "");
-          focusSelectionKey = "";
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        fadeTimeEl.addEventListener("change", () => {
-          fadeInTimeMyr = Number(fadeTimeEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        fadeInOutToggleEl.addEventListener("change", () => {
-          fadeInAndOutEnabled = Boolean(fadeInOutToggleEl.checked);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        axesVisibleToggleEl.addEventListener("change", () => {
-          axesVisible = Boolean(axesVisibleToggleEl.checked);
-          renderSceneControls();
-          buildAxes();
-        });
-        galacticReferenceToggleEl.addEventListener("change", () => {
-          galacticReferenceVisible = Boolean(galacticReferenceToggleEl.checked);
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
+        if (focusGroupSelectEl) {
+          focusGroupSelectEl.addEventListener("change", () => {
+            focusTraceKey = String(focusGroupSelectEl.value || "");
+            focusSelectionKey = "";
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
+        if (fadeTimeEl) {
+          fadeTimeEl.addEventListener("change", () => {
+            fadeInTimeMyr = Number(fadeTimeEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
+        if (fadeInOutToggleEl) {
+          fadeInOutToggleEl.addEventListener("change", () => {
+            fadeInAndOutEnabled = Boolean(fadeInOutToggleEl.checked);
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
+        if (axesVisibleToggleEl) {
+          axesVisibleToggleEl.addEventListener("change", () => {
+            axesVisible = Boolean(axesVisibleToggleEl.checked);
+            renderSceneControls();
+            buildAxes();
+          });
+        }
+        if (galacticReferenceToggleEl) {
+          galacticReferenceToggleEl.addEventListener("change", () => {
+            galacticReferenceVisible = Boolean(galacticReferenceToggleEl.checked);
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
         nearbyRegionLabelsToggleEls.forEach((toggleEl) => {
           toggleEl.addEventListener("change", () => {
             nearbyRegionLabelsVisible = Boolean(toggleEl.checked);
@@ -14479,45 +15680,51 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             focusViewer();
           });
         }
-        viewFromEarthButtonEl.addEventListener("click", () => {
-          viewFromEarth();
-        });
+        if (viewFromEarthButtonEl) {
+          viewFromEarthButtonEl.addEventListener("click", () => {
+            viewFromEarth();
+          });
+        }
         orbitCameraButtons.forEach((buttonEl) => {
           buttonEl.addEventListener("click", () => {
             setCameraAutoOrbitEnabled(!cameraAutoOrbitEnabled);
             focusViewer();
           });
         });
-        resetCameraButtonEl.addEventListener("click", () => {
-          resetCameraView();
-          renderSceneControls();
-        });
-        resetControlsButtonEl.addEventListener("click", () => {
-          activeThemeKey = "default";
-          globalScrollSpeed = 1.0;
-          globalPointSizeScale = 1.0;
-          globalPointOpacityScale = 1.0;
-          globalPointGlowStrength = 0.85;
-          sizePointsByStarsEnabled = false;
-          fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
-          fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
-          focusTraceKey = String(animationSpec.focus_trace_key_default || "");
-          axesVisible = Boolean(sceneSpec.show_axes);
-          galacticReferenceVisible = true;
-          nearbyRegionLabelsVisible = true;
-          setCameraAutoOrbitEnabled(false);
-          cameraViewMode = "free";
-          earthViewFocusDistance = null;
-          camera.fov = Number(initialCameraState.fov);
-          applyGlobalControlState();
-          applyCameraViewMode();
-          applyThemePreset(activeThemeKey, { rerender: false });
-          renderSceneControls();
-          buildAxes();
-          renderLegend();
-          updateSkyPanel();
-          renderFrame(currentFrameIndex);
-        });
+        if (resetCameraButtonEl) {
+          resetCameraButtonEl.addEventListener("click", () => {
+            resetCameraView();
+            renderSceneControls();
+          });
+        }
+        if (resetControlsButtonEl) {
+          resetControlsButtonEl.addEventListener("click", () => {
+            activeThemeKey = "default";
+            globalScrollSpeed = 1.0;
+            globalPointSizeScale = 1.0;
+            globalPointOpacityScale = 1.0;
+            globalPointGlowStrength = 0.85;
+            sizePointsByStarsEnabled = false;
+            fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
+            fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
+            focusTraceKey = String(animationSpec.focus_trace_key_default || "");
+            axesVisible = Boolean(sceneSpec.show_axes);
+            galacticReferenceVisible = true;
+            nearbyRegionLabelsVisible = true;
+            setCameraAutoOrbitEnabled(false);
+            cameraViewMode = "free";
+            earthViewFocusDistance = null;
+            camera.fov = Number(initialCameraState.fov);
+            applyGlobalControlState();
+            applyCameraViewMode();
+            applyThemePreset(activeThemeKey, { rerender: false });
+            renderSceneControls();
+            buildAxes();
+            renderLegend();
+            updateSkyPanel();
+            renderFrame(currentFrameIndex);
+          });
+        }
         widgetDragHandles.forEach((handle) => handle.addEventListener("pointerdown", onWidgetPointerStart));
         widgetResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onWidgetPointerStart));
         setZenMode(zenModeEnabled);
@@ -14525,6 +15732,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function onCanvasPointerDown(event) {
         focusViewer();
+        if (galacticSimpleModeEnabled && galacticSimpleTracksOrbitTargetToSun) {
+          enableGalacticSimpleOrbitTargetTracking();
+        }
         if (startSelectionBoxInteraction(event)) {
           return;
         }
@@ -14553,10 +15763,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function onWindowPointerDown(event) {
         const target = event.target;
         if (target) {
-          if (toolsShellEl.dataset.open === "true" && !toolsShellEl.contains(target)) {
+          if (toolsShellEl && toolsShellEl.dataset.open === "true" && !toolsShellEl.contains(target)) {
             setToolsDrawerOpen(false);
           }
-          if (controlsShellEl.dataset.open === "true" && !controlsShellEl.contains(target)) {
+          if (controlsShellEl && controlsShellEl.dataset.open === "true" && !controlsShellEl.contains(target)) {
             setControlsDrawerOpen(false);
           }
         }
@@ -14587,6 +15797,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         finishLassoSelection(event);
       }
 
+      function updateAnimatedFramePlayback(now) {
+        if (playbackDirection !== 0 && frameSpecs.length > 1) {
+          if (lastPlaybackAdvanceTimestamp === null) {
+            lastPlaybackAdvanceTimestamp = now;
+            return;
+          }
+          const elapsedMs = Math.max(0.0, now - lastPlaybackAdvanceTimestamp);
+          if (elapsedMs < playbackIntervalMs) {
+            return;
+          }
+          const steps = Math.max(1, Math.floor(elapsedMs / playbackIntervalMs));
+          lastPlaybackAdvanceTimestamp += steps * playbackIntervalMs;
+          const frameCount = frameSpecs.length;
+          const nextIndex = ((currentFrameIndex + (playbackDirection * steps)) % frameCount + frameCount) % frameCount;
+          renderFrame(nextIndex);
+        }
+      }
+
       function animate(timestamp) {
         window.requestAnimationFrame(animate);
         const now = Number(timestamp) || 0.0;
@@ -14594,11 +15822,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           ? 0.0
           : clampRange((now - lastAnimationTimestamp) / 1000.0, 0.0, 0.05);
         lastAnimationTimestamp = now;
+        updateAnimatedFramePlayback(now);
         updateKeyboardMotion(deltaSeconds);
         controls.update();
         updateCameraResponsivePointSprites();
-        updateScreenStableTextSprites();
         updateScaleBar();
+        updateCameraResponsiveImagePlanes();
+        updateScreenStableTextSprites();
         renderAgeKdeWidget();
         renderer.render(scene, camera);
       }
@@ -14615,7 +15845,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       await restoreInitialLassoSelectionMask();
       renderLegend();
       updateSelectionUI();
-      updatePlaybackToggleButton();
+      updatePlaybackButtons();
       renderFrame(currentFrameIndex);
       resize();
       window.setTimeout(() => focusViewer(), 0);
@@ -14625,6 +15855,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       canvas.addEventListener("pointerenter", focusViewer);
       canvas.addEventListener("pointermove", onPointerMove);
       canvas.addEventListener("pointerleave", onPointerLeave);
+      canvas.addEventListener("wheel", onCanvasWheel, { passive: false, capture: true });
       canvas.addEventListener("click", onCanvasClick);
       canvas.addEventListener("dblclick", onCanvasDoubleClick);
       scaleBarEl.addEventListener("pointerdown", onScaleBarPointerStart);
@@ -14661,9 +15892,27 @@ class ThreeJSFigure:
     def to_html(self) -> str:
         width = int(self.scene_spec.get("width") or 900)
         height = int(self.scene_spec.get("height") or 700)
+        initial_state = self.scene_spec.get("initial_state") or {}
+        minimal_mode = bool(
+            initial_state.get("minimal_mode_enabled")
+            or self.scene_spec.get("export_profile") == "minimal"
+        )
+        galactic_simple = bool((self.scene_spec.get("galactic_simple") or {}).get("enabled"))
         html = _THREEJS_HTML_TEMPLATE.replace("__ROOT_ID__", self._root_id)
         html = html.replace("__WIDTH_PX__", str(width))
         html = html.replace("__HEIGHT_PX__", str(height))
+        html = html.replace(
+            "__ROOT_MINIMAL_ATTR__",
+            'data-minimal="true"' if minimal_mode else 'data-minimal="false"',
+        )
+        html = html.replace(
+            "__ROOT_GALACTIC_SIMPLE_ATTR__",
+            'data-galactic-simple="true"' if galactic_simple else 'data-galactic-simple="false"',
+        )
+        html = html.replace(
+            "__TOPBAR_HTML__",
+            _THREEJS_MINIMAL_TOPBAR_HTML if minimal_mode else _THREEJS_TOPBAR_HTML,
+        )
         html = html.replace("__SCENE_JSON__", json.dumps(self.scene_spec))
         return html
 

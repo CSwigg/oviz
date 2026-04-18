@@ -18,6 +18,7 @@ SUPERNOVAE_ROOT = HOME_DIR / "Desktop" / "astro_research" / "supernovae_map"
 SUPERNOVAE_CATALOG_PATH = SUPERNOVAE_ROOT / "paper" / "solar_encounter_catalog_current.csv.gz"
 DESKTOP_ROOT = HOME_DIR / "Desktop"
 DEFAULT_OUTPUT_HTML = Path("/tmp/main_figure.html")
+GALACTIC_PLANE_IMAGE_PATH = HOME_DIR / "Downloads" / "Top-down_view_of_the_Milky_Way.jpg"
 
 
 def _sanitize_notebook_cell_source(source: str) -> str:
@@ -332,9 +333,35 @@ supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)
 """.strip()
 
 
-def patch_script_source(source: str, output_html: Path, theme_key: str | None) -> str:
+def patch_script_source(
+    source: str,
+    output_html: Path,
+    theme_key: str | None,
+    *,
+    minimal_mode: bool = False,
+    galactic_simple: bool = False,
+) -> str:
     source = source.replace("/Users/cam", str(HOME_DIR))
     source = source.replace("/Users/cam/Desktop", str(DESKTOP_ROOT))
+
+    if galactic_simple:
+        source, replaced_time_grid = re.subn(
+            r"(?m)^time_int\s*=\s*np\.round\(np\.arange\(0,\s*-66,\s*-1\),\s*1\)\s*$",
+            "time_int = np.round(np.arange(0, -66, -1), 1)",
+            source,
+            count=1,
+        )
+        if replaced_time_grid != 1:
+            raise RuntimeError("Could not restore the galactic simple time grid to 1 Myr steps.")
+
+        source, downsampled_edenhofer = re.subn(
+            r'("name"\s*:\s*"Edenhofer\+2024 Dust",[\s\S]*?"max_resolution"\s*:\s*)200(\s*,)',
+            r"\g<1>100\2",
+            source,
+            count=1,
+        )
+        if downsampled_edenhofer != 1:
+            raise RuntimeError("Could not reduce the Edenhofer dust max_resolution for galactic simple mode.")
 
     output_html_str = str(output_html)
     source, replaced = re.subn(
@@ -349,6 +376,13 @@ def patch_script_source(source: str, output_html: Path, theme_key: str | None) -
     control_bits = []
     if theme_key:
         control_bits.append(f"'theme_key': {theme_key!r}")
+    if galactic_simple:
+        control_bits.extend([
+            "'camera_fov': 42.0",
+            "'point_size_scale': 0.88",
+            "'point_glow_strength': 0.60",
+            "'fade_in_time_myr': 7.0",
+        ])
 
     if "threejs_initial_state=" not in source:
         initial_state_bits = [
@@ -358,6 +392,17 @@ def patch_script_source(source: str, output_html: Path, theme_key: str | None) -
             "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
             "'volume_state_by_key': ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}})",
         ]
+        if minimal_mode:
+            initial_state_bits.append("'minimal_mode_enabled': True")
+        if galactic_simple:
+            initial_state_bits.extend([
+                "'galactic_simple_mode_enabled': True",
+                f"'galactic_plane_image_path': {str(GALACTIC_PLANE_IMAGE_PATH)!r}",
+                "'galactic_plane_size_pc': 40000.0",
+                "'galactic_plane_opacity': 0.6",
+                "'initial_zoom_anchor': {'x': 0.0, 'y': 0.0, 'z': 0.0}",
+                "'camera': {'position': {'x': 3700.0, 'y': -6550.0, 'z': 4700.0}, 'target': {'x': 3000.0, 'y': 0.0, 'z': 0.0}, 'up': {'x': 0.0, 'y': 0.0, 'z': 1.0}}",
+            ])
         if control_bits:
             initial_state_bits.append("'global_controls': {" + ", ".join(control_bits) + "}")
         injection_lines = [
@@ -436,6 +481,53 @@ trace_groupings = {
         if inserted_groupings != 1:
             raise RuntimeError("Could not patch trace groupings with Full Cluster Catalog.")
 
+    if minimal_mode:
+        source, replaced_young_min_size = re.subn(
+            r"(young_trace\s*=\s*Trace\([^\n]*?data_name\s*=\s*'Clusters\s*\(<\s*15\s*Myr\)'[^\n]*?min_size\s*=\s*)([^,]+)",
+            r"\g<1>0.0",
+            source,
+            count=1,
+        )
+        if replaced_young_min_size != 1:
+            raise RuntimeError("Could not adjust young cluster minimum size for minimal mode.")
+
+    if galactic_simple:
+        source, recolored_full_sample = re.subn(
+            r"(full_sample_trace\s*=\s*Trace\([^\n]*?data_name\s*=\s*'Clusters\s*\(<\s*60\s*Myr\)'[^\n]*?color\s*=\s*)(['\"][^'\"]+['\"])",
+            r"\g<1>'#58e1ff'",
+            source,
+            count=1,
+        )
+        if recolored_full_sample != 1:
+            raise RuntimeError("Could not recolor the <60 Myr cluster trace for galactic simple mode.")
+
+        source, adjusted_full_sample_opacity = re.subn(
+            r"(full_sample_trace\s*=\s*Trace\([^\n]*?data_name\s*=\s*'Clusters\s*\(<\s*60\s*Myr\)'[^\n]*?opacity\s*=\s*)([^,\)]+)",
+            r"\g<1>0.8",
+            source,
+            count=1,
+        )
+        if adjusted_full_sample_opacity != 1:
+            raise RuntimeError("Could not adjust the <60 Myr cluster opacity for galactic simple mode.")
+
+        source, removed_young_from_collection = re.subn(
+            r"(?m)^(\s*)young_trace,\s*$",
+            "",
+            source,
+            count=1,
+        )
+        if removed_young_from_collection != 1:
+            raise RuntimeError("Could not remove the <15 Myr trace from the galactic simple TraceCollection.")
+
+        source, removed_young_from_grouping = re.subn(
+            r'"Clusters"\s*:\s*\[\s*\'Sun\'\s*,\s*\'Clusters\s*\(<\s*60\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*15\s*Myr\)\'\s*\]',
+            "\"Clusters\": ['Sun', 'Clusters (< 60 Myr)']",
+            source,
+            count=1,
+        )
+        if removed_young_from_grouping != 1:
+            raise RuntimeError("Could not remove the <15 Myr cluster trace from galactic simple groupings.")
+
     if "supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)" not in source:
         supernova_block = build_supernova_volume_source_block()
         source, inserted_supernova = re.subn(
@@ -477,6 +569,36 @@ def run_script_source(source: str) -> None:
     exec(compile(source, str(NOTEBOOK_PATH.with_suffix(".py")), "exec"), globals_dict)
 
 
+def run_main_figure(
+    output_html: Path = DEFAULT_OUTPUT_HTML,
+    *,
+    theme_key: str | None = None,
+    minimal_mode: bool = False,
+    galactic_simple: bool = False,
+) -> Path:
+    output_html.parent.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl")
+    os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
+    os.environ.setdefault("MPLBACKEND", "Agg")
+
+    if not NOTEBOOK_PATH.exists():
+        raise FileNotFoundError(f"Missing notebook: {NOTEBOOK_PATH}")
+    if not REPO_ROOT.exists():
+        raise FileNotFoundError(f"Missing repo root: {REPO_ROOT}")
+
+    notebook_source = convert_notebook_to_script_source(NOTEBOOK_PATH)
+    patched_source = patch_script_source(
+        notebook_source,
+        output_html=output_html,
+        theme_key=theme_key,
+        minimal_mode=minimal_mode,
+        galactic_simple=galactic_simple,
+    )
+
+    run_script_source(patched_source)
+    return output_html
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -490,30 +612,22 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional Three.js color theme preset to force into the figure initial state.",
     )
+    parser.add_argument(
+        "--minimal-mode",
+        action="store_true",
+        help="Render the figure in minimal presentation mode.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    args.output_html.parent.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl")
-    os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
-    os.environ.setdefault("MPLBACKEND", "Agg")
-
-    if not NOTEBOOK_PATH.exists():
-        raise FileNotFoundError(f"Missing notebook: {NOTEBOOK_PATH}")
-    if not REPO_ROOT.exists():
-        raise FileNotFoundError(f"Missing repo root: {REPO_ROOT}")
-
-    notebook_source = convert_notebook_to_script_source(NOTEBOOK_PATH)
-    patched_source = patch_script_source(
-        notebook_source,
+    output_html = run_main_figure(
         output_html=args.output_html,
         theme_key=args.theme_key,
+        minimal_mode=bool(args.minimal_mode),
     )
-
-    run_script_source(patched_source)
-    print(f"Wrote {args.output_html}")
+    print(f"Wrote {output_html}")
 
 
 if __name__ == "__main__":
