@@ -4,7 +4,8 @@
 
 It combines:
 - orbital integration (`galpy`)
-- animated 3D Plotly figures
+- a standalone Three.js viewer for interactive 3D exploration
+- animated 3D Plotly figures for legacy workflows
 - an optional Dash app with an on-sky Aladin Lite panel synced to cluster selection
 
 ## Installation
@@ -26,6 +27,8 @@ Main dependencies:
 - `dash`
 - `astropy`
 - `galpy`
+
+The current primary renderer is the Three.js export path. Plotly support remains available for older notebook and figure workflows, but new interactive viewer work is centered on the Three.js stack.
 
 ## Core Data Model
 
@@ -138,10 +141,10 @@ From `oviz`:
 
 ## Testing
 
-Run the sky-panel tests with:
+Run the test suite with:
 
 ```bash
-pytest -q tests/test_sky_panel.py
+pytest -q tests
 ```
 
 ## Notes

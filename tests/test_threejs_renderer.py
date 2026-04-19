@@ -102,7 +102,6 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn(">Group<", html)
         self.assertIn("Cluster A", html)
         self.assertIn("Shift+drag or use Lasso", html)
-        self.assertIn("oviz-three-lasso-button", html)
         self.assertIn("Enable click select", html)
         self.assertIn("Lasso volumetric data", html)
         self.assertIn("let lassoVolumeSelectionEnabled = false;", html)

@@ -155,6 +155,37 @@ class Trace:
 
         self.coordinates = self.df[['x', 'y', 'z', 'U', 'V', 'W']].T.values
 
+    @staticmethod
+    def _filter_integrated_component(component, member_mask):
+        arr = np.asarray(component)
+
+        if arr.ndim == 0:
+            return arr
+
+        if arr.shape[0] == member_mask.size:
+            return arr[member_mask]
+
+        if arr.ndim == 1 and member_mask.size and arr.size % member_mask.size == 0:
+            reshaped = arr.reshape(member_mask.size, -1)
+            return reshaped[member_mask]
+
+        if member_mask.size == 1:
+            return arr if member_mask[0] else arr[:0]
+
+        raise ValueError('Integrated coordinate component shape is inconsistent with the current cluster membership mask.')
+
+    def _filter_integrated_state(self, member_mask):
+        if not self.integrated or self.cluster_int_coords is None:
+            return
+
+        self.cluster_int_coords = tuple(
+            tuple(
+                self._filter_integrated_component(component, member_mask)
+                for component in coord_group
+            )
+            for coord_group in self.cluster_int_coords
+        )
+
     def create_integrated_dataframe(self, time):
         """
         Create an integrated DataFrame of the star cluster.
@@ -283,12 +314,13 @@ class Trace:
         age_max : float
             Maximum age of the star cluster.
         """
-        self.df = self.df[(self.df['age_myr'] >= age_min) & (self.df['age_myr'] <= age_max)]
+        member_mask = ((self.df['age_myr'] >= age_min) & (self.df['age_myr'] <= age_max)).to_numpy()
+        self.df = self.df[member_mask]
         self.coordinates = self.df[['x', 'y', 'z', 'U', 'V', 'W']].T.values
 
         if self.integrated:
+            self._filter_integrated_state(member_mask)
             self.df_int = self.df_int.loc[(self.df_int['age_myr'] >= age_min) & (self.df_int['age_myr'] <= age_max)]
-            self.cluster_int_coords = (self.df_int['x'].values, self.df_int['y'].values, self.df_int['z'].values)
     
     def limit_cluster_by_name(self, names):
         """
@@ -299,12 +331,13 @@ class Trace:
         names : list
             List of names of the star clusters to keep.
         """
-        self.df = self.df[self.df['name'].isin(names)]
+        member_mask = self.df['name'].isin(names).to_numpy()
+        self.df = self.df[member_mask]
         self.coordinates = self.df[['x', 'y', 'z', 'U', 'V', 'W']].T.values
 
         if self.integrated:
+            self._filter_integrated_state(member_mask)
             self.df_int = self.df_int[self.df_int['name'].isin(names)]
-            self.cluster_int_coords = (self.df_int['x'].values, self.df_int['y'].values, self.df_int['z'].values)
 
     def copy(self):
         """
@@ -346,7 +379,7 @@ class TraceCollection:
         Limit the star clusters in the collection by name.
     """
 
-    def __init__(self, clusters=[]):
+    def __init__(self, clusters=None):
         """
         Initialize the TraceCollection object.
 
@@ -366,7 +399,7 @@ class TraceCollection:
         self.vo = None
         self.ro = None
         self.zo = None
-        self.add_clusters(clusters)
+        self.add_clusters(clusters or [])
 
     def add_clusters(self, clusters):
         """
