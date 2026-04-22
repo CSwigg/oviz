@@ -305,6 +305,12 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function pause(options = {}) {
+        if (!actionInterruptsMuted()) {
+          interruptActionRun("time", { disableOrbit: false });
+        }
+        if (timeActionTrack) {
+          stopTimeActionTrack();
+        }
         const snapToFrame = options.snap !== false;
         playbackDirection = 0;
         lastPlaybackAdvanceTimestamp = null;
@@ -328,6 +334,12 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function play(direction = 1) {
+        if (!actionInterruptsMuted()) {
+          interruptActionRun("time", { disableOrbit: false });
+        }
+        if (timeActionTrack) {
+          stopTimeActionTrack();
+        }
         if (frameSpecs.length <= 1) {
           return;
         }
@@ -657,9 +669,6 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function onCanvasWheel(event) {
-        if (galacticSimpleModeEnabled && galacticSimpleTracksOrbitTargetToSun) {
-          enableGalacticSimpleOrbitTargetTracking();
-        }
         if (!initialZoomAnchorActive()) {
           return;
         }
@@ -681,7 +690,10 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function onScaleBarPointerStart(event) {
-        if (!scaleBarEl || event.button !== 0) {
+        if (!actionInterruptsMuted()) {
+          interruptActionRun("camera", { disableOrbit: true });
+        }
+        if (!scaleBarEl || event.button !== 0 || minimalModeEnabled) {
           return;
         }
         const rect = scaleBarEl.getBoundingClientRect();

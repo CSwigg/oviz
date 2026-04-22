@@ -39,6 +39,20 @@ GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES = {
     'R = 8.12 kpc',
 }
 
+
+def _galactic_simple_allowed_trace_names(plot):
+    allowed = set(GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES)
+    trace_grouping_dict = getattr(plot, 'trace_grouping_dict', {}) or {}
+    for grouped_trace_names in trace_grouping_dict.values():
+        if isinstance(grouped_trace_names, str):
+            grouped_trace_names = [grouped_trace_names]
+        if not isinstance(grouped_trace_names, (list, tuple, set, np.ndarray, pd.Series)):
+            continue
+        for trace_name in grouped_trace_names:
+            if trace_name not in (None, ''):
+                allowed.add(str(trace_name))
+    return allowed
+
 SPIRAL_ARMS = {
     "Perseus": {
         "theta_ref_deg": -13.0,
@@ -187,6 +201,7 @@ class Animate3D:
         cluster_members_file=None,
         volumes=None,
         threejs_initial_state=None,
+        actions=None,
     ):
         """
         Main method to generate a 3D animated plot. Integrates orbits if necessary and
@@ -239,6 +254,11 @@ class Animate3D:
         self.sky_members_by_cluster = None
         self.volume_configs = _normalize_threejs_volume_configs(volumes)
         self.threejs_initial_state = copy.deepcopy(threejs_initial_state) if threejs_initial_state else {}
+        self.threejs_actions = copy.deepcopy(actions) if actions else []
+        lite_mode_enabled = bool(
+            self.threejs_initial_state.get("lite_mode_enabled")
+            or self.threejs_initial_state.get("minimal_mode_enabled")
+        )
         if age_kde_bandwidth_myr <= 0:
             raise ValueError("age_kde_bandwidth_myr must be > 0.")
         self.age_kde_bandwidth_myr = float(age_kde_bandwidth_myr)
@@ -246,6 +266,10 @@ class Animate3D:
             raise NotImplementedError(
                 "volumes are currently only supported with renderer='threejs'."
             )
+        if renderer_name != 'threejs' and self.threejs_actions:
+            raise ValueError("actions are currently only supported with renderer='threejs'.")
+        if renderer_name == 'threejs' and self.threejs_actions and not lite_mode_enabled:
+            raise ValueError("actions are currently only supported for lite threejs exports.")
         if self.enable_sky_panel:
             if self.sky_radius_deg <= 0:
                 raise ValueError("sky_radius_deg must be > 0.")
@@ -2409,7 +2433,12 @@ class Animate3D:
             return None
 
         trace_name = str(trace_json.get('name') or '')
-        if galactic_simple_mode and trace_name not in GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES:
+        galactic_simple_allowed_trace_names = (
+            _galactic_simple_allowed_trace_names(self)
+            if galactic_simple_mode
+            else GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES
+        )
+        if galactic_simple_mode and trace_name not in galactic_simple_allowed_trace_names:
             return None
         if galactic_simple_mode and trace_name in (GALACTIC_RADIUS_TRACE_NAMES - {'R = 8.12 kpc'}):
             return None

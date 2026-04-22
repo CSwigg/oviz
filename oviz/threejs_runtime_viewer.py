@@ -229,9 +229,40 @@ THREEJS_VIEWER_RUNTIME_JS = """
         focusTraceKey = String(focusTraceKey || "");
         camera.fov = clampRange(camera.fov, 18.0, 90.0);
         controls.zoomSpeed = globalScrollSpeed;
-        controls.autoRotate = cameraAutoOrbitEnabled;
-        controls.autoRotateSpeed = CAMERA_AUTO_ORBIT_SPEED;
+        syncCameraAutoOrbitMode();
         camera.updateProjectionMatrix();
+      }
+
+      function normalizeCameraAutoOrbitSpeed(value) {
+        const speed = Number(value);
+        if (!Number.isFinite(speed)) {
+          return 1.0;
+        }
+        return Math.max(speed, 0.0);
+      }
+
+      function normalizeCameraAutoOrbitDirection(value) {
+        if (typeof value === "string") {
+          const normalized = String(value).trim().toLowerCase();
+          if (["reverse", "clockwise", "cw", "-1", "negative"].includes(normalized)) {
+            return -1.0;
+          }
+          if (["forward", "counterclockwise", "anticlockwise", "ccw", "1", "positive"].includes(normalized)) {
+            return 1.0;
+          }
+        }
+        const numeric = Number(value);
+        if (Number.isFinite(numeric) && numeric < 0.0) {
+          return -1.0;
+        }
+        return 1.0;
+      }
+
+      function cameraAutoOrbitAngularSpeed() {
+        return CAMERA_AUTO_ORBIT_SPEED
+          * normalizeCameraAutoOrbitSpeed(cameraAutoOrbitBaseSpeed)
+          * Math.max(Number(cameraAutoOrbitSpeedMultiplier) || 1.0, 0.05)
+          * normalizeCameraAutoOrbitDirection(cameraAutoOrbitDirection);
       }
 
       function syncCameraAutoOrbitUi() {
@@ -245,10 +276,29 @@ THREEJS_VIEWER_RUNTIME_JS = """
         });
       }
 
+      function galacticSimpleDefaultOrbitActive() {
+        const initialViewOffset = initialCameraState && initialCameraState.viewOffset
+          ? normalizeActionViewOffset(initialCameraState.viewOffset)
+          : { x: 0.0, y: 0.0 };
+        const framedInitialView = Math.abs(initialViewOffset.x) > 1e-6 || Math.abs(initialViewOffset.y) > 1e-6;
+        return Boolean(
+          cameraAutoOrbitEnabled
+          && galacticSimpleModeEnabled
+          && galacticSimpleTracksOrbitTargetToSun
+          && !actionCameraOrbitOwned
+          && !framedInitialView
+        );
+      }
+
+      function syncCameraAutoOrbitMode() {
+        const useControlsAutoRotate = cameraAutoOrbitEnabled && !galacticSimpleDefaultOrbitActive();
+        controls.autoRotate = useControlsAutoRotate;
+        controls.autoRotateSpeed = cameraAutoOrbitAngularSpeed();
+      }
+
       function setCameraAutoOrbitEnabled(enabled) {
         cameraAutoOrbitEnabled = Boolean(enabled);
-        controls.autoRotate = cameraAutoOrbitEnabled;
-        controls.autoRotateSpeed = CAMERA_AUTO_ORBIT_SPEED;
+        syncCameraAutoOrbitMode();
         syncCameraAutoOrbitUi();
       }
 
@@ -305,8 +355,16 @@ THREEJS_VIEWER_RUNTIME_JS = """
         const maxDistance = Math.max(maxSpan * 12.0, 10.0);
         const nextViewDistance = clampRange(viewDistance * zoomFactor, minDistance, maxDistance);
         const appliedFactor = nextViewDistance / Math.max(viewDistance, 1e-9);
+        const preserveTargetOffset = Boolean(
+          galacticSimpleModeEnabled
+          && galacticSimpleTracksOrbitTargetToSun
+        );
         camera.position.copy(anchorPoint.clone().add(cameraOffset.multiplyScalar(appliedFactor)));
-        controls.target.copy(anchorPoint.clone().add(targetOffset.multiplyScalar(appliedFactor)));
+        controls.target.copy(
+          preserveTargetOffset
+            ? anchorPoint.clone().add(targetOffset)
+            : anchorPoint.clone().add(targetOffset.multiplyScalar(appliedFactor))
+        );
         camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
         controls.update();
         updateScaleBar();
@@ -322,6 +380,36 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         galacticSimpleOrbitTargetTrackingActive = true;
         controls.target.copy(currentZoomAnchorPoint);
+        return true;
+      }
+
+      function updateGalacticSimpleDefaultOrbit(deltaSeconds) {
+        if (!galacticSimpleDefaultOrbitActive()) {
+          return false;
+        }
+        if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0.0) {
+          return false;
+        }
+        const anchorPoint = trackedZoomAnchorPointForFrame(currentFrame()) || currentZoomAnchorPoint || initialZoomAnchorPoint;
+        if (!(anchorPoint instanceof THREE.Vector3)) {
+          return false;
+        }
+        const angle = deltaSeconds
+          * ((2.0 * Math.PI) / 60.0)
+          * cameraAutoOrbitAngularSpeed();
+        if (Math.abs(angle) <= 1e-12) {
+          return false;
+        }
+        const cameraOffset = camera.position.clone().sub(anchorPoint);
+        const targetOffset = controls.target.clone().sub(anchorPoint);
+        if (cameraOffset.lengthSq() <= 1e-18) {
+          return false;
+        }
+        cameraOffset.applyAxisAngle(sceneUpVector, angle);
+        targetOffset.applyAxisAngle(sceneUpVector, angle);
+        camera.position.copy(anchorPoint.clone().add(cameraOffset));
+        controls.target.copy(anchorPoint.clone().add(targetOffset));
+        camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
         return true;
       }
 
@@ -725,9 +813,6 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (!Number.isFinite(sign) || Math.abs(sign) <= 1e-12 || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0.0) {
           return;
         }
-        if (galacticSimpleModeEnabled && galacticSimpleTracksOrbitTargetToSun) {
-          enableGalacticSimpleOrbitTargetTracking();
-        }
         if (initialZoomAnchorActive()) {
           const speedScale = Math.max(globalScrollSpeed, 0.2);
           const zoomFactor = Math.exp(sign * deltaSeconds * 1.8 * speedScale);
@@ -837,6 +922,16 @@ THREEJS_VIEWER_RUNTIME_JS = """
         const lowerKey = normalizedKeyboardKey(key);
         const fast = Boolean(event.shiftKey);
         const isMovementKey = ["w", "a", "s", "d", "q", "e", "r", "f", "shift"].includes(lowerKey);
+        const interruptsAction = isMovementKey
+          || key === " "
+          || key === "ArrowLeft"
+          || key === "ArrowRight"
+          || /^[1-9]$/.test(key)
+          || ["l", "c", "v", "o"].includes(lowerKey);
+
+        if (interruptsAction && !actionInterruptsMuted()) {
+          interruptActionRun("keyboard", { disableOrbit: true });
+        }
 
         if (keyHelpEl && keyHelpEl.dataset.open === "true") {
           if (key === "Escape" || key === "?" || (key === "/" && event.shiftKey)) {

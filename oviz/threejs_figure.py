@@ -10,6 +10,7 @@ from .threejs_embed import render_threejs_html, threejs_data_url, threejs_iframe
 from .threejs_shell import THREEJS_SHELL_HTML
 from .threejs_runtime_legend import THREEJS_LEGEND_RUNTIME_JS
 from .threejs_runtime_interactions import THREEJS_INTERACTION_RUNTIME_JS
+from .threejs_runtime_actions import THREEJS_ACTION_RUNTIME_JS
 from .threejs_runtime_scene import THREEJS_SCENE_RUNTIME_JS
 from .threejs_runtime_sky import THREEJS_SKY_RUNTIME_JS
 from .threejs_runtime_viewer import THREEJS_VIEWER_RUNTIME_JS
@@ -342,8 +343,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: none !important;
       }
       #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-footer {
-        left: 68%;
-        bottom: clamp(84px, 16vh, 132px);
+        left: 29%;
+        bottom: 22px;
         transform: translateX(-50%);
         width: auto;
         max-width: min(calc(100vw - 32px), 580px);
@@ -1443,6 +1444,45 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-text);
         pointer-events: none;
       }
+      #__ROOT_ID__ .oviz-three-action-bar {
+        position: absolute;
+        top: 16px;
+        right: 18px;
+        z-index: 7;
+        display: none;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: flex-start;
+        gap: 8px;
+        width: auto;
+        max-width: min(calc(100vw - 32px), 320px);
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+      #__ROOT_ID__ .oviz-three-action-button {
+        height: auto;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.42);
+        cursor: pointer;
+        box-shadow: none;
+        font: 500 16px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0.01em;
+        transition: color 160ms ease, opacity 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-action-button:hover {
+        color: rgba(255, 255, 255, 0.96);
+      }
+      #__ROOT_ID__ .oviz-three-action-button[data-active="true"] {
+        color: rgba(255, 255, 255, 0.96);
+      }
       #__ROOT_ID__ .oviz-three-widget-menu {
         position: static;
         grid-column: 3;
@@ -1452,6 +1492,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         justify-content: flex-end;
         flex-wrap: wrap;
         gap: 4px;
+        width: fit-content;
+        max-width: min(calc(100vw - 28px), 760px);
         padding: 4px;
         border: 1px solid rgba(255, 255, 255, 0.05);
         border-radius: 4px;
@@ -1498,6 +1540,81 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         padding: 0 12px;
         justify-content: center;
         text-align: center;
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu {
+        gap: 3px;
+        padding: 3px;
+        max-width: min(calc(100vw - 24px), 520px);
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-action-bar {
+        gap: 7px;
+        top: 14px;
+        right: 16px;
+        max-width: min(calc(100vw - 24px), 280px);
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-action-button {
+        font-size: 14px;
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu button,
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu select,
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-tools-toggle,
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-controls-toggle {
+        height: 28px;
+        font-size: 10px;
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu .oviz-three-tools-toggle,
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu .oviz-three-controls-toggle {
+        padding: 0 10px;
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-select {
+        min-width: 124px;
+        max-width: 148px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-topbar {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "title"
+          "actions";
+        align-items: start;
+        gap: 8px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-title {
+        grid-area: title;
+        justify-self: center;
+        max-width: calc(100vw - 24px);
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu {
+        grid-area: actions;
+        justify-self: end;
+        justify-content: flex-end;
+        width: min(calc(100vw - 24px), 420px);
+        max-width: calc(100vw - 24px);
+        gap: 3px;
+        padding: 3px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu button,
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu select,
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-tools-toggle,
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-controls-toggle {
+        height: 28px;
+        font-size: 10px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu .oviz-three-tools-toggle,
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu .oviz-three-controls-toggle {
+        padding: 0 9px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-select {
+        min-width: 112px;
+        max-width: 132px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-action-bar {
+        top: 12px;
+        right: 14px;
+        max-width: min(calc(100vw - 24px), 240px);
+        gap: 6px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-action-button {
+        font-size: 13px;
       }
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
@@ -1949,6 +2066,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-scale-bar[data-dragging="true"] {
         cursor: grabbing;
       }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-scale-bar {
+        cursor: default;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-scale-bar[data-dragging="true"] {
+        cursor: default;
+      }
       #__ROOT_ID__ .oviz-three-note {
         position: absolute;
         right: 12px;
@@ -2316,8 +2439,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         #__ROOT_ID__ .oviz-three-widget-menu {
           grid-area: actions;
-          justify-self: center;
-          justify-content: center;
+          justify-self: end;
+          justify-content: flex-end;
           width: min(calc(100vw - 28px), 920px);
           max-width: calc(100vw - 28px);
         }
@@ -2331,6 +2454,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       @media (max-width: 860px) {
         #__ROOT_ID__ .oviz-three-widget-menu {
           row-gap: 4px;
+          justify-self: end;
+          justify-content: flex-end;
         }
         #__ROOT_ID__ .oviz-three-widget-menu button,
         #__ROOT_ID__ .oviz-three-widget-menu select,
@@ -2361,6 +2486,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           max-width: calc(100vw - 20px);
           padding: 4px;
           gap: 4px;
+          justify-self: end;
+          justify-content: flex-end;
         }
         #__ROOT_ID__ .oviz-three-widget-menu button,
         #__ROOT_ID__ .oviz-three-widget-menu select,
@@ -2388,7 +2515,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       @media (max-width: 1100px), (max-height: 760px) {
         #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-footer {
-          left: 50%;
+          left: 29%;
           bottom: 14px;
           max-width: calc(100vw - 28px);
         }
@@ -2572,7 +2699,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       /*__SCENE_SPEC_START__*/const sceneSpec = __SCENE_JSON__;/*__SCENE_SPEC_END__*/
       const root = document.getElementById("__ROOT_ID__");
       const initialState = sceneSpec.initial_state || {};
-      const minimalModeEnabled = Boolean(initialState.minimal_mode_enabled);
+      const minimalModeEnabled = Boolean(
+        initialState.lite_mode_enabled
+        || initialState.minimal_mode_enabled
+        || sceneSpec.export_profile === "lite"
+        || sceneSpec.export_profile === "minimal"
+      );
       const galacticSimpleSpec = sceneSpec.galactic_simple && typeof sceneSpec.galactic_simple === "object"
         ? sceneSpec.galactic_simple
         : {};
@@ -2584,7 +2716,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         ? initialState.initial_zoom_anchor
         : null;
       const canvas = root.querySelector(".oviz-three-canvas");
+      const actionBarEl = root.querySelector(".oviz-three-action-bar");
       const titleEl = root.querySelector(".oviz-three-title");
+      const widgetMenuEl = root.querySelector(".oviz-three-widget-menu");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
       const resetViewButtonEl = root.querySelector(".oviz-three-reset-view");
       const saveStateButtonEl = root.querySelector(".oviz-three-save-state");
@@ -3003,6 +3137,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let globalPointGlowStrength = 1.2;
       let sizePointsByStarsEnabled = false;
       let globalScrollSpeed = 1.0;
+      let cameraAutoOrbitBaseSpeed = 1.0;
+      let cameraAutoOrbitDirection = 1.0;
+      let cameraAutoOrbitSpeedMultiplier = 1.0;
       let cameraAutoOrbitEnabled = Boolean(
         initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled
       );
@@ -3079,6 +3216,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       controls.minPolarAngle = 0.02;
       controls.maxPolarAngle = Math.PI - 0.02;
       controls.target.set(sceneSpec.center.x, sceneSpec.center.y, sceneSpec.center.z);
+      controls.addEventListener("start", () => {
+        handleManualCameraInteractionStart();
+      });
 
       const eye = (layoutScene.camera || {}).eye || { x: 0.0, y: -0.8, z: 1.5 };
       const eyeScale = Math.max(sceneSpec.max_span || 1, 1);
@@ -3093,6 +3233,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         target: controls.target.clone(),
         up: camera.up.clone(),
         fov: Number(camera.fov),
+        viewOffset: { x: 0.0, y: 0.0 },
       };
 
       const plotGroup = new THREE.Group();
@@ -3361,12 +3502,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function defaultLegendPanelRect() {
+        const actionBarHeight = actionBarEl && actionBarEl.dataset.visible === "true"
+          ? Math.max(actionBarEl.getBoundingClientRect().height, 0.0)
+          : 0.0;
+        const topInset = Math.max(14.0 + actionBarHeight + (actionBarHeight > 0.0 ? 10.0 : 0.0), 12.0);
         if (minimalModeEnabled) {
           const visibleItems = visibleLegendItemsForCurrentGroup();
           const estimatedHeight = Math.max(visibleItems.length * 16 + 8, 24);
           const width = Math.min(Math.max(root.clientWidth * 0.18, 140.0), 240.0);
-          const height = Math.min(estimatedHeight, Math.max(root.clientHeight - 24.0, 24.0));
-          return clampLegendPanelRect(12.0, 12.0, width, height);
+          const height = Math.min(estimatedHeight, Math.max(root.clientHeight - topInset - 12.0, 24.0));
+          return clampLegendPanelRect(12.0, topInset, width, height);
         }
         const width = Math.min(Math.max(root.clientWidth * 0.18, 204.0), 240.0);
         const visibleItems = visibleLegendItemsForCurrentGroup();
@@ -3376,8 +3521,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const preferredVolumeRows = volumeCount ? clampRange(volumeCount, 1, 3) : 0;
         const estimatedHeight = 108 + preferredTraceRows * 34 + preferredVolumeRows * 32 + ((traceCount && volumeCount) ? 14 : 0);
         const minHeight = volumeCount ? 304.0 : 272.0;
-        const height = Math.min(Math.max(estimatedHeight, minHeight), Math.min(root.clientHeight - 18.0, 520.0));
-        return clampLegendPanelRect(14.0, 14.0, width, height);
+        const height = Math.min(Math.max(estimatedHeight, minHeight), Math.min(root.clientHeight - topInset - 12.0, 520.0));
+        return clampLegendPanelRect(14.0, topInset, width, height);
       }
 
       function legendSectionDefs() {
@@ -4872,6 +5017,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedGlobalControls.camera_auto_orbit_enabled === "boolean") {
             cameraAutoOrbitEnabled = savedGlobalControls.camera_auto_orbit_enabled;
           }
+          if (savedGlobalControls.camera_auto_orbit_speed !== undefined) {
+            cameraAutoOrbitBaseSpeed = normalizeCameraAutoOrbitSpeed(savedGlobalControls.camera_auto_orbit_speed);
+          }
+          if (savedGlobalControls.camera_auto_orbit_direction !== undefined) {
+            cameraAutoOrbitDirection = normalizeCameraAutoOrbitDirection(savedGlobalControls.camera_auto_orbit_direction);
+          }
           if (typeof savedGlobalControls.camera_view_mode === "string" && savedGlobalControls.camera_view_mode) {
             cameraViewMode = String(savedGlobalControls.camera_view_mode);
           }
@@ -5107,6 +5258,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           const target = savedCamera.target || {};
           const position = savedCamera.position || {};
           const up = savedCamera.up || {};
+          const viewOffset = savedCamera.view_offset || savedCamera.viewOffset || {};
           if (Number.isFinite(Number(target.x)) && Number.isFinite(Number(target.y)) && Number.isFinite(Number(target.z))) {
             controls.target.set(Number(target.x), Number(target.y), Number(target.z));
           }
@@ -5116,12 +5268,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (Number.isFinite(Number(up.x)) && Number.isFinite(Number(up.y)) && Number.isFinite(Number(up.z))) {
             camera.up.set(Number(up.x), Number(up.y), Number(up.z));
           }
+          if (typeof applyActionCameraViewOffset === "function") {
+            applyActionCameraViewOffset(viewOffset);
+          }
           camera.lookAt(controls.target);
           controls.update();
           initialCameraState.position.copy(camera.position);
           initialCameraState.target.copy(controls.target);
           initialCameraState.up.copy(camera.up);
           initialCameraState.fov = Number(camera.fov);
+          initialCameraState.viewOffset = typeof normalizeActionViewOffset === "function"
+            ? normalizeActionViewOffset(viewOffset)
+            : {
+              x: Number.isFinite(Number(viewOffset.x)) ? Number(viewOffset.x) : 0.0,
+              y: Number.isFinite(Number(viewOffset.y)) ? Number(viewOffset.y) : 0.0,
+            };
         }
 
         const savedDrawers = initialState.drawers;
@@ -5223,6 +5384,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             galactic_reference_visible: galacticReferenceVisible,
             nearby_region_labels_visible: nearbyRegionLabelsVisible,
             camera_auto_orbit_enabled: cameraAutoOrbitEnabled,
+            camera_auto_orbit_speed: cameraAutoOrbitBaseSpeed,
+            camera_auto_orbit_direction: cameraAutoOrbitDirection,
             camera_view_mode: cameraViewMode,
             earth_view_focus_distance_pc: earthViewFocusDistance,
           },
@@ -5230,6 +5393,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
             target: { x: controls.target.x, y: controls.target.y, z: controls.target.z },
             up: { x: camera.up.x, y: camera.up.y, z: camera.up.z },
+            view_offset: typeof normalizeActionViewOffset === "function"
+              ? normalizeActionViewOffset(currentActionCameraViewOffset)
+              : { x: 0.0, y: 0.0 },
           },
           drawers: {
             tools_open: Boolean(toolsShellEl && toolsShellEl.dataset.open === "true"),
@@ -8054,6 +8220,7 @@ __SKY_RUNTIME_JS__
         const traceState = traceStyleStateForKey(trace.key);
         const lineColor = (traceState && traceState.color) || (trace.line || {}).color || "#ffffff";
         let lineOpacity = traceState ? clamp01(traceState.opacity) : (trace.opacity ?? 1.0);
+        lineOpacity *= traceVisibilityOpacityMultiplier(trace);
         const focusedTraceKey = dendrogramFocusTraceKey();
         if (focusedTraceKey && String(trace.key) !== focusedTraceKey) {
           lineOpacity *= 0.16;
@@ -8420,6 +8587,7 @@ __SKY_RUNTIME_JS__
         const traceOpacityMultiplier = traceState
           ? clamp01(traceState.opacity) / Math.max(clamp01(Number(trace.default_opacity ?? 1.0)), 1e-6)
           : 1.0;
+        const traceVisibilityMultiplier = traceVisibilityOpacityMultiplier(trace);
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
         trace.points.forEach((point) => {
           if (!clusterFilterPassesPoint(point)) {
@@ -8444,7 +8612,7 @@ __SKY_RUNTIME_JS__
             opacityMultiplier *= selectedClusterKeys.has(pointKey) ? 1.0 : 0.16;
           }
           const baseOpacity = Number(pointState.opacity ?? point.opacity ?? 1.0);
-          const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * opacityMultiplier * globalPointOpacityScale));
+          const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * traceVisibilityMultiplier * opacityMultiplier * globalPointOpacityScale));
           if (effectiveOpacity <= 0.001) {
             return;
           }
@@ -8543,7 +8711,7 @@ __SKY_RUNTIME_JS__
         const group = new THREE.Group();
         const traceState = traceStyleStateForKey(trace.key);
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
-        const opacityValue = traceState ? clamp01(traceState.opacity) : 1.0;
+        const opacityValue = (traceState ? clamp01(traceState.opacity) : 1.0) * traceVisibilityOpacityMultiplier(trace);
         trace.labels.forEach((label) => {
           if (!label.text) {
             return;
@@ -8865,6 +9033,10 @@ __SKY_RUNTIME_JS__
       }
 
       function traceVisible(trace) {
+        const actionState = actionTraceVisibilityState(trace);
+        if (actionState) {
+          return Boolean(actionState.visible);
+        }
         if (isGalacticReferenceTrace(trace) && !galacticReferenceVisible) {
           return false;
         }
@@ -9237,6 +9409,8 @@ __SCENE_RUNTIME_JS__
 
 __VIEWER_RUNTIME_JS__
 
+__ACTION_RUNTIME_JS__
+
       function manualLabelHitFromEvent(event) {
         const hitObject = pickSprite(event);
         if (!hitObject || !hitObject.userData || !hitObject.userData.manualLabelId) {
@@ -9372,6 +9546,7 @@ __VIEWER_RUNTIME_JS__
       }
 
       function initControls() {
+        renderActionBar();
         setToolsDrawerOpen(Boolean(toolsShellEl && toolsShellEl.dataset.open === "true"));
         setControlsDrawerOpen(Boolean(controlsShellEl && controlsShellEl.dataset.open === "true"));
         setLegendPanelOpen(legendPanelOpen);
@@ -9401,11 +9576,29 @@ __VIEWER_RUNTIME_JS__
         }
         renderWidgetMenu();
         groupSelectEl.addEventListener("change", () => {
+          if (!actionInterruptsMuted()) {
+            interruptActionRun("legend", { disableOrbit: false });
+          }
           currentGroup = groupSelectEl.value;
           resetLegendState(currentGroup);
           renderLegend();
           renderFrame(currentFrameIndex);
         });
+        if (legendPanelEl) {
+          legendPanelEl.addEventListener("pointerdown", (event) => {
+            const target = event.target;
+            if (!target || actionInterruptsMuted()) {
+              return;
+            }
+            if (
+              target.closest(".oviz-three-legend-entry")
+              || target.closest(".oviz-three-legend-section-toggle")
+              || target.closest(".oviz-three-group-select")
+            ) {
+              interruptActionRun("legend", { disableOrbit: false });
+            }
+          });
+        }
         renderSceneControls();
         if (widgetSelectEl) {
           widgetSelectEl.addEventListener("change", () => {
@@ -9488,17 +9681,30 @@ __VIEWER_RUNTIME_JS__
           legendDragHandleEl.addEventListener("pointerdown", onLegendPointerStart);
         }
         legendResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onLegendPointerStart));
+        sliderEl.addEventListener("pointerdown", () => {
+          handleManualCameraInteractionStart();
+        });
         sliderEl.addEventListener("input", () => {
+          handleManualCameraInteractionStart();
+          if (!actionInterruptsMuted()) {
+            interruptActionRun("time", { disableOrbit: false });
+          }
           pause({ snap: false });
           scheduleSliderScrubRender(Number(sliderEl.value));
         });
         if (playBackwardButtonEl) {
           playBackwardButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("time", { disableOrbit: false });
+            }
             play(-1);
           });
         }
         if (playForwardButtonEl) {
           playForwardButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("time", { disableOrbit: false });
+            }
             play(1);
           });
         }
@@ -9687,17 +9893,26 @@ __VIEWER_RUNTIME_JS__
         }
         if (viewFromEarthButtonEl) {
           viewFromEarthButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("camera", { disableOrbit: true });
+            }
             viewFromEarth();
           });
         }
         orbitCameraButtons.forEach((buttonEl) => {
           buttonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("camera", { disableOrbit: true });
+            }
             setCameraAutoOrbitEnabled(!cameraAutoOrbitEnabled);
             focusViewer();
           });
         });
         if (resetCameraButtonEl) {
           resetCameraButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("camera", { disableOrbit: true });
+            }
             resetCameraView();
             renderSceneControls();
           });
@@ -9720,6 +9935,9 @@ __VIEWER_RUNTIME_JS__
             cameraViewMode = "free";
             earthViewFocusDistance = null;
             camera.fov = Number(initialCameraState.fov);
+            if (typeof applyActionCameraViewOffset === "function") {
+              applyActionCameraViewOffset(initialCameraState.viewOffset);
+            }
             applyGlobalControlState();
             applyCameraViewMode();
             applyThemePreset(activeThemeKey, { rerender: false });
@@ -9736,10 +9954,11 @@ __VIEWER_RUNTIME_JS__
       }
 
       function onCanvasPointerDown(event) {
-        focusViewer();
-        if (galacticSimpleModeEnabled && galacticSimpleTracksOrbitTargetToSun) {
-          enableGalacticSimpleOrbitTargetTracking();
+        if (!actionInterruptsMuted()) {
+          interruptActionRun("camera", { disableOrbit: true });
         }
+        handleManualCameraInteractionStart();
+        focusViewer();
         if (startSelectionBoxInteraction(event)) {
           return;
         }
@@ -9803,6 +10022,9 @@ __VIEWER_RUNTIME_JS__
       }
 
       function updateAnimatedFramePlayback(now) {
+        if (timeActionTrack) {
+          return;
+        }
         if (playbackDirection !== 0 && frameSpecs.length > 1) {
           if (lastPlaybackAdvanceTimestamp === null) {
             lastPlaybackAdvanceTimestamp = now;
@@ -9827,8 +10049,10 @@ __VIEWER_RUNTIME_JS__
           ? 0.0
           : clampRange((now - lastAnimationTimestamp) / 1000.0, 0.0, 0.05);
         lastAnimationTimestamp = now;
+        updateViewerActions(now);
         updateAnimatedFramePlayback(now);
         updateKeyboardMotion(deltaSeconds);
+        updateGalacticSimpleDefaultOrbit(deltaSeconds);
         controls.update();
         updateCameraResponsivePointSprites();
         updateScaleBar();
@@ -9853,6 +10077,9 @@ __VIEWER_RUNTIME_JS__
       updatePlaybackButtons();
       renderFrame(currentFrameIndex);
       resize();
+      setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);
+      initialActionViewState = captureCurrentActionViewState();
+      syncActionButtons();
       window.setTimeout(() => focusViewer(), 0);
       animate();
 
@@ -9909,6 +10136,7 @@ class ThreeJSFigure:
             scene_runtime_js=THREEJS_SCENE_RUNTIME_JS,
             sky_runtime_js=THREEJS_SKY_RUNTIME_JS,
             viewer_runtime_js=THREEJS_VIEWER_RUNTIME_JS,
+            action_runtime_js=THREEJS_ACTION_RUNTIME_JS,
         )
 
     def _data_url(self) -> str:

@@ -20,13 +20,16 @@ def render_threejs_html(
     scene_runtime_js: str,
     sky_runtime_js: str,
     viewer_runtime_js: str,
+    action_runtime_js: str,
 ) -> str:
     width = int(scene_spec.get("width") or 900)
     height = int(scene_spec.get("height") or 700)
     initial_state = scene_spec.get("initial_state") or {}
     minimal_mode = bool(
+        initial_state.get("lite_mode_enabled")
+        or
         initial_state.get("minimal_mode_enabled")
-        or scene_spec.get("export_profile") == "minimal"
+        or scene_spec.get("export_profile") in {"minimal", "lite"}
     )
     galactic_simple = bool((scene_spec.get("galactic_simple") or {}).get("enabled"))
 
@@ -53,6 +56,7 @@ def render_threejs_html(
     html = html.replace("__SCENE_RUNTIME_JS__", scene_runtime_js)
     html = html.replace("__SKY_RUNTIME_JS__", sky_runtime_js)
     html = html.replace("__VIEWER_RUNTIME_JS__", viewer_runtime_js)
+    html = html.replace("__ACTION_RUNTIME_JS__", action_runtime_js)
     html = html.replace("__SCENE_JSON__", json.dumps(scene_spec))
     return html
 

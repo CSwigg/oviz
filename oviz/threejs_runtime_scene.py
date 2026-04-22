@@ -1092,12 +1092,59 @@ THREEJS_SCENE_RUNTIME_JS = """
         renderFrameScene(frame, displayedTimeMyr, { updateWidgets: true });
       }
 
+      function updateTopbarDensity() {
+        if (!root) {
+          return;
+        }
+        if (!widgetMenuEl) {
+          root.dataset.topbarDensity = "regular";
+          return;
+        }
+
+        const width = Math.max(Number(root.clientWidth) || 0, 1);
+        const height = Math.max(Number(root.clientHeight) || 0, 1);
+        const aspect = width / Math.max(height, 1);
+        const menuWidth = Math.max(
+          Number(widgetMenuEl.scrollWidth) || 0,
+          Number(widgetMenuEl.getBoundingClientRect().width) || 0
+        );
+        const titleWidth = titleEl && titleEl.offsetParent !== null
+          ? Math.max(Number(titleEl.scrollWidth) || 0, Number(titleEl.getBoundingClientRect().width) || 0)
+          : 0;
+        const horizontalBudget = Math.max(width - titleWidth - 72.0, 180.0);
+
+        let density = "regular";
+        if (width < 780 || height < 560 || aspect < 1.18) {
+          density = "stacked";
+        } else if (
+          width < 1180
+          || height < 760
+          || aspect < 1.50
+          || menuWidth > horizontalBudget
+        ) {
+          density = "compact";
+        }
+
+        if (menuWidth > Math.max(320.0, horizontalBudget * 1.08)) {
+          density = "stacked";
+        }
+
+        root.dataset.topbarDensity = density;
+      }
+
       function resize() {
         const width = root.clientWidth;
         const height = root.clientHeight;
+        updateTopbarDensity();
         renderer.setSize(width, height, false);
         camera.aspect = width / Math.max(height, 1);
-        camera.updateProjectionMatrix();
+        if (typeof applyActionCameraViewOffset === "function") {
+          applyActionCameraViewOffset(
+            typeof currentActionCameraViewOffset === "object" ? currentActionCameraViewOffset : null
+          );
+        } else {
+          camera.updateProjectionMatrix();
+        }
         [...axisLineMaterials, ...frameLineMaterials].forEach((material) => {
           material.resolution.set(width, height);
         });

@@ -4,25 +4,54 @@ import copy
 
 import numpy as np
 
+from .threejs_actions import normalize_threejs_actions
 
-def _minimal_mode_enabled(plot) -> bool:
+
+def _lite_mode_enabled(plot) -> bool:
     initial_state = getattr(plot, "threejs_initial_state", {}) or {}
-    return bool(initial_state.get("minimal_mode_enabled"))
+    return bool(
+        initial_state.get("lite_mode_enabled")
+        or initial_state.get("minimal_mode_enabled")
+    )
 
 
 def _galactic_simple_config(plot, *, file_to_data_url, coerce_float):
     initial_state = getattr(plot, "threejs_initial_state", {}) or {}
-    if not bool(initial_state.get("galactic_simple_mode_enabled")):
+    if not bool(
+        initial_state.get("galactic_lite_mode_enabled")
+        or initial_state.get("galactic_simple_mode_enabled")
+    ):
         return {"enabled": False}
 
-    image_path = initial_state.get("galactic_plane_image_path")
-    image_data_url = file_to_data_url(image_path) if image_path else None
+    image_enabled = initial_state.get("galaxy_image")
+    if image_enabled is None:
+        image_enabled = bool(
+            initial_state.get("galaxy_image_path")
+            or initial_state.get("galactic_plane_image_path")
+        )
+    image_path = initial_state.get("galaxy_image_path") or initial_state.get("galactic_plane_image_path")
+    image_data_url = file_to_data_url(image_path) if image_enabled and image_path else None
     return {
         "enabled": True,
         "key": "galactic-plane-overlay",
+        "track_orbit_target_to_sun": bool(initial_state.get("track_orbit_target_to_sun")),
         "image_data_url": image_data_url,
-        "size_pc": float(coerce_float(initial_state.get("galactic_plane_size_pc"), 40000.0)),
-        "opacity": float(np.clip(coerce_float(initial_state.get("galactic_plane_opacity"), 0.6), 0.0, 1.0)),
+        "size_pc": float(
+            coerce_float(
+                initial_state.get("galaxy_image_size_pc", initial_state.get("galactic_plane_size_pc")),
+                40000.0,
+            )
+        ),
+        "opacity": float(
+            np.clip(
+                coerce_float(
+                    initial_state.get("galaxy_image_opacity", initial_state.get("galactic_plane_opacity")),
+                    0.6,
+                ),
+                0.0,
+                1.0,
+            )
+        ),
         "hide_below_scale_bar_pc": 200.0,
         "fade_start_scale_bar_pc": 350.0,
     }
@@ -40,7 +69,7 @@ def build_threejs_scene_spec(
     catalog_from_frame_spec,
     annotate_point_motion_ranges,
 ):
-    minimal_mode = _minimal_mode_enabled(plot)
+    minimal_mode = _lite_mode_enabled(plot)
     galactic_simple = _galactic_simple_config(
         plot,
         file_to_data_url=file_to_data_url,
@@ -126,6 +155,12 @@ def build_threejs_scene_spec(
         for trace_key, trace_name in trace_keys
         if isinstance(trace_name, str) and trace_name
     }
+    normalized_actions = normalize_threejs_actions(
+        getattr(plot, "threejs_actions", []) or [],
+        group_names=list(plot.trace_grouping_dict.keys()),
+        trace_key_by_name=trace_key_by_name,
+        playback_interval_ms=240,
+    )
 
     seen_volume_state_keys = set()
     for layer in volume_layers:
@@ -239,9 +274,13 @@ def build_threejs_scene_spec(
             "legend_panel_state",
             "legend_panel_user_sized",
             "galactic_simple_mode_enabled",
+            "galactic_lite_mode_enabled",
             "galactic_plane_image_path",
             "galactic_plane_size_pc",
             "galactic_plane_opacity",
+            "galaxy_image_path",
+            "galaxy_image_size_pc",
+            "galaxy_image_opacity",
         ):
             initial_state.pop(state_key, None)
         initial_state["click_selection_enabled"] = False
@@ -310,10 +349,10 @@ def build_threejs_scene_spec(
 
     return {
         "renderer": "threejs",
-        "export_profile": "minimal" if minimal_mode else "full",
+        "export_profile": "lite" if minimal_mode else "full",
         "galactic_simple": {
             "enabled": bool(galactic_simple.get("enabled")),
-            "track_orbit_target_to_sun": False,
+            "track_orbit_target_to_sun": bool(galactic_simple.get("track_orbit_target_to_sun")),
         },
         "title": title_text,
         "width": int(layout_json.get("width") or 900),
@@ -342,6 +381,10 @@ def build_threejs_scene_spec(
         },
         "show_axes": bool(show_axes),
         "playback_interval_ms": 240,
+        "actions": {
+            "enabled": bool(normalized_actions),
+            "items": normalized_actions,
+        },
         "camera_up": {"x": 0.0, "y": 0.0, "z": 1.0},
         "image_planes": image_planes,
         "sky_panel": (
