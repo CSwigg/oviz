@@ -5,10 +5,11 @@ import copy
 import numpy as np
 
 from .threejs_actions import normalize_threejs_actions
+from .threejs_profiles import normalize_threejs_initial_state
 
 
 def _lite_mode_enabled(plot) -> bool:
-    initial_state = getattr(plot, "threejs_initial_state", {}) or {}
+    initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
     return bool(
         initial_state.get("lite_mode_enabled")
         or initial_state.get("minimal_mode_enabled")
@@ -16,7 +17,7 @@ def _lite_mode_enabled(plot) -> bool:
 
 
 def _galactic_simple_config(plot, *, file_to_data_url, coerce_float):
-    initial_state = getattr(plot, "threejs_initial_state", {}) or {}
+    initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
     if not bool(
         initial_state.get("galactic_lite_mode_enabled")
         or initial_state.get("galactic_simple_mode_enabled")
@@ -55,6 +56,21 @@ def _galactic_simple_config(plot, *, file_to_data_url, coerce_float):
         "hide_below_scale_bar_pc": 200.0,
         "fade_start_scale_bar_pc": 350.0,
     }
+
+
+def _timeline_enabled(plot, frame_specs) -> bool:
+    if len(frame_specs) <= 1:
+        return False
+
+    data_collection = getattr(plot, "data_collection", None)
+    if data_collection is None or not hasattr(data_collection, "get_all_clusters"):
+        return True
+
+    clusters = list(data_collection.get_all_clusters() or [])
+    if not clusters:
+        return False
+
+    return any(bool(getattr(cluster, "has_time_varying_geometry", True)) for cluster in clusters)
 
 
 def build_threejs_scene_spec(
@@ -257,10 +273,11 @@ def build_threejs_scene_spec(
         title_text = str(title_cfg)
 
     compact_layout = {"scene": copy.deepcopy(scene_layout)}
+    normalized_initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
     initial_state = {
         "click_selection_enabled": False,
         "current_group": default_group,
-        **copy.deepcopy(getattr(plot, "threejs_initial_state", {}) or {}),
+        **copy.deepcopy(normalized_initial_state),
     }
     if minimal_mode:
         for state_key in (
@@ -350,6 +367,10 @@ def build_threejs_scene_spec(
     return {
         "renderer": "threejs",
         "export_profile": "lite" if minimal_mode else "full",
+        "timeline": {
+            "enabled": bool(_timeline_enabled(plot, frame_specs)),
+            "frame_count": len(frame_specs),
+        },
         "galactic_simple": {
             "enabled": bool(galactic_simple.get("enabled")),
             "track_orbit_target_to_sun": bool(galactic_simple.get("track_orbit_target_to_sun")),

@@ -2751,6 +2751,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const timeLabelEl = root.querySelector(".oviz-three-time-label");
       const playBackwardButtonEl = root.querySelector(".oviz-three-play-backward");
       const playForwardButtonEl = root.querySelector(".oviz-three-play-forward");
+      const footerEl = root.querySelector(".oviz-three-footer");
       const tooltipEl = root.querySelector(".oviz-three-tooltip");
       const scaleBarEl = root.querySelector(".oviz-three-scale-bar");
       const scaleLabelEl = root.querySelector(".oviz-three-scale-label");
@@ -2968,6 +2969,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const layoutScene = (sceneSpec.layout || {}).scene || {};
       const axisSpec = sceneSpec.axes || {};
       const frameSpecs = sceneSpec.frames || [];
+      const timelineSpec = sceneSpec.timeline || { enabled: frameSpecs.length > 1 };
+      const timelineEnabled = timelineSpec.enabled !== false;
       const legendItems = (sceneSpec.legend || {}).items || [];
       const groupVisibility = sceneSpec.group_visibility || {};
       const defaultGroup = sceneSpec.default_group || "All";
@@ -2997,6 +3000,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             .filter((key) => key)
         )
       );
+      if (footerEl && !timelineEnabled) {
+        footerEl.style.display = "none";
+      }
       const volumeStateKeySet = new Set(volumeStateKeys);
       const animationSpec = sceneSpec.animation || {};
       const clusterFilterParameters = Array.isArray(clusterFilterSpec.parameters) ? clusterFilterSpec.parameters : [];

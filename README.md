@@ -1,6 +1,6 @@
 # oviz
 
-`oviz` is a Python package for 3D orbit visualization of stellar clusters and associations.
+`oviz` is a Python package for 3D astronomical spatial visualization, with orbit tracing as a core workflow.
 
 It combines:
 - orbital integration (`galpy`)
@@ -41,13 +41,20 @@ The current primary renderer is the Three.js export path. Plotly support remains
 Optional:
 - `n_stars` (required only if `size_by_n_stars=True`)
 
+For a more general astronomy-facing API, `oviz` also exposes:
+- `Layer`
+- `LayerCollection`
+- `Scene3D`
+
+`Layer` preserves the same rendering/orbit behavior as `Trace`, but it can also represent static spatial layers when you pass `assume_stationary=True`.
+
 ## Quick Start
 
 ```python
 import numpy as np
 import pandas as pd
 
-from oviz import Trace, TraceCollection, Animate3D
+from oviz import Layer, LayerCollection, Scene3D, build_threejs_profile
 from oviz.app import run_dash_app_in_notebook
 
 # Example minimal cluster dataframe
@@ -64,15 +71,15 @@ cluster_df = pd.DataFrame(
     }
 )
 
-trace = Trace(
+layer = Layer.from_dataframe(
     cluster_df,
-    data_name="Cluster A",
+    layer_name="Cluster A",
     color="cyan",
     marker_style="circle",
 )
-collection = TraceCollection([trace])
+collection = LayerCollection([layer])
 
-viz = Animate3D(
+viz = Scene3D(
     data_collection=collection,
     xyz_widths=(1000, 1000, 400),
     figure_theme="dark",
@@ -84,6 +91,7 @@ fig = viz.make_plot(
     show=False,
     galactic_mode=True,
     show_galactic_guides=False,
+    threejs_initial_state=build_threejs_profile("full"),
 )
 
 app = run_dash_app_in_notebook(
@@ -134,6 +142,14 @@ From `oviz`:
 - `Trace`
 - `TraceCollection`
 - `Animate3D`
+- `Layer`
+- `LayerCollection`
+- `Scene3D`
+- `build_threejs_profile`
+- `threejs_profile`
+- `lite_profile`
+- `galactic_lite_profile`
+- `website_background_profile`
 - `create_dash_app`
 - `run_dash_app`
 - `run_dash_app_in_notebook`

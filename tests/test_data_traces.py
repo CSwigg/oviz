@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from oviz.traces import Trace, TraceCollection
+from oviz.traces import Layer, LayerCollection, Trace, TraceCollection
 
 
 def _make_integrated_trace():
@@ -83,3 +83,43 @@ def test_trace_collection_uses_independent_default_cluster_lists():
 
     assert len(first.get_all_clusters()) == 1
     assert second.get_all_clusters() == []
+
+
+def test_layer_can_create_static_integrated_state_without_velocities():
+    df = pd.DataFrame(
+        {
+            "x": [1.0, 2.0],
+            "y": [3.0, 4.0],
+            "z": [5.0, 6.0],
+        }
+    )
+    layer = Layer(df, layer_name="Markers", assume_stationary=True)
+
+    layer.integrate_orbits(np.array([0.0, -1.0, -2.0]))
+
+    assert layer.supports_orbit_tracing is False
+    assert layer.integrated is True
+    assert set(layer.df_int["name"]) == {"Markers"}
+    assert set(layer.df_int["age_myr"]) == {0.0}
+    assert np.allclose(layer.df_int["x"].to_numpy()[:3], np.array([1.0, 1.0, 1.0]))
+
+
+def test_layer_collection_exposes_layer_alias_methods():
+    df = pd.DataFrame(
+        {
+            "x": [0.0],
+            "y": [0.0],
+            "z": [0.0],
+            "U": [0.0],
+            "V": [0.0],
+            "W": [0.0],
+            "name": ["A"],
+            "age_myr": [1.0],
+        }
+    )
+    layer = Layer(df, layer_name="Layer A")
+    collection = LayerCollection([layer])
+
+    assert collection.layers == collection.get_all_clusters()
+    assert collection.get_layer("Layer A") is layer
+    assert collection.get_all_layers() == [layer]

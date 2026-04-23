@@ -15,6 +15,7 @@ import importlib.resources
 from . import orbit_maker
 import pandas as pd
 from .threejs_figure import ThreeJSFigure
+from .threejs_profiles import build_threejs_profile, merge_threejs_profile
 from .threejs_scene import build_threejs_scene_spec
 
 GALACTIC_GUIDE_TRACE_NAMES = {
@@ -201,6 +202,7 @@ class Animate3D:
         cluster_members_file=None,
         volumes=None,
         threejs_initial_state=None,
+        preset=None,
         actions=None,
     ):
         """
@@ -253,7 +255,9 @@ class Animate3D:
         self.cluster_members_file = cluster_members_file
         self.sky_members_by_cluster = None
         self.volume_configs = _normalize_threejs_volume_configs(volumes)
-        self.threejs_initial_state = copy.deepcopy(threejs_initial_state) if threejs_initial_state else {}
+        profile_initial_state = build_threejs_profile(preset) if preset else {}
+        caller_initial_state = copy.deepcopy(threejs_initial_state) if threejs_initial_state else {}
+        self.threejs_initial_state = merge_threejs_profile(profile_initial_state, caller_initial_state)
         self.threejs_actions = copy.deepcopy(actions) if actions else []
         lite_mode_enabled = bool(
             self.threejs_initial_state.get("lite_mode_enabled")
@@ -2476,7 +2480,7 @@ class Animate3D:
             points = _points_from_trace(
                 trace_json,
                 default_opacity=float(trace_json.get('opacity', 1.0)),
-                include_selection=bool(getattr(self, 'enable_sky_panel', False)) and (not minimal_mode),
+                include_selection=not minimal_mode,
                 include_hovertext=not minimal_mode,
                 include_motion=(not minimal_mode) or galactic_simple_mode,
                 include_n_stars=not minimal_mode,

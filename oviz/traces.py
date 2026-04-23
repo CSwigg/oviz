@@ -350,6 +350,168 @@ class Trace:
         """
         return copy.deepcopy(self)
 
+    @property
+    def layer_name(self):
+        return self.data_name
+
+    @property
+    def integrated_coords(self):
+        return self.cluster_int_coords
+
+    @property
+    def has_time_varying_geometry(self):
+        return True
+
+    def limit_age(self, age_min, age_max):
+        self.limit_cluster_age(age_min, age_max)
+
+    def limit_by_name(self, names):
+        self.limit_cluster_by_name(names)
+
+
+class Layer(Trace):
+    """
+    General astronomy-facing spatial layer.
+
+    `Layer` preserves the current `Trace` behavior but relaxes the dataframe
+    requirements so callers can provide static 3D spatial data or full phase-space
+    data for orbit tracing.
+    """
+
+    def __init__(
+        self,
+        df,
+        layer_name,
+        min_size=1,
+        max_size=5,
+        color='gray',
+        opacity=1.0,
+        marker_style='circle',
+        show_tracks=False,
+        size_by_n_stars=False,
+        shifted_rf=None,
+        fade_in_time=None,
+        fade_in_and_out=None,
+        colormap=None,
+        cmin=None,
+        cmax=None,
+        fade_in_and_disp=None,
+        disp_time=None,
+        default_age_myr=0.0,
+        assume_stationary=False,
+    ):
+        prepared_df, has_velocity_columns = self._normalize_layer_dataframe(
+            df,
+            layer_name=layer_name,
+            size_by_n_stars=size_by_n_stars,
+            default_age_myr=default_age_myr,
+            assume_stationary=assume_stationary,
+        )
+        self._has_velocity_columns = has_velocity_columns
+
+        super().__init__(
+            prepared_df,
+            data_name=layer_name,
+            min_size=min_size,
+            max_size=max_size,
+            color=color,
+            opacity=opacity,
+            marker_style=marker_style,
+            show_tracks=show_tracks,
+            size_by_n_stars=size_by_n_stars,
+            shifted_rf=shifted_rf,
+            fade_in_time=fade_in_time,
+            fade_in_and_out=fade_in_and_out,
+            colormap=colormap,
+            cmin=cmin,
+            cmax=cmax,
+            fade_in_and_disp=fade_in_and_disp,
+            disp_time=disp_time,
+        )
+
+    @staticmethod
+    def _normalize_layer_dataframe(df, *, layer_name, size_by_n_stars=False, default_age_myr=0.0, assume_stationary=False):
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError('Layer input must be a pandas.DataFrame.')
+
+        prepared_df = df.copy()
+        missing_coordinates = [column for column in ('x', 'y', 'z') if column not in prepared_df.columns]
+        if missing_coordinates:
+            raise ValueError(
+                'Layer input data must contain the following columns: x, y, z '
+                f"(missing: {', '.join(missing_coordinates)})."
+            )
+
+        has_velocity_columns = all(column in prepared_df.columns for column in ('U', 'V', 'W'))
+        if not has_velocity_columns:
+            if not assume_stationary:
+                raise ValueError(
+                    'Layer input data must contain U, V, W to enable orbit tracing. '
+                    'If this layer should stay static in time, pass assume_stationary=True.'
+                )
+            for column in ('U', 'V', 'W'):
+                if column not in prepared_df.columns:
+                    prepared_df[column] = 0.0
+
+        if 'name' not in prepared_df.columns:
+            prepared_df['name'] = str(layer_name)
+        else:
+            prepared_df['name'] = prepared_df['name'].fillna(str(layer_name))
+
+        if 'age_myr' not in prepared_df.columns:
+            prepared_df['age_myr'] = float(default_age_myr)
+        else:
+            prepared_df['age_myr'] = prepared_df['age_myr'].fillna(float(default_age_myr))
+
+        if size_by_n_stars and 'n_stars' not in prepared_df.columns:
+            raise ValueError('Layer input data must contain n_stars when size_by_n_stars=True.')
+
+        return prepared_df, has_velocity_columns
+
+    @classmethod
+    def from_dataframe(cls, df, layer_name, **kwargs):
+        return cls(df=df, layer_name=layer_name, **kwargs)
+
+    @property
+    def supports_orbit_tracing(self):
+        return bool(self._has_velocity_columns)
+
+    @property
+    def has_time_varying_geometry(self):
+        return self.supports_orbit_tracing
+
+    def _static_cluster_int_coords(self, time):
+        time = np.asarray(time, dtype=float)
+        n_times = len(time)
+
+        x = np.repeat(self.df['x'].to_numpy(dtype=float)[:, None], n_times, axis=1)
+        y = np.repeat(self.df['y'].to_numpy(dtype=float)[:, None], n_times, axis=1)
+        z = np.repeat(self.df['z'].to_numpy(dtype=float)[:, None], n_times, axis=1)
+        r = np.hypot(x, y)
+        phi = np.arctan2(y, x)
+
+        return (
+            (x, y, z),
+            (x, y, z),
+            (x, y, z),
+            (r, phi, z),
+        )
+
+    def integrate_orbits(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
+        if self.supports_orbit_tracing:
+            return super().integrate_orbits(
+                time,
+                reference_frame_center=reference_frame_center,
+                potential=potential,
+                vo=vo,
+                ro=ro,
+                zo=zo,
+            )
+
+        self.cluster_int_coords = self._static_cluster_int_coords(time)
+        self.df_int = self.create_integrated_dataframe(np.asarray(time, dtype=float))
+        self.integrated = True
+
 class TraceCollection:
     """
     Class for storing a collection of star clusters.
@@ -561,3 +723,38 @@ class TraceCollection:
         """
         for cluster in self.clusters:
             cluster.limit_cluster_by_name(names)
+
+    @property
+    def layers(self):
+        return self.clusters
+
+    def add_layer(self, layer):
+        self.add_cluster(layer)
+
+    def get_layer(self, identifier):
+        return self.get_cluster(identifier)
+
+    def get_all_layers(self):
+        return self.get_all_clusters()
+
+    def integrate_all_layers(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
+        self.integrate_all_orbits(
+            time,
+            reference_frame_center=reference_frame_center,
+            potential=potential,
+            vo=vo,
+            ro=ro,
+            zo=zo,
+        )
+
+    def set_all_layer_sizes(self, fade_in_time, fade_in_and_out, fade_in_and_disp=False, disp_time=0):
+        self.set_all_cluster_sizes(
+            fade_in_time,
+            fade_in_and_out,
+            fade_in_and_disp=fade_in_and_disp,
+            disp_time=disp_time,
+        )
+
+
+class LayerCollection(TraceCollection):
+    pass

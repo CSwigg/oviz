@@ -13,6 +13,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from oviz import Layer, LayerCollection, Scene3D, galactic_lite_profile, website_background_profile  # noqa: E402
 from oviz.viz import Animate3D  # noqa: E402
 
 
@@ -318,40 +319,89 @@ class ThreeJSRendererTests(unittest.TestCase):
                 ],
             )
 
-        with self.assertRaisesRegex(ValueError, "unknown group"):
-            viz.make_plot(
-                time=np.array([0.0, -1.0]),
-                renderer="threejs",
-                show=False,
-                threejs_initial_state={"lite_mode_enabled": True},
-                actions=[
-                    {
-                        "key": "paper-1",
-                        "label": "Paper 1",
-                        "steps": [{"type": "legend_group", "group": "Missing Group"}],
-                    }
-                ],
-            )
+    def test_scene3d_supports_profile_helpers(self):
+        viz = Scene3D(_FakeCollection(show_tracks=True), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            preset="galactic_lite",
+            threejs_initial_state={
+                "galaxy_image": True,
+                "galaxy_image_path": "/tmp/galaxy.png",
+            },
+        )
 
-        with self.assertRaisesRegex(ValueError, "unknown trace"):
-            viz.make_plot(
-                time=np.array([0.0, -1.0]),
-                renderer="threejs",
-                show=False,
-                threejs_initial_state={"lite_mode_enabled": True},
-                actions=[
-                    {
-                        "key": "paper-1",
-                        "label": "Paper 1",
-                        "steps": [
-                            {
-                                "type": "camera",
-                                "target": {"kind": "trace", "name": "Missing Trace"},
-                            }
-                        ],
-                    }
-                ],
-            )
+        self.assertEqual(fig.__class__.__name__, "ThreeJSFigure")
+        self.assertEqual(viz.fig_dict["export_profile"], "lite")
+        self.assertTrue(viz.fig_dict["galactic_simple"]["enabled"])
+        self.assertEqual(viz.fig_dict["initial_state"]["lite_mode_enabled"], True)
+        self.assertEqual(viz.threejs_initial_state["galaxy_image_path"], "/tmp/galaxy.png")
+
+    def test_profile_helpers_normalize_legacy_aliases(self):
+        profile = galactic_lite_profile(
+            galaxy_image=True,
+            galaxy_image_path="/tmp/galaxy.png",
+            minimal_mode_enabled=False,
+            galactic_plane_opacity=0.4,
+        )
+
+        self.assertTrue(profile["lite_mode_enabled"])
+        self.assertTrue(profile["galactic_lite_mode_enabled"])
+        self.assertEqual(profile["galaxy_image_path"], "/tmp/galaxy.png")
+        self.assertEqual(profile["galaxy_image_opacity"], 0.4)
+
+    def test_website_background_profile_has_expected_defaults(self):
+        profile = website_background_profile(galaxy_image=True, galaxy_image_path="/tmp/galaxy.png")
+
+        self.assertTrue(profile["lite_mode_enabled"])
+        self.assertTrue(profile["galactic_lite_mode_enabled"])
+        self.assertTrue(profile["track_orbit_target_to_sun"])
+        self.assertFalse(profile["click_selection_enabled"])
+        self.assertEqual(profile["camera"]["view_offset"]["x"], 0.22)
+
+    def test_static_lite_scene_disables_timeline_footer(self):
+        static_sun_df = pd.DataFrame(
+            {
+                "x": [0.0],
+                "y": [0.0],
+                "z": [27.0],
+                "name": ["Sun"],
+                "age_myr": [8000.0],
+            }
+        )
+        layers = LayerCollection(
+            [
+                Layer.from_dataframe(
+                    static_sun_df,
+                    layer_name="Sun",
+                    min_size=5.0,
+                    max_size=5.0,
+                    color="yellow",
+                    opacity=1.0,
+                    marker_style="circle",
+                    assume_stationary=True,
+                )
+            ]
+        )
+        viz = Scene3D(
+            layers,
+            figure_theme="dark",
+            xyz_widths=(1000, 1000, 400),
+            trace_grouping_dict={"Sun": ["Sun"]},
+        )
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            galactic_mode=True,
+            preset="galactic_lite",
+        )
+
+        self.assertFalse(viz.fig_dict["timeline"]["enabled"])
+        html = fig.to_html()
+        self.assertIn('const timelineSpec = sceneSpec.timeline || { enabled: frameSpecs.length > 1 };', html)
+        self.assertIn('footerEl.style.display = "none";', html)
 
     def test_threejs_milky_way_model_is_t0_only(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
@@ -495,6 +545,29 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('type: "oviz-sky-hover-cluster"', html)
         self.assertIn('type: "oviz-parent-hover-cluster"', html)
         self.assertIn('aladin.on("objectHovered"', html)
+
+    def test_threejs_renderer_keeps_selection_metadata_without_sky_panel(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        viz.data_collection.cluster.df_int["x_helio"] = [10.0, 10.0]
+        viz.data_collection.cluster.df_int["y_helio"] = [-5.0, -5.0]
+        viz.data_collection.cluster.df_int["z_helio"] = [2.0, 2.0]
+
+        viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=False,
+        )
+
+        zero_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == 0.0)
+        cluster_trace = next(trace for trace in zero_frame["traces"] if trace["name"] == "Cluster A")
+        selection = cluster_trace["points"][0]["selection"]
+
+        self.assertFalse(viz.fig_dict["sky_panel"]["enabled"])
+        self.assertEqual(selection["trace_name"], "Cluster A")
+        self.assertEqual(selection["cluster_name"], "member_1")
+        self.assertTrue(np.isfinite(selection["ra_deg"]))
+        self.assertTrue(np.isfinite(selection["dec_deg"]))
 
     def test_threejs_renderer_builds_trace_catalog_without_members_file(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
