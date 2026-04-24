@@ -248,7 +248,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         box-shadow: none !important;
       }
       #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-group-field {
-        display: none !important;
+        padding: 0 1px 8px;
       }
       #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section {
         gap: 0;
@@ -458,10 +458,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-field {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 3px;
         min-width: 0;
-        color: var(--oviz-text);
-        font-size: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 11px;
       }
       #__ROOT_ID__ .oviz-three-legend-field input[type="range"],
       #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
@@ -473,10 +473,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
       #__ROOT_ID__ .oviz-three-legend-field select {
-        padding: 6px 8px;
-        border-radius: 6px;
-        border: 1px solid var(--oviz-panel-border);
-        background: rgba(0, 0, 0, 0.18);
+        padding: 2px 0 3px;
+        border-radius: 0;
+        border: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        background: transparent;
         color: var(--oviz-text);
         font: 12px Helvetica, Arial, sans-serif;
       }
@@ -484,29 +485,29 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         accent-color: var(--oviz-axis);
       }
       #__ROOT_ID__ .oviz-three-legend-field input[type="color"] {
-        height: 34px;
-        border: 1px solid var(--oviz-panel-border);
-        border-radius: 6px;
-        padding: 2px;
-        background: rgba(0, 0, 0, 0.18);
+        height: 26px;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        background: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-toggle {
         display: flex;
         align-items: center;
         gap: 8px;
-        color: var(--oviz-text);
-        font-size: 12px;
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 11px;
       }
       #__ROOT_ID__ .oviz-three-legend-toggle input {
         margin: 0;
         accent-color: var(--oviz-axis);
       }
       #__ROOT_ID__ .oviz-three-legend-summary {
-        color: var(--oviz-text);
-        font-size: 11px;
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 10px;
         line-height: 1.4;
         white-space: pre-wrap;
-        opacity: 0.88;
+        opacity: 1;
       }
       #__ROOT_ID__ .oviz-three-legend-item[data-active="false"] {
         opacity: 0.38;
@@ -1675,34 +1676,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         position: absolute;
         top: 14px;
         left: 14px;
-        z-index: 6;
-        width: min(220px, 19vw);
-        min-width: 176px;
-        min-height: 112px;
+        z-index: 8;
+        width: auto;
+        min-width: 0;
+        min-height: 0;
         display: flex;
         flex-direction: column;
-        overflow: hidden;
+        overflow: visible;
+        border: 0 !important;
+        border-radius: 0;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] {
         min-height: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-panel-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        padding: 10px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        cursor: grab;
-        user-select: none;
-        touch-action: auto;
+        display: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-panel[data-dragging="true"] .oviz-three-legend-panel-head {
         cursor: grabbing;
-      }
-      #__ROOT_ID__ .oviz-three-legend-panel-head {
-        padding: 8px 10px;
-        border-bottom-color: rgba(255, 255, 255, 0.05);
       }
       #__ROOT_ID__ .oviz-three-legend-panel-title {
         color: var(--oviz-text);
@@ -1730,12 +1725,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         flex-direction: column;
         flex: 1 1 auto;
         min-height: 0;
-        padding: 6px 8px 8px;
+        padding: 0;
         overflow: auto;
         transition: max-height 0.18s ease, padding 0.18s ease, opacity 0.18s ease;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel button,
+      #__ROOT_ID__ .oviz-three-legend-panel button:hover,
+      #__ROOT_ID__ .oviz-three-legend-panel button:focus,
+      #__ROOT_ID__ .oviz-three-legend-panel button:active {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        outline: none;
+        -webkit-appearance: none;
+        appearance: none;
       }
       #__ROOT_ID__ .oviz-three-legend-panel-body {
-        padding: 5px 7px 7px;
+        padding: 0;
         scroll-padding-bottom: 8px;
       }
       #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] .oviz-three-legend-panel-body {
@@ -1748,12 +1757,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 2px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        max-height: 58vh;
+        overflow: auto;
       }
       #__ROOT_ID__ .oviz-three-legend-section {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-section[data-open="false"] {
         gap: 0;
@@ -1762,15 +1778,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: none;
       }
       #__ROOT_ID__ .oviz-three-legend-section-toggle {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        width: 100%;
-        padding: 1px 2px 0;
-        border: 0;
-        background: transparent;
-        cursor: pointer;
+        display: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-section-title {
         color: var(--oviz-muted-text);
@@ -1791,14 +1799,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         transform: rotate(-90deg);
       }
       #__ROOT_ID__ .oviz-three-legend-volume-list .oviz-three-legend-entry {
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.016));
+        background: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-volume-section {
-        padding-top: 7px;
-        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        padding-top: 0;
+        border-top: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-section:last-child {
-        padding-bottom: 2px;
+        padding-bottom: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-group-field {
         display: flex;
@@ -1808,27 +1816,114 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-muted-text);
         font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
-      #__ROOT_ID__ .oviz-three-legend-group-field select {
-        height: 30px;
-        width: 100%;
+      #__ROOT_ID__ .oviz-three-legend-group-field > span {
+        display: none;
       }
       #__ROOT_ID__ .oviz-three-group-select {
-        height: 30px;
-        width: 100%;
-        padding: 0 28px 0 12px;
-        border-radius: 4px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(29, 32, 37, 0.98);
-        color: var(--oviz-text);
-        cursor: pointer;
-        box-shadow: none;
-        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        -webkit-appearance: none;
-        appearance: none;
+        display: none;
       }
-      #__ROOT_ID__ .oviz-three-group-select:hover {
-        background: rgba(38, 42, 48, 0.98);
-        border-color: rgba(255, 255, 255, 0.10);
+      @keyframes oviz-three-group-option-drop {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown {
+        width: min(236px, calc(100vw - 28px));
+      }
+      #__ROOT_ID__ .oviz-three-group-trigger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 5px;
+        width: auto;
+        min-width: 0;
+        max-width: min(236px, calc(100vw - 28px));
+        padding: 0 0 5px;
+        border: 0;
+        border-bottom: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.96);
+        cursor: pointer;
+        font: 760 15px/1.16 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+        text-align: left;
+      }
+      #__ROOT_ID__ .oviz-three-group-current {
+        display: block;
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: min(212px, calc(100vw - 52px));
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-three-group-chevron {
+        flex: 0 0 auto;
+        order: -1;
+        color: rgba(255, 255, 255, 0.56);
+        font: 760 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        transform: translateY(-1px) rotate(0deg);
+        transition: transform 220ms ease, color 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-chevron {
+        color: rgba(255, 255, 255, 0.9);
+        transform: translateY(-1px) rotate(180deg);
+      }
+      #__ROOT_ID__ .oviz-three-group-menu {
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        transform: translateY(-8px);
+        transition: max-height 340ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, transform 340ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 340ms ease;
+        margin-top: 0;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-menu {
+        max-height: 260px;
+        opacity: 1;
+        transform: translateY(0);
+        margin-top: 6px;
+      }
+      #__ROOT_ID__ .oviz-three-group-menu-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        padding: 0 0 4px;
+      }
+      #__ROOT_ID__ .oviz-three-group-option {
+        width: min(236px, calc(100vw - 28px));
+        padding: 3px 0 4px;
+        border: 0;
+        border-bottom: 1px solid transparent;
+        background: transparent;
+        color: rgba(235, 238, 245, 0.5);
+        cursor: pointer;
+        font: 650 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+        opacity: 0;
+        text-align: left;
+        transform: translateY(-10px);
+        transition: color 160ms ease, border-color 160ms ease;
+        will-change: opacity, transform;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-option {
+        opacity: 1;
+        transform: translateY(0);
+        animation: oviz-three-group-option-drop 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+        animation-delay: var(--group-option-delay, 0ms);
+      }
+      #__ROOT_ID__ .oviz-three-group-option:hover,
+      #__ROOT_ID__ .oviz-three-group-option:focus-visible {
+        color: rgba(255, 255, 255, 0.9);
+        outline: none;
+      }
+      #__ROOT_ID__ .oviz-three-group-option[data-active="true"] {
+        color: rgba(255, 255, 255, 0.96);
+        border-bottom-color: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-title {
         padding: 0 2px 6px;
@@ -1836,85 +1931,106 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 500 10px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-legend-entry {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 6px;
-        padding: 5px 7px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 11px;
-        background: rgba(255, 255, 255, 0.022);
-        transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+        display: block;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        transition: opacity 0.14s ease;
       }
-      #__ROOT_ID__ .oviz-three-legend-entry {
-        gap: 4px;
-        padding: 4px 6px;
-        border-radius: 7px;
-        border-color: rgba(255, 255, 255, 0.04);
-        background: rgba(255, 255, 255, 0.01);
+      #__ROOT_ID__ .oviz-three-legend-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 0;
+        min-width: 0;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-entry[data-active="false"] {
-        opacity: 0.46;
+        opacity: 1;
       }
       #__ROOT_ID__ .oviz-three-legend-item {
-        flex: 1 1 auto;
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 0;
         min-width: 0;
+        width: auto;
         border: 0;
         background: transparent;
         padding: 0;
-        color: var(--oviz-text);
+        color: inherit;
         text-align: left;
-        font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        font: 650 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-legend-item:hover,
       #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
-        background: rgba(255, 255, 255, 0.05);
-      }
-      #__ROOT_ID__ .oviz-three-legend-item:hover,
-      #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
-        background: rgba(255, 255, 255, 0.028);
+        background: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-swatch {
-        flex: 0 0 auto;
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
-      }
-      #__ROOT_ID__ .oviz-three-legend-swatch {
-        width: 7px;
-        height: 7px;
-        border-radius: 999px;
+        display: none;
       }
       #__ROOT_ID__ .oviz-three-legend-meta {
-        display: flex;
-        flex-direction: column;
+        display: block;
         min-width: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-name {
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        color: inherit;
+        opacity: 1;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
       }
       #__ROOT_ID__ .oviz-three-legend-edit {
         flex: 0 0 auto;
-        width: 22px;
-        height: 22px;
+        align-self: center;
+        width: auto;
+        height: auto;
+        margin-left: 0;
+        padding: 0 0 0 1px;
         border: 0;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.05);
-        color: var(--oviz-muted-text);
-        font: 700 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        border-radius: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.46);
+        cursor: pointer;
+        font: 700 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
-      #__ROOT_ID__ .oviz-three-legend-edit,
-      #__ROOT_ID__ .oviz-three-legend-panel-toggle {
-        border-radius: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(255, 255, 255, 0.024);
+      #__ROOT_ID__ .oviz-three-legend-edit:hover,
+      #__ROOT_ID__ .oviz-three-legend-edit[data-open="true"] {
+        color: rgba(255, 255, 255, 0.94);
+      }
+      #__ROOT_ID__ .oviz-three-legend-item[data-active="false"] .oviz-three-legend-name {
+        opacity: 0.52;
+        text-decoration: none;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin: 0 0 0 0;
+        padding: 0 0 0 10px;
+        border-radius: 0;
+        background: transparent;
+        border: 0;
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        transform: translateY(-6px);
+        transition: max-height 300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 190ms ease, transform 300ms cubic-bezier(0.22, 1, 0.36, 1), margin 300ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls[data-visible="true"] {
+        max-height: 460px;
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+        margin: 1px 0 8px 0;
+      }
+      #__ROOT_ID__ .oviz-three-legend-resize,
+      #__ROOT_ID__ .oviz-three-legend-popover {
+        display: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-resize {
         position: absolute;
@@ -2292,6 +2408,44 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-radius: 6px;
         background: rgba(0, 0, 0, 0.16);
       }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-title,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry:last-child,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-row,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-item,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-item:hover,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry[data-editor-open="true"],
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-edit,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-edit:hover,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-controls {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry:last-child {
+        display: block !important;
+        padding: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-row {
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-item {
+        display: inline-flex !important;
+        width: auto !important;
+        gap: 0 !important;
+        padding: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-edit {
+        margin-left: 0 !important;
+        padding-left: 1px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-controls {
+        margin: 1px 0 8px 0 !important;
+        padding: 0 0 0 10px !important;
+      }
       #__ROOT_ID__ .oviz-three-tools-shell,
       #__ROOT_ID__ .oviz-three-controls-shell {
         min-height: 0;
@@ -2415,6 +2569,266 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-radius: 10px;
         background: rgba(255, 255, 255, 0.04);
         font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel {
+        width: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel-head {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel-body {
+        gap: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel button,
+      #__ROOT_ID__ .oviz-three-legend-panel button:hover,
+      #__ROOT_ID__ .oviz-three-legend-panel button:focus,
+      #__ROOT_ID__ .oviz-three-legend-panel button:active {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        outline: none !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-group-field {
+        gap: 4px !important;
+        padding: 0 1px 8px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-group-field > span {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-select {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown {
+        width: min(236px, calc(100vw - 28px)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-trigger {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 5px !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: min(236px, calc(100vw - 28px)) !important;
+        padding: 0 0 5px !important;
+        border: 0 !important;
+        border-bottom: 0 !important;
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.96) !important;
+        cursor: pointer !important;
+        font: 760 15px/1.16 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+        text-align: left !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-current {
+        display: block !important;
+        flex: 0 1 auto !important;
+        min-width: 0 !important;
+        max-width: min(212px, calc(100vw - 52px)) !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-chevron {
+        flex: 0 0 auto !important;
+        order: -1 !important;
+        color: rgba(255, 255, 255, 0.56) !important;
+        font: 760 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        transform: translateY(-1px) rotate(0deg) !important;
+        transition: transform 220ms ease, color 160ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-chevron {
+        color: rgba(255, 255, 255, 0.9) !important;
+        transform: translateY(-1px) rotate(180deg) !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-menu {
+        max-height: 0 !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        transform: translateY(-8px) !important;
+        transition: max-height 340ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, transform 340ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 340ms ease !important;
+        margin-top: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-menu {
+        max-height: 260px !important;
+        opacity: 1 !important;
+        transform: translateY(0) !important;
+        margin-top: 6px !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-menu-list {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1px !important;
+        padding: 0 0 4px !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-option {
+        width: min(236px, calc(100vw - 28px)) !important;
+        padding: 3px 0 4px !important;
+        border: 0 !important;
+        border-bottom: 1px solid transparent !important;
+        background: transparent !important;
+        color: rgba(235, 238, 245, 0.5) !important;
+        cursor: pointer !important;
+        font: 650 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+        opacity: 0 !important;
+        text-align: left !important;
+        transform: translateY(-10px) !important;
+        transition: color 160ms ease, border-color 160ms ease !important;
+        will-change: opacity, transform !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-option {
+        opacity: 1 !important;
+        transform: translateY(0) !important;
+        animation: oviz-three-group-option-drop 340ms cubic-bezier(0.16, 1, 0.3, 1) both !important;
+        animation-delay: var(--group-option-delay, 0ms) !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-option:hover,
+      #__ROOT_ID__ .oviz-three-group-option:focus-visible {
+        color: rgba(255, 255, 255, 0.9) !important;
+        outline: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-option[data-active="true"] {
+        color: rgba(255, 255, 255, 0.96) !important;
+        border-bottom-color: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section {
+        gap: 0 !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-toggle {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend,
+      #__ROOT_ID__ .oviz-three-legend-volume-list {
+        gap: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry,
+      #__ROOT_ID__ .oviz-three-legend-volume-list .oviz-three-legend-entry,
+      #__ROOT_ID__ .oviz-three-legend-entry:last-child {
+        display: block !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-row,
+      #__ROOT_ID__ .oviz-three-legend-meta {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-row {
+        display: inline-grid !important;
+        grid-template-columns: 20px auto !important;
+        align-items: center !important;
+        column-gap: 4px !important;
+        min-width: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item {
+        display: inline-flex !important;
+        width: auto !important;
+        gap: 0 !important;
+        padding: 1px 0 !important;
+        font: 650 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        cursor: pointer !important;
+        pointer-events: auto !important;
+        text-align: left !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-swatch {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-meta {
+        display: inline-block !important;
+        min-width: auto !important;
+        max-width: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-name {
+        display: inline-block !important;
+        min-width: auto !important;
+        max-width: none !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        white-space: normal !important;
+        opacity: 1 !important;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item[data-active="false"] .oviz-three-legend-name {
+        opacity: 0.58 !important;
+        text-decoration: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item:hover,
+      #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-edit {
+        display: inline-flex !important;
+        align-self: center !important;
+        justify-content: center !important;
+        width: 18px !important;
+        height: 18px !important;
+        margin-right: 0 !important;
+        margin-left: 0 !important;
+        padding: 0 !important;
+        border: 1px solid currentColor !important;
+        border-radius: 999px !important;
+        color: rgba(255, 255, 255, 0.46) !important;
+        font: 400 16px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-edit:hover,
+      #__ROOT_ID__ .oviz-three-legend-edit[data-open="true"] {
+        color: currentColor !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        margin: 0 0 0 0 !important;
+        padding: 0 0 0 24px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        max-height: 0 !important;
+        opacity: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+        transform: translateY(-6px) !important;
+        transition: max-height 300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 190ms ease, transform 300ms cubic-bezier(0.22, 1, 0.36, 1), margin 300ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls[data-visible="true"] {
+        max-height: 460px !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        transform: translateY(0) !important;
+        margin: 1px 0 8px 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-resize,
+      #__ROOT_ID__ .oviz-three-legend-popover {
+        display: none !important;
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-legend-panel,
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
@@ -2722,6 +3136,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
       const resetViewButtonEl = root.querySelector(".oviz-three-reset-view");
       const saveStateButtonEl = root.querySelector(".oviz-three-save-state");
+      const legendGroupFieldEl = root.querySelector(".oviz-three-legend-group-field");
+      const groupDropdownEl = root.querySelector(".oviz-three-group-dropdown");
+      const groupDropdownTriggerEl = root.querySelector(".oviz-three-group-trigger");
+      const groupDropdownLabelEl = root.querySelector(".oviz-three-group-current");
+      const groupDropdownListEl = root.querySelector(".oviz-three-group-menu-list");
       const groupSelectEl = root.querySelector(".oviz-three-group-select");
       const widgetSelectEl = root.querySelector(".oviz-three-widget-select");
       const legendPanelEl = root.querySelector(".oviz-three-legend-panel");
@@ -3835,7 +4254,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         if (nextRect) {
           applyLegendPanelRect(nextRect, { allowAutoCap: false });
-          if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
+          if (typeof positionLegendPopover === "function" && activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
             positionLegendPopover(legendEditButtonByKey.get(activeLegendEditorKey));
           }
         }
@@ -9565,8 +9984,8 @@ __ACTION_RUNTIME_JS__
           option.textContent = groupName;
           groupSelectEl.appendChild(option);
         });
-        groupSelectEl.value = currentGroup;
-        groupSelectEl.style.display = groups.length > 1 ? "block" : "none";
+        renderLegendGroupDropdown(groups);
+        syncLegendGroupChooser({ centerActive: true, smooth: false });
         if (focusGroupSelectEl) {
           focusGroupSelectEl.innerHTML = "";
           const focusNoneOption = document.createElement("option");
@@ -9582,13 +10001,7 @@ __ACTION_RUNTIME_JS__
         }
         renderWidgetMenu();
         groupSelectEl.addEventListener("change", () => {
-          if (!actionInterruptsMuted()) {
-            interruptActionRun("legend", { disableOrbit: false });
-          }
-          currentGroup = groupSelectEl.value;
-          resetLegendState(currentGroup);
-          renderLegend();
-          renderFrame(currentFrameIndex);
+          setLegendGroup(groupSelectEl.value, { centerActive: true, smooth: true });
         });
         if (legendPanelEl) {
           legendPanelEl.addEventListener("pointerdown", (event) => {
@@ -9599,6 +10012,7 @@ __ACTION_RUNTIME_JS__
             if (
               target.closest(".oviz-three-legend-entry")
               || target.closest(".oviz-three-legend-section-toggle")
+              || target.closest(".oviz-three-group-dropdown")
               || target.closest(".oviz-three-group-select")
             ) {
               interruptActionRun("legend", { disableOrbit: false });

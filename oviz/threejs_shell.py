@@ -6,10 +6,19 @@ THREEJS_SHELL_HTML = """
           <button class="oviz-three-legend-panel-toggle" type="button" title="Collapse or expand the legend">▾</button>
         </div>
         <div class="oviz-three-legend-panel-body">
-          <label class="oviz-three-legend-group-field">
+          <div class="oviz-three-legend-group-field">
             <span>Group</span>
-            <select class="oviz-three-group-select"></select>
-          </label>
+            <div class="oviz-three-group-dropdown" data-open="false">
+              <button class="oviz-three-group-trigger" type="button" aria-label="Legend group" aria-expanded="false">
+                <span class="oviz-three-group-current"></span>
+                <span class="oviz-three-group-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div class="oviz-three-group-menu" role="listbox" aria-label="Legend group">
+                <div class="oviz-three-group-menu-list"></div>
+              </div>
+              <select class="oviz-three-group-select" aria-label="Legend group"></select>
+            </div>
+          </div>
           <div class="oviz-three-legend-section oviz-three-legend-trace-section" data-empty="false" data-open="true">
             <button class="oviz-three-legend-section-toggle oviz-three-legend-trace-section-toggle" type="button" title="Collapse or expand traces">
               <span class="oviz-three-legend-section-title">Traces</span>

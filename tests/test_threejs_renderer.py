@@ -112,6 +112,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("oviz-three-legend-popover", html)
         self.assertIn(">Legend<", html)
         self.assertIn(">Group<", html)
+        self.assertNotIn("border: 1px solid rgba(170, 176, 185, 0.42)", html)
+        self.assertIn("oviz-three-group-dropdown", html)
+        self.assertIn("oviz-three-group-option", html)
         self.assertIn("Cluster A", html)
         self.assertIn("Shift+drag or use Lasso", html)
         self.assertIn("Enable click select", html)
@@ -301,6 +304,53 @@ class ThreeJSRendererTests(unittest.TestCase):
 
         self.assertIn("Family A", trace_names)
         self.assertIn("Family A", legend_names)
+
+    def test_threejs_renderer_renders_clickable_group_dropdown(self):
+        viz = Animate3D(
+            _FakeFamilyCollection(show_tracks=True),
+            figure_theme="dark",
+            trace_grouping_dict={
+                "Clusters": ["Cluster A"],
+                "Families": ["Family A"],
+            },
+        )
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+        )
+
+        html = fig.to_html()
+
+        self.assertEqual(viz.fig_dict["group_order"], ["Clusters", "Families", "All"])
+        self.assertIn('class="oviz-three-group-dropdown"', html)
+        self.assertIn('class="oviz-three-group-trigger"', html)
+        self.assertIn('class="oviz-three-group-menu"', html)
+        self.assertIn('class="oviz-three-group-menu-list"', html)
+        self.assertIn('className = "oviz-three-group-option"', html)
+        self.assertIn('option.addEventListener("click"', html)
+        self.assertIn('option.addEventListener("keydown"', html)
+        self.assertIn("--group-option-delay", html)
+        self.assertIn("setLegendGroupDropdownOpen", html)
+        self.assertIn('groupDropdownTriggerEl.addEventListener("click"', html)
+        self.assertIn("max-height 340ms", html)
+        self.assertIn("@keyframes oviz-three-group-option-drop", html)
+        self.assertIn("animation: oviz-three-group-option-drop 340ms", html)
+        self.assertIn("justify-content: flex-start", html)
+        self.assertIn("order: -1", html)
+        self.assertIn("font: 760 15px/1.16", html)
+        self.assertNotIn("text-decoration: underline", html)
+        self.assertNotIn("border-bottom: 1px solid rgba(255, 255, 255, 0.58)", html)
+        self.assertIn("transform: translateY(-10px)", html)
+        self.assertIn('controls.dataset.visible = "false"', html)
+        self.assertIn('controls.dataset.visible = "true"', html)
+        self.assertIn('collapseLegendEntryControls', html)
+        self.assertIn('max-height 300ms cubic-bezier', html)
+        self.assertIn("normalizedLegendGroupOrder", html)
+        self.assertIn('groupName.toLowerCase() === "all"', html)
+        self.assertIn("setLegendGroup(groupName", html)
+        self.assertIn('target.closest(".oviz-three-group-dropdown")', html)
+        self.assertNotIn("oviz-three-group-carousel", html)
 
     def test_threejs_renderer_rejects_invalid_actions(self):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
