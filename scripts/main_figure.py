@@ -11,11 +11,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+from paper.other.paths import SOLAR_ENCOUNTER_CATALOG_CURRENT
+
 
 REPO_ROOT = Path("/Users/cam/Desktop/oviz")
 NOTEBOOK_PATH = Path("/Users/cam/Desktop/astro_research/radcliffe/oviz_notebooks/main_figure.ipynb")
 SUPERNOVAE_ROOT = Path("/Users/cam/Desktop/astro_research/supernovae_map")
-SUPERNOVAE_CATALOG_PATH = SUPERNOVAE_ROOT / "paper" / "solar_encounter_catalog_current.csv.gz"
+SUPERNOVAE_CATALOG_PATH = SOLAR_ENCOUNTER_CATALOG_CURRENT
 DEFAULT_OUTPUT_HTML = Path("/tmp/main_figure_uncodixified.html")
 DEFAULT_UI_DESIGN_KEY = "uncodixified"
 

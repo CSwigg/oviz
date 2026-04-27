@@ -1766,10 +1766,17 @@ class Animate3D:
             })
 
         group_visibility = {}
+        hidden_trace_names = {
+            str(name)
+            for name in copy.deepcopy(getattr(self, 'threejs_initial_state', {}) or {}).get('hidden_trace_names', [])
+            if isinstance(name, str) and name
+        }
         for group_name, traces_list in self.trace_grouping_dict.items():
             group_visibility[group_name] = {}
             for trace_key, trace_name in trace_keys:
                 visible = self.get_visibility(trace_name, traces_list)
+                if isinstance(trace_name, str) and trace_name in hidden_trace_names and visible is True:
+                    visible = "legendonly"
                 if visible == "legendonly":
                     group_visibility[group_name][trace_key] = "legendonly"
                 else:
