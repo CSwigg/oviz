@@ -1,12 +1,148 @@
 from __future__ import annotations
 
-import base64
-import json
 import tempfile
 import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any
+
+from .threejs_embed import render_threejs_html, threejs_data_url, threejs_iframe_html
+from .threejs_shell import THREEJS_SHELL_HTML
+from .threejs_runtime_legend import THREEJS_LEGEND_RUNTIME_JS
+from .threejs_runtime_interactions import THREEJS_INTERACTION_RUNTIME_JS
+from .threejs_runtime_actions import THREEJS_ACTION_RUNTIME_JS
+from .threejs_runtime_scene import THREEJS_SCENE_RUNTIME_JS
+from .threejs_runtime_sky import THREEJS_SKY_RUNTIME_JS
+from .threejs_runtime_viewer import THREEJS_VIEWER_RUNTIME_JS
+from .threejs_runtime_widget_content import THREEJS_WIDGET_CONTENT_RUNTIME_JS
+from .threejs_runtime_widgets import THREEJS_WIDGET_RUNTIME_JS
+
+
+_THREEJS_TOPBAR_HTML = """
+      <div class="oviz-three-topbar">
+        <div class="oviz-three-topbar-brand">
+          <span class="oviz-three-topbar-dot" aria-hidden="true"></span>
+          <span>oviz</span>
+        </div>
+        <div class="oviz-three-title"></div>
+        <div class="oviz-three-widget-menu">
+          <div class="oviz-three-tools-shell" data-open="false">
+            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
+            <div class="oviz-three-tools-drawer">
+              <div class="oviz-three-selection">
+                <div class="oviz-three-selection-row">
+                  <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
+                </div>
+                <label class="oviz-three-selection-toggle">
+                  <input class="oviz-three-click-select-toggle" type="checkbox" />
+                  <span>Enable click select</span>
+                </label>
+                <label class="oviz-three-selection-toggle">
+                  <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
+                  <span>Lasso volumetric data</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="oviz-three-controls-shell" data-open="false">
+            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
+            <div class="oviz-three-controls-drawer">
+                <div class="oviz-three-controls">
+                  <div class="oviz-three-controls-title">Controls</div>
+                  <label class="oviz-three-controls-field">
+                    <span>Theme</span>
+                  <select class="oviz-three-theme-select">
+                    <option value="default">Default</option>
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="midnight">Midnight</option>
+                    <option value="glacier">Glacier</option>
+                    <option value="ember">Ember</option>
+                    <option value="graphite">Graphite</option>
+                    <option value="aurora">Aurora</option>
+                    <option value="paper">Paper</option>
+                  </select>
+                </label>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-scroll-speed-label">Scroll speed</span>
+                    <input class="oviz-three-scroll-speed" type="range" min="0.2" max="4" step="0.05" />
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-camera-fov-label">Camera FOV</span>
+                    <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
+                  </label>
+                </div>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-global-point-size-label">Point size</span>
+                    <input class="oviz-three-global-point-size" type="range" min="0.25" max="4" step="0.05" />
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span class="oviz-three-global-point-opacity-label">Point opacity</span>
+                    <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
+                  </label>
+                </div>
+                <label class="oviz-three-controls-field">
+                  <span class="oviz-three-global-point-glow-label">Star glow</span>
+                  <input class="oviz-three-global-point-glow" type="range" min="0" max="4" step="0.02" />
+                </label>
+                <div class="oviz-three-controls-row">
+                  <label class="oviz-three-controls-field">
+                    <span>Focus group</span>
+                    <select class="oviz-three-focus-group-select"></select>
+                  </label>
+                  <label class="oviz-three-controls-field">
+                    <span>Fade time (Myr)</span>
+                    <input class="oviz-three-fade-time" type="number" min="0" step="0.5" />
+                  </label>
+                </div>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-fade-in-out-toggle" type="checkbox" />
+                  <span>Fade in and out</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
+                  <span>Size points by n_stars</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
+                  <span>Show axes</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-galactic-reference-toggle" type="checkbox" checked />
+                  <span>Show GC/radius overlays</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
+                  <span>Show region labels</span>
+                </label>
+                <div class="oviz-three-controls-actions">
+                  <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
+                  <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
+                  <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
+                  <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
+                  <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
+                </div>
+                <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
+              </div>
+            </div>
+          </div>
+          <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
+          <button class="oviz-three-reset-view" type="button" title="Reset the camera and clear current lasso and click selections">Reset</button>
+          <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
+          <select class="oviz-three-widget-select">
+            <option value="">Widgets</option>
+          </select>
+        </div>
+      </div>
+""".strip()
+
+_THREEJS_MINIMAL_TOPBAR_HTML = """
+      <div class="oviz-three-topbar">
+        <div class="oviz-three-title"></div>
+      </div>
+""".strip()
 
 
 _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
@@ -48,119 +184,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         height: 100%;
         outline: none;
       }
-      #__ROOT_ID__ .oviz-three-title {
-        position: absolute;
-        top: 12px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 5;
-        font-size: 20px;
-        font-weight: 500;
-        color: var(--oviz-text);
-        pointer-events: none;
-        white-space: nowrap;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        z-index: 6;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        max-width: min(320px, 32vw);
-      }
-      #__ROOT_ID__ .oviz-three-widget-menu {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        z-index: 6;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      #__ROOT_ID__ .oviz-three-tools-shell,
-      #__ROOT_ID__ .oviz-three-controls-shell {
-        position: relative;
-        min-height: 34px;
-      }
-      #__ROOT_ID__ .oviz-three-tools-toggle,
-      #__ROOT_ID__ .oviz-three-controls-toggle {
-        border: 1px solid var(--oviz-panel-border);
-        border-radius: 8px;
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        cursor: pointer;
-        font: 12px Helvetica, Arial, sans-serif;
-        padding: 7px 11px;
-      }
-      #__ROOT_ID__ .oviz-three-tools-drawer,
-      #__ROOT_ID__ .oviz-three-controls-drawer {
-        position: absolute;
-        top: 0;
-        left: 52px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        width: min(320px, 32vw);
-        transform: translateX(-20px);
-        opacity: 0;
-        pointer-events: none;
-        transition: transform 0.18s ease, opacity 0.18s ease;
-      }
-      #__ROOT_ID__ .oviz-three-tools-shell[data-open="true"] .oviz-three-tools-drawer,
-      #__ROOT_ID__ .oviz-three-controls-shell[data-open="true"] .oviz-three-controls-drawer {
-        transform: translateX(0);
-        opacity: 1;
-        pointer-events: auto;
-      }
-      #__ROOT_ID__ .oviz-three-group-select,
-      #__ROOT_ID__ .oviz-three-widget-select {
-        min-width: 180px;
-        padding: 6px 10px;
-        border-radius: 6px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        font-size: 14px;
-        font-family: inherit;
-      }
-      #__ROOT_ID__ .oviz-three-save-state {
-        padding: 7px 11px;
-        border-radius: 8px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        cursor: pointer;
-        font: 12px Helvetica, Arial, sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-zen-mode {
-        padding: 7px 11px;
-        border-radius: 8px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        cursor: pointer;
-        font: 12px Helvetica, Arial, sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-reset-view {
-        padding: 7px 11px;
-        border-radius: 8px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        cursor: pointer;
-        font: 12px Helvetica, Arial, sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-zen-mode[data-active="true"] {
-        border-color: var(--oviz-axis);
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
-      }
       #__ROOT_ID__ .oviz-three-save-state:disabled {
         opacity: 0.55;
         cursor: default;
       }
-      #__ROOT_ID__[data-zen="true"] .oviz-three-toolbar,
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel {
         display: none !important;
@@ -185,6 +212,176 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-menu {
         justify-self: end;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-topbar,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-key-help,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-note,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-popover,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-widget-panel,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-resize {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-lasso-overlay {
+        display: none;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-panel {
+        top: 12px;
+        left: 12px;
+        width: auto;
+        min-width: 0;
+        min-height: 0;
+        border: 0 !important;
+        border-radius: 0;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-panel-head {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-panel-body {
+        gap: 0;
+        padding: 0;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-group-field {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section {
+        gap: 0;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section-toggle {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section-chevron {
+        display: none;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section-title {
+        font-size: 9px;
+        letter-spacing: 0.08em;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-trace-section {
+        display: block;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-volume-section {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-volume-list {
+        gap: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        max-height: none;
+        overflow: visible;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-entry,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-volume-list .oviz-three-legend-entry {
+        display: block;
+        padding: 0;
+        border: 0 !important;
+        border-radius: 0;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-item {
+        display: block;
+        width: auto;
+        gap: 0;
+        padding: 1px 0;
+        font: 650 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        cursor: pointer;
+        pointer-events: auto;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        appearance: none;
+        -webkit-appearance: none;
+        outline: none;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-swatch {
+        display: none;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-row,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-meta {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-meta {
+        display: inline-block !important;
+        min-width: auto !important;
+        max-width: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-name {
+        display: inline-block !important;
+        min-width: auto !important;
+        max-width: none !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        white-space: normal !important;
+        opacity: 1 !important;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-item[data-active="false"] .oviz-three-legend-name {
+        opacity: 0.58 !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-item:hover,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-entry[data-editor-open="true"] {
+        background: transparent !important;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-edit,
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-panel-toggle {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-footer {
+        left: 29%;
+        bottom: 22px;
+        transform: translateX(-50%);
+        width: auto;
+        max-width: min(calc(100vw - 32px), 580px);
+        gap: 14px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-footer button {
+        width: 46px;
+        height: 46px;
+        font-size: 18px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-time-label {
+        min-width: 156px;
+        font: 600 16px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider-shell {
+        flex: 0 0 clamp(220px, 26vw, 300px);
+        width: clamp(220px, 26vw, 300px);
+        max-width: clamp(220px, 26vw, 300px);
+        height: 44px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider-track-wrap {
+        height: 30px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-webkit-slider-runnable-track {
+        height: 5px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-webkit-slider-thumb {
+        width: 16px;
+        height: 16px;
+        margin-top: -6px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-moz-range-track {
+        height: 5px;
+      }
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
       }
       #__ROOT_ID__ .oviz-three-legend {
         display: flex;
@@ -218,10 +415,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         gap: 6px;
         padding-bottom: 6px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      }
-      #__ROOT_ID__ .oviz-three-legend-entry:last-child {
-        padding-bottom: 0;
-        border-bottom: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-row {
         display: flex;
@@ -524,10 +717,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         white-space: nowrap;
       }
       #__ROOT_ID__ .oviz-three-volume {
-        display: none !important;
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 2px 2px;
       }
       #__ROOT_ID__ .oviz-three-volume[data-enabled="true"] {
-        display: none !important;
+        display: flex;
       }
       #__ROOT_ID__ .oviz-three-volume-title {
         font-size: 14px;
@@ -582,69 +778,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         line-height: 1.45;
         white-space: pre-wrap;
         opacity: 0.88;
-      }
-      #__ROOT_ID__ .oviz-three-footer {
-        position: absolute;
-        left: 50%;
-        bottom: 14px;
-        transform: translateX(-50%);
-        z-index: 6;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        width: auto;
-        max-width: calc(100vw - 28px);
-        padding: 0;
-        border-radius: 999px;
-        border: 0;
-        background: transparent;
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
-      }
-      #__ROOT_ID__ .oviz-three-footer button {
-        border: 0;
-        border-radius: 0;
-        background: none;
-        color: var(--oviz-text);
-        cursor: pointer;
-        font-size: 15px;
-        width: 34px;
-        height: 34px;
-        line-height: 1;
-        margin-top: 0;
-        padding: 0;
-        box-shadow: none;
-        -webkit-appearance: none;
-        appearance: none;
-      }
-      #__ROOT_ID__ .oviz-three-time-label {
-        min-width: 132px;
-        height: 34px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 15px;
-        color: var(--oviz-text);
-        white-space: nowrap;
-        font-variant-numeric: tabular-nums;
-        text-align: center;
-      }
-      #__ROOT_ID__ .oviz-three-slider-shell {
-        position: relative;
-        flex: 0 0 clamp(180px, 24vw, 260px);
-        width: clamp(180px, 24vw, 260px);
-        max-width: clamp(180px, 24vw, 260px);
-        display: block;
-        min-width: 0;
-        height: 34px;
-      }
-      #__ROOT_ID__ .oviz-three-slider-track-wrap {
-        position: relative;
-        display: flex;
-        align-items: center;
-        min-width: 0;
-        height: 34px;
       }
       #__ROOT_ID__ .oviz-three-slider {
         position: relative;
@@ -756,37 +889,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         pointer-events: none;
         white-space: normal;
       }
-      #__ROOT_ID__ .oviz-three-note {
-        position: absolute;
-        right: 12px;
-        bottom: 64px;
-        z-index: 6;
-        max-width: min(340px, 34vw);
-        padding: 8px 10px;
-        border-radius: 8px;
-        border: 1px solid var(--oviz-panel-border);
-        background: var(--oviz-panel-bg);
-        color: var(--oviz-text);
-        font-size: 12px;
-        display: none;
-      }
-      #__ROOT_ID__ .oviz-three-scale-bar {
-        position: absolute;
-        left: 18px;
-        bottom: 22px;
-        z-index: 6;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
-        pointer-events: auto;
-        cursor: grab;
-        user-select: none;
-        touch-action: none;
-      }
-      #__ROOT_ID__ .oviz-three-scale-bar[data-dragging="true"] {
-        cursor: grabbing;
-      }
       #__ROOT_ID__ .oviz-three-scale-label {
         color: var(--oviz-text);
         font: 12px Helvetica, Arial, sans-serif;
@@ -888,26 +990,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         width: min(40vw, 580px);
         height: min(46vh, 420px);
       }
-      #__ROOT_ID__ .oviz-three-widget-drag {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 34px;
-        z-index: 2;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 0 12px;
-        font-size: 11px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--oviz-text);
-        background: linear-gradient(to bottom, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.0));
-        cursor: grab;
-        user-select: none;
-      }
       #__ROOT_ID__ .oviz-three-widget-title {
         flex: 1 1 auto;
         min-width: 0;
@@ -920,9 +1002,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         align-items: center;
         gap: 6px;
         flex: 0 0 auto;
-      }
-      #__ROOT_ID__ .oviz-three-widget-panel[data-mode="fullscreen"] .oviz-three-widget-drag {
-        cursor: default;
       }
       #__ROOT_ID__ .oviz-three-sky-frame {
         position: absolute;
@@ -1341,6 +1420,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: radial-gradient(circle at 35% 35%, #ffffff, #d3d8df 62%, #9ea7b3);
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 14px rgba(255, 255, 255, 0.12);
       }
+      #__ROOT_ID__::before {
+        background:
+          radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.014), transparent 18%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.006), transparent 14%);
+      }
       #__ROOT_ID__ .oviz-three-title {
         position: static;
         transform: none;
@@ -1348,41 +1432,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         text-align: center;
         justify-self: center;
         align-self: start;
-        padding: 7px 12px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 999px;
-        background: rgba(18, 22, 28, 0.20);
-        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
-        backdrop-filter: blur(16px) saturate(126%);
-        -webkit-backdrop-filter: blur(16px) saturate(126%);
-        font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
-        letter-spacing: -0.02em;
-        color: var(--oviz-text);
-        pointer-events: none;
-      }
-      #__ROOT_ID__ .oviz-three-widget-menu {
-        position: static;
-        grid-column: 3;
-        display: flex;
-        align-items: center;
-        justify-self: end;
-        justify-content: flex-end;
-        flex-wrap: wrap;
-        gap: 6px;
-        padding: 5px 6px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 999px;
-        background: rgba(18, 22, 28, 0.18);
-        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
-        backdrop-filter: blur(18px) saturate(125%);
-        -webkit-backdrop-filter: blur(18px) saturate(125%);
-      }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"]::before {
-        background:
-          radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.014), transparent 18%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.006), transparent 14%);
-      }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-title {
         padding: 5px 10px;
         border: 1px solid rgba(255, 255, 255, 0.05);
         border-radius: 4px;
@@ -1392,9 +1441,59 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         -webkit-backdrop-filter: blur(4px) saturate(105%);
         font: 600 13px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         letter-spacing: -0.015em;
+        color: var(--oviz-text);
+        pointer-events: none;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu {
+      #__ROOT_ID__ .oviz-three-action-bar {
+        position: absolute;
+        top: 16px;
+        right: 18px;
+        z-index: 7;
+        display: none;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: flex-start;
+        gap: 8px;
+        width: auto;
+        max-width: min(calc(100vw - 32px), 320px);
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+      #__ROOT_ID__ .oviz-three-action-button {
+        height: auto;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.42);
+        cursor: pointer;
+        box-shadow: none;
+        font: 500 16px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0.01em;
+        transition: color 160ms ease, opacity 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-action-button:hover {
+        color: rgba(255, 255, 255, 0.96);
+      }
+      #__ROOT_ID__ .oviz-three-action-button[data-active="true"] {
+        color: rgba(255, 255, 255, 0.96);
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu {
+        position: static;
+        grid-column: 3;
+        display: flex;
+        align-items: center;
+        justify-self: end;
+        justify-content: flex-end;
+        flex-wrap: wrap;
         gap: 4px;
+        width: fit-content;
+        max-width: min(calc(100vw - 28px), 760px);
         padding: 4px;
         border: 1px solid rgba(255, 255, 255, 0.05);
         border-radius: 4px;
@@ -1403,42 +1502,25 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: blur(4px) saturate(104%);
         -webkit-backdrop-filter: blur(4px) saturate(104%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu button,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu select,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-tools-toggle,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-controls-toggle {
-        height: 30px;
-        border-radius: 4px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(29, 32, 37, 0.98);
-        box-shadow: none;
-        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-      }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu button:hover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu select:hover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-tools-toggle:hover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-controls-toggle:hover {
-        background: rgba(38, 42, 48, 0.98);
-        border-color: rgba(255, 255, 255, 0.10);
-      }
       #__ROOT_ID__ .oviz-three-widget-menu button,
       #__ROOT_ID__ .oviz-three-widget-menu select,
       #__ROOT_ID__ .oviz-three-tools-toggle,
       #__ROOT_ID__ .oviz-three-controls-toggle {
-        height: 34px;
-        border-radius: 11px;
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+        height: 30px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(29, 32, 37, 0.98);
         color: var(--oviz-text);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        cursor: pointer;
+        box-shadow: none;
         font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-widget-menu button:hover,
       #__ROOT_ID__ .oviz-three-widget-menu select:hover,
       #__ROOT_ID__ .oviz-three-tools-toggle:hover,
       #__ROOT_ID__ .oviz-three-controls-toggle:hover {
-        border-color: rgba(255, 255, 255, 0.18);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05));
+        background: rgba(38, 42, 48, 0.98);
+        border-color: rgba(255, 255, 255, 0.10);
       }
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell,
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell {
@@ -1458,6 +1540,81 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         padding: 0 12px;
         justify-content: center;
         text-align: center;
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu {
+        gap: 3px;
+        padding: 3px;
+        max-width: min(calc(100vw - 24px), 520px);
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-action-bar {
+        gap: 7px;
+        top: 14px;
+        right: 16px;
+        max-width: min(calc(100vw - 24px), 280px);
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-action-button {
+        font-size: 14px;
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu button,
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu select,
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-tools-toggle,
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-controls-toggle {
+        height: 28px;
+        font-size: 10px;
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu .oviz-three-tools-toggle,
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu .oviz-three-controls-toggle {
+        padding: 0 10px;
+      }
+      #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-select {
+        min-width: 124px;
+        max-width: 148px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-topbar {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "title"
+          "actions";
+        align-items: start;
+        gap: 8px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-title {
+        grid-area: title;
+        justify-self: center;
+        max-width: calc(100vw - 24px);
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu {
+        grid-area: actions;
+        justify-self: end;
+        justify-content: flex-end;
+        width: min(calc(100vw - 24px), 420px);
+        max-width: calc(100vw - 24px);
+        gap: 3px;
+        padding: 3px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu button,
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu select,
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-tools-toggle,
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-controls-toggle {
+        height: 28px;
+        font-size: 10px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu .oviz-three-tools-toggle,
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-menu .oviz-three-controls-toggle {
+        padding: 0 9px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-widget-select {
+        min-width: 112px;
+        max-width: 132px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-action-bar {
+        top: 12px;
+        right: 14px;
+        max-width: min(calc(100vw - 24px), 240px);
+        gap: 6px;
+      }
+      #__ROOT_ID__[data-topbar-density="stacked"] .oviz-three-action-button {
+        font-size: 13px;
       }
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
@@ -1494,7 +1651,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-panel,
-      #__ROOT_ID__ .oviz-three-inspector-panel,
       #__ROOT_ID__ .oviz-three-legend-popover {
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 20px;
@@ -1503,14 +1659,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: blur(22px) saturate(120%);
         -webkit-backdrop-filter: blur(22px) saturate(120%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-inspector-panel,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-popover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-tools-drawer,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-controls-drawer,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-panel {
+      #__ROOT_ID__ .oviz-three-legend-panel,
+      #__ROOT_ID__ .oviz-three-legend-popover,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer,
+      #__ROOT_ID__ .oviz-three-widget-panel {
         border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 11px;
+        border-radius: 10px;
         background: rgba(18, 20, 24, 0.76);
         box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
         backdrop-filter: blur(8px) saturate(108%);
@@ -1545,7 +1700,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-panel[data-dragging="true"] .oviz-three-legend-panel-head {
         cursor: grabbing;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-head {
+      #__ROOT_ID__ .oviz-three-legend-panel-head {
         padding: 8px 10px;
         border-bottom-color: rgba(255, 255, 255, 0.05);
       }
@@ -1554,7 +1709,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         letter-spacing: -0.01em;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-title {
+      #__ROOT_ID__ .oviz-three-legend-panel-title {
         font-size: 12px;
       }
       #__ROOT_ID__ .oviz-three-legend-panel-toggle {
@@ -1579,8 +1734,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         overflow: auto;
         transition: max-height 0.18s ease, padding 0.18s ease, opacity 0.18s ease;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-body {
+      #__ROOT_ID__ .oviz-three-legend-panel-body {
         padding: 5px 7px 7px;
+        scroll-padding-bottom: 8px;
       }
       #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] .oviz-three-legend-panel-body {
         max-height: 0;
@@ -1592,29 +1748,57 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend {
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 6px;
       }
       #__ROOT_ID__ .oviz-three-legend-section {
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 6px;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section[data-open="false"] {
+        gap: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-section[data-empty="true"] {
         display: none;
       }
-      #__ROOT_ID__ .oviz-three-legend-section-title {
+      #__ROOT_ID__ .oviz-three-legend-section-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
         padding: 1px 2px 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-title {
         color: var(--oviz-muted-text);
         font: 600 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
+      #__ROOT_ID__ .oviz-three-legend-section-chevron {
+        flex: 0 0 auto;
+        color: var(--oviz-muted-text);
+        font: 600 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        transition: transform 0.16s ease;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section[data-open="false"] .oviz-three-legend {
+        display: none;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section[data-open="false"] .oviz-three-legend-section-chevron {
+        transform: rotate(-90deg);
+      }
       #__ROOT_ID__ .oviz-three-legend-volume-list .oviz-three-legend-entry {
         background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.016));
       }
       #__ROOT_ID__ .oviz-three-legend-volume-section {
-        padding-top: 6px;
+        padding-top: 7px;
         border-top: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      #__ROOT_ID__ .oviz-three-legend-section:last-child {
+        padding-bottom: 2px;
       }
       #__ROOT_ID__ .oviz-three-legend-group-field {
         display: flex;
@@ -1627,6 +1811,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-group-field select {
         height: 30px;
         width: 100%;
+      }
+      #__ROOT_ID__ .oviz-three-group-select {
+        height: 30px;
+        width: 100%;
+        padding: 0 28px 0 12px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(29, 32, 37, 0.98);
+        color: var(--oviz-text);
+        cursor: pointer;
+        box-shadow: none;
+        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      #__ROOT_ID__ .oviz-three-group-select:hover {
+        background: rgba(38, 42, 48, 0.98);
+        border-color: rgba(255, 255, 255, 0.10);
       }
       #__ROOT_ID__ .oviz-three-legend-title {
         padding: 0 2px 6px;
@@ -1644,10 +1846,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(255, 255, 255, 0.022);
         transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-entry {
+      #__ROOT_ID__ .oviz-three-legend-entry {
         gap: 4px;
         padding: 4px 6px;
-        border-radius: 8px;
+        border-radius: 7px;
         border-color: rgba(255, 255, 255, 0.04);
         background: rgba(255, 255, 255, 0.01);
       }
@@ -1671,8 +1873,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
         background: rgba(255, 255, 255, 0.05);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-item:hover,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-entry[data-editor-open="true"] {
+      #__ROOT_ID__ .oviz-three-legend-item:hover,
+      #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
         background: rgba(255, 255, 255, 0.028);
       }
       #__ROOT_ID__ .oviz-three-legend-swatch {
@@ -1682,7 +1884,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-radius: 999px;
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-swatch {
+      #__ROOT_ID__ .oviz-three-legend-swatch {
         width: 7px;
         height: 7px;
         border-radius: 999px;
@@ -1708,9 +1910,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-muted-text);
         font: 700 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-edit,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-legend-panel-toggle {
-        border-radius: 7px;
+      #__ROOT_ID__ .oviz-three-legend-edit,
+      #__ROOT_ID__ .oviz-three-legend-panel-toggle {
+        border-radius: 6px;
         border: 1px solid rgba(255, 255, 255, 0.06);
         background: rgba(255, 255, 255, 0.024);
       }
@@ -1745,13 +1947,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         pointer-events: none;
         opacity: 0;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-tools-drawer,
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-menu .oviz-three-controls-drawer {
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
         top: calc(100% + 8px);
         width: min(320px, calc(100vw - 32px));
         padding: 10px;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-widget-drag {
+      #__ROOT_ID__ .oviz-three-widget-drag {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
         height: 34px;
         padding: 0 10px;
         text-transform: none;
@@ -1760,68 +1971,132 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-text);
         background: rgba(24, 26, 30, 0.96);
         border-bottom: 1px solid var(--oviz-panel-border);
+        cursor: grab;
+        user-select: none;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-footer {
+      #__ROOT_ID__ .oviz-three-widget-panel[data-mode="fullscreen"] .oviz-three-widget-drag {
+        cursor: default;
+      }
+      #__ROOT_ID__ .oviz-three-footer {
+        position: absolute;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: auto;
+        max-width: calc(100vw - 28px);
+        padding: 5px 10px;
         border-radius: 8px;
         background: rgba(18, 20, 24, 0.94);
         box-shadow: 0 5px 14px rgba(0, 0, 0, 0.12);
         backdrop-filter: blur(4px) saturate(103%);
         -webkit-backdrop-filter: blur(4px) saturate(103%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-footer button {
+      #__ROOT_ID__ .oviz-three-footer button {
+        width: 32px;
+        height: 32px;
+        line-height: 1;
+        padding: 0;
         border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.04);
         background: rgba(255, 255, 255, 0.02);
+        -webkit-appearance: none;
+        appearance: none;
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-scale-bar {
+      #__ROOT_ID__ .oviz-three-footer button[data-active="true"] {
+        color: var(--oviz-axis);
+        border-color: rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-three-time-label {
+        min-width: 124px;
+        height: 30px;
+        font-size: 13px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+      }
+      #__ROOT_ID__ .oviz-three-slider-shell {
+        position: relative;
+        flex: 0 0 clamp(196px, 25vw, 288px);
+        width: clamp(196px, 25vw, 288px);
+        max-width: clamp(196px, 25vw, 288px);
+        display: flex;
+        align-items: center;
+        height: 38px;
+        min-width: 0;
+      }
+      #__ROOT_ID__ .oviz-three-slider-track-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        width: 100%;
+        height: 24px;
+      }
+      #__ROOT_ID__ .oviz-three-slider-labels {
+        top: 24px;
+        height: 12px;
+      }
+      #__ROOT_ID__ .oviz-three-scale-bar {
+        position: absolute;
+        left: 18px;
+        bottom: 22px;
+        z-index: 6;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        pointer-events: auto;
+        cursor: grab;
+        user-select: none;
+        touch-action: none;
         border-radius: 4px;
         background: rgba(18, 20, 24, 0.92);
         backdrop-filter: blur(4px) saturate(103%);
         -webkit-backdrop-filter: blur(4px) saturate(103%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-note {
+      #__ROOT_ID__ .oviz-three-scale-bar[data-dragging="true"] {
+        cursor: grabbing;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-scale-bar {
+        cursor: default;
+      }
+      #__ROOT_ID__[data-minimal="true"] .oviz-three-scale-bar[data-dragging="true"] {
+        cursor: default;
+      }
+      #__ROOT_ID__ .oviz-three-note {
+        position: absolute;
+        right: 12px;
+        bottom: 64px;
+        z-index: 6;
+        max-width: min(340px, 34vw);
+        padding: 8px 10px;
+        display: none;
+        color: var(--oviz-text);
+        font-size: 12px;
         border-radius: 4px;
         background: rgba(18, 20, 24, 0.92);
         box-shadow: 0 5px 14px rgba(0, 0, 0, 0.12);
         backdrop-filter: blur(4px) saturate(103%);
         -webkit-backdrop-filter: blur(4px) saturate(103%);
       }
-      #__ROOT_ID__[data-ui-design-key="uncodixified"] .oviz-three-sky-frame {
+      #__ROOT_ID__ .oviz-three-sky-frame {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        border: 0;
+        display: block;
+        background: var(--oviz-panel-solid);
         top: 32px;
         height: calc(100% - 32px);
-      }
-      #__ROOT_ID__ .oviz-three-inspector-dock {
-        display: none !important;
-      }
-      #__ROOT_ID__ .oviz-three-inspector-dock[data-open="true"] {
-        transform: translateX(0);
-      }
-      #__ROOT_ID__ .oviz-three-inspector-dock[data-pinned="true"] .oviz-three-inspector-toggle {
-        border-color: rgba(255, 255, 255, 0.16);
-        background: linear-gradient(180deg, rgba(36, 40, 46, 0.54), rgba(18, 21, 26, 0.32));
-      }
-      #__ROOT_ID__ .oviz-three-inspector-toggle {
-        position: absolute;
-        top: 12px;
-        right: -32px;
-        width: 32px;
-        height: 108px;
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        border-radius: 0 16px 16px 0;
-        background: linear-gradient(180deg, rgba(23, 28, 34, 0.40), rgba(14, 17, 22, 0.20));
-        color: var(--oviz-text);
-        font: 600 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        writing-mode: vertical-rl;
-        text-orientation: mixed;
-      }
-      #__ROOT_ID__ .oviz-three-inspector-panel {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        max-height: min(56vh, 620px);
-        padding-right: 4px;
-        overflow: auto;
       }
       #__ROOT_ID__ .oviz-three-widget-select,
       #__ROOT_ID__ .oviz-three-group-select,
@@ -1839,173 +2114,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-text);
         font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
-      #__ROOT_ID__ .oviz-three-toolbar {
-        top: 74px;
-        left: 14px;
-        z-index: 6;
-        gap: 0;
-        width: min(312px, 31vw);
-        max-width: min(312px, 31vw);
-        max-height: none;
-        padding-right: 0;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 42px;
-        align-items: start;
-        overflow: visible;
-        transform: translateX(calc(-100% + 42px));
-        transition: transform 0.18s ease;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar[data-expanded="true"] {
-        transform: translateX(0);
-      }
-      #__ROOT_ID__ .oviz-three-toolbar[data-pinned="true"] .oviz-three-toolbar-rail {
-        border-color: rgba(255, 255, 255, 0.16);
-        background: linear-gradient(180deg, rgba(28, 33, 40, 0.48), rgba(15, 18, 23, 0.28));
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-rail {
-        order: 2;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: 8px 4px 8px 2px;
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-left: 0;
-        border-radius: 0 16px 16px 0;
-        background: linear-gradient(180deg, rgba(26, 30, 36, 0.42), rgba(14, 17, 20, 0.24));
-        box-shadow: 0 16px 28px rgba(0, 0, 0, 0.18);
-        backdrop-filter: blur(18px) saturate(128%);
-        -webkit-backdrop-filter: blur(18px) saturate(128%);
-        align-self: flex-start;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-tab {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        width: 100%;
-        min-height: 72px;
-        padding: 8px 0 6px;
-        border: 0;
-        background: transparent;
-        color: transparent;
-        font-size: 0;
-        text-align: center;
-        cursor: pointer;
-        user-select: none;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-tab:focus-visible {
-        outline: 1px solid rgba(255, 255, 255, 0.22);
-        outline-offset: -3px;
-        border-radius: 12px;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-tab::before {
-        content: "▸";
-        display: block;
-        margin-bottom: 8px;
-        color: rgba(238, 242, 247, 0.82);
-        font: 600 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar[data-expanded="true"] .oviz-three-toolbar-tab::before {
-        content: "◂";
-      }
-      #__ROOT_ID__ .oviz-three-toolbar[data-pinned="true"] .oviz-three-toolbar-tab::before {
-        color: rgba(255, 255, 255, 0.96);
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-tab::after {
-        content: "Scene";
-        color: var(--oviz-muted-text);
-        font: 600 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: 2px 4px 8px 1px;
-        max-height: min(58vh, 620px);
-        overflow: auto;
-        align-items: center;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 5px;
-        width: 34px;
-        padding: 6px 0 7px;
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        border-radius: 15px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.040), rgba(255, 255, 255, 0.022));
-        color: var(--oviz-text);
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-item[data-active="false"] {
-        opacity: 0.46;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-item[data-editor-open="true"] {
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.082), rgba(255, 255, 255, 0.036));
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 18px rgba(0, 0, 0, 0.16);
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-toggle,
-      #__ROOT_ID__ .oviz-three-legend-peek-edit {
-        border: 0;
-        background: transparent;
-        color: inherit;
-        cursor: pointer;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-toggle {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 5px;
-        width: 100%;
-        padding: 0;
-        font: 700 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        text-align: center;
-        letter-spacing: 0.08em;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-edit {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 19px;
-        height: 15px;
-        margin-top: 1px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.055);
-        color: rgba(238, 242, 247, 0.72);
-        font: 700 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-swatch {
-        flex: 0 0 auto;
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
-      }
-      #__ROOT_ID__ .oviz-three-legend-peek-label {
-        display: block;
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      #__ROOT_ID__ .oviz-three-toolbar-panel {
-        order: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        min-width: 0;
-        max-height: min(70vh, 760px);
-        padding-right: 6px;
-        overflow: auto;
-        overscroll-behavior: contain;
-      }
-      #__ROOT_ID__ .oviz-three-inspector-card,
       #__ROOT_ID__ .oviz-three-tools-shell,
       #__ROOT_ID__ .oviz-three-controls-shell {
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2102,7 +2210,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         width: 26px;
         height: 26px;
         border: 0;
-        border-radius: 999px;
+        border-radius: 6px;
         background: rgba(255, 255, 255, 0.05);
         color: var(--oviz-muted-text);
         font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -2119,41 +2227,48 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: transparent;
         max-height: none;
         min-height: 0;
+        overflow: visible;
       }
       #__ROOT_ID__ .oviz-three-legend-controls {
-        gap: 9px;
-        padding: 8px 9px;
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.025);
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.022);
       }
       #__ROOT_ID__ .oviz-three-legend-title {
         position: sticky;
         top: 0;
         z-index: 1;
-        padding: 7px 8px;
+        padding: 5px 7px;
         border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.022);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.018);
         color: var(--oviz-muted-text);
         font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         letter-spacing: 0.02em;
       }
       #__ROOT_ID__ .oviz-three-legend-entry {
-        gap: 8px;
-        padding: 8px 9px;
+        gap: 5px;
+        padding: 5px 7px;
         border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 13px;
-        background: rgba(255, 255, 255, 0.028);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.022);
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry:last-child {
+        padding-bottom: 5px;
+        border-bottom-width: 1px;
+        border-bottom-style: solid;
+        border-bottom-color: rgba(255, 255, 255, 0.05);
       }
       #__ROOT_ID__ .oviz-three-legend-item {
         display: flex;
         align-items: center;
-        gap: 9px;
-        font: 600 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        gap: 7px;
+        font: 600 11px/1.18 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-legend-swatch {
-        width: 9px;
-        height: 9px;
+        width: 8px;
+        height: 8px;
         border-radius: 999px;
       }
       #__ROOT_ID__ .oviz-three-legend-meta {
@@ -2172,10 +2287,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-legend-controls {
-        gap: 10px;
-        padding: 10px;
-        border-radius: 12px;
-        background: rgba(0, 0, 0, 0.20);
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.16);
       }
       #__ROOT_ID__ .oviz-three-tools-shell,
       #__ROOT_ID__ .oviz-three-controls-shell {
@@ -2244,7 +2359,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-footer button {
         width: 38px;
         height: 38px;
+        border: 0;
+        border-radius: 0;
         background: none;
+        color: var(--oviz-text);
+        cursor: pointer;
+        font-size: 15px;
+        line-height: 1;
+        margin-top: 0;
+        padding: 0;
+        box-shadow: none;
+        -webkit-appearance: none;
+        appearance: none;
       }
       #__ROOT_ID__ .oviz-three-time-label {
         min-width: 136px;
@@ -2253,9 +2379,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-scale-bar {
         left: 18px;
         bottom: 22px;
-        padding: 10px 12px;
+        padding: 8px 10px;
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 16px;
+        border-radius: 10px;
         background: rgba(14, 17, 22, 0.26);
         backdrop-filter: blur(16px) saturate(135%);
         -webkit-backdrop-filter: blur(16px) saturate(135%);
@@ -2291,7 +2417,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-legend-panel,
-      #__ROOT_ID__[data-zen="true"] .oviz-three-inspector-dock,
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel,
       #__ROOT_ID__[data-zen="true"] .oviz-three-note,
@@ -2310,552 +2435,164 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         #__ROOT_ID__ .oviz-three-title {
           grid-area: title;
           justify-self: center;
+          max-width: calc(100vw - 28px);
         }
         #__ROOT_ID__ .oviz-three-widget-menu {
           grid-area: actions;
           justify-self: end;
+          justify-content: flex-end;
+          width: min(calc(100vw - 28px), 920px);
+          max-width: calc(100vw - 28px);
         }
         #__ROOT_ID__ .oviz-three-legend-panel {
           width: min(244px, calc(100vw - 28px));
-        }
-        #__ROOT_ID__ .oviz-three-inspector-dock {
-          width: min(332px, calc(100vw - 28px));
         }
         #__ROOT_ID__ .oviz-three-footer {
           width: min(calc(100vw - 28px), 920px);
         }
       }
+      @media (max-width: 860px) {
+        #__ROOT_ID__ .oviz-three-widget-menu {
+          row-gap: 4px;
+          justify-self: end;
+          justify-content: flex-end;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu button,
+        #__ROOT_ID__ .oviz-three-widget-menu select,
+        #__ROOT_ID__ .oviz-three-tools-toggle,
+        #__ROOT_ID__ .oviz-three-controls-toggle {
+          height: 30px;
+          font-size: 10.5px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-toggle,
+        #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-toggle {
+          padding: 0 10px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-select,
+        #__ROOT_ID__ .oviz-three-group-select {
+          min-width: 138px;
+        }
+        #__ROOT_ID__ .oviz-three-footer {
+          width: min(calc(100vw - 24px), 760px);
+        }
+      }
       @media (max-width: 720px) {
+        #__ROOT_ID__ .oviz-three-title {
+          font-size: 12px;
+          padding: 5px 9px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu {
+          width: min(calc(100vw - 20px), 640px);
+          max-width: calc(100vw - 20px);
+          padding: 4px;
+          gap: 4px;
+          justify-self: end;
+          justify-content: flex-end;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu button,
+        #__ROOT_ID__ .oviz-three-widget-menu select,
+        #__ROOT_ID__ .oviz-three-tools-toggle,
+        #__ROOT_ID__ .oviz-three-controls-toggle {
+          height: 28px;
+          font-size: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-select,
+        #__ROOT_ID__ .oviz-three-group-select {
+          min-width: 120px;
+        }
         #__ROOT_ID__ .oviz-three-legend-panel {
-          top: 66px;
+          top: 74px;
+          left: 12px;
           width: min(220px, calc(100vw - 24px));
         }
-        #__ROOT_ID__ .oviz-three-inspector-dock {
-          top: auto;
-          bottom: 110px;
-          width: min(312px, calc(100vw - 22px));
+        #__ROOT_ID__ .oviz-three-footer {
+          bottom: 12px;
+          width: min(calc(100vw - 20px), 620px);
         }
         #__ROOT_ID__ .oviz-three-scale-bar {
           display: none;
         }
       }
+      @media (max-width: 1100px), (max-height: 760px) {
+        #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-footer {
+          left: 29%;
+          bottom: 14px;
+          max-width: calc(100vw - 28px);
+        }
+      }
+      @media (max-width: 560px) {
+        #__ROOT_ID__ .oviz-three-footer {
+          display: grid;
+          grid-template-columns: 32px 32px auto minmax(0, 1fr);
+          align-items: center;
+          gap: 8px;
+          width: min(calc(100vw - 16px), 520px);
+        }
+        #__ROOT_ID__ .oviz-three-footer button {
+          width: 32px;
+          height: 32px;
+        }
+        #__ROOT_ID__ .oviz-three-time-label {
+          min-width: 96px;
+          font-size: 12px;
+        }
+        #__ROOT_ID__ .oviz-three-slider-shell {
+          width: auto;
+          max-width: none;
+          min-width: 0;
+        }
+        #__ROOT_ID__ .oviz-three-legend-panel {
+          width: min(206px, calc(100vw - 20px));
+        }
+      }
+      @media (max-height: 760px) {
+        #__ROOT_ID__ .oviz-three-topbar {
+          top: 10px;
+          left: 10px;
+          right: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu {
+          max-width: min(calc(100vw - 20px), 760px);
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
+        #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
+          max-height: min(62vh, 560px);
+        }
+        #__ROOT_ID__ .oviz-three-legend-panel {
+          top: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-footer {
+          bottom: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-note {
+          display: none;
+        }
+      }
+      @media (max-height: 620px) {
+        #__ROOT_ID__ .oviz-three-title {
+          font-size: 12px;
+          padding: 5px 9px;
+        }
+        #__ROOT_ID__ .oviz-three-widget-menu button,
+        #__ROOT_ID__ .oviz-three-widget-menu select,
+        #__ROOT_ID__ .oviz-three-tools-toggle,
+        #__ROOT_ID__ .oviz-three-controls-toggle {
+          height: 28px;
+          font-size: 10px;
+        }
+        #__ROOT_ID__ .oviz-three-legend-panel {
+          width: min(212px, calc(100vw - 20px));
+        }
+        #__ROOT_ID__ .oviz-three-footer {
+          bottom: 8px;
+        }
+      }
     </style>
   </head>
   <body>
-    <div id="__ROOT_ID__" tabindex="0" data-zen="false" data-ui-design-key="default">
-      <div class="oviz-three-topbar">
-        <div class="oviz-three-topbar-brand">
-          <span class="oviz-three-topbar-dot" aria-hidden="true"></span>
-          <span>oviz</span>
-        </div>
-        <div class="oviz-three-title"></div>
-        <div class="oviz-three-widget-menu">
-          <div class="oviz-three-tools-shell" data-open="false">
-            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
-            <div class="oviz-three-tools-drawer">
-              <div class="oviz-three-selection">
-                <div class="oviz-three-selection-row">
-                  <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
-                  <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
-                </div>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-click-select-toggle" type="checkbox" />
-                  <span>Enable click select</span>
-                </label>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
-                  <span>Lasso volumetric data</span>
-                </label>
-                <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters on the current frame.</div>
-              </div>
-            </div>
-          </div>
-          <div class="oviz-three-controls-shell" data-open="false">
-            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
-            <div class="oviz-three-controls-drawer">
-                <div class="oviz-three-controls">
-                  <div class="oviz-three-controls-title">Controls</div>
-                  <label class="oviz-three-controls-field">
-                    <span>Theme</span>
-                  <select class="oviz-three-theme-select">
-                    <option value="default">Default</option>
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                    <option value="midnight">Midnight</option>
-                    <option value="glacier">Glacier</option>
-                    <option value="ember">Ember</option>
-                    <option value="graphite">Graphite</option>
-                    <option value="aurora">Aurora</option>
-                    <option value="paper">Paper</option>
-                  </select>
-                </label>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-scroll-speed-label">Scroll speed</span>
-                    <input class="oviz-three-scroll-speed" type="range" min="0.2" max="4" step="0.05" />
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-camera-fov-label">Camera FOV</span>
-                    <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
-                  </label>
-                </div>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-global-point-size-label">Point size</span>
-                    <input class="oviz-three-global-point-size" type="range" min="0.25" max="4" step="0.05" />
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-global-point-opacity-label">Point opacity</span>
-                    <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
-                  </label>
-                </div>
-                <label class="oviz-three-controls-field">
-                  <span class="oviz-three-global-point-glow-label">Star glow</span>
-                  <input class="oviz-three-global-point-glow" type="range" min="0" max="4" step="0.02" />
-                </label>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span>Focus group</span>
-                    <select class="oviz-three-focus-group-select"></select>
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span>Fade time (Myr)</span>
-                    <input class="oviz-three-fade-time" type="number" min="0" step="0.5" />
-                  </label>
-                </div>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-fade-in-out-toggle" type="checkbox" />
-                  <span>Fade in and out</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
-                  <span>Size points by n_stars</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
-                  <span>Show axes</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-galactic-reference-toggle" type="checkbox" checked />
-                  <span>Show GC/radius overlays</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
-                  <span>Show region labels</span>
-                </label>
-                <div class="oviz-three-controls-actions">
-                  <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
-                  <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
-                  <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
-                  <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
-                  <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
-                </div>
-                <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
-              </div>
-            </div>
-          </div>
-          <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
-          <button class="oviz-three-reset-view" type="button" title="Reset the camera and clear current lasso and click selections">Reset</button>
-          <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
-          <select class="oviz-three-widget-select">
-            <option value="">Widgets</option>
-          </select>
-        </div>
-      </div>
-      <div class="oviz-three-legend-panel" data-open="true" data-dragging="false">
-        <div class="oviz-three-legend-panel-head oviz-three-legend-panel-drag">
-          <div class="oviz-three-legend-panel-title">Legend</div>
-          <button class="oviz-three-legend-panel-toggle" type="button" title="Collapse or expand the legend">▾</button>
-        </div>
-        <div class="oviz-three-legend-panel-body">
-          <label class="oviz-three-legend-group-field">
-            <span>Group</span>
-            <select class="oviz-three-group-select"></select>
-          </label>
-          <div class="oviz-three-legend-section oviz-three-legend-trace-section" data-empty="false">
-            <div class="oviz-three-legend-section-title">Traces</div>
-            <div class="oviz-three-legend oviz-three-legend-trace-list"></div>
-          </div>
-          <div class="oviz-three-legend-section oviz-three-legend-volume-section" data-empty="false">
-            <div class="oviz-three-legend-section-title">Volumes</div>
-            <div class="oviz-three-legend oviz-three-legend-volume-list"></div>
-          </div>
-        </div>
-        <div class="oviz-three-legend-resize" data-dir="nw"></div>
-        <div class="oviz-three-legend-resize" data-dir="ne"></div>
-        <div class="oviz-three-legend-resize" data-dir="sw"></div>
-        <div class="oviz-three-legend-resize" data-dir="se"></div>
-      </div>
-      <div class="oviz-three-inspector-dock" data-open="false">
-        <button class="oviz-three-inspector-toggle" type="button" title="Open settings">Settings</button>
-        <div class="oviz-three-inspector-panel">
-          <div class="oviz-three-scene-card oviz-three-inspector-card">
-            <div class="oviz-three-card-head">
-              <div class="oviz-three-card-eyebrow">Scene</div>
-              <div class="oviz-three-card-caption">Groups and view settings</div>
-            </div>
-            <div class="oviz-three-scene-meta">
-              <label class="oviz-three-sidebar-field">
-                <span>Group</span>
-                <select class="oviz-three-group-select"></select>
-              </label>
-            </div>
-          </div>
-          <div class="oviz-three-tools-shell oviz-three-inspector-card" data-open="false">
-            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
-            <div class="oviz-three-tools-drawer">
-              <div class="oviz-three-selection">
-                <div class="oviz-three-selection-row">
-                  <button class="oviz-three-lasso-button" type="button" title="Lasso clusters on the 3D plot">Lasso</button>
-                  <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
-                </div>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-click-select-toggle" type="checkbox" />
-                  <span>Enable click select</span>
-                </label>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
-                  <span>Lasso volumetric data</span>
-                </label>
-                <div class="oviz-three-selection-readout">Shift+drag or use Lasso to select clusters on the current frame.</div>
-              </div>
-              <div class="oviz-three-volume" data-enabled="false">
-                <div class="oviz-three-volume-title">Volume</div>
-                <label class="oviz-three-volume-field">
-                  <span>Layer</span>
-                  <select class="oviz-three-volume-select"></select>
-                </label>
-                <label class="oviz-three-volume-field oviz-three-volume-smoothing-field">
-                  <span>Smoothing</span>
-                  <select class="oviz-three-volume-smoothing"></select>
-                </label>
-                <label class="oviz-three-volume-toggle">
-                  <input class="oviz-three-volume-visible" type="checkbox" />
-                  <span>Show volume</span>
-                </label>
-                <label class="oviz-three-volume-field">
-                  <span>Colormap</span>
-                  <select class="oviz-three-volume-colormap"></select>
-                </label>
-                <label class="oviz-three-volume-field">
-                  <span>Stretch</span>
-                  <select class="oviz-three-volume-stretch"></select>
-                </label>
-                <div class="oviz-three-volume-row">
-                  <label class="oviz-three-volume-field">
-                    <span>vmin</span>
-                    <input class="oviz-three-volume-vmin" type="number" step="any" />
-                  </label>
-                  <label class="oviz-three-volume-field">
-                    <span>vmax</span>
-                    <input class="oviz-three-volume-vmax" type="number" step="any" />
-                  </label>
-                </div>
-                <label class="oviz-three-volume-field">
-                  <span class="oviz-three-volume-opacity-label">Opacity</span>
-                  <input class="oviz-three-volume-opacity" type="range" min="0" max="1" step="0.01" />
-                </label>
-                <label class="oviz-three-volume-field">
-                  <span class="oviz-three-volume-alpha-label">Alpha coef</span>
-                  <input class="oviz-three-volume-alpha" type="range" min="1" max="200" step="1" />
-                </label>
-                <label class="oviz-three-volume-field">
-                  <span class="oviz-three-volume-steps-label">Samples</span>
-                  <input class="oviz-three-volume-steps" type="range" min="24" max="768" step="8" />
-                </label>
-                <div class="oviz-three-volume-summary"></div>
-              </div>
-            </div>
-          </div>
-          <div class="oviz-three-controls-shell oviz-three-inspector-card" data-open="false">
-            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
-            <div class="oviz-three-controls-drawer">
-              <div class="oviz-three-controls">
-                <div class="oviz-three-controls-title">Controls</div>
-                <label class="oviz-three-controls-field">
-                  <span>Theme</span>
-                  <select class="oviz-three-theme-select">
-                    <option value="default">Default</option>
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                  </select>
-                </label>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-scroll-speed-label">Scroll speed</span>
-                    <input class="oviz-three-scroll-speed" type="range" min="0.2" max="4" step="0.05" />
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-camera-fov-label">Camera FOV</span>
-                    <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
-                  </label>
-                </div>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-global-point-size-label">Point size</span>
-                    <input class="oviz-three-global-point-size" type="range" min="0.25" max="4" step="0.05" />
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span class="oviz-three-global-point-opacity-label">Point opacity</span>
-                    <input class="oviz-three-global-point-opacity" type="range" min="0" max="2" step="0.02" />
-                  </label>
-                </div>
-                <label class="oviz-three-controls-field">
-                  <span class="oviz-three-global-point-glow-label">Star glow</span>
-                  <input class="oviz-three-global-point-glow" type="range" min="0" max="4" step="0.02" />
-                </label>
-                <div class="oviz-three-controls-row">
-                  <label class="oviz-three-controls-field">
-                    <span>Focus group</span>
-                    <select class="oviz-three-focus-group-select"></select>
-                  </label>
-                  <label class="oviz-three-controls-field">
-                    <span>Fade time (Myr)</span>
-                    <input class="oviz-three-fade-time" type="number" min="0" step="0.5" />
-                  </label>
-                </div>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-fade-in-out-toggle" type="checkbox" />
-                  <span>Fade in and out</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
-                  <span>Size points by n_stars</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
-                  <span>Show axes</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-galactic-reference-toggle" type="checkbox" checked />
-                  <span>Show GC/radius overlays</span>
-                </label>
-                <label class="oviz-three-controls-toggle-row">
-                  <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
-                  <span>Show region labels</span>
-                </label>
-                <div class="oviz-three-controls-actions">
-                  <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
-                  <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
-                  <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
-                  <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
-                  <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
-                </div>
-                <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="oviz-three-legend-popover" data-open="false"></div>
-      <div class="oviz-three-key-help" data-open="false">
-        <div class="oviz-three-key-help-head">
-          <div class="oviz-three-key-help-title">Keyboard Controls</div>
-          <button class="oviz-three-key-help-close" type="button" title="Close keyboard help">Close</button>
-        </div>
-        <p class="oviz-three-key-help-text">Keyboard controls are active as soon as the viewer loads. Shift switches WASD from orbiting to panning and makes frame stepping larger.</p>
-        <div class="oviz-three-key-help-grid">
-          <div class="oviz-three-key-help-keys">W / A / S / D</div>
-          <div>Orbit around the current anchor point.</div>
-          <div class="oviz-three-key-help-keys">Shift + W / A / S / D</div>
-          <div>Pan in camera-relative space while keeping the current view direction.</div>
-          <div class="oviz-three-key-help-keys">R / F</div>
-          <div>Move up and down along the z-up axis.</div>
-          <div class="oviz-three-key-help-keys">Q / E</div>
-          <div>Zoom out and in toward the current anchor point.</div>
-          <div class="oviz-three-key-help-keys">Left / Right</div>
-          <div>Step the time slider backward or forward.</div>
-          <div class="oviz-three-key-help-keys">Shift + Left / Right</div>
-          <div>Jump five time steps backward or forward.</div>
-          <div class="oviz-three-key-help-keys">1 - 9</div>
-          <div>Toggle the first nine legend items in the current group.</div>
-          <div class="oviz-three-key-help-keys">Shift + 1 - 9</div>
-          <div>Solo the corresponding legend item.</div>
-          <div class="oviz-three-key-help-keys">Space</div>
-          <div>Play or pause the animation.</div>
-          <div class="oviz-three-key-help-keys">L / C</div>
-          <div>Toggle lasso mode or click selection.</div>
-          <div class="oviz-three-key-help-keys">V</div>
-          <div>Activate View from Earth.</div>
-          <div class="oviz-three-key-help-keys">O</div>
-          <div>Toggle automatic orbit around the current anchor point.</div>
-          <div class="oviz-three-key-help-keys">?</div>
-          <div>Open this keyboard help panel.</div>
-          <div class="oviz-three-key-help-keys">Esc</div>
-          <div>Close help or clear the current selection.</div>
-        </div>
-      </div>
-      <canvas class="oviz-three-canvas" tabindex="0"></canvas>
-      <div class="oviz-three-lasso-overlay" data-active="false">
-        <svg preserveAspectRatio="none" aria-hidden="true">
-          <polyline points=""></polyline>
-        </svg>
-      </div>
-      <div class="oviz-three-tooltip"></div>
-      <div class="oviz-three-scale-bar" data-dragging="false" title="Drag to reposition">
-        <div class="oviz-three-scale-label"></div>
-        <div class="oviz-three-scale-line"></div>
-      </div>
-      <div class="oviz-three-footer">
-        <button class="oviz-three-play" type="button" title="Play">▶</button>
-        <span class="oviz-three-time-label"></span>
-        <div class="oviz-three-slider-shell">
-          <div class="oviz-three-slider-track-wrap">
-            <div class="oviz-three-slider-ticks oviz-three-slider-ticks-minor"></div>
-            <div class="oviz-three-slider-ticks oviz-three-slider-ticks-major"></div>
-            <input class="oviz-three-slider" type="range" min="0" max="0" step="1" value="0" />
-          </div>
-          <div class="oviz-three-slider-labels"></div>
-        </div>
-      </div>
-      <div class="oviz-three-note"></div>
-      <div class="oviz-three-sky-panel oviz-three-widget-panel" data-widget-key="sky" data-mode="hidden">
-        <div class="oviz-three-sky-drag oviz-three-widget-drag">
-          <span class="oviz-three-widget-title">Sky</span>
-          <div class="oviz-three-widget-window-controls">
-            <button class="oviz-three-sky-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide sky panel" aria-label="Hide sky panel"></button>
-            <button class="oviz-three-sky-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen sky panel" aria-label="Toggle fullscreen sky panel"></button>
-          </div>
-        </div>
-        <iframe class="oviz-three-sky-frame" loading="eager" referrerpolicy="no-referrer"></iframe>
-        <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="nw"></div>
-        <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="ne"></div>
-        <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="sw"></div>
-        <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="se"></div>
-      </div>
-      <div class="oviz-three-age-panel oviz-three-widget-panel" data-widget-key="age_kde" data-mode="hidden">
-        <div class="oviz-three-age-drag oviz-three-widget-drag">
-          <span class="oviz-three-widget-title">Age KDE</span>
-          <div class="oviz-three-widget-window-controls">
-            <button class="oviz-three-age-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide age KDE panel" aria-label="Hide age KDE panel"></button>
-            <button class="oviz-three-age-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen age KDE panel" aria-label="Toggle fullscreen age KDE panel"></button>
-          </div>
-        </div>
-        <div class="oviz-three-age-body">
-          <div class="oviz-three-age-kde-shell">
-            <canvas class="oviz-three-age-canvas"></canvas>
-          </div>
-          <div class="oviz-three-age-filter">
-            <div class="oviz-three-age-filter-slider-shell">
-              <input class="oviz-three-age-filter-range oviz-three-age-filter-range-min" type="range" min="0" max="1000" step="1" value="0" />
-              <input class="oviz-three-age-filter-range oviz-three-age-filter-range-max" type="range" min="0" max="1000" step="1" value="1000" />
-            </div>
-            <div class="oviz-three-age-filter-labels">
-              <span class="oviz-three-age-filter-range-readout-min"></span>
-              <span class="oviz-three-age-filter-range-readout-max"></span>
-            </div>
-            <div class="oviz-three-age-filter-hint">Age filter for clusters contributing to the current KDE view</div>
-          </div>
-        </div>
-        <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="nw"></div>
-        <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="ne"></div>
-        <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="sw"></div>
-        <div class="oviz-three-age-resize oviz-three-widget-resize" data-dir="se"></div>
-      </div>
-      <div class="oviz-three-filter-panel oviz-three-widget-panel" data-widget-key="cluster_filter" data-mode="hidden">
-        <div class="oviz-three-filter-drag oviz-three-widget-drag">
-          <span class="oviz-three-widget-title">Filter</span>
-          <div class="oviz-three-widget-window-controls">
-            <button class="oviz-three-filter-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide filter panel" aria-label="Hide filter panel"></button>
-            <button class="oviz-three-filter-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen filter panel" aria-label="Toggle fullscreen filter panel"></button>
-          </div>
-        </div>
-        <div class="oviz-three-filter-body">
-          <div class="oviz-three-filter-row">
-            <label class="oviz-three-filter-field">
-              <span>Parameter</span>
-              <select class="oviz-three-filter-parameter"></select>
-            </label>
-          </div>
-          <div class="oviz-three-filter-hist">
-            <canvas class="oviz-three-filter-canvas"></canvas>
-          </div>
-          <div class="oviz-three-filter-slider-shell">
-            <input class="oviz-three-filter-range oviz-three-filter-range-min" type="range" min="0" max="1000" step="1" value="0" />
-            <input class="oviz-three-filter-range oviz-three-filter-range-max" type="range" min="0" max="1000" step="1" value="1000" />
-          </div>
-          <div class="oviz-three-filter-labels">
-            <span class="oviz-three-filter-range-readout-min"></span>
-            <span class="oviz-three-filter-range-readout-max"></span>
-          </div>
-        </div>
-        <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="nw"></div>
-        <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="ne"></div>
-        <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="sw"></div>
-        <div class="oviz-three-filter-resize oviz-three-widget-resize" data-dir="se"></div>
-      </div>
-      <div class="oviz-three-box-panel oviz-three-widget-panel" data-widget-key="box_metrics" data-mode="hidden">
-        <div class="oviz-three-box-drag oviz-three-widget-drag">
-          <span class="oviz-three-widget-title">Box Metrics</span>
-          <div class="oviz-three-widget-window-controls">
-            <button class="oviz-three-box-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide box metrics panel" aria-label="Hide box metrics panel"></button>
-            <button class="oviz-three-box-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen box metrics panel" aria-label="Toggle fullscreen box metrics panel"></button>
-          </div>
-        </div>
-        <div class="oviz-three-box-body">
-          <div class="oviz-three-box-toolbar">
-            <div class="oviz-three-box-summary"></div>
-            <div class="oviz-three-box-controls">
-              <label class="oviz-three-box-field">
-                <span>Show Box</span>
-                <input class="oviz-three-box-visible" type="checkbox" />
-              </label>
-              <button class="oviz-three-box-reset" type="button">Reset Box</button>
-            </div>
-          </div>
-          <div class="oviz-three-box-shell">
-            <canvas class="oviz-three-box-canvas"></canvas>
-          </div>
-          <div class="oviz-three-box-hint">Drag cube faces to move the co-rotating box in local X/Y. Drag a corner handle to resize it. The lower panel shows nearest-neighbor clustering enhancement relative to matched random catalogs.</div>
-        </div>
-        <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="nw"></div>
-        <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="ne"></div>
-        <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="sw"></div>
-        <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="se"></div>
-      </div>
-      <div class="oviz-three-dendrogram-panel oviz-three-widget-panel" data-widget-key="dendrogram" data-mode="hidden">
-        <div class="oviz-three-dendrogram-drag oviz-three-widget-drag">
-          <span class="oviz-three-widget-title">Dendrogram</span>
-          <div class="oviz-three-widget-window-controls">
-            <button class="oviz-three-dendrogram-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide dendrogram panel" aria-label="Hide dendrogram panel"></button>
-            <button class="oviz-three-dendrogram-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen dendrogram panel" aria-label="Toggle fullscreen dendrogram panel"></button>
-          </div>
-        </div>
-        <div class="oviz-three-dendrogram-body">
-          <div class="oviz-three-dendrogram-row">
-            <label class="oviz-three-dendrogram-field oviz-three-dendrogram-field--trace">
-              <span>Trace</span>
-              <select class="oviz-three-dendrogram-trace"></select>
-            </label>
-            <label class="oviz-three-dendrogram-field">
-              <span>Links</span>
-              <select class="oviz-three-dendrogram-connection">
-                <option value="birth_to_older_track">Birth to older track</option>
-                <option value="birth_to_birth">Birth to birth</option>
-              </select>
-            </label>
-            <label class="oviz-three-dendrogram-field">
-              <span>Mode</span>
-              <select class="oviz-three-dendrogram-mode">
-                <option value="distance_pc">Distance threshold</option>
-                <option value="birth_age_myr">Birth-age threshold</option>
-              </select>
-            </label>
-            <label class="oviz-three-dendrogram-field">
-              <span class="oviz-three-dendrogram-threshold-label">Threshold (pc)</span>
-              <input class="oviz-three-dendrogram-threshold" type="number" min="0" step="1" />
-            </label>
-          </div>
-          <div class="oviz-three-dendrogram-shell">
-            <canvas class="oviz-three-dendrogram-canvas"></canvas>
-          </div>
-          <div class="oviz-three-dendrogram-hint">Hover a branch to preview its descendant clusters in 3D. Click to pin that branch highlight.</div>
-        </div>
-        <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="nw"></div>
-        <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="ne"></div>
-        <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="sw"></div>
-        <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="se"></div>
-      </div>
+    <div id="__ROOT_ID__" tabindex="0" data-zen="false" __ROOT_MINIMAL_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__>
+      __TOPBAR_HTML__
+      __SHELL_HTML__
     </div>
 
     <script>
@@ -2960,10 +2697,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       /*__SCENE_SPEC_START__*/const sceneSpec = __SCENE_JSON__;/*__SCENE_SPEC_END__*/
-      const initialState = sceneSpec.initial_state || {};
       const root = document.getElementById("__ROOT_ID__");
+      const initialState = sceneSpec.initial_state || {};
+      const minimalModeEnabled = Boolean(
+        initialState.lite_mode_enabled
+        || initialState.minimal_mode_enabled
+        || sceneSpec.export_profile === "lite"
+        || sceneSpec.export_profile === "minimal"
+      );
+      const galacticSimpleSpec = sceneSpec.galactic_simple && typeof sceneSpec.galactic_simple === "object"
+        ? sceneSpec.galactic_simple
+        : {};
+      const galacticSimpleModeEnabled = Boolean(galacticSimpleSpec.enabled);
+      const galacticSimpleTracksOrbitTargetToSun = Boolean(galacticSimpleSpec.track_orbit_target_to_sun);
+      root.dataset.minimal = minimalModeEnabled ? "true" : "false";
+      root.dataset.galacticSimple = galacticSimpleModeEnabled ? "true" : "false";
+      const initialZoomAnchorSpec = initialState.initial_zoom_anchor && typeof initialState.initial_zoom_anchor === "object"
+        ? initialState.initial_zoom_anchor
+        : null;
       const canvas = root.querySelector(".oviz-three-canvas");
+      const actionBarEl = root.querySelector(".oviz-three-action-bar");
       const titleEl = root.querySelector(".oviz-three-title");
+      const widgetMenuEl = root.querySelector(".oviz-three-widget-menu");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
       const resetViewButtonEl = root.querySelector(".oviz-three-reset-view");
       const saveStateButtonEl = root.querySelector(".oviz-three-save-state");
@@ -2974,12 +2729,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const legendPanelBodyEl = root.querySelector(".oviz-three-legend-panel-body");
       const legendTraceSectionEl = root.querySelector(".oviz-three-legend-trace-section");
       const legendVolumeSectionEl = root.querySelector(".oviz-three-legend-volume-section");
+      const legendTraceSectionToggleEl = root.querySelector(".oviz-three-legend-trace-section-toggle");
+      const legendVolumeSectionToggleEl = root.querySelector(".oviz-three-legend-volume-section-toggle");
       const legendTraceListEl = root.querySelector(".oviz-three-legend-trace-list");
       const legendVolumeListEl = root.querySelector(".oviz-three-legend-volume-list");
       const legendDragHandleEl = root.querySelector(".oviz-three-legend-panel-drag");
       const legendResizeEls = Array.from(root.querySelectorAll(".oviz-three-legend-resize"));
-      const inspectorDockEl = root.querySelector(".oviz-three-inspector-dock");
-      const inspectorToggleEl = root.querySelector(".oviz-three-inspector-toggle");
       const legendPopoverEl = root.querySelector(".oviz-three-legend-popover");
       const keyHelpEl = root.querySelector(".oviz-three-key-help");
       const keyHelpButtonEl = root.querySelector(".oviz-three-key-help-button");
@@ -2994,14 +2749,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const sliderMajorTicksEl = root.querySelector(".oviz-three-slider-ticks-major");
       const sliderLabelsEl = root.querySelector(".oviz-three-slider-labels");
       const timeLabelEl = root.querySelector(".oviz-three-time-label");
-      const playButtonEl = root.querySelector(".oviz-three-play");
-      const pauseButtonEl = root.querySelector(".oviz-three-pause");
+      const playBackwardButtonEl = root.querySelector(".oviz-three-play-backward");
+      const playForwardButtonEl = root.querySelector(".oviz-three-play-forward");
+      const footerEl = root.querySelector(".oviz-three-footer");
       const tooltipEl = root.querySelector(".oviz-three-tooltip");
       const scaleBarEl = root.querySelector(".oviz-three-scale-bar");
       const scaleLabelEl = root.querySelector(".oviz-three-scale-label");
       const noteEl = root.querySelector(".oviz-three-note");
-      const selectionReadoutEl = root.querySelector(".oviz-three-selection-readout");
-      const lassoButtonEl = root.querySelector(".oviz-three-lasso-button");
       const clearSelectionButtonEl = root.querySelector(".oviz-three-selection-clear");
       const clickSelectToggleEl = root.querySelector(".oviz-three-click-select-toggle");
       const volumeLassoToggleEl = root.querySelector(".oviz-three-volume-lasso-toggle");
@@ -3095,7 +2849,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       const baseTheme = safeJsonClone(sceneSpec.theme || {}, {});
       const theme = safeJsonClone(baseTheme, {});
-      titleEl.textContent = sceneSpec.title || "";
+      if (titleEl) {
+        titleEl.textContent = sceneSpec.title || "";
+      }
 
       function buildThemePresets(sourceTheme) {
         const defaultTheme = safeJsonClone(sourceTheme || {}, {});
@@ -3201,7 +2957,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       applyThemeCssVars();
-      titleEl.style.display = sceneSpec.title ? "block" : "none";
+      if (titleEl) {
+        titleEl.style.display = sceneSpec.title ? "block" : "none";
+      }
 
       if (sceneSpec.note) {
         noteEl.textContent = sceneSpec.note;
@@ -3211,6 +2969,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const layoutScene = (sceneSpec.layout || {}).scene || {};
       const axisSpec = sceneSpec.axes || {};
       const frameSpecs = sceneSpec.frames || [];
+      const timelineSpec = sceneSpec.timeline || { enabled: frameSpecs.length > 1 };
+      const timelineEnabled = timelineSpec.enabled !== false;
       const legendItems = (sceneSpec.legend || {}).items || [];
       const groupVisibility = sceneSpec.group_visibility || {};
       const defaultGroup = sceneSpec.default_group || "All";
@@ -3219,8 +2979,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const ageKdeSpec = sceneSpec.age_kde || { enabled: false };
       const clusterFilterSpec = sceneSpec.cluster_filter || { enabled: false };
       const dendrogramSpec = sceneSpec.dendrogram || { enabled: false };
-      const volumeLayers = ((sceneSpec.volumes || {}).layers || []);
+      const volumeSpec = sceneSpec.volumes || { enabled: false, layers: [] };
+      const volumeLayers = (volumeSpec.layers || []);
+      const volumeCoRotationRateRadPerMyr = Number(volumeSpec.co_rotation_rate_rad_per_myr);
       const volumeLayersByKey = new Map(volumeLayers.map((layer) => [String(layer.key), layer]));
+      const imagePlaneSpecs = Array.isArray(sceneSpec.image_planes) ? sceneSpec.image_planes : [];
+      const imagePlaneSpecByKey = new Map(
+        imagePlaneSpecs
+          .map((spec) => {
+            const key = String((spec && spec.key) || "");
+            return key ? [key, spec] : null;
+          })
+          .filter(Boolean)
+      );
       const volumeStateKeyForRawLayer = (layer) => String((layer && (layer.state_key || layer.key)) || "");
       const volumeStateKeys = Array.from(
         new Set(
@@ -3229,6 +3000,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             .filter((key) => key)
         )
       );
+      if (footerEl && !timelineEnabled) {
+        footerEl.style.display = "none";
+      }
       const volumeStateKeySet = new Set(volumeStateKeys);
       const animationSpec = sceneSpec.animation || {};
       const clusterFilterParameters = Array.isArray(clusterFilterSpec.parameters) ? clusterFilterSpec.parameters : [];
@@ -3287,6 +3061,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const themePresets = buildThemePresets(baseTheme);
       const pointScale = Math.max(sceneSpec.max_span || 1, 1) / 4000.0;
       const hoverTargets = [];
+      const cameraResponsivePointEntries = [];
+      const cameraResponsiveImagePlaneEntries = [];
       const selectionSpriteEntriesByKey = new Map();
       const axisLineMaterials = [];
       const frameLineMaterials = [];
@@ -3300,6 +3076,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const starBloomMaterialCache = new Map();
       const textTextureCache = new Map();
       const galaxyTextureCache = new Map();
+      const imagePlaneTextureCache = new Map();
       const volumeScalarDataCache = new Map();
       const volumeScalarDataPendingCache = new Map();
       const volumeTextureCache = new Map();
@@ -3307,6 +3084,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const volumeColorBytesCache = new Map();
       const volumeRuntimeByKey = new Map();
       const DEFAULT_MANUAL_LABEL_SIZE = 24.0;
+      const LEGEND_MAX_VISIBLE_ITEMS = 5;
       const MIN_MANUAL_LABEL_SIZE = 8.0;
       const MAX_MANUAL_LABEL_SIZE = 120.0;
       const MAX_MANUAL_LABEL_TEXT_LENGTH = 80;
@@ -3319,7 +3097,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let currentSelectionMode = "none";
       let clickSelectionEnabled = false;
       let lassoVolumeSelectionEnabled = false;
-      let playbackTimer = null;
+      let playbackDirection = 0;
+      let displayedFrameValue = currentFrameIndex;
+      let frameTransitionState = null;
+      let lastPlaybackAdvanceTimestamp = null;
+      let lastTransitionRenderTimestamp = null;
+      let pendingSliderFrameIndex = null;
+      let sliderScrubRenderHandle = null;
       let skyPanelMode = "hidden";
       let boxMetricsPanelMode = "hidden";
       let ageKdePanelMode = "hidden";
@@ -3338,8 +3122,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let skyHoveredClusterKey = "";
       let lastSentSkyHoverClusterKey = null;
       let scaleBarPosition = null;
+      let currentScaleBarLengthPc = NaN;
+      let currentZoomAnchorPoint = null;
+      let galacticSimpleOrbitTargetTrackingActive = false;
       let legendPanelRectState = null;
-      let activeUiDesignKey = String(sceneSpec.ui_design_key || "uncodixified");
+      let legendPanelUserSized = false;
+      let legendSectionOpenState = { traces: true, volumes: true };
       let activeThemeKey = "default";
       let axesVisible = Boolean(sceneSpec.show_axes);
       let galacticReferenceVisible = true;
@@ -3355,15 +3143,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let globalPointGlowStrength = 1.2;
       let sizePointsByStarsEnabled = false;
       let globalScrollSpeed = 1.0;
+      let cameraAutoOrbitBaseSpeed = 1.0;
+      let cameraAutoOrbitDirection = 1.0;
+      let cameraAutoOrbitSpeedMultiplier = 1.0;
       let cameraAutoOrbitEnabled = Boolean(
         initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled
       );
       let zenModeEnabled = Boolean(initialState.zen_mode_enabled);
-      let inspectorOpen = Boolean(initialState.inspector_open);
-      let inspectorPinned = Boolean(initialState.inspector_pinned);
       let legendPanelOpen = initialState.legend_open === undefined ? true : Boolean(initialState.legend_open);
-      let inspectorHoverOpenTimer = null;
-      let inspectorHoverCloseTimer = null;
       let fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
       let fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
       let focusTraceKey = String(animationSpec.focus_trace_key_default || "");
@@ -3373,6 +3160,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let currentLassoSelectionMask = null;
       const pressedKeys = new Set();
       let lastAnimationTimestamp = null;
+      const playbackIntervalMs = Math.max(Number(sceneSpec.playback_interval_ms) || 240, 80);
       let clusterFilterParameterKey = String(clusterFilterSpec.default_parameter_key || "");
       const clusterFilterRangeStateByKey = {};
       let dendrogramTraceKey = String(dendrogramSpec.default_trace_key || "");
@@ -3434,6 +3222,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       controls.minPolarAngle = 0.02;
       controls.maxPolarAngle = Math.PI - 0.02;
       controls.target.set(sceneSpec.center.x, sceneSpec.center.y, sceneSpec.center.z);
+      controls.addEventListener("start", () => {
+        handleManualCameraInteractionStart();
+      });
 
       const eye = (layoutScene.camera || {}).eye || { x: 0.0, y: -0.8, z: 1.5 };
       const eyeScale = Math.max(sceneSpec.max_span || 1, 1);
@@ -3448,6 +3239,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         target: controls.target.clone(),
         up: camera.up.clone(),
         fov: Number(camera.fov),
+        viewOffset: { x: 0.0, y: 0.0 },
       };
 
       const plotGroup = new THREE.Group();
@@ -3472,6 +3264,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           gradientStep: Number(defaults.gradient_step),
           stretch: normalizeVolumeStretch(defaults.stretch),
           colormap: String(defaults.colormap || (((layer.colormap_options || [])[0] || {}).name || "inferno")),
+          showAllTimes: Boolean(defaults.show_all_times),
         };
       });
 
@@ -3508,6 +3301,55 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       const raycaster = new THREE.Raycaster();
       const pointer = new THREE.Vector2(2, 2);
+      const initialZoomAnchorPoint = (
+        initialZoomAnchorSpec
+        && Number.isFinite(Number(initialZoomAnchorSpec.x))
+        && Number.isFinite(Number(initialZoomAnchorSpec.y))
+        && Number.isFinite(Number(initialZoomAnchorSpec.z))
+      )
+        ? new THREE.Vector3(
+          Number(initialZoomAnchorSpec.x),
+          Number(initialZoomAnchorSpec.y),
+          Number(initialZoomAnchorSpec.z)
+        )
+        : null;
+      currentZoomAnchorPoint = initialZoomAnchorPoint ? initialZoomAnchorPoint.clone() : null;
+      const initialZoomAnchorTargetSpec = initialState.camera
+        && typeof initialState.camera === "object"
+        && initialState.camera.target
+        && typeof initialState.camera.target === "object"
+        ? initialState.camera.target
+        : null;
+      const initialZoomAnchorCameraSpec = initialState.camera
+        && typeof initialState.camera === "object"
+        && initialState.camera.position
+        && typeof initialState.camera.position === "object"
+        ? initialState.camera.position
+        : null;
+      const initialZoomAnchorTargetPoint = (
+        initialZoomAnchorTargetSpec
+        && Number.isFinite(Number(initialZoomAnchorTargetSpec.x))
+        && Number.isFinite(Number(initialZoomAnchorTargetSpec.y))
+        && Number.isFinite(Number(initialZoomAnchorTargetSpec.z))
+      )
+        ? new THREE.Vector3(
+          Number(initialZoomAnchorTargetSpec.x),
+          Number(initialZoomAnchorTargetSpec.y),
+          Number(initialZoomAnchorTargetSpec.z)
+        )
+        : null;
+      const initialZoomAnchorCameraPoint = (
+        initialZoomAnchorCameraSpec
+        && Number.isFinite(Number(initialZoomAnchorCameraSpec.x))
+        && Number.isFinite(Number(initialZoomAnchorCameraSpec.y))
+        && Number.isFinite(Number(initialZoomAnchorCameraSpec.z))
+      )
+        ? new THREE.Vector3(
+          Number(initialZoomAnchorCameraSpec.x),
+          Number(initialZoomAnchorCameraSpec.y),
+          Number(initialZoomAnchorCameraSpec.z)
+        )
+        : null;
 
       function formatTick(value) {
         if (!Number.isFinite(value)) {
@@ -3526,6 +3368,58 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function currentFrame() {
         return frameSpecs[Math.max(0, Math.min(currentFrameIndex, frameSpecs.length - 1))] || null;
+      }
+
+      function clampFrameIndex(value) {
+        return Math.max(0, Math.min(Math.round(Number(value) || 0.0), Math.max(frameSpecs.length - 1, 0)));
+      }
+
+      function clampFrameValue(value) {
+        return Math.max(0.0, Math.min(Number(value) || 0.0, Math.max(frameSpecs.length - 1, 0)));
+      }
+
+      function wrapFrameValue(value) {
+        const frameCount = Math.max(frameSpecs.length, 0);
+        if (frameCount <= 1) {
+          return 0.0;
+        }
+        let wrapped = Number(value) || 0.0;
+        wrapped %= frameCount;
+        if (wrapped < 0.0) {
+          wrapped += frameCount;
+        }
+        if (wrapped >= frameCount) {
+          wrapped = 0.0;
+        }
+        return wrapped;
+      }
+
+      function frameValueState(frameValue) {
+        const clampedValue = clampFrameValue(frameValue);
+        const lowerIndex = Math.floor(clampedValue);
+        const upperIndex = Math.min(lowerIndex + 1, Math.max(frameSpecs.length - 1, 0));
+        const alpha = Math.max(0.0, Math.min(clampedValue - lowerIndex, 1.0));
+        return {
+          value: clampedValue,
+          lowerIndex,
+          upperIndex,
+          alpha,
+        };
+      }
+
+      function frameTimeForValue(frameValue) {
+        const state = frameValueState(frameValue);
+        const lowerFrame = frameSpecs[state.lowerIndex] || null;
+        const upperFrame = frameSpecs[state.upperIndex] || lowerFrame;
+        const lowerTime = Number(lowerFrame && lowerFrame.time);
+        const upperTime = Number(upperFrame && upperFrame.time);
+        if (!Number.isFinite(lowerTime)) {
+          return Number.isFinite(upperTime) ? upperTime : 0.0;
+        }
+        if (!Number.isFinite(upperTime) || state.upperIndex === state.lowerIndex) {
+          return lowerTime;
+        }
+        return lowerTime + (upperTime - lowerTime) * state.alpha;
       }
 
       function sceneSpecMarkerWrappedJson(exportSceneSpec) {
@@ -3547,121 +3441,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#39;");
-      }
-
-      function widgetPanelForKey(widgetKey) {
-        if (widgetKey === "sky") {
-          return skyPanelEl;
-        }
-        if (widgetKey === "box_metrics") {
-          return boxMetricsPanelEl;
-        }
-        if (widgetKey === "age_kde") {
-          return ageKdePanelEl;
-        }
-        if (widgetKey === "cluster_filter") {
-          return clusterFilterPanelEl;
-        }
-        if (widgetKey === "dendrogram") {
-          return dendrogramPanelEl;
-        }
-        return null;
-      }
-
-      function widgetEnabled(widgetKey) {
-        if (widgetKey === "sky") {
-          return Boolean(skySpec.enabled);
-        }
-        if (widgetKey === "box_metrics") {
-          return Boolean(selectionBoxSpec.enabled);
-        }
-        if (widgetKey === "age_kde") {
-          return Boolean(ageKdeSpec.enabled);
-        }
-        if (widgetKey === "cluster_filter") {
-          return Boolean(clusterFilterSpec.enabled);
-        }
-        if (widgetKey === "dendrogram") {
-          return Boolean(dendrogramSpec.enabled);
-        }
-        return false;
-      }
-
-      function widgetModeForKey(widgetKey) {
-        if (widgetKey === "sky") {
-          return skyPanelMode;
-        }
-        if (widgetKey === "box_metrics") {
-          return boxMetricsPanelMode;
-        }
-        if (widgetKey === "age_kde") {
-          return ageKdePanelMode;
-        }
-        if (widgetKey === "cluster_filter") {
-          return clusterFilterPanelMode;
-        }
-        if (widgetKey === "dendrogram") {
-          return dendrogramPanelMode;
-        }
-        return "hidden";
-      }
-
-      function setWidgetModeValue(widgetKey, mode) {
-        if (widgetKey === "sky") {
-          skyPanelMode = mode;
-        } else if (widgetKey === "box_metrics") {
-          boxMetricsPanelMode = mode;
-        } else if (widgetKey === "age_kde") {
-          ageKdePanelMode = mode;
-        } else if (widgetKey === "cluster_filter") {
-          clusterFilterPanelMode = mode;
-        } else if (widgetKey === "dendrogram") {
-          dendrogramPanelMode = mode;
-        }
-      }
-
-      function widgetDefaultRect(widgetKey) {
-        if (widgetKey === "sky") {
-          return {
-            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.38, 560) - 12),
-            top: 72,
-            width: Math.min(window.innerWidth * 0.38, 560),
-            height: Math.min(window.innerHeight * 0.56, 560),
-          };
-        }
-        if (widgetKey === "box_metrics") {
-          return {
-            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.40, 580) - 18),
-            top: Math.max(72, window.innerHeight - Math.min(window.innerHeight * 0.46, 420) - 92),
-            width: Math.min(window.innerWidth * 0.40, 580),
-            height: Math.min(window.innerHeight * 0.46, 420),
-          };
-        }
-        if (widgetKey === "age_kde") {
-          return {
-            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.36, 540) - 44),
-            top: 96,
-            width: Math.min(window.innerWidth * 0.36, 540),
-            height: Math.min(window.innerHeight * 0.42, 360),
-          };
-        }
-        if (widgetKey === "cluster_filter") {
-          return {
-            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.34, 480) - 72),
-            top: 108,
-            width: Math.min(window.innerWidth * 0.34, 480),
-            height: Math.min(window.innerHeight * 0.40, 340),
-          };
-        }
-        if (widgetKey === "dendrogram") {
-          return {
-            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.40, 560) - 88),
-            top: 104,
-            width: Math.min(window.innerWidth * 0.40, 560),
-            height: Math.min(window.innerHeight * 0.52, 440),
-          };
-        }
-        return { left: 12, top: 72, width: 360, height: 260 };
       }
 
       function measuredScaleBarSize() {
@@ -3705,15 +3484,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           left = 18.0;
         }
         if (!Number.isFinite(top)) {
-          top = Math.max(6.0, rootRect.height - size.height - 86.0);
+          top = Math.max(6.0, rootRect.height - size.height - 22.0);
         }
         return clampScaleBarPosition(left, top, size.width, size.height);
       }
 
       function clampLegendPanelRect(left, top, width, height) {
         const margin = 8.0;
-        const minWidth = Math.min(196.0, Math.max(160.0, root.clientWidth - 2 * margin));
-        const minHeight = Math.min(132.0, Math.max(72.0, root.clientHeight - 2 * margin));
+        const minWidth = minimalModeEnabled
+          ? Math.min(140.0, Math.max(96.0, root.clientWidth - 2 * margin))
+          : Math.min(196.0, Math.max(160.0, root.clientWidth - 2 * margin));
+        const minHeight = minimalModeEnabled
+          ? Math.min(48.0, Math.max(18.0, root.clientHeight - 2 * margin))
+          : Math.min(132.0, Math.max(72.0, root.clientHeight - 2 * margin));
         const nextWidth = clampRange(Number(width) || minWidth, minWidth, Math.max(minWidth, root.clientWidth - 2 * margin));
         const nextHeight = clampRange(Number(height) || minHeight, minHeight, Math.max(minHeight, root.clientHeight - 2 * margin));
         return {
@@ -3725,27 +3508,165 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function defaultLegendPanelRect() {
-        const width = Math.min(Math.max(root.clientWidth * 0.17, 194.0), 232.0);
+        const actionBarHeight = actionBarEl && actionBarEl.dataset.visible === "true"
+          ? Math.max(actionBarEl.getBoundingClientRect().height, 0.0)
+          : 0.0;
+        const topInset = Math.max(14.0 + actionBarHeight + (actionBarHeight > 0.0 ? 10.0 : 0.0), 12.0);
+        if (minimalModeEnabled) {
+          const visibleItems = visibleLegendItemsForCurrentGroup();
+          const estimatedHeight = Math.max(visibleItems.length * 16 + 8, 24);
+          const width = Math.min(Math.max(root.clientWidth * 0.18, 140.0), 240.0);
+          const height = Math.min(estimatedHeight, Math.max(root.clientHeight - topInset - 12.0, 24.0));
+          return clampLegendPanelRect(12.0, topInset, width, height);
+        }
+        const width = Math.min(Math.max(root.clientWidth * 0.18, 204.0), 240.0);
         const visibleItems = visibleLegendItemsForCurrentGroup();
         const traceCount = visibleItems.filter((item) => !volumeLayerForKey(item.key)).length;
         const volumeCount = visibleItems.length - traceCount;
-        const preferredTraceRows = clampRange(Math.max(Math.min(traceCount, 5), 5), 5, 5);
-        const preferredVolumeRows = clampRange(Math.min(volumeCount, 2), 0, 2);
-        const estimatedHeight = 122 + preferredTraceRows * 38 + preferredVolumeRows * 34 + (volumeCount ? 20 : 0);
-        const height = Math.min(Math.max(estimatedHeight, 332.0), Math.min(root.clientHeight - 18.0, 460.0));
-        return clampLegendPanelRect(14.0, 14.0, width, height);
+        const preferredTraceRows = traceCount ? clampRange(traceCount, 4, 8) : 0;
+        const preferredVolumeRows = volumeCount ? clampRange(volumeCount, 1, 3) : 0;
+        const estimatedHeight = 108 + preferredTraceRows * 34 + preferredVolumeRows * 32 + ((traceCount && volumeCount) ? 14 : 0);
+        const minHeight = volumeCount ? 304.0 : 272.0;
+        const height = Math.min(Math.max(estimatedHeight, minHeight), Math.min(root.clientHeight - topInset - 12.0, 520.0));
+        return clampLegendPanelRect(14.0, topInset, width, height);
       }
 
-      function applyLegendPanelRect(rectState) {
+      function legendSectionDefs() {
+        return [
+          {
+            key: "traces",
+            sectionEl: legendTraceSectionEl,
+            toggleEl: legendTraceSectionToggleEl,
+            listEl: legendTraceListEl,
+            label: "Traces",
+          },
+          {
+            key: "volumes",
+            sectionEl: legendVolumeSectionEl,
+            toggleEl: legendVolumeSectionToggleEl,
+            listEl: legendVolumeListEl,
+            label: "Volumes",
+          },
+        ];
+      }
+
+      function applyLegendSectionState(sectionKey) {
+        const section = legendSectionDefs().find((item) => item.key === sectionKey);
+        if (!section || !section.sectionEl || !section.toggleEl) {
+          return;
+        }
+        const isOpen = minimalModeEnabled ? true : (legendSectionOpenState[sectionKey] !== false);
+        section.sectionEl.dataset.open = isOpen ? "true" : "false";
+        section.toggleEl.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        section.toggleEl.setAttribute(
+          "title",
+          `${isOpen ? "Collapse" : "Expand"} ${String(section.label || sectionKey).toLowerCase()}`
+        );
+        const chevronEl = section.toggleEl.querySelector(".oviz-three-legend-section-chevron");
+        if (chevronEl) {
+          chevronEl.textContent = isOpen ? "▾" : "▸";
+        }
+      }
+
+      function setLegendSectionOpen(sectionKey, isOpen) {
+        legendSectionOpenState[sectionKey] = Boolean(isOpen);
+        applyLegendSectionState(sectionKey);
+        if (legendPanelOpen) {
+          applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
+        }
+      }
+
+      function legendPanelPreferredExpandedHeight(maxVisibleEntries = LEGEND_MAX_VISIBLE_ITEMS) {
+        if (!legendPanelEl || !legendPanelBodyEl || !legendPanelOpen) {
+          return 0.0;
+        }
+        const headerHeight = legendDragHandleEl
+          ? Math.max(legendDragHandleEl.getBoundingClientRect().height || 0.0, 36.0)
+          : 36.0;
+        const hiddenEntries = [];
+        const hiddenSections = [];
+        let remainingEntries = Math.max(0, Number(maxVisibleEntries) || 0);
+
+        legendSectionDefs().forEach(({ sectionEl, listEl }) => {
+          if (!sectionEl || sectionEl.dataset.empty === "true") {
+            return;
+          }
+          if (sectionEl.dataset.open === "false" || !listEl) {
+            return;
+          }
+          const entries = Array.from(listEl.children).filter(
+            (child) => child && child.classList && child.classList.contains("oviz-three-legend-entry")
+          );
+          const visibleCount = Math.min(entries.length, remainingEntries);
+          if (visibleCount <= 0) {
+            hiddenSections.push([sectionEl, sectionEl.style.display]);
+            sectionEl.style.display = "none";
+            return;
+          }
+          remainingEntries -= visibleCount;
+          entries.slice(visibleCount).forEach((entry) => {
+            hiddenEntries.push([entry, entry.style.display]);
+            entry.style.display = "none";
+          });
+        });
+
+        const bodyHeight = Math.max(legendPanelBodyEl.scrollHeight || 0.0, 0.0);
+
+        hiddenEntries.forEach(([entry, previousDisplay]) => {
+          entry.style.display = previousDisplay;
+        });
+        hiddenSections.forEach(([sectionEl, previousDisplay]) => {
+          sectionEl.style.display = previousDisplay;
+        });
+
+        return headerHeight + bodyHeight + 2.0;
+      }
+
+      function legendPanelOverflowHeight(expandedHeight) {
+        if (!legendPanelEl || !legendPanelBodyEl || !legendPanelOpen) {
+          return 0.0;
+        }
+        const headerHeight = legendDragHandleEl
+          ? Math.max(legendDragHandleEl.getBoundingClientRect().height || 0.0, 36.0)
+          : 36.0;
+        const availableBodyHeight = Math.max(Number(expandedHeight) - headerHeight, 0.0);
+        const contentBodyHeight = Math.max(legendPanelBodyEl.scrollHeight || 0.0, 0.0);
+        return Math.max(contentBodyHeight - availableBodyHeight, 0.0);
+      }
+
+      function applyLegendPanelRect(rectState, options = {}) {
         if (!legendPanelEl) {
           return;
         }
-        const next = clampLegendPanelRect(
+        const allowAutoCap = options.allowAutoCap !== false;
+        const requestedHeight = rectState && rectState.height;
+        const base = clampLegendPanelRect(
           rectState && rectState.left,
           rectState && rectState.top,
           rectState && rectState.width,
-          rectState && rectState.height,
+          requestedHeight,
         );
+        let next = base;
+        if (legendPanelOpen && allowAutoCap && !legendPanelUserSized) {
+          const preferredExpandedHeight = legendPanelPreferredExpandedHeight(LEGEND_MAX_VISIBLE_ITEMS);
+          let targetHeight = preferredExpandedHeight > 0.0
+            ? Math.min(base.height, preferredExpandedHeight)
+            : base.height;
+          const overflowHeight = legendPanelOverflowHeight(targetHeight);
+          if (overflowHeight > 1.0) {
+            targetHeight = preferredExpandedHeight > 0.0
+              ? Math.min(targetHeight + overflowHeight + 2.0, preferredExpandedHeight)
+              : targetHeight + overflowHeight + 2.0;
+          }
+          if (Math.abs(targetHeight - base.height) > 0.5) {
+            next = clampLegendPanelRect(
+              base.left,
+              base.top,
+              base.width,
+              targetHeight,
+            );
+          }
+        }
         legendPanelRectState = next;
         legendPanelEl.style.left = `${next.left}px`;
         legendPanelEl.style.top = `${next.top}px`;
@@ -3836,35 +3757,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return String(frame.name || "");
       }
 
-      function renderTimeSliderTicks() {
-        if (!sliderMinorTicksEl || !sliderMajorTicksEl || !sliderLabelsEl) {
-          return;
-        }
-        sliderMinorTicksEl.innerHTML = "";
-        sliderMajorTicksEl.innerHTML = "";
-        sliderLabelsEl.innerHTML = "";
-      }
-
-      function updatePlaybackToggleButton() {
-        if (!playButtonEl) {
-          return;
-        }
-        const isPlaying = Boolean(playbackTimer);
-        playButtonEl.textContent = isPlaying ? "⏸" : "▶";
-        playButtonEl.setAttribute("title", isPlaying ? "Pause" : "Play");
-        playButtonEl.setAttribute("aria-label", isPlaying ? "Pause" : "Play");
-      }
-
-      function updateTimeSliderTickState() {
-        if (!sliderTrackWrapEl) {
-          return;
-        }
-        const activeIndex = String(currentFrameIndex);
-        sliderTrackWrapEl.querySelectorAll(".oviz-three-slider-tick, .oviz-three-slider-tick-label").forEach((el) => {
-          el.dataset.active = el.dataset.frameIndex === activeIndex ? "true" : "false";
-        });
-      }
-
       function beginLegendPanelInteraction(state, event) {
         legendPointerState = state;
         if (legendPanelEl) {
@@ -3938,14 +3830,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             legendPointerState.height,
           );
         } else if (legendPointerState.mode === "resize") {
+          legendPanelUserSized = true;
           nextRect = resizeLegendRect(legendPointerState, event.clientX, event.clientY);
         }
         if (nextRect) {
-          applyLegendPanelRect(nextRect);
+          applyLegendPanelRect(nextRect, { allowAutoCap: false });
           if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
             positionLegendPopover(legendEditButtonByKey.get(activeLegendEditorKey));
           }
-          positionInspectorDock();
         }
         event.preventDefault();
         return true;
@@ -3965,6 +3857,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         return true;
       }
+
       function applyScaleBarPosition() {
         if (!scaleBarEl) {
           return;
@@ -4005,89 +3898,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           left: Number(scaleBarPosition.left) || 0.0,
           top: Number(scaleBarPosition.top) || 0.0,
         };
-      }
-
-      function raiseWidget(widgetKey) {
-        const panelEl = widgetPanelForKey(widgetKey);
-        if (!panelEl) {
-          return;
-        }
-        widgetZIndexCounter += 1;
-        panelEl.style.zIndex = String(widgetZIndexCounter);
-      }
-
-      function clampWidgetPosition(left, top, width, height) {
-        const margin = 6;
-        return {
-          left: Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - width - margin)),
-          top: Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - height - margin)),
-        };
-      }
-
-      function resizeWidgetRect(state, clientX, clientY) {
-        const margin = 6;
-        const minWidth = Math.min(220, Math.max(80, window.innerWidth - 2 * margin));
-        const minHeight = Math.min(220, Math.max(80, window.innerHeight - 2 * margin));
-        let left = state.startLeft;
-        let right = state.startRight;
-        let top = state.startTop;
-        let bottom = state.startBottom;
-        const dx = clientX - state.startX;
-        const dy = clientY - state.startY;
-        const dir = state.dir || "se";
-
-        if (dir.includes("w")) {
-          left = Math.max(margin, Math.min(state.startLeft + dx, state.startRight - minWidth));
-        } else if (dir.includes("e")) {
-          right = Math.min(window.innerWidth - margin, Math.max(state.startRight + dx, state.startLeft + minWidth));
-        }
-        if (dir.includes("n")) {
-          top = Math.max(margin, Math.min(state.startTop + dy, state.startBottom - minHeight));
-        } else if (dir.includes("s")) {
-          bottom = Math.min(window.innerHeight - margin, Math.max(state.startBottom + dy, state.startTop + minHeight));
-        }
-
-        return {
-          left,
-          top,
-          width: Math.max(minWidth, right - left),
-          height: Math.max(minHeight, bottom - top),
-        };
-      }
-
-      function storeWidgetRect(widgetKey) {
-        const panelEl = widgetPanelForKey(widgetKey);
-        if (!panelEl) {
-          return;
-        }
-        const rect = panelEl.getBoundingClientRect();
-        panelEl.dataset.normalLeft = String(rect.left);
-        panelEl.dataset.normalTop = String(rect.top);
-        panelEl.dataset.normalWidth = String(rect.width);
-        panelEl.dataset.normalHeight = String(rect.height);
-      }
-
-      function restoreWidgetRect(widgetKey) {
-        const panelEl = widgetPanelForKey(widgetKey);
-        if (!panelEl) {
-          return;
-        }
-        const left = Number(panelEl.dataset.normalLeft);
-        const top = Number(panelEl.dataset.normalTop);
-        const width = Number(panelEl.dataset.normalWidth);
-        const height = Number(panelEl.dataset.normalHeight);
-        const defaults = widgetDefaultRect(widgetKey);
-        const next = [left, top, width, height].every(Number.isFinite)
-          ? clampWidgetPosition(left, top, width, height)
-          : clampWidgetPosition(defaults.left, defaults.top, defaults.width, defaults.height);
-        const nextWidth = Number.isFinite(width) ? width : defaults.width;
-        const nextHeight = Number.isFinite(height) ? height : defaults.height;
-        panelEl.style.left = `${next.left}px`;
-        panelEl.style.top = `${next.top}px`;
-        panelEl.style.right = "auto";
-        panelEl.style.bottom = "auto";
-        panelEl.style.width = `${nextWidth}px`;
-        panelEl.style.height = `${nextHeight}px`;
       }
 
       function buildSelectionBoxMetricTimeCenters() {
@@ -4302,7 +4112,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function selectionBoxShouldRender() {
-        return Boolean(selectionBoxSpec.enabled)
+        return !minimalModeEnabled
+          && Boolean(selectionBoxSpec.enabled)
           && selectionBoxPanelIsOpen()
           && selectionBoxState.visible !== false;
       }
@@ -5049,6 +4860,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function restoreInitialLassoSelectionMask() {
+        if (minimalModeEnabled) {
+          disposeLassoSelectionMask(currentLassoSelectionMask);
+          currentLassoSelectionMask = null;
+          return Promise.resolve();
+        }
         const savedMask = initialState && typeof initialState === "object"
           ? initialState.lasso_selection_mask
           : null;
@@ -5118,6 +4934,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function applyInitialStateSync() {
         resetLegendState(currentGroup);
         if (!initialState || typeof initialState !== "object") {
+          if (minimalModeEnabled) {
+            clickSelectionEnabled = false;
+            lassoVolumeSelectionEnabled = false;
+            lassoArmed = false;
+          currentSelection = null;
+          currentSelections = [];
+          selectedClusterKeys = new Set();
+          focusSelectionKey = "";
+          legendPanelRectState = null;
+          legendPanelUserSized = false;
+          ["sky", "box_metrics", "age_kde", "cluster_filter", "dendrogram"].forEach((widgetKey) => {
+            setWidgetModeValue(widgetKey, "hidden");
+          });
+            setToolsDrawerOpen(false);
+            setControlsDrawerOpen(false);
+            legendPanelOpen = true;
+          }
           return;
         }
 
@@ -5190,6 +5023,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedGlobalControls.camera_auto_orbit_enabled === "boolean") {
             cameraAutoOrbitEnabled = savedGlobalControls.camera_auto_orbit_enabled;
           }
+          if (savedGlobalControls.camera_auto_orbit_speed !== undefined) {
+            cameraAutoOrbitBaseSpeed = normalizeCameraAutoOrbitSpeed(savedGlobalControls.camera_auto_orbit_speed);
+          }
+          if (savedGlobalControls.camera_auto_orbit_direction !== undefined) {
+            cameraAutoOrbitDirection = normalizeCameraAutoOrbitDirection(savedGlobalControls.camera_auto_orbit_direction);
+          }
           if (typeof savedGlobalControls.camera_view_mode === "string" && savedGlobalControls.camera_view_mode) {
             cameraViewMode = String(savedGlobalControls.camera_view_mode);
           }
@@ -5227,6 +5066,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             height: Number(savedLegendPanelState.height),
           };
         }
+        if (typeof initialState.legend_panel_user_sized === "boolean") {
+          legendPanelUserSized = initialState.legend_panel_user_sized;
+        }
+
+        const savedLegendSectionsOpen = initialState.legend_sections_open;
+        if (savedLegendSectionsOpen && typeof savedLegendSectionsOpen === "object") {
+          if (typeof savedLegendSectionsOpen.traces === "boolean") {
+            legendSectionOpenState.traces = savedLegendSectionsOpen.traces;
+          }
+          if (typeof savedLegendSectionsOpen.volumes === "boolean") {
+            legendSectionOpenState.volumes = savedLegendSectionsOpen.volumes;
+          }
+        }
+
         if (initialState.active_volume_key && volumeStateKeySet.has(String(initialState.active_volume_key))) {
           activeVolumeKey = String(initialState.active_volume_key);
         }
@@ -5287,6 +5140,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             }
             if (Number.isFinite(Number(state.gradientStep))) {
               target.gradientStep = Number(state.gradientStep);
+            }
+            if (typeof state.showAllTimes === "boolean") {
+              target.showAllTimes = state.showAllTimes;
             }
             if (typeof state.stretch === "string" && state.stretch) {
               target.stretch = normalizeVolumeStretch(state.stretch);
@@ -5408,6 +5264,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           const target = savedCamera.target || {};
           const position = savedCamera.position || {};
           const up = savedCamera.up || {};
+          const viewOffset = savedCamera.view_offset || savedCamera.viewOffset || {};
           if (Number.isFinite(Number(target.x)) && Number.isFinite(Number(target.y)) && Number.isFinite(Number(target.z))) {
             controls.target.set(Number(target.x), Number(target.y), Number(target.z));
           }
@@ -5417,8 +5274,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (Number.isFinite(Number(up.x)) && Number.isFinite(Number(up.y)) && Number.isFinite(Number(up.z))) {
             camera.up.set(Number(up.x), Number(up.y), Number(up.z));
           }
+          if (typeof applyActionCameraViewOffset === "function") {
+            applyActionCameraViewOffset(viewOffset);
+          }
           camera.lookAt(controls.target);
           controls.update();
+          initialCameraState.position.copy(camera.position);
+          initialCameraState.target.copy(controls.target);
+          initialCameraState.up.copy(camera.up);
+          initialCameraState.fov = Number(camera.fov);
+          initialCameraState.viewOffset = typeof normalizeActionViewOffset === "function"
+            ? normalizeActionViewOffset(viewOffset)
+            : {
+              x: Number.isFinite(Number(viewOffset.x)) ? Number(viewOffset.x) : 0.0,
+              y: Number.isFinite(Number(viewOffset.y)) ? Number(viewOffset.y) : 0.0,
+            };
         }
 
         const savedDrawers = initialState.drawers;
@@ -5431,36 +5301,36 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
         }
 
-        const savedInspector = initialState.inspector;
-        if (savedInspector && typeof savedInspector === "object") {
-          if (typeof savedInspector.pinned === "boolean") {
-            inspectorPinned = savedInspector.pinned;
-          }
-          if (typeof savedInspector.open === "boolean") {
-            inspectorOpen = savedInspector.open;
-          }
-        }
-
-        if (typeof initialState.inspector_pinned === "boolean") {
-          inspectorPinned = initialState.inspector_pinned;
-        }
-        if (typeof initialState.inspector_open === "boolean") {
-          inspectorOpen = initialState.inspector_open;
-        }
         if (typeof initialState.legend_open === "boolean") {
           legendPanelOpen = initialState.legend_open;
+        }
+
+        if (minimalModeEnabled) {
+          clickSelectionEnabled = false;
+          lassoVolumeSelectionEnabled = false;
+          lassoArmed = false;
+          currentSelection = null;
+          currentSelections = [];
+          selectedClusterKeys = new Set();
+          focusSelectionKey = "";
+          activeLegendEditorKey = "";
+          legendPanelRectState = null;
+          legendPanelUserSized = false;
+          ["sky", "box_metrics", "age_kde", "cluster_filter", "dendrogram"].forEach((widgetKey) => {
+            setWidgetModeValue(widgetKey, "hidden");
+          });
+          setToolsDrawerOpen(false);
+          setControlsDrawerOpen(false);
+          legendPanelOpen = true;
         }
 
         applyGlobalControlState();
         clampClusterFilterRangeForParameter(activeClusterFilterParameterSpec());
         pruneSelectionsToActiveClusterFilter();
         applyCameraViewMode();
-        applyUiDesignPreset(activeUiDesignKey, { syncInput: false });
         applyThemePreset(activeThemeKey, { rerender: false, syncInput: false });
         renderSceneControls();
         setLegendPanelOpen(legendPanelOpen);
-        setInspectorPinned(inspectorPinned, { syncOpen: false });
-        setInspectorOpen(inspectorPinned || inspectorOpen);
         setZenMode(zenModeEnabled);
       }
 
@@ -5484,34 +5354,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             width: Number.isFinite(width) ? width : widgetDefaultRect(widgetKey).width,
             height: Number.isFinite(height) ? height : widgetDefaultRect(widgetKey).height,
           },
-        };
-      }
-
-      function captureLassoSelectionMaskState(mask) {
-        if (!mask || !mask.maskTexture || !mask.viewProjectionMatrix) {
-          return null;
-        }
-        const image = mask.maskTexture.image;
-        let dataUrl = null;
-        if (image && typeof image.toDataURL === "function") {
-          dataUrl = image.toDataURL("image/png");
-        } else if (image && typeof image.src === "string" && image.src) {
-          dataUrl = image.src;
-        }
-        if (!dataUrl) {
-          return null;
-        }
-        return {
-          data_url: dataUrl,
-          view_projection_matrix: Array.from(mask.viewProjectionMatrix.elements || []).map((value) => Number(value)),
-          polygon_ndc: Array.isArray(mask.polygonNdc)
-            ? mask.polygonNdc
-              .map((point) => ({
-                x: Number(point && point.x),
-                y: Number(point && point.y),
-              }))
-              .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
-            : [],
         };
       }
 
@@ -5548,6 +5390,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             galactic_reference_visible: galacticReferenceVisible,
             nearby_region_labels_visible: nearbyRegionLabelsVisible,
             camera_auto_orbit_enabled: cameraAutoOrbitEnabled,
+            camera_auto_orbit_speed: cameraAutoOrbitBaseSpeed,
+            camera_auto_orbit_direction: cameraAutoOrbitDirection,
             camera_view_mode: cameraViewMode,
             earth_view_focus_distance_pc: earthViewFocusDistance,
           },
@@ -5555,19 +5399,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
             target: { x: controls.target.x, y: controls.target.y, z: controls.target.z },
             up: { x: camera.up.x, y: camera.up.y, z: camera.up.z },
+            view_offset: typeof normalizeActionViewOffset === "function"
+              ? normalizeActionViewOffset(currentActionCameraViewOffset)
+              : { x: 0.0, y: 0.0 },
           },
           drawers: {
-            tools_open: toolsShellEl.dataset.open === "true",
-            controls_open: controlsShellEl.dataset.open === "true",
-          },
-          inspector_open: inspectorOpen,
-          inspector_pinned: inspectorPinned,
-          inspector: {
-            open: inspectorOpen,
-            pinned: inspectorPinned,
+            tools_open: Boolean(toolsShellEl && toolsShellEl.dataset.open === "true"),
+            controls_open: Boolean(controlsShellEl && controlsShellEl.dataset.open === "true"),
           },
           legend_open: legendPanelOpen,
           legend_panel_state: captureLegendPanelState(),
+          legend_panel_user_sized: legendPanelUserSized,
+          legend_sections_open: safeJsonClone(legendSectionOpenState, { traces: true, volumes: true }),
           zen_mode_enabled: zenModeEnabled,
           widgets: {
             sky: captureWidgetState("sky"),
@@ -5832,14 +5675,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function applySceneHoverState() {
-        const activeKeys = activeHoveredClusterKeys();
-        selectionSpriteEntriesByKey.forEach((entries, key) => {
-          const isActive = activeKeys.has(key);
-          entries.forEach((entry) => {
-            const scale = entry.baseScale * (isActive ? 1.45 : 1.0);
-            entry.sprite.scale.set(scale, scale, scale);
-          });
-        });
+        updateCameraResponsivePointSprites();
       }
 
       function interpolateDendrogramPosition(entry, targetTimeMyr) {
@@ -5895,140 +5731,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           };
         }
         return samples[samples.length - 1];
-      }
-
-      function postParentHoverToSkyFrame() {
-        if (!skySpec.enabled || !skyFrameEl || !skyFrameEl.contentWindow) {
-          return;
-        }
-        const clusterKey = crossHoverEnabled() ? normalizeMemberKey(localHoveredClusterKey) : "";
-        if (clusterKey === lastSentSkyHoverClusterKey) {
-          return;
-        }
-        lastSentSkyHoverClusterKey = clusterKey;
-        skyFrameEl.contentWindow.postMessage({
-          type: "oviz-parent-hover-cluster",
-          clusterKey: clusterKey || null,
-        }, "*");
-      }
-
-      function setLocalHoveredClusterKey(clusterKey) {
-        const nextKey = normalizeMemberKey(clusterKey);
-        if (nextKey === localHoveredClusterKey) {
-          return;
-        }
-        localHoveredClusterKey = nextKey;
-        applySceneHoverState();
-        if (widgetModeForKey("dendrogram") !== "hidden") {
-          renderDendrogramWidget();
-        }
-        postParentHoverToSkyFrame();
-      }
-
-      function setSkyHoveredClusterKey(clusterKey) {
-        const nextKey = crossHoverEnabled() ? normalizeMemberKey(clusterKey) : "";
-        if (nextKey === skyHoveredClusterKey) {
-          return;
-        }
-        skyHoveredClusterKey = nextKey;
-        applySceneHoverState();
-        if (widgetModeForKey("dendrogram") !== "hidden") {
-          renderDendrogramWidget();
-        }
-      }
-
-      function clearCrossHoverState() {
-        localHoveredClusterKey = "";
-        skyHoveredClusterKey = "";
-        lastSentSkyHoverClusterKey = null;
-        applySceneHoverState();
-        if (widgetModeForKey("dendrogram") !== "hidden") {
-          renderDendrogramWidget();
-        }
-        postParentHoverToSkyFrame();
-      }
-
-      function hasActiveLassoSelectionMask() {
-        return Boolean(
-          currentLassoSelectionMask
-          && currentLassoSelectionMask.maskTexture
-          && currentLassoSelectionMask.viewProjectionMatrix
-        );
-      }
-
-      function activeVolumeLassoSelectionMask() {
-        return lassoVolumeSelectionEnabled ? currentLassoSelectionMask : null;
-      }
-
-      function disposeLassoSelectionMask(mask) {
-        if (!mask || !mask.maskTexture) {
-          return;
-        }
-        mask.maskTexture.dispose();
-      }
-
-      function canvasPointToNdc(point) {
-        const width = Math.max(canvas.clientWidth || 0, 1);
-        const height = Math.max(canvas.clientHeight || 0, 1);
-        return {
-          x: (Number(point.x) / width) * 2.0 - 1.0,
-          y: 1.0 - (Number(point.y) / height) * 2.0,
-        };
-      }
-
-      function captureLassoSelectionMask(points) {
-        const source = Array.isArray(points) ? points : [];
-        if (source.length < 3) {
-          return null;
-        }
-        const pointsNdc = source
-          .map((point) => canvasPointToNdc(point))
-          .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
-        if (pointsNdc.length < 3) {
-          return null;
-        }
-
-        const maskCanvasSize = 512;
-        const maskCanvas = document.createElement("canvas");
-        maskCanvas.width = maskCanvasSize;
-        maskCanvas.height = maskCanvasSize;
-        const maskCtx = maskCanvas.getContext("2d");
-        maskCtx.clearRect(0, 0, maskCanvasSize, maskCanvasSize);
-        maskCtx.fillStyle = "#ffffff";
-        maskCtx.beginPath();
-        pointsNdc.forEach((point, index) => {
-          const x = (point.x * 0.5 + 0.5) * maskCanvasSize;
-          const y = (0.5 - point.y * 0.5) * maskCanvasSize;
-          if (index === 0) {
-            maskCtx.moveTo(x, y);
-          } else {
-            maskCtx.lineTo(x, y);
-          }
-        });
-        maskCtx.closePath();
-        maskCtx.fill();
-
-        const maskTexture = new THREE.CanvasTexture(maskCanvas);
-        maskTexture.minFilter = THREE.NearestFilter;
-        maskTexture.magFilter = THREE.NearestFilter;
-        maskTexture.wrapS = THREE.ClampToEdgeWrapping;
-        maskTexture.wrapT = THREE.ClampToEdgeWrapping;
-        maskTexture.flipY = false;
-        maskTexture.generateMipmaps = false;
-        maskTexture.needsUpdate = true;
-        const maskImageData = maskCtx.getImageData(0, 0, maskCanvasSize, maskCanvasSize);
-
-        camera.updateMatrixWorld(true);
-        camera.updateProjectionMatrix();
-        const viewProjectionMatrix = new THREE.Matrix4()
-          .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-        return {
-          maskTexture,
-          viewProjectionMatrix,
-          polygonNdc: pointsNdc.map((point) => ({ x: Number(point.x), y: Number(point.y) })),
-          maskSize: maskCanvasSize,
-          maskAlphaData: maskImageData ? maskImageData.data : null,
-        };
       }
 
       function applyLassoSelectionMaskUniforms(uniforms, mask) {
@@ -6128,937 +5830,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return buildAladinSrcdoc([], [], "overview", null);
       }
 
-      function normalizeMemberKey(value) {
-        return String(value || "")
-          .trim()
-          .toLowerCase()
-          .replace(/[_\s]+/g, " ");
-      }
-
-      const GALACTIC_TO_ICRS_MATRIX = [
-        -0.0548755604162154, 0.4941094278755837, -0.8676661490190047,
-        -0.8734370902348850, -0.4448296299600112, -0.1980763734312015,
-        -0.4838350155487132, 0.7469822444972189, 0.4559837761750669,
-      ];
-
-      function normalizeSkyLongitude(value) {
-        let lon = Number(value);
-        if (!Number.isFinite(lon)) {
-          return NaN;
-        }
-        lon %= 360.0;
-        if (lon < 0.0) {
-          lon += 360.0;
-        }
-        return lon;
-      }
-
-      function wrapLongitudeDeltaDeg(value) {
-        let delta = Number(value);
-        if (!Number.isFinite(delta)) {
-          return NaN;
-        }
-        while (delta <= -180.0) {
-          delta += 360.0;
-        }
-        while (delta > 180.0) {
-          delta -= 360.0;
-        }
-        return delta;
-      }
-
-      function galacticLonLatDegFromCartesian(x, y, z) {
-        const xx = Number(x);
-        const yy = Number(y);
-        const zz = Number(z);
-        if (!Number.isFinite(xx) || !Number.isFinite(yy) || !Number.isFinite(zz)) {
-          return null;
-        }
-        const distance = Math.sqrt(xx * xx + yy * yy + zz * zz);
-        if (!(distance > 1e-9)) {
-          return null;
-        }
-        return {
-          l: normalizeSkyLongitude(Math.atan2(yy, xx) * 180.0 / Math.PI),
-          b: Math.asin(Math.min(1.0, Math.max(-1.0, zz / distance))) * 180.0 / Math.PI,
-          distance,
-        };
-      }
-
-      function applyVolumeSkyAxisTransform(x, y, z, transform) {
-        const coords = [Number(x), Number(y), Number(z)];
-        if (!coords.every(Number.isFinite)) {
-          return null;
-        }
-        const xyPermutation = Array.isArray(transform && transform.xyPermutation) && transform.xyPermutation.length === 2
-          ? transform.xyPermutation
-          : [0, 1];
-        const xySigns = Array.isArray(transform && transform.xySigns) && transform.xySigns.length === 2
-          ? transform.xySigns
-          : [1, 1];
-        const zSign = Number(transform && transform.zSign);
-        const tx = (Number(xySigns[0]) || 1) * coords[Number(xyPermutation[0]) || 0];
-        const ty = (Number(xySigns[1]) || 1) * coords[Number(xyPermutation[1]) || 1];
-        const tz = (Number.isFinite(zSign) && Math.abs(zSign) > 0.5 ? zSign : 1) * coords[2];
-        return { x: tx, y: ty, z: tz };
-      }
-
-      function deriveVolumeSkyAxisTransform() {
-        const identity = { xyPermutation: [0, 1], xySigns: [1, 1], zSign: 1 };
-        const referenceFrame = frameSpecs.find((frame) => approximatelyZero(Number(frame && frame.time))) || frameSpecs[0] || null;
-        if (!referenceFrame || !Array.isArray(referenceFrame.traces)) {
-          return identity;
-        }
-
-        const samples = [];
-        referenceFrame.traces.forEach((trace) => {
-          if (!trace || !Array.isArray(trace.points)) {
-            return;
-          }
-          trace.points.forEach((point) => {
-            const selection = point && typeof point === "object" ? point.selection : null;
-            if (!selection || typeof selection !== "object") {
-              return;
-            }
-            const x0 = Number(selection.x0);
-            const y0 = Number(selection.y0);
-            const z0 = Number(selection.z0);
-            const lDeg = Number(selection.l_deg);
-            const bDeg = Number(selection.b_deg);
-            if (
-              !Number.isFinite(x0)
-              || !Number.isFinite(y0)
-              || !Number.isFinite(z0)
-              || !Number.isFinite(lDeg)
-              || !Number.isFinite(bDeg)
-            ) {
-              return;
-            }
-            const distance = Math.sqrt(x0 * x0 + y0 * y0 + z0 * z0);
-            if (!(distance > 1e-6)) {
-              return;
-            }
-            samples.push({ x: x0, y: y0, z: z0, l: lDeg, b: bDeg });
-          });
-        });
-
-        if (samples.length < 3) {
-          return identity;
-        }
-
-        const cappedSamples = samples.length > 256
-          ? samples.filter((_, idx) => (idx % Math.ceil(samples.length / 256)) === 0)
-          : samples;
-        const xyCandidates = [
-          { xyPermutation: [0, 1], xySigns: [1, 1] },
-          { xyPermutation: [0, 1], xySigns: [1, -1] },
-          { xyPermutation: [0, 1], xySigns: [-1, 1] },
-          { xyPermutation: [0, 1], xySigns: [-1, -1] },
-          { xyPermutation: [1, 0], xySigns: [1, 1] },
-          { xyPermutation: [1, 0], xySigns: [1, -1] },
-          { xyPermutation: [1, 0], xySigns: [-1, 1] },
-          { xyPermutation: [1, 0], xySigns: [-1, -1] },
-        ];
-        const zCandidates = [1, -1];
-        let bestTransform = identity;
-        let bestScore = Infinity;
-
-        xyCandidates.forEach((xyCandidate) => {
-          zCandidates.forEach((zSign) => {
-            const transform = {
-              xyPermutation: xyCandidate.xyPermutation,
-              xySigns: xyCandidate.xySigns,
-              zSign,
-            };
-            let score = 0.0;
-            let matchedCount = 0;
-            cappedSamples.forEach((sample) => {
-              const transformed = applyVolumeSkyAxisTransform(sample.x, sample.y, sample.z, transform);
-              const projected = transformed
-                ? galacticLonLatDegFromCartesian(transformed.x, transformed.y, transformed.z)
-                : null;
-              if (!projected) {
-                return;
-              }
-              const lonError = wrapLongitudeDeltaDeg(Number(projected.l) - Number(sample.l));
-              const latError = Number(projected.b) - Number(sample.b);
-              if (!Number.isFinite(lonError) || !Number.isFinite(latError)) {
-                return;
-              }
-              score += (lonError * lonError) + (latError * latError);
-              matchedCount += 1;
-            });
-            if (!matchedCount) {
-              return;
-            }
-            const normalizedScore = score / matchedCount;
-            if (normalizedScore < bestScore) {
-              bestScore = normalizedScore;
-              bestTransform = transform;
-            }
-          });
-        });
-
-        return bestTransform;
-      }
-
-      const volumeSkyAxisTransform = deriveVolumeSkyAxisTransform();
-
-      function volumeSkyGalacticLonLatDegFromCartesian(x, y, z) {
-        const transformed = applyVolumeSkyAxisTransform(x, y, z, volumeSkyAxisTransform);
-        if (!transformed) {
-          return null;
-        }
-        return galacticLonLatDegFromCartesian(transformed.x, transformed.y, transformed.z);
-      }
-
-      function icrsDegFromGalacticDeg(lDeg, bDeg) {
-        const lon = Number(lDeg) * Math.PI / 180.0;
-        const lat = Number(bDeg) * Math.PI / 180.0;
-        if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
-          return null;
-        }
-        const cosLat = Math.cos(lat);
-        const xGal = cosLat * Math.cos(lon);
-        const yGal = cosLat * Math.sin(lon);
-        const zGal = Math.sin(lat);
-        const xEq = (
-          GALACTIC_TO_ICRS_MATRIX[0] * xGal
-          + GALACTIC_TO_ICRS_MATRIX[1] * yGal
-          + GALACTIC_TO_ICRS_MATRIX[2] * zGal
-        );
-        const yEq = (
-          GALACTIC_TO_ICRS_MATRIX[3] * xGal
-          + GALACTIC_TO_ICRS_MATRIX[4] * yGal
-          + GALACTIC_TO_ICRS_MATRIX[5] * zGal
-        );
-        const zEq = (
-          GALACTIC_TO_ICRS_MATRIX[6] * xGal
-          + GALACTIC_TO_ICRS_MATRIX[7] * yGal
-          + GALACTIC_TO_ICRS_MATRIX[8] * zGal
-        );
-        const dec = Math.asin(Math.min(1.0, Math.max(-1.0, zEq))) * 180.0 / Math.PI;
-        const ra = normalizeSkyLongitude(Math.atan2(yEq, xEq) * 180.0 / Math.PI);
-        if (!Number.isFinite(ra) || !Number.isFinite(dec)) {
-          return null;
-        }
-        return { ra, dec };
-      }
-
-      function galacticDegFromIcrsDeg(raDeg, decDeg) {
-        const ra = Number(raDeg) * Math.PI / 180.0;
-        const dec = Number(decDeg) * Math.PI / 180.0;
-        if (!Number.isFinite(ra) || !Number.isFinite(dec)) {
-          return null;
-        }
-        const cosDec = Math.cos(dec);
-        const xEq = cosDec * Math.cos(ra);
-        const yEq = cosDec * Math.sin(ra);
-        const zEq = Math.sin(dec);
-        const xGal = (
-          GALACTIC_TO_ICRS_MATRIX[0] * xEq
-          + GALACTIC_TO_ICRS_MATRIX[3] * yEq
-          + GALACTIC_TO_ICRS_MATRIX[6] * zEq
-        );
-        const yGal = (
-          GALACTIC_TO_ICRS_MATRIX[1] * xEq
-          + GALACTIC_TO_ICRS_MATRIX[4] * yEq
-          + GALACTIC_TO_ICRS_MATRIX[7] * zEq
-        );
-        const zGal = (
-          GALACTIC_TO_ICRS_MATRIX[2] * xEq
-          + GALACTIC_TO_ICRS_MATRIX[5] * yEq
-          + GALACTIC_TO_ICRS_MATRIX[8] * zEq
-        );
-        const b = Math.asin(Math.min(1.0, Math.max(-1.0, zGal))) * 180.0 / Math.PI;
-        const l = normalizeSkyLongitude(Math.atan2(yGal, xGal) * 180.0 / Math.PI);
-        if (!Number.isFinite(l) || !Number.isFinite(b)) {
-          return null;
-        }
-        return { l, b };
-      }
-
-      function volumeOverlayStretchValue(value, stretchName) {
-        const clamped = Math.min(Math.max(Number(value), 0.0), 1.0);
-        const stretch = normalizeVolumeStretch(stretchName);
-        if (stretch === "log10") {
-          const strength = 999.0;
-          return Math.log(1.0 + strength * clamped) / Math.log(1.0 + strength);
-        }
-        if (stretch === "asinh") {
-          const strength = 10.0;
-          const numer = Math.log(strength * clamped + Math.sqrt((strength * clamped) * (strength * clamped) + 1.0));
-          const denom = Math.log(strength + Math.sqrt(strength * strength + 1.0));
-          return denom > 0.0 ? numer / denom : clamped;
-        }
-        return clamped;
-      }
-
-      function galacticDirectionVectorFromLonLatDeg(lDeg, bDeg) {
-        const lonRad = Number(lDeg) * Math.PI / 180.0;
-        const latRad = Number(bDeg) * Math.PI / 180.0;
-        if (!Number.isFinite(lonRad) || !Number.isFinite(latRad)) {
-          return null;
-        }
-        const cosLat = Math.cos(latRad);
-        return {
-          x: cosLat * Math.cos(lonRad),
-          y: cosLat * Math.sin(lonRad),
-          z: Math.sin(latRad),
-        };
-      }
-
-      function intersectRayWithBounds(direction, xBounds, yBounds, zBounds) {
-        if (!direction) {
-          return null;
-        }
-        const dir = [
-          Number(direction.x) || 0.0,
-          Number(direction.y) || 0.0,
-          Number(direction.z) || 0.0,
-        ];
-        const bounds = [
-          Array.isArray(xBounds) ? xBounds : [-0.5, 0.5],
-          Array.isArray(yBounds) ? yBounds : [-0.5, 0.5],
-          Array.isArray(zBounds) ? zBounds : [-0.5, 0.5],
-        ];
-        let tMin = -Infinity;
-        let tMax = Infinity;
-        for (let axis = 0; axis < 3; axis += 1) {
-          const d = dir[axis];
-          const low = Number(bounds[axis][0]);
-          const high = Number(bounds[axis][1]);
-          if (!Number.isFinite(low) || !Number.isFinite(high)) {
-            return null;
-          }
-          if (Math.abs(d) < 1e-8) {
-            if (0.0 < Math.min(low, high) || 0.0 > Math.max(low, high)) {
-              return null;
-            }
-            continue;
-          }
-          let t0 = low / d;
-          let t1 = high / d;
-          if (t0 > t1) {
-            const swap = t0;
-            t0 = t1;
-            t1 = swap;
-          }
-          tMin = Math.max(tMin, t0);
-          tMax = Math.min(tMax, t1);
-          if (!(tMax > tMin)) {
-            return null;
-          }
-        }
-        const near = Math.max(tMin, 0.0);
-        if (!(tMax > near)) {
-          return null;
-        }
-        return { tMin: near, tMax };
-      }
-
-      function sampleVolumeScalarTrilinear(scalarData, nx, ny, nz, xNorm, yNorm, zNorm) {
-        if (!scalarData || !scalarData.length) {
-          return 0.0;
-        }
-        const x = Math.min(Math.max(Number(xNorm), 0.0), 1.0) * Math.max(nx - 1, 0);
-        const y = Math.min(Math.max(Number(yNorm), 0.0), 1.0) * Math.max(ny - 1, 0);
-        const z = Math.min(Math.max(Number(zNorm), 0.0), 1.0) * Math.max(nz - 1, 0);
-        const x0 = Math.floor(x);
-        const y0 = Math.floor(y);
-        const z0 = Math.floor(z);
-        const x1 = Math.min(x0 + 1, nx - 1);
-        const y1 = Math.min(y0 + 1, ny - 1);
-        const z1 = Math.min(z0 + 1, nz - 1);
-        const tx = x - x0;
-        const ty = y - y0;
-        const tz = z - z0;
-        const strideY = nx;
-        const strideZ = nx * ny;
-        const index000 = z0 * strideZ + y0 * strideY + x0;
-        const index100 = z0 * strideZ + y0 * strideY + x1;
-        const index010 = z0 * strideZ + y1 * strideY + x0;
-        const index110 = z0 * strideZ + y1 * strideY + x1;
-        const index001 = z1 * strideZ + y0 * strideY + x0;
-        const index101 = z1 * strideZ + y0 * strideY + x1;
-        const index011 = z1 * strideZ + y1 * strideY + x0;
-        const index111 = z1 * strideZ + y1 * strideY + x1;
-        const c000 = Number(scalarData[index000] || 0) / 255.0;
-        const c100 = Number(scalarData[index100] || 0) / 255.0;
-        const c010 = Number(scalarData[index010] || 0) / 255.0;
-        const c110 = Number(scalarData[index110] || 0) / 255.0;
-        const c001 = Number(scalarData[index001] || 0) / 255.0;
-        const c101 = Number(scalarData[index101] || 0) / 255.0;
-        const c011 = Number(scalarData[index011] || 0) / 255.0;
-        const c111 = Number(scalarData[index111] || 0) / 255.0;
-        const c00 = c000 * (1.0 - tx) + c100 * tx;
-        const c10 = c010 * (1.0 - tx) + c110 * tx;
-        const c01 = c001 * (1.0 - tx) + c101 * tx;
-        const c11 = c011 * (1.0 - tx) + c111 * tx;
-        const c0 = c00 * (1.0 - ty) + c10 * ty;
-        const c1 = c01 * (1.0 - ty) + c11 * ty;
-        return c0 * (1.0 - tz) + c1 * tz;
-      }
-
-      function pointInsideProjectedLassoMask(worldX, worldY, worldZ, mask) {
-        if (
-          !mask
-          || !mask.viewProjectionMatrix
-          || !Array.isArray(mask.polygonNdc)
-          || mask.polygonNdc.length < 3
-        ) {
-          return false;
-        }
-        const e = mask.viewProjectionMatrix.elements || [];
-        if (e.length !== 16) {
-          return false;
-        }
-        const clipX = e[0] * worldX + e[4] * worldY + e[8] * worldZ + e[12];
-        const clipY = e[1] * worldX + e[5] * worldY + e[9] * worldZ + e[13];
-        const clipZ = e[2] * worldX + e[6] * worldY + e[10] * worldZ + e[14];
-        const clipW = e[3] * worldX + e[7] * worldY + e[11] * worldZ + e[15];
-        if (!(clipW > 0.0)) {
-          return false;
-        }
-        const ndcPoint = {
-          x: clipX / clipW,
-          y: clipY / clipW,
-          z: clipZ / clipW,
-        };
-        if (!Number.isFinite(ndcPoint.x) || !Number.isFinite(ndcPoint.y) || !Number.isFinite(ndcPoint.z)) {
-          return false;
-        }
-        if (ndcPoint.z < -1.0 || ndcPoint.z > 1.0) {
-          return false;
-        }
-        if (ndcPoint.x < -1.0 || ndcPoint.x > 1.0 || ndcPoint.y < -1.0 || ndcPoint.y > 1.0) {
-          return false;
-        }
-        const maskSize = Math.max(0, Math.round(Number(mask.maskSize) || 0));
-        const maskAlphaData = mask.maskAlphaData;
-        if (maskSize > 0 && maskAlphaData && maskAlphaData.length >= maskSize * maskSize * 4) {
-          const maskX = Math.max(0, Math.min(maskSize - 1, Math.round((ndcPoint.x * 0.5 + 0.5) * (maskSize - 1))));
-          const maskY = Math.max(0, Math.min(maskSize - 1, Math.round((0.5 - ndcPoint.y * 0.5) * (maskSize - 1))));
-          const alphaIndex = ((maskY * maskSize) + maskX) * 4 + 3;
-          return Number(maskAlphaData[alphaIndex] || 0) > 0;
-        }
-        return pointInPolygon(ndcPoint, mask.polygonNdc);
-      }
-
-      function buildVolumeSkyImageOverlaySpec(mode = "overview") {
-        if (mode === "click") {
-          return null;
-        }
-        const activeMask = activeVolumeLassoSelectionMask();
-        if (
-          !activeMask
-          || !activeMask.viewProjectionMatrix
-          || !Array.isArray(activeMask.polygonNdc)
-          || activeMask.polygonNdc.length < 3
-        ) {
-          return null;
-        }
-
-        const frame = currentFrame();
-        const frameTime = frame ? Number(frame.time) : NaN;
-        const displayOffsetX = Number(plotGroup.position.x) || 0.0;
-        const displayOffsetY = Number(plotGroup.position.y) || 0.0;
-        const displayOffsetZ = Number(plotGroup.position.z) || 0.0;
-        const collectedSamples = [];
-        const usedLayerNames = [];
-        let usedLayerCount = 0;
-
-        frameVolumeLayers(frame).forEach((layer) => {
-          const stateKey = volumeStateKeyForLayer(layer);
-          const state = volumeStateByKey[stateKey];
-          if (!state || state.visible === false || legendState[stateKey] === false) {
-            return;
-          }
-
-          const shape = layer.sky_overlay_shape || layer.shape || {};
-          const nx = Math.max(1, Math.round(Number(shape.x) || 0));
-          const ny = Math.max(1, Math.round(Number(shape.y) || 0));
-          const nz = Math.max(1, Math.round(Number(shape.z) || 0));
-          const totalVoxels = nx * ny * nz;
-          if (!(totalVoxels > 0)) {
-            return;
-          }
-
-          const scalarData = volumeSkyScalarArrayFor(layer);
-          if (!scalarData || !scalarData.length) {
-            return;
-          }
-
-          const option = volumeColormapOptionFor(layer, state.colormap);
-          const colorBytes = option ? volumeColorBytesForOption(option) : null;
-          if (!colorBytes || colorBytes.length < 4) {
-            return;
-          }
-
-          const bounds = layer.bounds || {};
-          const xBounds = Array.isArray(bounds.x) ? bounds.x : [-0.5, 0.5];
-          const yBounds = Array.isArray(bounds.y) ? bounds.y : [-0.5, 0.5];
-          const zBounds = Array.isArray(bounds.z) ? bounds.z : [-0.5, 0.5];
-          const xSpan = Number(xBounds[1]) - Number(xBounds[0]);
-          const ySpan = Number(yBounds[1]) - Number(yBounds[0]);
-          const zSpan = Number(zBounds[1]) - Number(zBounds[0]);
-          if (!(Number.isFinite(xSpan) && Number.isFinite(ySpan) && Number.isFinite(zSpan))) {
-            return;
-          }
-
-          const windowState = normalizedVolumeWindowFor(layer, state);
-          const low = Number(windowState.low);
-          const high = Number(windowState.high);
-          const span = Math.max(high - low, 1e-6);
-          const desiredScanCount = 2500000;
-          const stride = Math.max(1, Math.ceil(Math.cbrt(totalVoxels / desiredScanCount)));
-          const minScaledThreshold = 0.02;
-          const layerOpacityWeight = Math.max(0.05, Number(state.opacity) || 0.0);
-          const lutSamples = Math.max(1, Math.floor(colorBytes.length / 4));
-          const cellSizeX = Math.abs(xSpan / Math.max(nx, 1));
-          const cellSizeY = Math.abs(ySpan / Math.max(ny, 1));
-          const cellSizeZ = Math.abs(zSpan / Math.max(nz, 1));
-          const cellSizeMin = Math.max(1e-6, Math.min(cellSizeX, cellSizeY, cellSizeZ));
-          let layerUsed = false;
-
-          for (let iz = 0; iz < nz; iz += stride) {
-            const localZ = Number(zBounds[0]) + ((iz + 0.5) / nz) * zSpan;
-            const displayedZ = localZ + displayOffsetZ;
-            for (let iy = 0; iy < ny; iy += stride) {
-              const localY = Number(yBounds[0]) + ((iy + 0.5) / ny) * ySpan;
-              const displayedY = localY + displayOffsetY;
-              for (let ix = 0; ix < nx; ix += stride) {
-                const dataIndex = iz * nx * ny + iy * nx + ix;
-                const normalizedValue = Number(scalarData[dataIndex] || 0) / 255.0;
-                if (!(normalizedValue > low)) {
-                  continue;
-                }
-                const scaledValue = Math.min(Math.max((normalizedValue - low) / span, 0.0), 1.0);
-                const stretchedValue = volumeOverlayStretchValue(scaledValue, state.stretch);
-                if (!(stretchedValue > minScaledThreshold)) {
-                  continue;
-                }
-
-                const localX = Number(xBounds[0]) + ((ix + 0.5) / nx) * xSpan;
-                const displayedX = localX + displayOffsetX;
-                if (!pointInsideProjectedLassoMask(displayedX, displayedY, displayedZ, activeMask)) {
-                  continue;
-                }
-
-                const galactic = volumeSkyGalacticLonLatDegFromCartesian(localX, localY, localZ);
-                if (!galactic) {
-                  continue;
-                }
-
-                const lDeg = normalizeSkyLongitude(galactic.l);
-                const bDeg = Number(galactic.b);
-                if (!Number.isFinite(lDeg) || !Number.isFinite(bDeg)) {
-                  continue;
-                }
-
-                const weight = stretchedValue * layerOpacityWeight;
-                const icrs = icrsDegFromGalacticDeg(lDeg, bDeg);
-                if (!icrs) {
-                  continue;
-                }
-                const colorIndex = Math.max(
-                  0,
-                  Math.min(
-                    lutSamples - 1,
-                    Math.round(stretchedValue * (lutSamples - 1))
-                  )
-                ) * 4;
-                const angularFootprintDeg = Math.atan2(cellSizeMin * 0.9, Math.max(Number(galactic.distance) || 0.0, 1e-6)) * 180.0 / Math.PI;
-                collectedSamples.push({
-                  l: lDeg,
-                  b: bDeg,
-                  ra: Number(icrs.ra),
-                  dec: Number(icrs.dec),
-                  weight,
-                  r: Number(colorBytes[colorIndex]) || 0,
-                  g: Number(colorBytes[colorIndex + 1]) || 0,
-                  bColor: Number(colorBytes[colorIndex + 2]) || 0,
-                  sigmaDeg: Math.min(Math.max(angularFootprintDeg * 0.85, 0.02), 6.0),
-                });
-                layerUsed = true;
-              }
-            }
-          }
-
-          if (layerUsed) {
-            usedLayerCount += 1;
-            const baseName = volumeBaseNameForLayer(layer) || volumeStateNameForLayer(layer);
-            if (baseName && !usedLayerNames.includes(baseName)) {
-              usedLayerNames.push(baseName);
-            }
-          }
-        });
-
-        if (!collectedSamples.length || !usedLayerCount) {
-          return null;
-        }
-
-        let sumLonSin = 0.0;
-        let sumLonCos = 0.0;
-        let sumLat = 0.0;
-        let sumWeight = 0.0;
-        collectedSamples.forEach((sample) => {
-          const weight = Math.max(Number(sample.weight) || 0.0, 1e-6);
-          const lonRad = Number(sample.l) * Math.PI / 180.0;
-          sumLonSin += Math.sin(lonRad) * weight;
-          sumLonCos += Math.cos(lonRad) * weight;
-          sumLat += Number(sample.b) * weight;
-          sumWeight += weight;
-        });
-
-        const baseCenterLon = normalizeSkyLongitude(Math.atan2(sumLonSin, sumLonCos) * 180.0 / Math.PI);
-        const baseCenterLat = sumWeight > 0.0 ? (sumLat / sumWeight) : 0.0;
-        let minRelLon = Infinity;
-        let maxRelLon = -Infinity;
-        let minLat = Infinity;
-        let maxLat = -Infinity;
-        collectedSamples.forEach((sample) => {
-          const relLon = wrapLongitudeDeltaDeg(Number(sample.l) - baseCenterLon);
-          sample.relLonBase = relLon;
-          minRelLon = Math.min(minRelLon, relLon);
-          maxRelLon = Math.max(maxRelLon, relLon);
-          minLat = Math.min(minLat, Number(sample.b));
-          maxLat = Math.max(maxLat, Number(sample.b));
-        });
-
-        const lonSpanRaw = Math.max(maxRelLon - minRelLon, 0.25);
-        const latSpanRaw = Math.max(maxLat - minLat, 0.25);
-        const lonSpan = Math.min(Math.max(lonSpanRaw * 1.12, 2.0), 180.0);
-        const latSpan = Math.min(Math.max(latSpanRaw * 1.12, 2.0), 180.0);
-        const lonMidOffset = 0.5 * (minRelLon + maxRelLon);
-        const overlayCenterLon = normalizeSkyLongitude(baseCenterLon + lonMidOffset);
-        const overlayCenterLat = Math.min(Math.max(baseCenterLat + 0.5 * ((minLat + maxLat) - (2.0 * baseCenterLat)), -89.0), 89.0);
-        const aspect = Math.max(latSpan / lonSpan, 0.35);
-        const width = lonSpan <= 10.0 ? 2048 : (lonSpan <= 28.0 ? 1536 : (lonSpan <= 70.0 ? 1024 : 768));
-        const height = Math.max(384, Math.min(1536, Math.round(width * aspect)));
-        const pixelCount = width * height;
-        const weightGrid = new Float32Array(pixelCount);
-        const redGrid = new Float32Array(pixelCount);
-        const greenGrid = new Float32Array(pixelCount);
-        const blueGrid = new Float32Array(pixelCount);
-        const halfLonSpan = lonSpan * 0.5;
-        const halfLatSpan = latSpan * 0.5;
-        const pixelScaleLon = lonSpan / Math.max(width, 1);
-        const pixelScaleLat = latSpan / Math.max(height, 1);
-        const pixelScale = Math.max(Math.min(pixelScaleLon, pixelScaleLat), 1e-6);
-        const maxSamplesForOverlay = 120000;
-        const overlaySamples = collectedSamples.length > maxSamplesForOverlay
-          ? collectedSamples.filter((_, idx) => (idx % Math.ceil(collectedSamples.length / maxSamplesForOverlay)) === 0)
-          : collectedSamples;
-
-        overlaySamples.forEach((sample) => {
-          const relLon = wrapLongitudeDeltaDeg(Number(sample.l) - overlayCenterLon);
-          const relLat = Number(sample.b) - overlayCenterLat;
-          if (Math.abs(relLon) > halfLonSpan || Math.abs(relLat) > halfLatSpan) {
-            return;
-          }
-          const xCenter = ((halfLonSpan - relLon) / lonSpan) * width - 0.5;
-          const yCenter = ((halfLatSpan - relLat) / latSpan) * height - 0.5;
-          const sigmaPx = Math.max(1.1, Number(sample.sigmaDeg || pixelScale) / pixelScale);
-          const radiusPx = Math.max(2, Math.min(18, Math.ceil(sigmaPx * 2.8)));
-          const xMin = Math.max(0, Math.floor(xCenter - radiusPx));
-          const xMax = Math.min(width - 1, Math.ceil(xCenter + radiusPx));
-          const yMin = Math.max(0, Math.floor(yCenter - radiusPx));
-          const yMax = Math.min(height - 1, Math.ceil(yCenter + radiusPx));
-          const baseWeight = Math.max(Number(sample.weight) || 0.0, 0.0);
-          if (!(baseWeight > 0.0)) {
-            return;
-          }
-          const sigmaSq = sigmaPx * sigmaPx;
-          for (let yIndex = yMin; yIndex <= yMax; yIndex += 1) {
-            const dy = yIndex - yCenter;
-            for (let xIndex = xMin; xIndex <= xMax; xIndex += 1) {
-              const dx = xIndex - xCenter;
-              const distanceSq = dx * dx + dy * dy;
-              const kernelWeight = Math.exp(-0.5 * distanceSq / sigmaSq);
-              if (!(kernelWeight > 1e-4)) {
-                continue;
-              }
-              const contribution = baseWeight * kernelWeight;
-              const pixelIndex = yIndex * width + xIndex;
-              weightGrid[pixelIndex] += contribution;
-              redGrid[pixelIndex] += Number(sample.r || 0) * contribution;
-              greenGrid[pixelIndex] += Number(sample.g || 0) * contribution;
-              blueGrid[pixelIndex] += Number(sample.bColor || 0) * contribution;
-            }
-          }
-        });
-
-        let maxWeight = 0.0;
-        let nonZeroPixels = 0;
-        for (let index = 0; index < pixelCount; index += 1) {
-          const weight = Number(weightGrid[index]);
-          if (weight > 0.0) {
-            nonZeroPixels += 1;
-            if (weight > maxWeight) {
-              maxWeight = weight;
-            }
-          }
-        }
-
-        if (!(maxWeight > 0.0) || !nonZeroPixels) {
-          return null;
-        }
-
-        const overlayCanvas = document.createElement("canvas");
-        overlayCanvas.width = width;
-        overlayCanvas.height = height;
-        const overlayCtx = overlayCanvas.getContext("2d");
-        if (!overlayCtx) {
-          return null;
-        }
-        const imageData = overlayCtx.createImageData(width, height);
-        const rgba = imageData.data;
-        const normalizer = maxWeight > 0.0 ? maxWeight : 1.0;
-
-        for (let index = 0; index < pixelCount; index += 1) {
-          const weight = Number(weightGrid[index]);
-          if (!(weight > 0.0)) {
-            continue;
-          }
-          const normalized = Math.min(weight / normalizer, 1.0);
-          const intensity = Math.pow(normalized, 0.72);
-          const outIndex = index * 4;
-          const invWeight = 1.0 / weight;
-          rgba[outIndex] = Math.max(
-            0,
-            Math.min(255, Math.round((Number(redGrid[index]) * invWeight) * (0.30 + 0.70 * intensity)))
-          );
-          rgba[outIndex + 1] = Math.max(
-            0,
-            Math.min(255, Math.round((Number(greenGrid[index]) * invWeight) * (0.30 + 0.70 * intensity)))
-          );
-          rgba[outIndex + 2] = Math.max(
-            0,
-            Math.min(255, Math.round((Number(blueGrid[index]) * invWeight) * (0.30 + 0.70 * intensity)))
-          );
-          rgba[outIndex + 3] = Math.max(0, Math.min(255, Math.round(255.0 * Math.pow(normalized, 0.78))));
-        }
-
-        overlayCtx.putImageData(imageData, 0, 0);
-        const overlayName = usedLayerNames.length === 1
-          ? `Selected ${usedLayerNames[0]}`
-          : (usedLayerCount > 1 ? "Selected Volume Intensity" : "Selected Volume");
-        return {
-          kind: "volume_image",
-          name: overlayName,
-          data_url: overlayCanvas.toDataURL("image/png"),
-          width,
-          height,
-          sample_count: collectedSamples.length,
-          non_zero_pixels: nonZeroPixels,
-          wcs: {
-            NAXIS: 2,
-            NAXIS1: width,
-            NAXIS2: height,
-            CTYPE1: "GLON-CAR",
-            CTYPE2: "GLAT-CAR",
-            CUNIT1: "deg",
-            CUNIT2: "deg",
-            CRPIX1: (width / 2.0) + 0.5,
-            CRPIX2: (height / 2.0) + 0.5,
-            CRVAL1: overlayCenterLon,
-            CRVAL2: overlayCenterLat,
-            CDELT1: -lonSpan / width,
-            // The PNG is written in browser image coordinates with a top-left origin,
-            // so latitude should decrease as rows move downward.
-            CDELT2: latSpan / height,
-            CROTA2: 0.0,
-            LONPOLE: 180.0,
-            LATPOLE: 90.0,
-          },
-        };
-      }
-
-      function resolveMemberPoints(selection) {
-        const byCluster = skySpec.members_by_cluster || {};
-        const traceName = selection && selection.trace_name ? String(selection.trace_name) : "";
-        const clusterName = selection && selection.cluster_name ? String(selection.cluster_name) : "";
-        const candidates = [clusterName, traceName]
-          .filter(Boolean)
-          .flatMap((name) => [name, name.replace(/_/g, " "), name.replace(/\s+/g, "_")]);
-
-        for (const key of candidates) {
-          if (Array.isArray(byCluster[key]) && byCluster[key].length) {
-            return { key, points: byCluster[key] };
-          }
-        }
-
-        const normalizedCandidates = new Set(candidates.map((name) => normalizeMemberKey(name)));
-        for (const key of Object.keys(byCluster)) {
-          if (normalizedCandidates.has(normalizeMemberKey(key)) && Array.isArray(byCluster[key]) && byCluster[key].length) {
-            return { key, points: byCluster[key] };
-          }
-        }
-
-        return { key: traceName || clusterName || "Selection", points: null };
-      }
-
-      function buildAladinCatalogPayload(selections, mode = "overview") {
-        const activeSelections = uniqueSelections(selections);
-        const payload = activeSelections.map((selection) => {
-          const resolvedMembers = resolveMemberPoints(selection);
-          const lookupName = resolvedMembers.key || selectionKeyFor(selection) || "Selection";
-          const traceName = selection && selection.trace_name ? String(selection.trace_name) : lookupName;
-          const clusterKey = normalizedSelectionKeyFor(selection);
-          const clusterColor = selection.cluster_color ? String(selection.cluster_color) : "#ffffff";
-          const members = Array.isArray(resolvedMembers.points) ? resolvedMembers.points : null;
-          let points = [];
-          if (members && members.length) {
-            points = members.map((pt) => ({
-              l: Number(pt.l),
-              b: Number(pt.b),
-              ra: Number(pt.ra),
-              dec: Number(pt.dec),
-              label: pt.label || lookupName,
-              clusterKey,
-            }));
-          } else if (Number.isFinite(Number(selection.ra_deg)) && Number.isFinite(Number(selection.dec_deg))) {
-            points = [{
-              l: Number(selection.l_deg),
-              b: Number(selection.b_deg),
-              ra: Number(selection.ra_deg),
-              dec: Number(selection.dec_deg),
-              label: lookupName,
-              clusterKey,
-            }];
-          }
-          return {
-            name: lookupName,
-            traceName,
-            color: clusterColor,
-            opacity: 1.0,
-            sourceSize: points.length > 1 ? 4 : 7,
-            points,
-          };
-        }).filter((catalog) => (catalog.points || []).length);
-
-        if (mode === "click" || payload.length <= 1) {
-          return payload;
-        }
-
-        const grouped = new Map();
-        payload.forEach((catalog) => {
-          const groupKey = String(catalog.traceName || catalog.name || "Selected trace");
-          if (!grouped.has(groupKey)) {
-            grouped.set(groupKey, {
-              name: groupKey,
-              color: catalog.color,
-              opacity: 1.0,
-              sourceSize: 4,
-              points: [],
-              seen: new Set(),
-            });
-          }
-          const group = grouped.get(groupKey);
-          (catalog.points || []).forEach((point) => {
-            const ra = Number(point.ra);
-            const dec = Number(point.dec);
-            const label = String(point.label || catalog.name || "Selection");
-            const clusterKey = String(point.clusterKey || "");
-            const key = `${ra.toFixed(8)}|${dec.toFixed(8)}|${label}|${clusterKey}`;
-            if (!Number.isFinite(ra) || !Number.isFinite(dec) || group.seen.has(key)) {
-              return;
-            }
-            group.seen.add(key);
-            group.points.push({
-              l: Number(point.l),
-              b: Number(point.b),
-              ra,
-              dec,
-              label,
-              clusterKey,
-            });
-          });
-        });
-
-        return Array.from(grouped.values())
-          .map((group) => ({
-            name: group.name,
-            color: group.color,
-            opacity: group.opacity,
-            sourceSize: group.sourceSize,
-            points: group.points,
-          }))
-          .filter((group) => group.points.length);
-      }
-
-      function angularSeparationDeg(ra1Deg, dec1Deg, ra2Deg, dec2Deg) {
-        const rad = Math.PI / 180.0;
-        const sin1 = Math.sin(dec1Deg * rad);
-        const sin2 = Math.sin(dec2Deg * rad);
-        const cos1 = Math.cos(dec1Deg * rad);
-        const cos2 = Math.cos(dec2Deg * rad);
-        const deltaRa = (ra1Deg - ra2Deg) * rad;
-        const cosSep = Math.min(1.0, Math.max(-1.0, sin1 * sin2 + cos1 * cos2 * Math.cos(deltaRa)));
-        return Math.acos(cosSep) * 180.0 / Math.PI;
-      }
-
-      function skyFocusFromPayload(selections, catalogPayload) {
-        const focusPoints = [];
-        (catalogPayload || []).forEach((catalog) => {
-          (catalog.points || []).forEach((point) => {
-            const ra = Number(point.ra);
-            const dec = Number(point.dec);
-            if (Number.isFinite(ra) && Number.isFinite(dec)) {
-              focusPoints.push({ ra, dec });
-            }
-          });
-        });
-        if (!focusPoints.length) {
-          uniqueSelections(selections).forEach((selection) => {
-            const ra = Number(selection.ra_deg);
-            const dec = Number(selection.dec_deg);
-            if (Number.isFinite(ra) && Number.isFinite(dec)) {
-              focusPoints.push({ ra, dec });
-            }
-          });
-        }
-        if (!focusPoints.length) {
-          return null;
-        }
-
-        const rad = Math.PI / 180.0;
-        let sx = 0.0;
-        let sy = 0.0;
-        let sz = 0.0;
-        focusPoints.forEach((point) => {
-          const ra = point.ra * rad;
-          const dec = point.dec * rad;
-          const cosDec = Math.cos(dec);
-          sx += cosDec * Math.cos(ra);
-          sy += cosDec * Math.sin(ra);
-          sz += Math.sin(dec);
-        });
-
-        const norm = Math.sqrt(sx * sx + sy * sy + sz * sz);
-        let centerRa = focusPoints[0].ra;
-        let centerDec = focusPoints[0].dec;
-        if (norm > 1e-9) {
-          centerRa = Math.atan2(sy, sx) * 180.0 / Math.PI;
-          if (centerRa < 0.0) {
-            centerRa += 360.0;
-          }
-          centerDec = Math.asin(Math.min(1.0, Math.max(-1.0, sz / norm))) * 180.0 / Math.PI;
-        }
-
-        let maxSep = 0.0;
-        focusPoints.forEach((point) => {
-          maxSep = Math.max(maxSep, angularSeparationDeg(centerRa, centerDec, point.ra, point.dec));
-        });
-
-        const radiusDeg = Number(skySpec.radius_deg || 1.0);
-        return {
-          ra: centerRa,
-          dec: centerDec,
-          fovDeg: Math.min(Math.max(radiusDeg * 2.4, maxSep * 2.8, 1.2), 180.0),
-        };
-      }
+__SKY_RUNTIME_JS__
 
       function buildAladinSrcdoc(selections, catalogPayload, mode = "overview", volumeOverlay = null) {
         const activeSelections = uniqueSelections(selections);
@@ -7334,10 +6106,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function updateSelectionUI() {
-        selectionReadoutEl.textContent = selectionToolbarText(currentSelections, currentSelection);
+        if (!clearSelectionButtonEl || !clickSelectToggleEl || !volumeLassoToggleEl) {
+          return;
+        }
+        if (minimalModeEnabled) {
+          clearSelectionButtonEl.disabled = true;
+          clickSelectToggleEl.checked = false;
+          clickSelectToggleEl.disabled = true;
+          volumeLassoToggleEl.checked = false;
+          volumeLassoToggleEl.disabled = true;
+          return;
+        }
         clearSelectionButtonEl.disabled = currentSelections.length === 0 && !currentSelection && !hasActiveLassoSelectionMask();
-        lassoButtonEl.dataset.active = lassoArmed ? "true" : "false";
-        lassoButtonEl.setAttribute("aria-pressed", lassoArmed ? "true" : "false");
         clickSelectToggleEl.checked = clickSelectionEnabled;
         volumeLassoToggleEl.checked = lassoVolumeSelectionEnabled;
       }
@@ -7353,2413 +6133,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (data.type === "oviz-sky-hover-cluster") {
           setSkyHoveredClusterKey(data.clusterKey);
         }
-      }
-
-      function clamp01(value) {
-        return Math.min(Math.max(Number(value), 0.0), 1.0);
-      }
-
-      function clampRange(value, minValue, maxValue) {
-        const numeric = Number(value);
-        if (!Number.isFinite(numeric)) {
-          return minValue;
-        }
-        return Math.min(Math.max(numeric, minValue), maxValue);
-      }
-
-      function clampManualLabelSize(value) {
-        return clampRange(value, MIN_MANUAL_LABEL_SIZE, MAX_MANUAL_LABEL_SIZE);
-      }
-
-      function sanitizeManualLabelText(value) {
-        return String(value ?? "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, MAX_MANUAL_LABEL_TEXT_LENGTH);
-      }
-
-      function manualLabelFallbackText(index) {
-        return `Label ${Math.max(1, Number(index) || 1)}`;
-      }
-
-      function trackManualLabelId(id, fallbackIndex = 0) {
-        const numericFallback = Math.max(0, Number(fallbackIndex) || 0);
-        const text = String(id || "");
-        const match = text.match(/manual-label-(\d+)$/);
-        if (match) {
-          manualLabelIdCounter = Math.max(manualLabelIdCounter, Number(match[1]) || numericFallback);
-        } else {
-          manualLabelIdCounter = Math.max(manualLabelIdCounter, numericFallback);
-        }
-      }
-
-      function nextManualLabelId() {
-        manualLabelIdCounter += 1;
-        return `manual-label-${manualLabelIdCounter}`;
-      }
-
-      function normalizeManualLabel(rawLabel, index) {
-        if (!rawLabel || typeof rawLabel !== "object") {
-          return null;
-        }
-        const fallbackIndex = index + 1;
-        const rawId = String(rawLabel.id || "");
-        const id = rawId || nextManualLabelId();
-        trackManualLabelId(id, fallbackIndex);
-        return {
-          id,
-          text: sanitizeManualLabelText(rawLabel.text) || manualLabelFallbackText(fallbackIndex),
-          x: Number.isFinite(Number(rawLabel.x)) ? Number(rawLabel.x) : 0.0,
-          y: Number.isFinite(Number(rawLabel.y)) ? Number(rawLabel.y) : 0.0,
-          z: Number.isFinite(Number(rawLabel.z)) ? Number(rawLabel.z) : 0.0,
-          size: clampManualLabelSize(rawLabel.size ?? DEFAULT_MANUAL_LABEL_SIZE),
-        };
-      }
-
-      function manualLabelById(labelId) {
-        const requestedId = String(labelId || "");
-        return manualLabels.find((label) => String(label.id) === requestedId) || null;
-      }
-
-      function activeManualLabel() {
-        return manualLabelById(activeManualLabelId);
-      }
-
-      function ensureActiveManualLabel(preferredId = "") {
-        const requestedId = String(preferredId || activeManualLabelId || "");
-        if (requestedId && manualLabelById(requestedId)) {
-          activeManualLabelId = requestedId;
-          return;
-        }
-        activeManualLabelId = manualLabels.length ? String(manualLabels[manualLabels.length - 1].id || "") : "";
-      }
-
-      function syncManualLabelDraftFromSelection() {
-        const selectedLabel = activeManualLabel();
-        if (selectedLabel) {
-          manualLabelDraftText = String(selectedLabel.text || "");
-          manualLabelDraftSize = clampManualLabelSize(selectedLabel.size);
-          return;
-        }
-        manualLabelDraftText = "";
-        manualLabelDraftSize = DEFAULT_MANUAL_LABEL_SIZE;
-      }
-
-      function loadManualLabels(labelState, preferredId = "") {
-        manualLabelIdCounter = 0;
-        manualLabels = Array.isArray(labelState)
-          ? labelState
-            .map((label, index) => normalizeManualLabel(label, index))
-            .filter(Boolean)
-          : [];
-        ensureActiveManualLabel(preferredId);
-        syncManualLabelDraftFromSelection();
-      }
-
-      function manualLabelScenePositionFromCurrentTarget() {
-        return controls.target.clone().sub(plotGroup.position);
-      }
-
-      function currentManualLabelDraftText(fallbackText) {
-        return sanitizeManualLabelText(manualLabelDraftText) || String(fallbackText || "");
-      }
-
-      function currentManualLabelDraftSize() {
-        return clampManualLabelSize(manualLabelDraftSize);
-      }
-
-      function renderManualLabelControls() {
-        if (!manualLabelSelectEl || !manualLabelTextEl || !manualLabelSizeEl) {
-          return;
-        }
-        ensureActiveManualLabel();
-        const selectedLabel = activeManualLabel();
-
-        manualLabelSelectEl.innerHTML = "";
-        const placeholder = document.createElement("option");
-        placeholder.value = "";
-        placeholder.textContent = manualLabels.length ? "Select label" : "No manual labels";
-        manualLabelSelectEl.appendChild(placeholder);
-        manualLabels.forEach((label, index) => {
-          const option = document.createElement("option");
-          option.value = String(label.id || "");
-          option.textContent = `${index + 1}. ${String(label.text || manualLabelFallbackText(index + 1))}`;
-          manualLabelSelectEl.appendChild(option);
-        });
-        manualLabelSelectEl.disabled = manualLabels.length === 0;
-        manualLabelSelectEl.value = selectedLabel ? String(selectedLabel.id || "") : "";
-        manualLabelTextEl.value = String(manualLabelDraftText || "");
-        manualLabelSizeEl.value = String(Math.round(currentManualLabelDraftSize()));
-        if (manualLabelApplyButtonEl) {
-          manualLabelApplyButtonEl.disabled = !selectedLabel;
-        }
-        if (manualLabelDeleteButtonEl) {
-          manualLabelDeleteButtonEl.disabled = !selectedLabel;
-        }
-        if (manualLabelReadoutEl) {
-          if (selectedLabel) {
-            manualLabelReadoutEl.textContent = `Selected: ${selectedLabel.text} @ (${formatTick(selectedLabel.x)}, ${formatTick(selectedLabel.y)}, ${formatTick(selectedLabel.z)}) pc. Click and drag in the scene to reposition.`;
-          } else {
-            manualLabelReadoutEl.textContent = "Add a label at the current camera target, then drag it in the scene.";
-          }
-        }
-      }
-
-      function addManualLabelFromDraft() {
-        const position = manualLabelScenePositionFromCurrentTarget();
-        const nextLabel = {
-          id: nextManualLabelId(),
-          text: currentManualLabelDraftText(manualLabelFallbackText(manualLabels.length + 1)),
-          x: Number.isFinite(position.x) ? position.x : 0.0,
-          y: Number.isFinite(position.y) ? position.y : 0.0,
-          z: Number.isFinite(position.z) ? position.z : 0.0,
-          size: currentManualLabelDraftSize(),
-        };
-        manualLabels.push(nextLabel);
-        activeManualLabelId = nextLabel.id;
-        syncManualLabelDraftFromSelection();
-        renderManualLabelControls();
-        renderFrame(currentFrameIndex);
-      }
-
-      function applyManualLabelDraftToSelection() {
-        const selectedLabel = activeManualLabel();
-        if (!selectedLabel) {
-          return;
-        }
-        selectedLabel.text = currentManualLabelDraftText(selectedLabel.text || manualLabelFallbackText(1));
-        selectedLabel.size = currentManualLabelDraftSize();
-        syncManualLabelDraftFromSelection();
-        renderManualLabelControls();
-        renderFrame(currentFrameIndex);
-      }
-
-      function deleteActiveManualLabel() {
-        if (!activeManualLabel()) {
-          return;
-        }
-        manualLabels = manualLabels.filter((label) => String(label.id || "") !== String(activeManualLabelId || ""));
-        ensureActiveManualLabel();
-        syncManualLabelDraftFromSelection();
-        renderManualLabelControls();
-        renderFrame(currentFrameIndex);
-      }
-
-      function themePresetForKey(themeKey) {
-        const requestedKey = String(themeKey || "default");
-        return themePresets[requestedKey] || themePresets.default || {};
-      }
-
-      function uiDesignPresetForKey(uiDesignKey) {
-        const requestedKey = String(uiDesignKey || "default");
-        return requestedKey === "uncodixified" ? "uncodixified" : "default";
-      }
-
-      function applyUiDesignPreset(uiDesignKey, options = {}) {
-        activeUiDesignKey = uiDesignPresetForKey(uiDesignKey);
-        root.dataset.uiDesignKey = activeUiDesignKey;
-      }
-
-      function applyThemePreset(themeKey, options = {}) {
-        activeThemeKey = Object.prototype.hasOwnProperty.call(themePresets, String(themeKey))
-          ? String(themeKey)
-          : "default";
-        const nextTheme = safeJsonClone(themePresetForKey(activeThemeKey), {});
-        Object.keys(theme).forEach((key) => {
-          delete theme[key];
-        });
-        Object.assign(theme, nextTheme);
-        root.dataset.themeKey = activeThemeKey;
-        applyThemeCssVars();
-        scene.background = new THREE.Color(theme.scene_bgcolor || theme.paper_bgcolor || "#000000");
-        if (options.syncInput !== false && themeSelectEl) {
-          themeSelectEl.value = activeThemeKey;
-        }
-        if (options.rerender !== false) {
-          buildAxes();
-          renderLegend();
-          updateSkyPanel();
-          renderFrame(currentFrameIndex);
-        }
-      }
-
-      function applyGlobalControlState() {
-        globalScrollSpeed = clampRange(globalScrollSpeed, 0.2, 4.0);
-        globalPointSizeScale = clampRange(globalPointSizeScale, 0.25, 4.0);
-        globalPointOpacityScale = clampRange(globalPointOpacityScale, 0.0, 2.0);
-        globalPointGlowStrength = clampRange(globalPointGlowStrength, 0.0, 4.0);
-        fadeInTimeMyr = Math.max(Number.isFinite(Number(fadeInTimeMyr)) ? Number(fadeInTimeMyr) : 0.0, 0.0);
-        focusTraceKey = String(focusTraceKey || "");
-        camera.fov = clampRange(camera.fov, 18.0, 90.0);
-        controls.zoomSpeed = globalScrollSpeed;
-        controls.autoRotate = cameraAutoOrbitEnabled;
-        controls.autoRotateSpeed = CAMERA_AUTO_ORBIT_SPEED;
-        camera.updateProjectionMatrix();
-      }
-
-      function syncCameraAutoOrbitUi() {
-        orbitCameraButtons.forEach((buttonEl) => {
-          buttonEl.dataset.active = cameraAutoOrbitEnabled ? "true" : "false";
-          buttonEl.setAttribute("aria-pressed", cameraAutoOrbitEnabled ? "true" : "false");
-          buttonEl.textContent = cameraAutoOrbitEnabled ? "Stop orbit" : "Orbit camera";
-          buttonEl.title = cameraAutoOrbitEnabled
-            ? "Stop rotating around the current camera target"
-            : "Rotate around the current camera target";
-        });
-      }
-
-      function setCameraAutoOrbitEnabled(enabled) {
-        cameraAutoOrbitEnabled = Boolean(enabled);
-        controls.autoRotate = cameraAutoOrbitEnabled;
-        controls.autoRotateSpeed = CAMERA_AUTO_ORBIT_SPEED;
-        syncCameraAutoOrbitUi();
-      }
-
-      function applyCameraViewMode() {
-        const isEarthView = cameraViewMode === "earth";
-        controls.enableRotate = true;
-        controls.enableZoom = !isEarthView;
-        controls.enablePan = !isEarthView;
-      }
-
-      function resetCameraView() {
-        setCameraAutoOrbitEnabled(false);
-        cameraViewMode = "free";
-        earthViewFocusDistance = null;
-        camera.position.copy(initialCameraState.position);
-        controls.target.copy(initialCameraState.target);
-        camera.up.copy(initialCameraState.up);
-        camera.fov = Number(initialCameraState.fov);
-        applyGlobalControlState();
-        applyCameraViewMode();
-        controls.update();
-        renderFrame(currentFrameIndex);
-      }
-
-      function resetCameraAndSelections() {
-        focusSelectionKey = "";
-        lassoArmed = false;
-        clearClusterSelections();
-        resetCameraView();
-      }
-
-      function centroidFromSpriteEntries(entries) {
-        if (!Array.isArray(entries) || !entries.length) {
-          return null;
-        }
-        let count = 0;
-        const centroid = new THREE.Vector3();
-        entries.forEach((entry) => {
-          if (!entry || !entry.sprite) {
-            return;
-          }
-          const worldPoint = new THREE.Vector3();
-          entry.sprite.getWorldPosition(worldPoint);
-          if (!Number.isFinite(worldPoint.x) || !Number.isFinite(worldPoint.y) || !Number.isFinite(worldPoint.z)) {
-            return;
-          }
-          centroid.add(worldPoint);
-          count += 1;
-        });
-        if (!count) {
-          return null;
-        }
-        return centroid.multiplyScalar(1.0 / count);
-      }
-
-      function selectionFallbackPoint(selection) {
-        if (!selection || typeof selection !== "object") {
-          return null;
-        }
-        const x = Number(selection.x0);
-        const y = Number(selection.y0);
-        const z = Number(selection.z0);
-        if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
-          return new THREE.Vector3(x, y, z);
-        }
-        return null;
-      }
-
-      function currentSelectionCentroidWorldPoint() {
-        if (currentSelection) {
-          const key = normalizedSelectionKeyFor(currentSelection);
-          const centroid = key ? centroidFromSpriteEntries(selectionSpriteEntriesByKey.get(key)) : null;
-          if (centroid) {
-            return centroid;
-          }
-          return selectionFallbackPoint(currentSelection);
-        }
-
-        if (currentSelections.length) {
-          let count = 0;
-          const centroid = new THREE.Vector3();
-          currentSelections.forEach((selection) => {
-            const key = normalizedSelectionKeyFor(selection);
-            const selectionCentroid = key ? centroidFromSpriteEntries(selectionSpriteEntriesByKey.get(key)) : null;
-            const fallbackPoint = selectionCentroid || selectionFallbackPoint(selection);
-            if (!fallbackPoint) {
-              return;
-            }
-            centroid.add(fallbackPoint);
-            count += 1;
-          });
-          if (count) {
-            return centroid.multiplyScalar(1.0 / count);
-          }
-        }
-        return null;
-      }
-
-      function earthViewTargetPoint() {
-        const selectedPoint = currentSelectionCentroidWorldPoint();
-        if (selectedPoint) {
-          return selectedPoint;
-        }
-        const gcX = Math.max(
-          Number((sceneSpec.ranges || {}).x ? sceneSpec.ranges.x[1] : NaN) || 0.0,
-          8122.0
-        );
-        return new THREE.Vector3(gcX, 0.0, 0.0);
-      }
-
-      function viewFromEarth() {
-        const earthPoint = new THREE.Vector3(0.0, 0.0, 20.8);
-        let targetPoint = earthViewTargetPoint();
-        if (!targetPoint || !Number.isFinite(targetPoint.x) || !Number.isFinite(targetPoint.y) || !Number.isFinite(targetPoint.z)) {
-          targetPoint = new THREE.Vector3(8122.0, 0.0, 0.0);
-        }
-        const direction = new THREE.Vector3().subVectors(targetPoint, earthPoint);
-        if (direction.lengthSq() <= 1e-12) {
-          direction.set(1.0, 0.0, 0.0);
-          targetPoint = earthPoint.clone().add(direction);
-        }
-        earthViewFocusDistance = Math.max(direction.length(), 1e-6);
-        direction.normalize();
-        const orbitRadius = Math.max(1e-3, Math.min(0.05, earthViewFocusDistance * 1e-6));
-        cameraViewMode = "earth";
-        controls.target.copy(earthPoint);
-        camera.position.copy(earthPoint.clone().sub(direction.clone().multiplyScalar(orbitRadius)));
-        camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
-        camera.fov = 90.0;
-        applyGlobalControlState();
-        applyCameraViewMode();
-        controls.update();
-        renderSceneControls();
-        updateScaleBar();
-      }
-
-      function renderSceneControls() {
-        if (themeSelectEl) {
-          themeSelectEl.value = activeThemeKey;
-        }
-        if (scrollSpeedEl) {
-          scrollSpeedEl.value = String(globalScrollSpeed);
-        }
-        if (scrollSpeedLabelEl) {
-          scrollSpeedLabelEl.textContent = `Scroll speed (${globalScrollSpeed.toFixed(2)}x)`;
-        }
-        if (cameraFovEl) {
-          cameraFovEl.value = String(camera.fov);
-        }
-        if (cameraFovLabelEl) {
-          cameraFovLabelEl.textContent = `Camera FOV (${Math.round(Number(camera.fov))} deg)`;
-        }
-        if (globalPointSizeEl) {
-          globalPointSizeEl.value = String(globalPointSizeScale);
-        }
-        if (globalPointSizeLabelEl) {
-          globalPointSizeLabelEl.textContent = `Point size (${globalPointSizeScale.toFixed(2)}x)`;
-        }
-        if (globalPointOpacityEl) {
-          globalPointOpacityEl.value = String(globalPointOpacityScale);
-        }
-        if (globalPointOpacityLabelEl) {
-          globalPointOpacityLabelEl.textContent = `Point opacity (${globalPointOpacityScale.toFixed(2)}x)`;
-        }
-        if (globalPointGlowEl) {
-          globalPointGlowEl.value = String(globalPointGlowStrength);
-        }
-        if (globalPointGlowLabelEl) {
-          globalPointGlowLabelEl.textContent = `Star glow (${globalPointGlowStrength.toFixed(2)}x)`;
-        }
-        if (sizeByStarsToggleEl) {
-          sizeByStarsToggleEl.checked = sizePointsByStarsEnabled;
-        }
-        if (focusGroupSelectEl) {
-          focusGroupSelectEl.value = focusTraceKey;
-        }
-        if (fadeTimeEl) {
-          fadeTimeEl.value = Number(fadeInTimeMyr).toFixed(1).replace(/\.0$/, "");
-        }
-        if (fadeInOutToggleEl) {
-          fadeInOutToggleEl.checked = fadeInAndOutEnabled;
-        }
-        if (axesVisibleToggleEl) {
-          axesVisibleToggleEl.checked = axesVisible;
-        }
-        if (galacticReferenceToggleEl) {
-          galacticReferenceToggleEl.checked = galacticReferenceVisible;
-        }
-        nearbyRegionLabelsToggleEls.forEach((toggleEl) => {
-          toggleEl.checked = nearbyRegionLabelsVisible;
-        });
-        renderManualLabelControls();
-        syncCameraAutoOrbitUi();
-      }
-
-      function setZenMode(enabled) {
-        zenModeEnabled = Boolean(enabled);
-        root.dataset.zen = zenModeEnabled ? "true" : "false";
-        if (zenModeButtonEl) {
-          zenModeButtonEl.dataset.active = zenModeEnabled ? "true" : "false";
-          zenModeButtonEl.textContent = zenModeEnabled ? "Exit Zen" : "Zen";
-          zenModeButtonEl.title = zenModeEnabled
-            ? "Restore the interface panels and controls"
-            : "Hide interface panels and keep only the time slider visible";
-        }
-        if (zenModeEnabled) {
-          tooltipEl.style.display = "none";
-        }
-      }
-
-      function setKeyHelpOpen(isOpen) {
-        if (!keyHelpEl) {
-          return;
-        }
-        keyHelpEl.dataset.open = isOpen ? "true" : "false";
-      }
-
-      function normalizedKeyboardKey(key) {
-        const text = String(key || "");
-        return text.length === 1 ? text.toLowerCase() : text.toLowerCase();
-      }
-
-      function focusViewer() {
-        const focusTarget = canvas || root;
-        try {
-          window.focus();
-        } catch (_err) {}
-        try {
-          focusTarget.focus({ preventScroll: true });
-        } catch (_err) {
-          focusTarget.focus();
-        }
-      }
-
-      function clearPressedKeys() {
-        pressedKeys.clear();
-      }
-
-      function keyboardTargetIsEditable(target) {
-        if (!target || target === document.body || target === root || target === canvas) {
-          return false;
-        }
-        if (typeof target.closest === "function" && target.closest(".oviz-three-key-help")) {
-          return true;
-        }
-        if (target.isContentEditable) {
-          return true;
-        }
-        const tagName = String(target.tagName || "").toLowerCase();
-        return ["input", "select", "textarea", "button"].includes(tagName);
-      }
-
-      function keyboardLegendItems() {
-        const defaults = groupDefaults(currentGroup);
-        return legendItems.filter((item) => {
-          const mode = defaults[item.key];
-          return !(mode === false || mode === undefined);
-        });
-      }
-
-      function toggleLegendItemByIndex(index, solo = false) {
-        const items = keyboardLegendItems();
-        if (index < 0 || index >= items.length) {
-          return false;
-        }
-        if (solo) {
-          items.forEach((item, itemIndex) => {
-            legendState[item.key] = itemIndex === index;
-          });
-        } else {
-          const item = items[index];
-          legendState[item.key] = !legendState[item.key];
-        }
-        renderLegend();
-        renderFrame(currentFrameIndex);
-        return true;
-      }
-
-      function soloTraceLegendItem(itemKey) {
-        const targetKey = String(itemKey || "");
-        if (!targetKey || volumeLayerForKey(targetKey)) {
-          return false;
-        }
-        const defaults = groupDefaults(currentGroup);
-        let foundTarget = false;
-        legendItems.forEach((item) => {
-          const key = String(item.key || "");
-          const mode = defaults[key];
-          if (mode === false || mode === undefined || volumeLayerForKey(key)) {
-            return;
-          }
-          legendState[key] = key === targetKey;
-          if (key === targetKey) {
-            foundTarget = true;
-          }
-        });
-        if (!foundTarget) {
-          return false;
-        }
-        renderLegend();
-        renderFrame(currentFrameIndex);
-        return true;
-      }
-
-      function cameraTravelDistance(fast = false) {
-        const referenceDistance = cameraViewMode === "earth" && Number.isFinite(earthViewFocusDistance) && earthViewFocusDistance > 0.0
-          ? earthViewFocusDistance
-          : Math.max(camera.position.distanceTo(controls.target), 1.0);
-        const step = clampRange(referenceDistance * 0.01, 1.0, Math.max((sceneSpec.max_span || 1) * 0.03, 1.0));
-        return fast ? step * 4.0 : step;
-      }
-
-      function enterFreeCameraMode() {
-        if (cameraViewMode !== "free") {
-          cameraViewMode = "free";
-          earthViewFocusDistance = null;
-          applyCameraViewMode();
-        }
-      }
-
-      function translateCameraAndTarget(delta) {
-        if (!delta || delta.lengthSq() <= 1e-18) {
-          return;
-        }
-        enterFreeCameraMode();
-        camera.position.add(delta);
-        controls.target.add(delta);
-        controls.update();
-        updateScaleBar();
-      }
-
-      function rotateCameraYaw(sign, fast = false) {
-        const angle = (fast ? 0.12 : 0.04) * sign;
-        const offset = camera.position.clone().sub(controls.target);
-        if (offset.lengthSq() <= 1e-18) {
-          return;
-        }
-        offset.applyAxisAngle(sceneUpVector, angle);
-        camera.position.copy(controls.target.clone().add(offset));
-        camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
-        controls.update();
-      }
-
-      function stepFrame(delta) {
-        if (!delta) {
-          return;
-        }
-        pause();
-        const nextIndex = Math.max(0, Math.min(currentFrameIndex + delta, frameSpecs.length - 1));
-        if (nextIndex !== currentFrameIndex) {
-          renderFrame(nextIndex);
-        }
-      }
-
-      function movementVectors() {
-        const forward = new THREE.Vector3();
-        camera.getWorldDirection(forward);
-        if (forward.lengthSq() <= 1e-18) {
-          forward.set(1.0, 0.0, 0.0);
-        } else {
-          forward.normalize();
-        }
-        const right = new THREE.Vector3().crossVectors(forward, sceneUpVector).normalize();
-        if (right.lengthSq() <= 1e-18) {
-          right.set(0.0, 1.0, 0.0);
-        }
-        const up = sceneUpVector.clone();
-        return { forward, right, up };
-      }
-
-      function orbitCameraByKeyboard(deltaTheta, deltaPhi) {
-        if ((!Number.isFinite(deltaTheta) || Math.abs(deltaTheta) <= 1e-12) && (!Number.isFinite(deltaPhi) || Math.abs(deltaPhi) <= 1e-12)) {
-          return;
-        }
-        const offset = camera.position.clone().sub(controls.target);
-        if (offset.lengthSq() <= 1e-18) {
-          return;
-        }
-        const quat = new THREE.Quaternion().setFromUnitVectors(sceneUpVector, new THREE.Vector3(0.0, 1.0, 0.0));
-        const quatInverse = quat.clone().invert();
-        offset.applyQuaternion(quat);
-        const spherical = new THREE.Spherical().setFromVector3(offset);
-        spherical.theta += Number.isFinite(deltaTheta) ? deltaTheta : 0.0;
-        spherical.phi += Number.isFinite(deltaPhi) ? deltaPhi : 0.0;
-        const minPolar = Number.isFinite(controls.minPolarAngle) ? controls.minPolarAngle : 0.02;
-        const maxPolar = Number.isFinite(controls.maxPolarAngle) ? controls.maxPolarAngle : (Math.PI - 0.02);
-        spherical.phi = clampRange(spherical.phi, minPolar, maxPolar);
-        if (typeof spherical.makeSafe === "function") {
-          spherical.makeSafe();
-        }
-        offset.setFromSpherical(spherical);
-        offset.applyQuaternion(quatInverse);
-        camera.position.copy(controls.target.clone().add(offset));
-        camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
-      }
-
-      function zoomCameraByKeyboard(sign, deltaSeconds) {
-        if (!Number.isFinite(sign) || Math.abs(sign) <= 1e-12 || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0.0) {
-          return;
-        }
-        const offset = camera.position.clone().sub(controls.target);
-        const distance = offset.length();
-        if (!(distance > 1e-12)) {
-          return;
-        }
-        const speedScale = Math.max(globalScrollSpeed, 0.2);
-        const zoomFactor = Math.exp(sign * deltaSeconds * 1.8 * speedScale);
-        const maxSpan = Math.max(sceneSpec.max_span || 1, 1);
-        const minDistance = cameraViewMode === "earth"
-          ? Math.max(1e-6, Math.min(0.005, distance * 0.2))
-          : Math.max(maxSpan * 1e-5, 0.05);
-        const maxDistance = Math.max(maxSpan * 12.0, 10.0);
-        const nextDistance = clampRange(distance * zoomFactor, minDistance, maxDistance);
-        offset.setLength(nextDistance);
-        camera.position.copy(controls.target.clone().add(offset));
-        camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
-        updateScaleBar();
-      }
-
-      function updateKeyboardMotion(deltaSeconds) {
-        if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0.0 || pressedKeys.size === 0) {
-          return;
-        }
-        if (keyboardTargetIsEditable(document.activeElement) || (keyHelpEl && keyHelpEl.dataset.open === "true")) {
-          return;
-        }
-
-        const shiftHeld = pressedKeys.has("shift");
-        const speedScale = Math.max(globalScrollSpeed, 0.2);
-        const panDistance = cameraTravelDistance(shiftHeld) * deltaSeconds * 6.0 * speedScale;
-        const verticalDistance = cameraTravelDistance(shiftHeld) * deltaSeconds * 5.0 * speedScale;
-        const orbitAzimuthSpeed = deltaSeconds * 1.4 * speedScale;
-        const orbitPolarSpeed = deltaSeconds * 1.15 * speedScale;
-        const { forward, right, up } = movementVectors();
-
-        if (shiftHeld) {
-          const translation = new THREE.Vector3();
-          if (pressedKeys.has("w")) {
-            translation.add(forward.clone().multiplyScalar(panDistance));
-          }
-          if (pressedKeys.has("s")) {
-            translation.add(forward.clone().multiplyScalar(-panDistance));
-          }
-          if (pressedKeys.has("a")) {
-            translation.add(right.clone().multiplyScalar(-panDistance));
-          }
-          if (pressedKeys.has("d")) {
-            translation.add(right.clone().multiplyScalar(panDistance));
-          }
-          if (translation.lengthSq() > 1e-18) {
-            translateCameraAndTarget(translation);
-          }
-        } else {
-          let deltaTheta = 0.0;
-          let deltaPhi = 0.0;
-          if (pressedKeys.has("a")) {
-            deltaTheta += orbitAzimuthSpeed;
-          }
-          if (pressedKeys.has("d")) {
-            deltaTheta -= orbitAzimuthSpeed;
-          }
-          if (pressedKeys.has("w")) {
-            deltaPhi -= orbitPolarSpeed;
-          }
-          if (pressedKeys.has("s")) {
-            deltaPhi += orbitPolarSpeed;
-          }
-          if (Math.abs(deltaTheta) > 1e-12 || Math.abs(deltaPhi) > 1e-12) {
-            orbitCameraByKeyboard(deltaTheta, deltaPhi);
-          }
-        }
-
-        if (pressedKeys.has("q")) {
-          zoomCameraByKeyboard(1.0, deltaSeconds);
-        }
-        if (pressedKeys.has("e")) {
-          zoomCameraByKeyboard(-1.0, deltaSeconds);
-        }
-
-        let verticalTranslation = null;
-        if (pressedKeys.has("r")) {
-          verticalTranslation = up.clone().multiplyScalar(verticalDistance);
-        } else if (pressedKeys.has("f")) {
-          verticalTranslation = up.clone().multiplyScalar(-verticalDistance);
-        }
-        if (verticalTranslation) {
-          translateCameraAndTarget(verticalTranslation);
-        }
-      }
-
-      function onKeyDown(event) {
-        if (keyboardTargetIsEditable(event.target)) {
-          return;
-        }
-        if (event.metaKey || event.ctrlKey || event.altKey) {
-          return;
-        }
-
-        const key = String(event.key || "");
-        const lowerKey = normalizedKeyboardKey(key);
-        const fast = Boolean(event.shiftKey);
-        const isMovementKey = ["w", "a", "s", "d", "q", "e", "r", "f", "shift"].includes(lowerKey);
-
-        if (keyHelpEl && keyHelpEl.dataset.open === "true") {
-          if (key === "Escape" || key === "?" || (key === "/" && event.shiftKey)) {
-            clearPressedKeys();
-            setKeyHelpOpen(false);
-            focusViewer();
-            event.preventDefault();
-          }
-          return;
-        }
-
-        if (isMovementKey) {
-          pressedKeys.add(lowerKey);
-          event.preventDefault();
-          return;
-        }
-
-        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "o" || key === "?" || (key === "/" && event.shiftKey))) {
-          event.preventDefault();
-          return;
-        }
-
-        if (key === "?" || (key === "/" && event.shiftKey)) {
-          clearPressedKeys();
-          setKeyHelpOpen(true);
-          event.preventDefault();
-          return;
-        }
-
-        if (key === "Escape") {
-          clearPressedKeys();
-          if (activeLegendEditorKey) {
-            closeLegendPopover();
-            renderLegend();
-            event.preventDefault();
-            return;
-          }
-          clearClusterSelections();
-          lassoArmed = false;
-          updateSelectionUI();
-          event.preventDefault();
-          return;
-        }
-
-        if (key === " ") {
-          if (playbackTimer) {
-            pause();
-          } else {
-            play();
-          }
-          event.preventDefault();
-          return;
-        }
-
-        if (key === "ArrowLeft") {
-          stepFrame(fast ? -5 : -1);
-          event.preventDefault();
-          return;
-        }
-        if (key === "ArrowRight") {
-          stepFrame(fast ? 5 : 1);
-          event.preventDefault();
-          return;
-        }
-
-        if (/^[1-9]$/.test(key)) {
-          const handled = toggleLegendItemByIndex(Number(key) - 1, fast);
-          if (handled) {
-            event.preventDefault();
-          }
-          return;
-        }
-
-        if (lowerKey === "l") {
-          lassoArmed = !lassoArmed;
-          updateSelectionUI();
-          event.preventDefault();
-          return;
-        }
-        if (lowerKey === "c") {
-          clickSelectionEnabled = !clickSelectionEnabled;
-          updateSelectionUI();
-          event.preventDefault();
-          return;
-        }
-        if (lowerKey === "v") {
-          viewFromEarth();
-          event.preventDefault();
-          return;
-        }
-        if (lowerKey === "o") {
-          setCameraAutoOrbitEnabled(!cameraAutoOrbitEnabled);
-          event.preventDefault();
-          return;
-        }
-      }
-
-      function onKeyUp(event) {
-        if (keyboardTargetIsEditable(event.target)) {
-          return;
-        }
-        if (event.metaKey || event.ctrlKey || event.altKey) {
-          return;
-        }
-        const lowerKey = normalizedKeyboardKey(event.key || "");
-        if (pressedKeys.has(lowerKey)) {
-          pressedKeys.delete(lowerKey);
-          event.preventDefault();
-        }
-      }
-
-      function cssColorToHex(value, fallback = "#ffffff") {
-        try {
-          return `#${new THREE.Color(value || fallback).getHexString()}`;
-        } catch (_err) {
-          return fallback;
-        }
-      }
-
-      function cssColorWithAlpha(value, alpha, fallback = "#ffffff") {
-        try {
-          const color = new THREE.Color(value || fallback);
-          const r = Math.round(color.r * 255.0);
-          const g = Math.round(color.g * 255.0);
-          const b = Math.round(color.b * 255.0);
-          return `rgba(${r}, ${g}, ${b}, ${clamp01(alpha)})`;
-        } catch (_err) {
-          return fallback;
-        }
-      }
-
-      function formatCompactNumber(value) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) {
-          return "";
-        }
-        const abs = Math.abs(num);
-        if (abs >= 100.0) {
-          return String(Math.round(num));
-        }
-        if (abs >= 10.0) {
-          return num.toFixed(1).replace(/\.0$/, "");
-        }
-        if (abs >= 1.0) {
-          return num.toFixed(2).replace(/0$/, "").replace(/\.$/, "");
-        }
-        return num.toPrecision(2).replace(/\.0+e/, "e");
-      }
-
-      function formatDistanceLabelPc(distancePc) {
-        const value = Number(distancePc);
-        if (!Number.isFinite(value) || value <= 0.0) {
-          return "";
-        }
-        if (value >= 1000.0) {
-          return `${formatCompactNumber(value / 1000.0)} kpc`;
-        }
-        return `${formatCompactNumber(value)} pc`;
-      }
-
-      function updateScaleBar() {
-        if (!scaleBarEl || !scaleLabelEl) {
-          return;
-        }
-        const canvasHeight = Math.max(canvas.clientHeight || root.clientHeight || 0, 1);
-        const distance = cameraViewMode === "earth" && Number.isFinite(earthViewFocusDistance) && earthViewFocusDistance > 0.0
-          ? earthViewFocusDistance
-          : Math.max(camera.position.distanceTo(controls.target), 1e-6);
-        const worldPerPixel = (2.0 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5))) / canvasHeight;
-        const barLengthPc = worldPerPixel * 120.0;
-        scaleLabelEl.textContent = formatDistanceLabelPc(barLengthPc);
-        scaleBarEl.style.display = Number.isFinite(barLengthPc) ? "flex" : "none";
-        if (Number.isFinite(barLengthPc)) {
-          applyScaleBarPosition();
-        }
-      }
-
-      function clusterFilterParameterSpecForKey(parameterKey) {
-        return clusterFilterParameters.find((parameter) => String(parameter.key) === String(parameterKey)) || null;
-      }
-
-      function activeClusterFilterParameterSpec() {
-        return clusterFilterParameterSpecForKey(clusterFilterParameterKey)
-          || (clusterFilterParameters.length ? clusterFilterParameters[0] : null);
-      }
-
-      function clampClusterFilterRangeForParameter(parameter) {
-        if (!parameter) {
-          return null;
-        }
-        const key = String(parameter.key || "");
-        const parameterMin = Number(parameter.min);
-        const parameterMax = Number(parameter.max);
-        const rangeState = clusterFilterRangeStateByKey[key] || {
-          min: parameterMin,
-          max: parameterMax,
-        };
-        let minValue = Number(rangeState.min);
-        let maxValue = Number(rangeState.max);
-        if (!Number.isFinite(minValue)) {
-          minValue = parameterMin;
-        }
-        if (!Number.isFinite(maxValue)) {
-          maxValue = parameterMax;
-        }
-        minValue = clampRange(minValue, parameterMin, parameterMax);
-        maxValue = clampRange(maxValue, parameterMin, parameterMax);
-        if (minValue > maxValue) {
-          const middle = 0.5 * (minValue + maxValue);
-          minValue = middle;
-          maxValue = middle;
-        }
-        rangeState.min = minValue;
-        rangeState.max = maxValue;
-        clusterFilterRangeStateByKey[key] = rangeState;
-        return rangeState;
-      }
-
-      function formatClusterFilterValue(value, parameter) {
-        const numericValue = Number(value);
-        if (!Number.isFinite(numericValue)) {
-          return "";
-        }
-        const unit = String((parameter && parameter.unit) || "").trim();
-        const valueText = numericValue >= 1000.0
-          ? formatCompactNumber(numericValue)
-          : formatCompactNumber(numericValue);
-        return unit ? `${valueText} ${unit}` : valueText;
-      }
-
-      function clusterFilterEntryValue(entry, parameterKey) {
-        if (!entry || typeof entry !== "object") {
-          return NaN;
-        }
-        return Number(entry[String(parameterKey || "")]);
-      }
-
-      function clusterFilterSelectionKeyForPoint(point) {
-        if (point && point.motion && point.motion.key) {
-          return normalizeMemberKey(point.motion.key);
-        }
-        if (point && point.selection) {
-          return normalizedSelectionKeyFor(point.selection);
-        }
-        return "";
-      }
-
-      function clusterFilterPassesSelectionKey(selectionKey) {
-        if (!clusterFilterSpec.enabled) {
-          return true;
-        }
-        const key = normalizeMemberKey(selectionKey);
-        if (!key) {
-          return true;
-        }
-        const parameter = activeClusterFilterParameterSpec();
-        if (!parameter) {
-          return true;
-        }
-        const rangeState = clampClusterFilterRangeForParameter(parameter);
-        const entry = clusterFilterEntryByKey.get(key);
-        if (!entry || !rangeState) {
-          return true;
-        }
-        const value = clusterFilterEntryValue(entry, parameter.key);
-        if (!Number.isFinite(value)) {
-          return true;
-        }
-        return value >= Number(rangeState.min) && value <= Number(rangeState.max);
-      }
-
-      function clusterFilterPassesSelectionKeyExcludingParameter(selectionKey, excludedParameterKey) {
-        if (!clusterFilterSpec.enabled) {
-          return true;
-        }
-        const key = normalizeMemberKey(selectionKey);
-        if (!key) {
-          return true;
-        }
-        const parameter = activeClusterFilterParameterSpec();
-        if (!parameter) {
-          return true;
-        }
-        if (excludedParameterKey && String(parameter.key) === String(excludedParameterKey)) {
-          return true;
-        }
-        const rangeState = clampClusterFilterRangeForParameter(parameter);
-        const entry = clusterFilterEntryByKey.get(key);
-        if (!entry || !rangeState) {
-          return true;
-        }
-        const value = clusterFilterEntryValue(entry, parameter.key);
-        if (!Number.isFinite(value)) {
-          return true;
-        }
-        return value >= Number(rangeState.min) && value <= Number(rangeState.max);
-      }
-
-      function clusterFilterPassesSelection(selection) {
-        return clusterFilterPassesSelectionKey(normalizedSelectionKeyFor(selection));
-      }
-
-      function clusterFilterPassesPoint(point) {
-        return clusterFilterPassesSelectionKey(clusterFilterSelectionKeyForPoint(point));
-      }
-
-      function pruneSelectionsToActiveClusterFilter() {
-        currentSelections = uniqueSelections(currentSelections.filter((selection) => clusterFilterPassesSelection(selection)));
-        if (currentSelection && !clusterFilterPassesSelection(currentSelection)) {
-          currentSelection = null;
-        }
-        const nextSelectedKeys = new Set();
-        currentSelections.forEach((selection) => {
-          const key = normalizedSelectionKeyFor(selection);
-          if (key) {
-            nextSelectedKeys.add(key);
-          }
-        });
-        if (currentSelection) {
-          const focusKey = normalizedSelectionKeyFor(currentSelection);
-          if (focusKey) {
-            nextSelectedKeys.add(focusKey);
-          }
-        }
-        selectedClusterKeys = nextSelectedKeys;
-        currentSelectionMode = currentSelection ? "click" : ((currentSelections.length || hasActiveLassoSelectionMask()) ? "lasso" : "none");
-        if (!clusterFilterPassesSelectionKey(localHoveredClusterKey)) {
-          setLocalHoveredClusterKey("");
-        }
-        if (!clusterFilterPassesSelectionKey(skyHoveredClusterKey)) {
-          skyHoveredClusterKey = "";
-          lastSentSkyHoverClusterKey = null;
-        }
-      }
-
-      function ageKdeGridValues() {
-        const traces = Array.isArray(ageKdeSpec.traces) ? ageKdeSpec.traces : [];
-        if (traces.length && Array.isArray(traces[0].x) && traces[0].x.length >= 2) {
-          return traces[0].x.map((value) => Number(value)).filter(Number.isFinite);
-        }
-        const xRange = Array.isArray(ageKdeSpec.x_range) ? ageKdeSpec.x_range : [-1.0, 0.0];
-        const xMin = Number(xRange[0]);
-        const xMax = Number(xRange[1]);
-        const count = 300;
-        return Array.from({ length: count }, (_, index) => {
-          const frac = count <= 1 ? 0.0 : index / (count - 1);
-          return xMin + frac * (xMax - xMin);
-        });
-      }
-
-      function gaussianKde(values, xGrid, bandwidth) {
-        const finiteValues = (Array.isArray(values) ? values : []).map((value) => Number(value)).filter(Number.isFinite);
-        if (!finiteValues.length) {
-          return xGrid.map(() => 0.0);
-        }
-        const bw = Math.max(Number(bandwidth) || 1.0, 1e-6);
-        const norm = finiteValues.length * bw * Math.sqrt(2.0 * Math.PI);
-        return xGrid.map((xValue) => {
-          let sum = 0.0;
-          for (const value of finiteValues) {
-            const u = (Number(xValue) - value) / bw;
-            sum += Math.exp(-0.5 * u * u);
-          }
-          return sum / norm;
-        });
-      }
-
-      function ageKdeFilterParameterSpec() {
-        return clusterFilterParameterSpecForKey("age_now_myr");
-      }
-
-      function ageKdeAxisRange() {
-        const xRange = Array.isArray(ageKdeSpec.x_range) ? ageKdeSpec.x_range : [-1.0, 0.0];
-        let minValue = Number(xRange[0]);
-        let maxValue = Number(xRange[1]);
-        if (!Number.isFinite(minValue)) {
-          minValue = -1.0;
-        }
-        if (!Number.isFinite(maxValue)) {
-          maxValue = 0.0;
-        }
-        if (minValue > maxValue) {
-          const swap = minValue;
-          minValue = maxValue;
-          maxValue = swap;
-        }
-        return { min: minValue, max: maxValue };
-      }
-
-      function ageNowToKdeAxisValue(ageNowMyr) {
-        const value = Number(ageNowMyr);
-        if (!Number.isFinite(value)) {
-          return NaN;
-        }
-        return -Math.abs(value);
-      }
-
-      function kdeAxisValueToAgeNow(axisValue) {
-        const value = Number(axisValue);
-        if (!Number.isFinite(value)) {
-          return NaN;
-        }
-        return Math.abs(value);
-      }
-
-      function ageKdeAxisValueToSlider(axisValue) {
-        const axisRange = ageKdeAxisRange();
-        const denom = Math.max(axisRange.max - axisRange.min, 1e-9);
-        return Math.round(1000.0 * clampRange((Number(axisValue) - axisRange.min) / denom, 0.0, 1.0));
-      }
-
-      function ageKdeSliderValueToAxisValue(sliderValue) {
-        const axisRange = ageKdeAxisRange();
-        const normalized = clampRange(Number(sliderValue) / 1000.0, 0.0, 1.0);
-        return axisRange.min + normalized * (axisRange.max - axisRange.min);
-      }
-
-      function ageKdeAxisFilterRange() {
-        const parameter = ageKdeFilterParameterSpec();
-        if (!parameter) {
-          return null;
-        }
-        const rangeState = clampClusterFilterRangeForParameter(parameter);
-        const axisRange = ageKdeAxisRange();
-        let minAxis = clampRange(ageNowToKdeAxisValue(rangeState.max), axisRange.min, axisRange.max);
-        let maxAxis = clampRange(ageNowToKdeAxisValue(rangeState.min), axisRange.min, axisRange.max);
-        if (minAxis > maxAxis) {
-          const swap = minAxis;
-          minAxis = maxAxis;
-          maxAxis = swap;
-        }
-        return { min: minAxis, max: maxAxis };
-      }
-
-      function formatAgeKdeAxisValue(axisValue) {
-        const value = Number(axisValue);
-        if (!Number.isFinite(value)) {
-          return "";
-        }
-        return `${formatCompactNumber(value)} Myr`;
-      }
-
-      function setClusterAgeFilterFromKdeAxisRange(minAxisValue, maxAxisValue) {
-        const parameter = ageKdeFilterParameterSpec();
-        if (!parameter) {
-          return;
-        }
-        const axisRange = ageKdeAxisRange();
-        const clampedMinAxis = clampRange(Math.min(Number(minAxisValue), Number(maxAxisValue)), axisRange.min, axisRange.max);
-        const clampedMaxAxis = clampRange(Math.max(Number(minAxisValue), Number(maxAxisValue)), axisRange.min, axisRange.max);
-        const youngerAge = clampRange(
-          kdeAxisValueToAgeNow(clampedMaxAxis),
-          Number(parameter.min),
-          Number(parameter.max),
-        );
-        const olderAge = clampRange(
-          kdeAxisValueToAgeNow(clampedMinAxis),
-          Number(parameter.min),
-          Number(parameter.max),
-        );
-        clusterFilterParameterKey = String(parameter.key || "");
-        clusterFilterRangeStateByKey[String(parameter.key)] = {
-          min: Math.min(youngerAge, olderAge),
-          max: Math.max(youngerAge, olderAge),
-        };
-        applyClusterFilterState();
-      }
-
-      function ageKdeBaseEntries() {
-        const ageParameter = ageKdeFilterParameterSpec();
-        if (!ageParameter) {
-          return [];
-        }
-        const selectedKeys = selectedClusterKeys.size ? selectedClusterKeys : null;
-        return clusterFilterEntries.filter((entry) => {
-          if (!entry || typeof entry !== "object") {
-            return false;
-          }
-          const selectionKey = normalizeMemberKey(entry.selection_key || "");
-          if (!selectionKey) {
-            return false;
-          }
-          if (!clusterFilterEntryVisibleInScene(entry)) {
-            return false;
-          }
-          if (selectedKeys && selectedKeys.size && !selectedKeys.has(selectionKey)) {
-            return false;
-          }
-          if (!clusterFilterPassesSelectionKeyExcludingParameter(selectionKey, ageParameter.key)) {
-            return false;
-          }
-          return Number.isFinite(clusterFilterEntryValue(entry, ageParameter.key));
-        });
-      }
-
-      function filteredAgeKdeSeries() {
-        const defaults = groupDefaults(currentGroup);
-        const selectedKeys = selectedClusterKeys.size ? selectedClusterKeys : null;
-        const traceMetaByKey = new Map();
-        const traceMetaByName = new Map();
-        (ageKdeSpec.traces || []).forEach((traceSpec) => {
-          if (traceSpec.trace_key) {
-            traceMetaByKey.set(String(traceSpec.trace_key), traceSpec);
-          }
-          if (traceSpec.trace_name) {
-            traceMetaByName.set(String(traceSpec.trace_name), traceSpec);
-          }
-        });
-
-        const groupedAges = new Map();
-        (ageKdeSpec.cluster_points || []).forEach((point) => {
-          const traceKey = point && point.trace_key ? String(point.trace_key) : null;
-          const traceName = point && point.trace_name ? String(point.trace_name) : "";
-          const traceLookupKey = traceKey || traceName;
-          if (!traceLookupKey) {
-            return;
-          }
-          if (traceKey) {
-            const mode = defaults[traceKey];
-            if (mode !== true || legendState[traceKey] === false) {
-              return;
-            }
-          }
-          if (selectedKeys && selectedKeys.size) {
-            const selectionLike = {
-              cluster_name: point.cluster_name,
-              trace_name: traceName,
-            };
-            const pointKey = normalizedSelectionKeyFor(selectionLike);
-            if (!pointKey || !selectedKeys.has(pointKey)) {
-              return;
-            }
-          }
-          const pointSelectionKey = normalizedSelectionKeyFor({
-            cluster_name: point.cluster_name,
-            trace_name: traceName,
-          });
-          if (!clusterFilterPassesSelectionKey(pointSelectionKey)) {
-            return;
-          }
-          const ageNow = Number(point.age_now_myr);
-          if (!Number.isFinite(ageNow)) {
-            return;
-          }
-          if (!groupedAges.has(traceLookupKey)) {
-            groupedAges.set(traceLookupKey, []);
-          }
-          groupedAges.get(traceLookupKey).push(-Math.abs(ageNow));
-        });
-
-        const xGrid = ageKdeGridValues();
-        const series = [];
-        groupedAges.forEach((lookbackValues, traceLookupKey) => {
-          if (!lookbackValues.length) {
-            return;
-          }
-          const meta = traceMetaByKey.get(String(traceLookupKey)) || traceMetaByName.get(String(traceLookupKey)) || {};
-          const traceKey = meta.trace_key ? String(meta.trace_key) : (String(traceLookupKey).startsWith("trace-") ? String(traceLookupKey) : null);
-          const styleState = traceKey ? traceStyleStateForKey(traceKey) : null;
-          const densityRaw = gaussianKde(lookbackValues, xGrid, ageKdeSpec.bandwidth_myr);
-          const densityMax = Math.max(...densityRaw, 0.0);
-          const density = densityMax > 0.0 ? densityRaw.map((value) => value / densityMax) : densityRaw;
-          series.push({
-            traceName: String(meta.trace_name || traceLookupKey),
-            traceKey,
-            color: styleState && styleState.color ? styleState.color : (meta.color || axisSpec.x?.linecolor || theme.axis_color || "#808080"),
-            opacity: clamp01((styleState && Number.isFinite(styleState.opacity) ? styleState.opacity : 1.0) * Number(meta.opacity ?? 1.0)),
-            x: xGrid,
-            y: density,
-            count: lookbackValues.length,
-          });
-        });
-
-        series.sort((a, b) => String(a.traceName).localeCompare(String(b.traceName)));
-        return series;
-      }
-
-      function renderAgeKdeWidget() {
-        if (!ageKdeSpec.enabled || !ageKdeCanvasEl || widgetModeForKey("age_kde") === "hidden") {
-          return;
-        }
-
-        const rect = ageKdeCanvasEl.getBoundingClientRect();
-        const cssWidth = Math.max(1, Math.round(rect.width));
-        const cssHeight = Math.max(1, Math.round(rect.height));
-        const dpr = Math.max(window.devicePixelRatio || 1, 1);
-        if (ageKdeCanvasEl.width !== Math.round(cssWidth * dpr) || ageKdeCanvasEl.height !== Math.round(cssHeight * dpr)) {
-          ageKdeCanvasEl.width = Math.round(cssWidth * dpr);
-          ageKdeCanvasEl.height = Math.round(cssHeight * dpr);
-        }
-
-        const ctx = ageKdeCanvasEl.getContext("2d");
-        if (!ctx) {
-          return;
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, cssWidth, cssHeight);
-        ctx.fillStyle = theme.scene_bgcolor || theme.paper_bgcolor || "#000000";
-        ctx.fillRect(0, 0, cssWidth, cssHeight);
-
-        const margin = { left: 44, right: 16, top: 18, bottom: 28 };
-        const plotWidth = Math.max(40, cssWidth - margin.left - margin.right);
-        const plotHeight = Math.max(40, cssHeight - margin.top - margin.bottom);
-        const xRange = Array.isArray(ageKdeSpec.x_range) ? ageKdeSpec.x_range : [-1.0, 0.0];
-        const xMin = Number(xRange[0]);
-        const xMax = Number(xRange[1]);
-        const axisColor = String(ageKdeSpec.axis_color || theme.axis_color || "#808080");
-        const filteredSeries = filteredAgeKdeSeries();
-        const ageFilterParameter = ageKdeFilterParameterSpec();
-        const ageRangeState = ageFilterParameter ? clampClusterFilterRangeForParameter(ageFilterParameter) : null;
-        const ageAxisRangeState = ageFilterParameter ? ageKdeAxisFilterRange() : null;
-        const ageEntries = ageKdeBaseEntries();
-        const yMax = Math.max(
-          ...filteredSeries.map((series) => Math.max(...series.y, 0.0)),
-          Number((Array.isArray(ageKdeSpec.y_range) ? ageKdeSpec.y_range[1] : 1.0)) || 1.0,
-          1e-6,
-        );
-
-        function xToPx(value) {
-          const denom = Math.max(xMax - xMin, 1e-6);
-          return margin.left + ((Number(value) - xMin) / denom) * plotWidth;
-        }
-
-        function yToPx(value) {
-          return margin.top + plotHeight - (Math.max(Number(value), 0.0) / yMax) * plotHeight;
-        }
-
-        ctx.strokeStyle = axisColor;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(margin.left, margin.top);
-        ctx.lineTo(margin.left, margin.top + plotHeight);
-        ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
-        ctx.stroke();
-
-        ctx.fillStyle = axisColor;
-        ctx.font = "11px Helvetica, Arial, sans-serif";
-        ctx.textBaseline = "middle";
-        ctx.textAlign = "right";
-        [0.0, 0.5, 1.0].forEach((frac) => {
-          const yValue = frac * yMax;
-          const yPx = yToPx(yValue);
-          ctx.globalAlpha = 0.16;
-          ctx.beginPath();
-          ctx.moveTo(margin.left, yPx);
-          ctx.lineTo(margin.left + plotWidth, yPx);
-          ctx.stroke();
-          ctx.globalAlpha = 1.0;
-          ctx.fillText(formatCompactNumber(yValue), margin.left - 8, yPx);
-        });
-
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        [xMin, 0.5 * (xMin + xMax), xMax].forEach((xValue) => {
-          const xPx = xToPx(xValue);
-          ctx.fillText(formatCompactNumber(xValue), xPx, margin.top + plotHeight + 8);
-        });
-
-        const visibleTraceNames = [];
-        filteredSeries.forEach((traceSpec) => {
-          const lineColor = traceSpec.color || axisColor;
-          const lineOpacity = clamp01(traceSpec.opacity);
-          const xValues = Array.isArray(traceSpec.x) ? traceSpec.x : [];
-          const yValues = Array.isArray(traceSpec.y) ? traceSpec.y : [];
-          if (xValues.length < 2 || yValues.length !== xValues.length) {
-            return;
-          }
-          visibleTraceNames.push(String(traceSpec.traceName || traceSpec.traceKey || "trace"));
-
-          ctx.beginPath();
-          ctx.moveTo(xToPx(xValues[0]), margin.top + plotHeight);
-          for (let i = 0; i < xValues.length; i += 1) {
-            ctx.lineTo(xToPx(xValues[i]), yToPx(yValues[i]));
-          }
-          ctx.lineTo(xToPx(xValues[xValues.length - 1]), margin.top + plotHeight);
-          ctx.closePath();
-          ctx.fillStyle = cssColorWithAlpha(lineColor, Math.min(0.28, 0.14 + 0.18 * lineOpacity), axisColor);
-          ctx.fill();
-
-          ctx.beginPath();
-          for (let i = 0; i < xValues.length; i += 1) {
-            const xPx = xToPx(xValues[i]);
-            const yPx = yToPx(yValues[i]);
-            if (i === 0) {
-              ctx.moveTo(xPx, yPx);
-            } else {
-              ctx.lineTo(xPx, yPx);
-            }
-          }
-          ctx.strokeStyle = cssColorWithAlpha(lineColor, lineOpacity, axisColor);
-          ctx.lineWidth = 2.0;
-          ctx.stroke();
-        });
-
-        const frame = currentFrame();
-        const timeValue = frame ? Number(frame.time) : 0.0;
-        const markerX = xToPx(Math.min(Math.max(timeValue, xMin), xMax));
-        ctx.save();
-        ctx.setLineDash([6, 6]);
-        ctx.strokeStyle = axisColor;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(markerX, margin.top);
-        ctx.lineTo(markerX, margin.top + plotHeight);
-        ctx.stroke();
-        ctx.restore();
-
-        if (ageFilterParameter && ageRangeState && ageAxisRangeState) {
-          if (ageKdeFilterRangeMinEl) {
-            ageKdeFilterRangeMinEl.value = String(ageKdeAxisValueToSlider(ageAxisRangeState.min));
-          }
-          if (ageKdeFilterRangeMaxEl) {
-            ageKdeFilterRangeMaxEl.value = String(ageKdeAxisValueToSlider(ageAxisRangeState.max));
-          }
-          if (ageKdeFilterRangeReadoutMinEl) {
-            ageKdeFilterRangeReadoutMinEl.textContent = formatAgeKdeAxisValue(ageAxisRangeState.min);
-          }
-          if (ageKdeFilterRangeReadoutMaxEl) {
-            ageKdeFilterRangeReadoutMaxEl.textContent = formatAgeKdeAxisValue(ageAxisRangeState.max);
-          }
-        }
-
-      }
-
-      function applyBoxMetricsPanelMode() {
-        applyWidgetMode("box_metrics");
-        if (boxMetricsFullButtonEl) {
-          boxMetricsFullButtonEl.setAttribute(
-            "title",
-            boxMetricsPanelMode === "fullscreen" ? "Restore box metrics panel" : "Maximize box metrics panel"
-          );
-          boxMetricsFullButtonEl.setAttribute(
-            "aria-label",
-            boxMetricsPanelMode === "fullscreen" ? "Restore box metrics panel" : "Maximize box metrics panel"
-          );
-        }
-      }
-
-      function renderBoxMetricsWidget() {
-        syncSelectionBoxVisibilityInput();
-        if (boxMetricsSummaryEl) {
-          boxMetricsSummaryEl.textContent = selectionBoxSummaryText(selectionBoxMetricsCache, selectionBoxMetricsPending);
-        }
-        if (!selectionBoxSpec.enabled || !boxMetricsCanvasEl || widgetModeForKey("box_metrics") === "hidden") {
-          return;
-        }
-
-        const rect = boxMetricsCanvasEl.getBoundingClientRect();
-        const cssWidth = Math.max(1, Math.round(rect.width));
-        const cssHeight = Math.max(1, Math.round(rect.height));
-        const dpr = Math.max(window.devicePixelRatio || 1, 1);
-        if (boxMetricsCanvasEl.width !== Math.round(cssWidth * dpr) || boxMetricsCanvasEl.height !== Math.round(cssHeight * dpr)) {
-          boxMetricsCanvasEl.width = Math.round(cssWidth * dpr);
-          boxMetricsCanvasEl.height = Math.round(cssHeight * dpr);
-        }
-        const ctx = boxMetricsCanvasEl.getContext("2d");
-        if (!ctx) {
-          return;
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, cssWidth, cssHeight);
-        ctx.fillStyle = theme.scene_bgcolor || theme.paper_bgcolor || "#000000";
-        ctx.fillRect(0, 0, cssWidth, cssHeight);
-
-        const axisColor = String(theme.axis_color || "#808080");
-        const topLabelColor = String(theme.text_color || "#d0d0d0");
-        const frame = currentFrame();
-        const currentLookback = Math.abs(Number(frame && frame.time) || 0.0);
-        const margin = { left: 48, right: 14, top: 18, bottom: 28 };
-        const gap = 28;
-        const plotWidth = Math.max(80, cssWidth - margin.left - margin.right);
-        const totalPlotHeight = Math.max(80, cssHeight - margin.top - margin.bottom);
-        const panelHeight = Math.max(56, (totalPlotHeight - gap) / 2.0);
-        const rateRect = { x: margin.left, y: margin.top, width: plotWidth, height: panelHeight };
-        const corrRect = { x: margin.left, y: margin.top + panelHeight + gap, width: plotWidth, height: panelHeight };
-        const lookbackMax = Math.max(Number(selectionBoxMetricsSpec.lookback_max_myr) || 0.0, 1.0);
-
-        function xToPx(value) {
-          return rateRect.x + (clampRange(Number(value), 0.0, lookbackMax) / lookbackMax) * rateRect.width;
-        }
-
-        function yToPx(rectDef, value, yMin, yMax) {
-          const denom = Math.max(yMax - yMin, 1e-6);
-          return rectDef.y + rectDef.height - ((Number(value) - yMin) / denom) * rectDef.height;
-        }
-
-        function drawPanelAxes(rectDef, yMin, yMax, title, showXLabels, includeZeroLine = false) {
-          ctx.strokeStyle = axisColor;
-          ctx.lineWidth = 1.3;
-          ctx.beginPath();
-          ctx.moveTo(rectDef.x, rectDef.y);
-          ctx.lineTo(rectDef.x, rectDef.y + rectDef.height);
-          ctx.lineTo(rectDef.x + rectDef.width, rectDef.y + rectDef.height);
-          ctx.stroke();
-          if (includeZeroLine && yMin < 0.0 && yMax > 0.0) {
-            const zeroY = yToPx(rectDef, 0.0, yMin, yMax);
-            ctx.save();
-            ctx.setLineDash([4, 4]);
-            ctx.globalAlpha = 0.45;
-            ctx.beginPath();
-            ctx.moveTo(rectDef.x, zeroY);
-            ctx.lineTo(rectDef.x + rectDef.width, zeroY);
-            ctx.stroke();
-            ctx.restore();
-          }
-          ctx.fillStyle = topLabelColor;
-          ctx.font = "11px Helvetica, Arial, sans-serif";
-          ctx.textAlign = "left";
-          ctx.textBaseline = "bottom";
-          ctx.fillText(title, rectDef.x, rectDef.y - 4);
-
-          ctx.textAlign = "right";
-          ctx.textBaseline = "middle";
-          [0.0, 0.5, 1.0].forEach((fraction) => {
-            const value = yMin + fraction * (yMax - yMin);
-            const yPx = yToPx(rectDef, value, yMin, yMax);
-            ctx.globalAlpha = 0.14;
-            ctx.beginPath();
-            ctx.moveTo(rectDef.x, yPx);
-            ctx.lineTo(rectDef.x + rectDef.width, yPx);
-            ctx.stroke();
-            ctx.globalAlpha = 1.0;
-            ctx.fillText(formatCompactNumber(value), rectDef.x - 8, yPx);
-          });
-
-          if (showXLabels) {
-            ctx.textAlign = "center";
-            ctx.textBaseline = "top";
-            [0.0, 0.5 * lookbackMax, lookbackMax].forEach((value) => {
-              const xPx = xToPx(value);
-              ctx.fillText(formatCompactNumber(value), xPx, rectDef.y + rectDef.height + 8);
-            });
-            ctx.textAlign = "right";
-            ctx.fillText("Lookback Time (Myr)", rectDef.x + rectDef.width, rectDef.y + rectDef.height + 20);
-          }
-
-          const markerX = xToPx(currentLookback);
-          ctx.save();
-          ctx.setLineDash([6, 6]);
-          ctx.strokeStyle = axisColor;
-          ctx.lineWidth = 1.3;
-          ctx.beginPath();
-          ctx.moveTo(markerX, rectDef.y);
-          ctx.lineTo(markerX, rectDef.y + rectDef.height);
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        if (!selectionBoxMetricsCache) {
-          ctx.fillStyle = topLabelColor;
-          ctx.font = "12px Menlo, Monaco, Consolas, monospace";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(selectionBoxMetricsPending ? "Updating box metrics..." : "No box metrics available.", cssWidth / 2, cssHeight / 2);
-          return;
-        }
-
-        const rate = selectionBoxMetricsCache.rate || { centers: [], mean: [], lo: [], hi: [] };
-        const clustering = selectionBoxMetricsCache.clustering || { centers: [], median: [], lo: [], hi: [] };
-        const finiteRate = rate.mean.filter((value) => Number.isFinite(value));
-        const finiteRateHi = rate.hi.filter((value) => Number.isFinite(value));
-        const rateMax = Math.max(0.5, ...finiteRate, ...finiteRateHi, 0.0);
-        drawPanelAxes(rateRect, 0.0, rateMax * 1.08, "Mean ccSN Volume Density in Box (Myr^-1 kpc^-3)", false, false);
-
-        if (Array.isArray(rate.centers) && rate.centers.length && Array.isArray(rate.mean) && rate.mean.length === rate.centers.length) {
-          const fillStarted = [];
-          ctx.beginPath();
-          rate.centers.forEach((centerValue, index) => {
-            const loValue = Number(rate.lo[index]);
-            const hiValue = Number(rate.hi[index]);
-            if (!Number.isFinite(loValue) || !Number.isFinite(hiValue)) {
-              return;
-            }
-            const xPx = xToPx(centerValue);
-            const yPx = yToPx(rateRect, hiValue, 0.0, rateMax * 1.08);
-            if (!fillStarted.length) {
-              ctx.moveTo(xPx, yPx);
-              fillStarted.push(index);
-            } else {
-              ctx.lineTo(xPx, yPx);
-            }
-          });
-          for (let index = rate.centers.length - 1; index >= 0; index -= 1) {
-            const loValue = Number(rate.lo[index]);
-            const hiValue = Number(rate.hi[index]);
-            if (!Number.isFinite(loValue) || !Number.isFinite(hiValue)) {
-              continue;
-            }
-            const xPx = xToPx(rate.centers[index]);
-            const yPx = yToPx(rateRect, loValue, 0.0, rateMax * 1.08);
-            ctx.lineTo(xPx, yPx);
-          }
-          if (fillStarted.length) {
-            ctx.closePath();
-            ctx.fillStyle = cssColorWithAlpha("#73a3ff", 0.20, "#73a3ff");
-            ctx.fill();
-          }
-          ctx.beginPath();
-          rate.centers.forEach((centerValue, index) => {
-            const meanValue = Number(rate.mean[index]);
-            if (!Number.isFinite(meanValue)) {
-              return;
-            }
-            const xPx = xToPx(centerValue);
-            const yPx = yToPx(rateRect, meanValue, 0.0, rateMax * 1.08);
-            if (index === 0) {
-              ctx.moveTo(xPx, yPx);
-            } else {
-              ctx.lineTo(xPx, yPx);
-            }
-          });
-          ctx.strokeStyle = "#73a3ff";
-          ctx.lineWidth = 2.0;
-          ctx.stroke();
-        }
-
-        const finiteClustering = clustering.median.filter((value) => Number.isFinite(value));
-        const finiteClusteringHi = clustering.hi.filter((value) => Number.isFinite(value));
-        const clusteringMax = Math.max(1.25, ...finiteClustering, ...finiteClusteringHi, 1.0);
-        drawPanelAxes(corrRect, 0.0, clusteringMax * 1.08, "NN Clustering Enhancement in Box", false, true);
-
-        const unityY = yToPx(corrRect, 1.0, 0.0, clusteringMax * 1.08);
-        ctx.save();
-        ctx.setLineDash([5, 5]);
-        ctx.strokeStyle = cssColorWithAlpha(axisColor, 0.55, axisColor);
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(corrRect.x, unityY);
-        ctx.lineTo(corrRect.x + corrRect.width, unityY);
-        ctx.stroke();
-        ctx.restore();
-
-        if (
-          Array.isArray(clustering.centers)
-          && clustering.centers.length
-          && Array.isArray(clustering.lo)
-          && Array.isArray(clustering.hi)
-          && clustering.lo.length === clustering.centers.length
-          && clustering.hi.length === clustering.centers.length
-        ) {
-          let started = false;
-          ctx.beginPath();
-          clustering.centers.forEach((centerValue, index) => {
-            const loValue = Number(clustering.lo[index]);
-            const hiValue = Number(clustering.hi[index]);
-            if (!Number.isFinite(loValue) || !Number.isFinite(hiValue)) {
-              return;
-            }
-            const xPx = xToPx(centerValue);
-            const yPx = yToPx(corrRect, hiValue, 0.0, clusteringMax * 1.08);
-            if (!started) {
-              ctx.moveTo(xPx, yPx);
-              started = true;
-            } else {
-              ctx.lineTo(xPx, yPx);
-            }
-          });
-          for (let index = clustering.centers.length - 1; index >= 0; index -= 1) {
-            const loValue = Number(clustering.lo[index]);
-            const hiValue = Number(clustering.hi[index]);
-            if (!Number.isFinite(loValue) || !Number.isFinite(hiValue)) {
-              continue;
-            }
-            const xPx = xToPx(clustering.centers[index]);
-            const yPx = yToPx(corrRect, loValue, 0.0, clusteringMax * 1.08);
-            ctx.lineTo(xPx, yPx);
-          }
-          if (started) {
-            ctx.closePath();
-            ctx.fillStyle = cssColorWithAlpha("#9FB3C8", 0.24, "#9FB3C8");
-            ctx.fill();
-          }
-        }
-
-        if (
-          Array.isArray(clustering.centers)
-          && clustering.centers.length
-          && Array.isArray(clustering.median)
-          && clustering.median.length === clustering.centers.length
-        ) {
-          ctx.beginPath();
-          let moved = false;
-          clustering.centers.forEach((centerValue, index) => {
-            const metricValue = Number(clustering.median[index]);
-            if (!Number.isFinite(metricValue)) {
-              return;
-            }
-            const xPx = xToPx(centerValue);
-            const yPx = yToPx(corrRect, metricValue, 0.0, clusteringMax * 1.08);
-            if (!moved) {
-              ctx.moveTo(xPx, yPx);
-              moved = true;
-            } else {
-              ctx.lineTo(xPx, yPx);
-            }
-          });
-          if (moved) {
-            ctx.strokeStyle = "#1F2A44";
-            ctx.lineWidth = 2.0;
-            ctx.stroke();
-          }
-        }
-      }
-
-      function clusterFilterSliderValueToActual(sliderValue, parameter) {
-        const spec = parameter || activeClusterFilterParameterSpec();
-        if (!spec) {
-          return 0.0;
-        }
-        const minValue = Number(spec.min);
-        const maxValue = Number(spec.max);
-        if (!Number.isFinite(minValue) || !Number.isFinite(maxValue) || Math.abs(maxValue - minValue) <= 1e-12) {
-          return minValue;
-        }
-        const normalized = clampRange(Number(sliderValue) / 1000.0, 0.0, 1.0);
-        return minValue + normalized * (maxValue - minValue);
-      }
-
-      function clusterFilterActualValueToSlider(actualValue, parameter) {
-        const spec = parameter || activeClusterFilterParameterSpec();
-        if (!spec) {
-          return 0;
-        }
-        const minValue = Number(spec.min);
-        const maxValue = Number(spec.max);
-        if (!Number.isFinite(minValue) || !Number.isFinite(maxValue) || Math.abs(maxValue - minValue) <= 1e-12) {
-          return 0;
-        }
-        return Math.round(1000.0 * clampRange((Number(actualValue) - minValue) / (maxValue - minValue), 0.0, 1.0));
-      }
-
-      function clusterFilterEntryVisibleInScene(entry) {
-        if (!entry || typeof entry !== "object") {
-          return false;
-        }
-        const traceKey = entry.trace_key ? String(entry.trace_key) : "";
-        if (!traceKey) {
-          return true;
-        }
-        const defaults = groupDefaults(currentGroup);
-        const mode = defaults[traceKey];
-        if (mode === false || mode === undefined) {
-          return false;
-        }
-        return legendState[traceKey] !== false;
-      }
-
-      function applyClusterFilterState() {
-        clampClusterFilterRangeForParameter(activeClusterFilterParameterSpec());
-        pruneSelectionsToActiveClusterFilter();
-        updateSelectionUI();
-        updateSkyPanel();
-        renderFrame(currentFrameIndex);
-      }
-
-      function renderClusterFilterWidget() {
-        if (!clusterFilterSpec.enabled || !clusterFilterCanvasEl || widgetModeForKey("cluster_filter") === "hidden") {
-          return;
-        }
-
-        const parameter = activeClusterFilterParameterSpec();
-        if (!parameter) {
-          return;
-        }
-        const rangeState = clampClusterFilterRangeForParameter(parameter);
-        clusterFilterParameterKey = String(parameter.key);
-        if (clusterFilterParameterEl) {
-          clusterFilterParameterEl.value = clusterFilterParameterKey;
-        }
-        if (clusterFilterRangeMinEl) {
-          clusterFilterRangeMinEl.value = String(clusterFilterActualValueToSlider(rangeState.min, parameter));
-        }
-        if (clusterFilterRangeMaxEl) {
-          clusterFilterRangeMaxEl.value = String(clusterFilterActualValueToSlider(rangeState.max, parameter));
-        }
-        if (clusterFilterRangeReadoutMinEl) {
-          clusterFilterRangeReadoutMinEl.textContent = formatClusterFilterValue(rangeState.min, parameter);
-        }
-        if (clusterFilterRangeReadoutMaxEl) {
-          clusterFilterRangeReadoutMaxEl.textContent = formatClusterFilterValue(rangeState.max, parameter);
-        }
-
-        const finiteEntries = clusterFilterEntries.filter((entry) => Number.isFinite(clusterFilterEntryValue(entry, parameter.key)));
-        const rect = clusterFilterCanvasEl.getBoundingClientRect();
-        const cssWidth = Math.max(1, Math.round(rect.width));
-        const cssHeight = Math.max(1, Math.round(rect.height));
-        const dpr = Math.max(window.devicePixelRatio || 1, 1);
-        if (clusterFilterCanvasEl.width !== Math.round(cssWidth * dpr) || clusterFilterCanvasEl.height !== Math.round(cssHeight * dpr)) {
-          clusterFilterCanvasEl.width = Math.round(cssWidth * dpr);
-          clusterFilterCanvasEl.height = Math.round(cssHeight * dpr);
-        }
-
-        const ctx = clusterFilterCanvasEl.getContext("2d");
-        if (!ctx) {
-          return;
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, cssWidth, cssHeight);
-        ctx.fillStyle = theme.scene_bgcolor || theme.paper_bgcolor || "#000000";
-        ctx.fillRect(0, 0, cssWidth, cssHeight);
-
-        const margin = { left: 34, right: 12, top: 10, bottom: 22 };
-        const plotWidth = Math.max(40, cssWidth - margin.left - margin.right);
-        const plotHeight = Math.max(40, cssHeight - margin.top - margin.bottom);
-        const xMin = Number(parameter.min);
-        const xMax = Number(parameter.max);
-        const axisColor = String(theme.axis_color || "#808080");
-        const bins = Math.max(12, Math.min(28, Math.round(plotWidth / 18)));
-        const counts = new Array(bins).fill(0);
-        const highlightedCounts = new Array(bins).fill(0);
-        const denom = Math.max(xMax - xMin, 1e-9);
-
-        finiteEntries.forEach((entry) => {
-          const value = clusterFilterEntryValue(entry, parameter.key);
-          const frac = clampRange((value - xMin) / denom, 0.0, 0.999999);
-          const binIndex = Math.max(0, Math.min(bins - 1, Math.floor(frac * bins)));
-          counts[binIndex] += 1;
-          if (value >= rangeState.min && value <= rangeState.max) {
-            highlightedCounts[binIndex] += 1;
-          }
-        });
-
-        const yMax = Math.max(...counts, 1);
-        const binWidth = plotWidth / bins;
-        ctx.strokeStyle = axisColor;
-        ctx.lineWidth = 1.0;
-        ctx.beginPath();
-        ctx.moveTo(margin.left, margin.top);
-        ctx.lineTo(margin.left, margin.top + plotHeight);
-        ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
-        ctx.stroke();
-
-        for (let i = 0; i < bins; i += 1) {
-          const totalCount = counts[i];
-          if (!totalCount) {
-            continue;
-          }
-          const x = margin.left + i * binWidth + 1;
-          const fullHeight = (totalCount / yMax) * plotHeight;
-          const selectedHeight = (highlightedCounts[i] / yMax) * plotHeight;
-          ctx.fillStyle = cssColorWithAlpha(theme.axis_color || "#6f7f8f", 0.22, axisColor);
-          ctx.fillRect(x, margin.top + plotHeight - fullHeight, Math.max(1, binWidth - 2), fullHeight);
-          if (selectedHeight > 0) {
-            ctx.fillStyle = cssColorWithAlpha(theme.text_color || "#ffffff", 0.80, "#ffffff");
-            ctx.fillRect(x, margin.top + plotHeight - selectedHeight, Math.max(1, binWidth - 2), selectedHeight);
-          }
-        }
-
-        ctx.fillStyle = axisColor;
-        ctx.font = "10px Menlo, Monaco, Consolas, monospace";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.fillText(formatCompactNumber(xMin), margin.left, margin.top + plotHeight + 6);
-        ctx.textAlign = "right";
-        ctx.fillText(formatCompactNumber(xMax), margin.left + plotWidth, margin.top + plotHeight + 6);
-
-      }
-
-      function dendrogramTraceOptionsForCurrentGroup() {
-        const defaults = groupDefaults(currentGroup);
-        return (Array.isArray(dendrogramSpec.traces) ? dendrogramSpec.traces : [])
-          .filter((traceOption) => {
-            const traceKey = String(traceOption && traceOption.trace_key ? traceOption.trace_key : "");
-            if (!traceKey) {
-              return false;
-            }
-            return defaults[traceKey] === true;
-          })
-          .sort((a, b) => String(a.trace_name || a.trace_key || "").localeCompare(String(b.trace_name || b.trace_key || "")));
-      }
-
-      function activeDendrogramEntries() {
-        const traceKey = dendrogramFocusTraceKey();
-        if (!traceKey) {
-          return [];
-        }
-        return (Array.isArray(dendrogramSpec.entries) ? dendrogramSpec.entries : []).filter((entry) => {
-          if (!entry || typeof entry !== "object" || String(entry.trace_key || "") !== traceKey) {
-            return false;
-          }
-          return clusterFilterPassesSelectionKey(entry.selection_key);
-        });
-      }
-
-      function currentDendrogramThresholdMode() {
-        return String(dendrogramThresholdMode || "distance_pc") === "birth_age_myr"
-          ? "birth_age_myr"
-          : "distance_pc";
-      }
-
-      function currentDendrogramConnectionMode() {
-        return String(dendrogramConnectionMode || "birth_to_older_track") === "birth_to_birth"
-          ? "birth_to_birth"
-          : "birth_to_older_track";
-      }
-
-      function currentDendrogramThresholdValue() {
-        return currentDendrogramThresholdMode() === "birth_age_myr"
-          ? Math.max(Number(dendrogramThresholdAgeMyr) || 0.0, 0.0)
-          : Math.max(Number(dendrogramThresholdPc) || 0.0, 0.0);
-      }
-
-      function syncDendrogramThresholdControls() {
-        const mode = currentDendrogramThresholdMode();
-        if (dendrogramModeEl) {
-          dendrogramModeEl.value = mode;
-        }
-        if (dendrogramThresholdLabelEl) {
-          dendrogramThresholdLabelEl.textContent = mode === "birth_age_myr" ? "Threshold (Myr)" : "Threshold (pc)";
-        }
-        if (!dendrogramThresholdEl) {
-          return;
-        }
-        if (mode === "birth_age_myr") {
-          const minValue = Math.max(Number(dendrogramSpec.threshold_min_age_myr) || 0.0, 0.0);
-          const maxValue = Math.max(Number(dendrogramSpec.threshold_max_age_myr) || 10.0, minValue + 1.0);
-          dendrogramThresholdEl.min = String(minValue);
-          dendrogramThresholdEl.max = String(maxValue);
-          dendrogramThresholdEl.step = "0.5";
-          dendrogramThresholdEl.value = Number(dendrogramThresholdAgeMyr).toFixed(1);
-          return;
-        }
-        const minValue = Math.max(Number(dendrogramSpec.threshold_min_pc) || 0.0, 0.0);
-        const maxValue = Math.max(Number(dendrogramSpec.threshold_max_pc) || 1000.0, minValue + 1.0);
-        dendrogramThresholdEl.min = String(minValue);
-        dendrogramThresholdEl.max = String(maxValue);
-        dendrogramThresholdEl.step = "1";
-        dendrogramThresholdEl.value = Number(dendrogramThresholdPc).toFixed(0);
-      }
-
-      function pointSegmentDistanceSq(px, py, x1, y1, x2, y2) {
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        if ((dx * dx + dy * dy) <= 1e-12) {
-          const ddx = px - x1;
-          const ddy = py - y1;
-          return ddx * ddx + ddy * ddy;
-        }
-        const t = clampRange(((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy), 0.0, 1.0);
-        const cx = x1 + t * dx;
-        const cy = y1 + t * dy;
-        const ddx = px - cx;
-        const ddy = py - cy;
-        return ddx * ddx + ddy * ddy;
-      }
-
-      function buildDendrogramModel(entries, thresholdValue, thresholdMode, connectionMode) {
-        const mode = String(thresholdMode || "distance_pc") === "birth_age_myr"
-          ? "birth_age_myr"
-          : "distance_pc";
-        const linksMode = String(connectionMode || "birth_to_older_track") === "birth_to_birth"
-          ? "birth_to_birth"
-          : "birth_to_older_track";
-        const threshold = Math.max(Number(thresholdValue) || 0.0, 0.0);
-        const sortedEntries = (Array.isArray(entries) ? entries : [])
-          .filter((entry) => (
-            entry
-            && typeof entry === "object"
-            && Number.isFinite(Number(entry.age_now_myr))
-            && Number.isFinite(Number(entry.birth_time_myr))
-            && Number.isFinite(Number(entry.x_birth))
-            && Number.isFinite(Number(entry.y_birth))
-            && Number.isFinite(Number(entry.z_birth))
-            && normalizeMemberKey(entry.selection_key)
-          ))
-          .map((entry) => ({
-            key: normalizeMemberKey(entry.selection_key),
-            selection_key: normalizeMemberKey(entry.selection_key),
-            cluster_name: String(entry.cluster_name || entry.selection_key || ""),
-            trace_name: String(entry.trace_name || ""),
-            trace_key: String(entry.trace_key || ""),
-            color: String(entry.color || "#ffffff"),
-            age_now_myr: Number(entry.age_now_myr),
-            birth_time_myr: Number(entry.birth_time_myr),
-            x_birth: Number(entry.x_birth),
-            y_birth: Number(entry.y_birth),
-            z_birth: Number(entry.z_birth),
-            time_samples: Array.isArray(entry.time_samples) ? entry.time_samples.map((value) => Number(value)) : [],
-            x_samples: Array.isArray(entry.x_samples) ? entry.x_samples.map((value) => Number(value)) : [],
-            y_samples: Array.isArray(entry.y_samples) ? entry.y_samples.map((value) => Number(value)) : [],
-            z_samples: Array.isArray(entry.z_samples) ? entry.z_samples.map((value) => Number(value)) : [],
-            parent_key: "",
-            parent_distance_pc: NaN,
-            parent_age_gap_myr: NaN,
-            axis_value: 0.0,
-            children: [],
-            plot_order: 0,
-          }))
-          .sort((a, b) => (
-            Number(b.age_now_myr) - Number(a.age_now_myr)
-            || String(a.cluster_name).localeCompare(String(b.cluster_name))
-          ));
-
-        const nodeByKey = new Map(sortedEntries.map((entry) => [entry.key, entry]));
-        for (let index = 0; index < sortedEntries.length; index += 1) {
-          const node = sortedEntries[index];
-          let bestParent = null;
-          let bestDistance = Infinity;
-          let bestAgeGap = Infinity;
-          for (let olderIndex = 0; olderIndex < index; olderIndex += 1) {
-            const candidate = sortedEntries[olderIndex];
-            const ageGap = Math.max(0.0, Number(candidate.age_now_myr) - Number(node.age_now_myr));
-            const candidatePosition = linksMode === "birth_to_birth"
-              ? {
-                x: Number(candidate.x_birth),
-                y: Number(candidate.y_birth),
-                z: Number(candidate.z_birth),
-              }
-              : interpolateDendrogramPosition(candidate, node.birth_time_myr);
-            if (!candidatePosition) {
-              continue;
-            }
-            const dx = node.x_birth - candidatePosition.x;
-            const dy = node.y_birth - candidatePosition.y;
-            const dz = node.z_birth - candidatePosition.z;
-            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (mode === "birth_age_myr") {
-              if (!(ageGap <= threshold) || distance >= bestDistance) {
-                continue;
-              }
-            } else if (!(distance <= threshold) || distance >= bestDistance) {
-              continue;
-            }
-            bestDistance = distance;
-            bestAgeGap = ageGap;
-            bestParent = candidate;
-          }
-          if (bestParent) {
-            node.parent_key = bestParent.key;
-            node.parent_distance_pc = bestDistance;
-            node.parent_age_gap_myr = bestAgeGap;
-            bestParent.children.push(node.key);
-          }
-          node.axis_value = mode === "birth_age_myr"
-            ? 0.0
-            : Math.max(Number(node.age_now_myr) || 0.0, 0.0);
-        }
-
-        if (mode === "birth_age_myr") {
-          const cumulativeAxisByKey = new Map();
-          function cumulativeBirthDistanceFor(node) {
-            if (!node) {
-              return 0.0;
-            }
-            if (cumulativeAxisByKey.has(node.key)) {
-              return cumulativeAxisByKey.get(node.key);
-            }
-            const localDistance = Number.isFinite(node.parent_distance_pc)
-              ? Math.max(Number(node.parent_distance_pc), 0.0)
-              : 0.0;
-            const parentDistance = node.parent_key
-              ? cumulativeBirthDistanceFor(nodeByKey.get(node.parent_key))
-              : 0.0;
-            const cumulativeDistance = parentDistance + localDistance;
-            cumulativeAxisByKey.set(node.key, cumulativeDistance);
-            return cumulativeDistance;
-          }
-
-          sortedEntries.forEach((node) => {
-            node.axis_value = cumulativeBirthDistanceFor(node);
-          });
-        }
-
-        const roots = sortedEntries
-          .filter((entry) => !entry.parent_key)
-          .sort((a, b) => (
-            Number(b.age_now_myr) - Number(a.age_now_myr)
-            || String(a.cluster_name).localeCompare(String(b.cluster_name))
-          ));
-
-        let nextLeafOrder = 0;
-        function assignPlotOrder(node) {
-          const children = node.children
-            .map((childKey) => nodeByKey.get(childKey))
-            .filter(Boolean)
-            .sort((a, b) => (
-              Number(b.age_now_myr) - Number(a.age_now_myr)
-              || String(a.cluster_name).localeCompare(String(b.cluster_name))
-            ));
-          if (!children.length) {
-            node.plot_order = nextLeafOrder;
-            nextLeafOrder += 1;
-            return node.plot_order;
-          }
-          const childOrders = children.map(assignPlotOrder);
-          node.plot_order = childOrders.reduce((total, value) => total + value, 0.0) / childOrders.length;
-          return node.plot_order;
-        }
-        roots.forEach(assignPlotOrder);
-
-        const descendantKeysByNode = new Map();
-        function descendantKeysFor(node) {
-          if (!node) {
-            return [];
-          }
-          if (descendantKeysByNode.has(node.key)) {
-            return descendantKeysByNode.get(node.key);
-          }
-          const keys = [node.key];
-          node.children.forEach((childKey) => {
-            const child = nodeByKey.get(childKey);
-            descendantKeysFor(child).forEach((selectionKey) => keys.push(selectionKey));
-          });
-          const uniqueKeys = Array.from(new Set(keys.map((value) => normalizeMemberKey(value)).filter(Boolean)));
-          descendantKeysByNode.set(node.key, uniqueKeys);
-          return uniqueKeys;
-        }
-
-        const branches = [];
-        sortedEntries.forEach((node) => {
-          if (!node.parent_key) {
-            return;
-          }
-          const parent = nodeByKey.get(node.parent_key);
-          if (!parent) {
-            return;
-          }
-          branches.push({
-            key: `${node.key}->${parent.key}`,
-            child: node,
-            parent,
-            label: `${node.cluster_name} from ${parent.cluster_name}`,
-            selectionKeys: descendantKeysFor(node),
-            count: descendantKeysFor(node).length,
-            distance_pc: Number(node.parent_distance_pc),
-            age_gap_myr: Number(node.parent_age_gap_myr),
-          });
-        });
-
-        const axisValues = sortedEntries
-          .map((entry) => Number(entry.axis_value))
-          .filter((value) => Number.isFinite(value) && value >= 0.0);
-
-        return {
-          nodes: sortedEntries,
-          roots,
-          branches,
-          leafCount: Math.max(nextLeafOrder, 1),
-          maxAgeMyr: Math.max(...sortedEntries.map((entry) => Number(entry.age_now_myr)), 0.0),
-          maxAxisValue: axisValues.length ? Math.max(...axisValues, 0.0) : 0.0,
-          connectionMode: linksMode,
-          thresholdMode: mode,
-        };
-      }
-
-      function renderDendrogramWidget() {
-        if (!dendrogramSpec.enabled || !dendrogramCanvasEl || widgetModeForKey("dendrogram") === "hidden") {
-          dendrogramHitRegions = [];
-          return;
-        }
-
-        const traceOptions = dendrogramTraceOptionsForCurrentGroup();
-        dendrogramTraceEl.innerHTML = "";
-        traceOptions.forEach((traceOption) => {
-          const option = document.createElement("option");
-          option.value = String(traceOption.trace_key || "");
-          option.textContent = String(traceOption.trace_name || traceOption.trace_key || "");
-          dendrogramTraceEl.appendChild(option);
-        });
-        if (!traceOptions.some((traceOption) => String(traceOption.trace_key || "") === String(dendrogramTraceKey || ""))) {
-          dendrogramTraceKey = traceOptions.length ? String(traceOptions[0].trace_key || "") : "";
-          clearDendrogramHoverState();
-        }
-        dendrogramTraceEl.value = dendrogramTraceKey;
-        dendrogramConnectionMode = currentDendrogramConnectionMode();
-        if (dendrogramConnectionEl) {
-          dendrogramConnectionEl.value = dendrogramConnectionMode;
-        }
-        dendrogramThresholdPc = Math.max(Number(dendrogramThresholdPc) || 0.0, 0.0);
-        dendrogramThresholdAgeMyr = Math.max(Number(dendrogramThresholdAgeMyr) || 0.0, 0.0);
-        syncDendrogramThresholdControls();
-
-        const entries = activeDendrogramEntries();
-        const rect = dendrogramCanvasEl.getBoundingClientRect();
-        const cssWidth = Math.max(1, Math.round(rect.width));
-        const cssHeight = Math.max(1, Math.round(rect.height));
-        const dpr = Math.max(window.devicePixelRatio || 1, 1);
-        if (dendrogramCanvasEl.width !== Math.round(cssWidth * dpr) || dendrogramCanvasEl.height !== Math.round(cssHeight * dpr)) {
-          dendrogramCanvasEl.width = Math.round(cssWidth * dpr);
-          dendrogramCanvasEl.height = Math.round(cssHeight * dpr);
-        }
-        const ctx = dendrogramCanvasEl.getContext("2d");
-        if (!ctx) {
-          dendrogramHitRegions = [];
-          return;
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, cssWidth, cssHeight);
-        ctx.fillStyle = theme.scene_bgcolor || theme.paper_bgcolor || "#000000";
-        ctx.fillRect(0, 0, cssWidth, cssHeight);
-
-        if (!traceOptions.length || !entries.length) {
-          dendrogramHitRegions = [];
-          clearDendrogramSelectionState();
-          return;
-        }
-
-        const thresholdMode = currentDendrogramThresholdMode();
-        const thresholdValue = currentDendrogramThresholdValue();
-        const connectionMode = currentDendrogramConnectionMode();
-        const model = buildDendrogramModel(entries, thresholdValue, thresholdMode, connectionMode);
-        const margin = { left: 52, right: 16, top: 18, bottom: 28 };
-        const plotWidth = Math.max(40, cssWidth - margin.left - margin.right);
-        const plotHeight = Math.max(40, cssHeight - margin.top - margin.bottom);
-        const currentTraceMeta = traceOptions.find((traceOption) => String(traceOption.trace_key || "") === String(dendrogramTraceKey || "")) || traceOptions[0];
-        const traceMaxAge = Math.max(Number(currentTraceMeta && currentTraceMeta.max_age_myr) || 0.0, Number(model.maxAgeMyr) || 0.0, 0.0);
-        const axisMode = model.thresholdMode || thresholdMode;
-        const axisLabel = axisMode === "birth_age_myr" ? "Birth distance" : "Birth age";
-        const axisUnit = axisMode === "birth_age_myr" ? "pc" : "Myr";
-        const axisMax = axisMode === "birth_age_myr"
-          ? Math.max((Number(model.maxAxisValue) || 0.0) * 1.08, 25.0)
-          : Math.max(traceMaxAge + 5.0, 1.0);
-        const traceState = traceStyleStateForKey(dendrogramTraceKey);
-        const traceColor = (traceState && traceState.color) || String(currentTraceMeta.color || theme.text_color || "#ffffff");
-        const axisColor = String(theme.axis_color || "#808080");
-        const activeKeys = activeDendrogramSelectionKeys();
-        const hoveredClusterKeys = activeHoveredClusterKeys();
-        dendrogramHitRegions = [];
-
-        function xToPx(orderValue) {
-          if (model.leafCount <= 1) {
-            return margin.left + plotWidth * 0.5;
-          }
-          return margin.left + (Number(orderValue) / Math.max(model.leafCount - 1, 1)) * plotWidth;
-        }
-
-        function yToPx(axisValue) {
-          return margin.top + (1.0 - clampRange(Number(axisValue) / axisMax, 0.0, 1.0)) * plotHeight;
-        }
-
-        ctx.strokeStyle = axisColor;
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(margin.left, margin.top);
-        ctx.lineTo(margin.left, margin.top + plotHeight);
-        ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
-        ctx.stroke();
-
-        ctx.fillStyle = axisColor;
-        ctx.font = "10px Menlo, Monaco, Consolas, monospace";
-        ctx.textAlign = "right";
-        ctx.textBaseline = "middle";
-        [0.0, 0.33, 0.66, 1.0].forEach((fraction) => {
-          const axisValue = fraction * axisMax;
-          const yPx = yToPx(axisValue);
-          ctx.globalAlpha = 0.14;
-          ctx.beginPath();
-          ctx.moveTo(margin.left, yPx);
-          ctx.lineTo(margin.left + plotWidth, yPx);
-          ctx.stroke();
-          ctx.globalAlpha = 1.0;
-          ctx.fillText(`${formatCompactNumber(axisValue)} ${axisUnit}`, margin.left - 8, yPx);
-        });
-
-        ctx.save();
-        ctx.translate(14, margin.top + plotHeight * 0.5);
-        ctx.rotate(-Math.PI * 0.5);
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(axisLabel, 0, 0);
-        ctx.restore();
-
-        const formationAge = Math.max(0.0, -(currentFrame() ? Number(currentFrame().time) : 0.0));
-        if (axisMode === "distance_pc") {
-          const markerY = yToPx(Math.min(formationAge, axisMax));
-          ctx.save();
-          ctx.setLineDash([6, 6]);
-          ctx.strokeStyle = axisColor;
-          ctx.lineWidth = 1.4;
-          ctx.beginPath();
-          ctx.moveTo(margin.left, markerY);
-          ctx.lineTo(margin.left + plotWidth, markerY);
-          ctx.stroke();
-          ctx.restore();
-        } else {
-          ctx.save();
-          ctx.textAlign = "right";
-          ctx.textBaseline = "top";
-          ctx.fillStyle = cssColorWithAlpha(axisColor, 0.9, axisColor);
-          ctx.fillText(`Formation age: ${formatCompactNumber(formationAge)} Myr`, margin.left + plotWidth, margin.top + 2);
-          ctx.restore();
-        }
-
-        model.branches.forEach((branch) => {
-          const childX = xToPx(branch.child.plot_order);
-          const childY = yToPx(branch.child.axis_value);
-          const parentX = xToPx(branch.parent.plot_order);
-          const parentY = yToPx(branch.parent.axis_value);
-          const isPinned = dendrogramPinnedRegionKey && dendrogramPinnedRegionKey === branch.key;
-          const isHovered = !isPinned && dendrogramHoveredRegionKey === branch.key;
-          const isActive = activeKeys.size && branch.selectionKeys.some((selectionKey) => activeKeys.has(selectionKey));
-          ctx.strokeStyle = cssColorWithAlpha(traceColor, isPinned ? 1.0 : (isHovered ? 0.96 : (isActive ? 0.86 : 0.62)), traceColor);
-          ctx.lineWidth = isPinned ? 3.6 : (isHovered ? 3.0 : (isActive ? 2.4 : 1.7));
-          ctx.beginPath();
-          ctx.moveTo(childX, childY);
-          ctx.lineTo(childX, parentY);
-          ctx.lineTo(parentX, parentY);
-          ctx.stroke();
-          dendrogramHitRegions.push({
-            type: "branch",
-            key: branch.key,
-            label: branch.label,
-            count: branch.count,
-            selectionKeys: branch.selectionKeys,
-            hitRadius: isPinned ? 10.0 : (isHovered ? 9.0 : 8.0),
-            segments: [
-              [childX, childY, childX, parentY],
-              [childX, parentY, parentX, parentY],
-            ],
-          });
-        });
-
-        model.nodes.forEach((node) => {
-          const nodeX = xToPx(node.plot_order);
-          const nodeY = yToPx(node.axis_value);
-          const nodeRegionKey = `node:${node.key}`;
-          const isPinned = dendrogramPinnedRegionKey && dendrogramPinnedRegionKey === nodeRegionKey;
-          const isHovered = !isPinned && dendrogramHoveredRegionKey === nodeRegionKey;
-          const isActive = activeKeys.size && activeKeys.has(node.selection_key);
-          const isSceneHovered = hoveredClusterKeys.has(node.selection_key);
-          const nodeRadius = isPinned ? 5.2 : (isHovered ? 4.8 : (isSceneHovered ? 4.6 : (isActive ? 4.1 : 3.4)));
-          ctx.beginPath();
-          ctx.fillStyle = cssColorWithAlpha(traceColor, isPinned ? 1.0 : (isHovered ? 0.96 : (isSceneHovered ? 0.94 : (isActive ? 0.88 : 0.82))), traceColor);
-          ctx.arc(nodeX, nodeY, nodeRadius, 0, Math.PI * 2.0);
-          ctx.fill();
-          if (isSceneHovered && !isPinned) {
-            ctx.save();
-            ctx.strokeStyle = cssColorWithAlpha(traceColor, 0.95, traceColor);
-            ctx.lineWidth = 1.4;
-            ctx.beginPath();
-            ctx.arc(nodeX, nodeY, nodeRadius + 2.6, 0, Math.PI * 2.0);
-            ctx.stroke();
-            ctx.restore();
-          }
-          dendrogramHitRegions.push({
-            type: "node",
-            key: nodeRegionKey,
-            label: node.cluster_name,
-            count: 1,
-            selectionKeys: [node.selection_key],
-            centerX: nodeX,
-            centerY: nodeY,
-            radius: Math.max(7.5, nodeRadius + 2.5),
-          });
-        });
-
       }
 
       function traceStyleStateForKey(traceKey) {
@@ -9977,7 +6350,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           ? (
             Number.isFinite(Number(layer.time_myr))
               ? "Rendered as a time-resolved WebGL2 ray-marched volume matched to the current animation frame."
-              : "Rendered at t=0 only as a WebGL2 ray-marched volume."
+              : (
+                state.showAllTimes
+                  ? (
+                    layer.co_rotate_with_frame
+                      ? "Rendered across all animation frames with a co-rotating local reference frame."
+                      : "Rendered across all animation frames as a static WebGL2 ray-marched volume."
+                  )
+                  : "Rendered at t=0 only as a WebGL2 ray-marched volume."
+              )
           )
           : "Volume rendering requires WebGL2 support in the browser.";
         const resampleMethod = String(layer.downsample_method || "resampled");
@@ -10005,84 +6386,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const row = document.createElement("div");
         row.className = "oviz-three-legend-control-row";
         return row;
-      }
-
-      function setClusterSelections(selections, mode = "click") {
-        const nextSelections = uniqueSelections(selections);
-        const normalizedMode = String(mode || "click");
-
-        if (normalizedMode === "lasso") {
-          currentSelections = nextSelections;
-          if (!currentSelections.length && !hasActiveLassoSelectionMask()) {
-            currentSelection = null;
-          }
-          selectedClusterKeys = new Set(
-            currentSelections
-              .map((selection) => normalizedSelectionKeyFor(selection))
-              .filter(Boolean)
-          );
-          if (currentSelection) {
-            const focusKey = normalizedSelectionKeyFor(currentSelection);
-            if (!focusKey || !selectedClusterKeys.has(focusKey)) {
-              currentSelection = null;
-            }
-          }
-        } else {
-          const nextFocus = nextSelections.length ? nextSelections[0] : null;
-          if (currentSelections.length) {
-            const focusKey = normalizedSelectionKeyFor(nextFocus);
-            if (!nextFocus || !focusKey || !selectedClusterKeys.has(focusKey)) {
-              return;
-            }
-          }
-          currentSelection = nextFocus;
-        }
-
-        currentSelectionMode = currentSelection ? "click" : ((currentSelections.length || hasActiveLassoSelectionMask()) ? "lasso" : "none");
-        clearCrossHoverState();
-        updateSelectionUI();
-        updateSkyPanel();
-        renderFrame(currentFrameIndex);
-      }
-
-      function clearClusterSelections() {
-        currentSelections = [];
-        currentSelection = null;
-        disposeLassoSelectionMask(currentLassoSelectionMask);
-        currentLassoSelectionMask = null;
-        currentSelectionMode = "none";
-        selectedClusterKeys = new Set();
-        clearCrossHoverState();
-        updateSelectionUI();
-        updateSkyPanel();
-        renderFrame(currentFrameIndex);
-      }
-
-      function applySkyPanelMode() {
-        applyWidgetMode("sky");
-        skyFullButtonEl.setAttribute("title", skyPanelMode === "fullscreen" ? "Restore sky panel" : "Maximize sky panel");
-        skyFullButtonEl.setAttribute("aria-label", skyPanelMode === "fullscreen" ? "Restore sky panel" : "Maximize sky panel");
-      }
-
-      function applyAgeKdePanelMode() {
-        applyWidgetMode("age_kde");
-        ageKdeFullButtonEl.setAttribute("title", ageKdePanelMode === "fullscreen" ? "Restore age KDE panel" : "Maximize age KDE panel");
-        ageKdeFullButtonEl.setAttribute("aria-label", ageKdePanelMode === "fullscreen" ? "Restore age KDE panel" : "Maximize age KDE panel");
-      }
-
-      function applyClusterFilterPanelMode() {
-        applyWidgetMode("cluster_filter");
-        clusterFilterFullButtonEl.setAttribute("title", clusterFilterPanelMode === "fullscreen" ? "Restore filter panel" : "Maximize filter panel");
-        clusterFilterFullButtonEl.setAttribute("aria-label", clusterFilterPanelMode === "fullscreen" ? "Restore filter panel" : "Maximize filter panel");
-      }
-
-      function applyDendrogramPanelMode() {
-        applyWidgetMode("dendrogram");
-        dendrogramFullButtonEl.setAttribute("title", dendrogramPanelMode === "fullscreen" ? "Restore dendrogram panel" : "Maximize dendrogram panel");
-        dendrogramFullButtonEl.setAttribute("aria-label", dendrogramPanelMode === "fullscreen" ? "Restore dendrogram panel" : "Maximize dendrogram panel");
-        if (widgetModeForKey("dendrogram") === "hidden") {
-          clearDendrogramSelectionState();
-        }
       }
 
       function base64ToUint8Array(encoded) {
@@ -10405,244 +6708,57 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return { low, high };
       }
 
-      const VOLUME_VERTEX_SHADER = `
-        uniform vec4 rotation;
-        uniform vec4 translation;
-
-        varying vec3 localPosition;
-        varying vec3 transformedCameraPosition;
-        varying vec3 transformedWorldPosition;
-
-        vec3 rotate_vertex_position(vec3 pos, vec3 t, vec4 q) {
-          vec3 p = pos.xyz - t.xyz;
-          return p.xyz + 2.0 * cross(cross(p.xyz, q.xyz) + q.w * p.xyz, q.xyz) + t.xyz;
-        }
-
-        void main() {
-          vec3 transformed = position;
-          localPosition = position;
-          vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
-          transformedCameraPosition = rotate_vertex_position(cameraPosition.xyz, translation.xyz, rotation);
-          transformedWorldPosition = rotate_vertex_position(worldPosition.xyz, translation.xyz, rotation);
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `;
-
-      const VOLUME_FRAGMENT_SHADER = `
-        #include <common>
-        #include <lights_pars_begin>
-
-        precision highp sampler3D;
-
-        uniform sampler3D volumeTexture;
-        uniform sampler2D colormap;
-        uniform sampler2D jitterTexture;
-        uniform sampler2D selectionMaskTexture;
-        uniform float low;
-        uniform float high;
-        uniform float opacity;
-        uniform float samples;
-        uniform float alpha_coef;
-        uniform float gradient_step;
-        uniform float stretch_mode;
-        uniform vec4 scale;
-        uniform vec4 translation;
-        uniform bool useSelectionPolygon;
-        uniform mat4 selectionViewProjectionMatrix;
-        uniform float selectionDimOutside;
-
-        varying vec3 localPosition;
-        varying vec3 transformedCameraPosition;
-        varying vec3 transformedWorldPosition;
-
-        float inv_range;
-
-        struct Ray {
-          vec3 origin;
-          vec3 direction;
-          vec3 inv_direction;
-          int sign[3];
-        };
-
-        vec3 aabb[2] = vec3[2](
-          vec3(-0.5, -0.5, -0.5),
-          vec3(0.5, 0.5, 0.5)
+      function volumeSupportsShowAllTimes(layer) {
+        return Boolean(
+          layer
+          && layer.supports_show_all_times
+          && !Number.isFinite(Number(layer.time_myr))
         );
+      }
 
-        Ray makeRay(vec3 origin, vec3 direction) {
-          vec3 inv_direction = vec3(1.0) / direction;
-          return Ray(
-            origin,
-            direction,
-            inv_direction,
-            int[3](
-              ((inv_direction.x < 0.0) ? 1 : 0),
-              ((inv_direction.y < 0.0) ? 1 : 0),
-              ((inv_direction.z < 0.0) ? 1 : 0)
-            )
-          );
+      function volumeVisibleForFrame(layer, state, frame = currentFrame()) {
+        if (!layer || !state || state.visible === false) {
+          return false;
         }
-
-        void intersect(in Ray ray, in vec3 bounds[2], out float tmin, out float tmax) {
-          float tymin;
-          float tymax;
-          float tzmin;
-          float tzmax;
-          tmin = (bounds[ray.sign[0]].x - ray.origin.x) * ray.inv_direction.x;
-          tmax = (bounds[1 - ray.sign[0]].x - ray.origin.x) * ray.inv_direction.x;
-          tymin = (bounds[ray.sign[1]].y - ray.origin.y) * ray.inv_direction.y;
-          tymax = (bounds[1 - ray.sign[1]].y - ray.origin.y) * ray.inv_direction.y;
-          tzmin = (bounds[ray.sign[2]].z - ray.origin.z) * ray.inv_direction.z;
-          tzmax = (bounds[1 - ray.sign[2]].z - ray.origin.z) * ray.inv_direction.z;
-          tmin = max(max(tmin, tymin), tzmin);
-          tmax = min(min(tmax, tymax), tzmax);
+        const frameTime = frame ? Number(frame.time) : 0.0;
+        const layerTime = Number(layer.time_myr);
+        if (Number.isFinite(layerTime)) {
+          return approximatelyZero(frameTime - layerTime);
         }
-
-        float sampleVolume(vec3 pos) {
-          return texture(volumeTexture, clamp(pos, vec3(0.0), vec3(1.0))).x;
+        if (state.showAllTimes && volumeSupportsShowAllTimes(layer)) {
+          return true;
         }
-
-        float asinhStretch(float value) {
-          return log(value + sqrt(value * value + 1.0));
+        if (layer.only_at_t0 === false) {
+          return true;
         }
+        return approximatelyZero(frameTime);
+      }
 
-        float applyStretch(float value) {
-          float clampedValue = clamp(value, 0.0, 1.0);
-          if (stretch_mode < 0.5) {
-            return clampedValue;
-          }
-          if (stretch_mode < 1.5) {
-            float strength = 999.0;
-            return log(1.0 + strength * clampedValue) / log(1.0 + strength);
-          }
-          float asinhStrength = 10.0;
-          return asinhStretch(asinhStrength * clampedValue) / asinhStretch(asinhStrength);
+      function volumeRotationAngleForFrame(layer, state, frame = currentFrame()) {
+        if (
+          !layer
+          || !state
+          || !state.showAllTimes
+          || !layer.co_rotate_with_frame
+          || !volumeSupportsShowAllTimes(layer)
+          || !Number.isFinite(volumeCoRotationRateRadPerMyr)
+        ) {
+          return 0.0;
         }
-
-        bool sampleInsideSelectionPolygon(vec3 worldPos) {
-          if (!useSelectionPolygon) {
-            return true;
-          }
-          vec4 clip = selectionViewProjectionMatrix * vec4(worldPos, 1.0);
-          if (clip.w <= 0.0) {
-            return false;
-          }
-          vec3 ndc = clip.xyz / clip.w;
-          if (ndc.z < -1.0 || ndc.z > 1.0) {
-            return false;
-          }
-          vec2 uv = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
-          if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) {
-            return false;
-          }
-          return texture2D(selectionMaskTexture, uv).r > 0.5;
+        const frameTime = frame ? Number(frame.time) : 0.0;
+        if (!Number.isFinite(frameTime)) {
+          return 0.0;
         }
+        const referenceTime = Number.isFinite(Number(layer.reference_time_myr))
+          ? Number(layer.reference_time_myr)
+          : 0.0;
+        return volumeCoRotationRateRadPerMyr * (frameTime - referenceTime);
+      }
 
-        vec3 worldGetNormal(in float px, in vec3 pos) {
-          return normalize(vec3(
-            px - sampleVolume(pos + vec3(gradient_step, 0.0, 0.0)),
-            px - sampleVolume(pos + vec3(0.0, gradient_step, 0.0)),
-            px - sampleVolume(pos + vec3(0.0, 0.0, gradient_step))
-          ));
-        }
-
-        void main() {
-          float jitter = texture2D(jitterTexture, gl_FragCoord.xy / 64.0).r;
-          float tmin = 0.0;
-          float tmax = 0.0;
-          float px = 0.0;
-          vec4 pxColor = vec4(0.0);
-          vec4 value = vec4(0.0);
-          vec3 direction = normalize(transformedWorldPosition - transformedCameraPosition);
-
-          inv_range = 1.0 / max(high - low, 1e-6);
-          aabb[0] = aabb[0] * scale.xyz + translation.xyz;
-          aabb[1] = aabb[1] * scale.xyz + translation.xyz;
-          intersect(makeRay(transformedCameraPosition, direction), aabb, tmin, tmax);
-
-          if (tmax <= max(0.0, tmin)) {
-            discard;
-          }
-
-          vec3 textcoord_end = localPosition + vec3(0.5);
-          vec3 textcoord_start = textcoord_end - (tmax - max(0.0, tmin)) * direction / scale.xyz;
-          vec3 textcoord_delta = textcoord_end - textcoord_start;
-          int sampleCount = min(int(length(textcoord_delta) * samples), int(samples * 1.8));
-          if (sampleCount <= 0) {
-            discard;
-          }
-
-          textcoord_delta = textcoord_delta / float(sampleCount);
-          textcoord_start = textcoord_start - textcoord_delta * (0.01 + 0.98 * jitter);
-          vec3 textcoord = textcoord_start - textcoord_delta;
-          float step = length(textcoord_delta);
-
-          for (int count = 0; count < 2048; count++) {
-            if (count >= sampleCount) {
-              break;
-            }
-
-            textcoord += textcoord_delta;
-            px = texture(volumeTexture, textcoord).x;
-            float scaled_px = (px - low) * inv_range;
-
-            if (scaled_px > 0.0) {
-              scaled_px = applyStretch(min(scaled_px, 0.999));
-              pxColor = texture(colormap, vec2(scaled_px, 0.5));
-              vec3 worldPos = (textcoord - vec3(0.5)) * scale.xyz + translation.xyz;
-              bool insideSelection = sampleInsideSelectionPolygon(worldPos);
-              if (!insideSelection && selectionDimOutside <= 0.001) {
-                continue;
-              }
-              pxColor.a = 1.0 - pow(1.0 - clamp(pxColor.a * opacity, 0.0, 0.999), step * alpha_coef);
-              if (!insideSelection) {
-                pxColor.a *= selectionDimOutside;
-              }
-              pxColor.a *= (1.0 - value.a);
-              pxColor.rgb *= pxColor.a;
-
-              #if NUM_DIR_LIGHTS > 0
-              if (pxColor.a > 0.0) {
-                vec4 addedLights = vec4(ambientLightColor / PI, 1.0);
-                vec3 specularColor = vec3(0.0);
-                vec3 normal = worldGetNormal(px, textcoord);
-                vec3 lightDirection;
-                float lightingIntensity;
-                vec3 lightReflect;
-                float specularFactor;
-
-                #pragma unroll_loop_start
-                for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
-                  lightDirection = directionalLights[i].direction;
-                  lightingIntensity = clamp(dot(lightDirection, normal), 0.0, 1.0);
-                  addedLights.rgb += directionalLights[i].color / PI * (0.2 + 0.8 * lightingIntensity);
-                  lightReflect = normalize(reflect(lightDirection, normal));
-                  specularFactor = dot(direction, lightReflect);
-                  if (specularFactor > 0.0) {
-                    specularColor += 0.002 * scaled_px * (1.0 / max(step, 1e-6))
-                      * directionalLights[i].color / PI * pow(specularFactor, 250.0) * pxColor.a;
-                  }
-                }
-                #pragma unroll_loop_end
-
-                pxColor.rgb = pxColor.rgb * addedLights.xyz + specularColor;
-              }
-              #endif
-
-              value += pxColor;
-              if (value.a >= 0.99) {
-                value.a = 1.0;
-                break;
-              }
-            }
-          }
-
-          if (value.a <= 0.001) {
-            discard;
-          }
-          gl_FragColor = value;
-        }
-      `;
+      function volumeQuaternionForZRotation(angleRad) {
+        const halfAngle = 0.5 * (Number.isFinite(angleRad) ? angleRad : 0.0);
+        return new THREE.Vector4(0.0, 0.0, Math.sin(halfAngle), Math.cos(halfAngle));
+      }
 
       function createVolumeRuntime(layer) {
         if (!volumeSupported) {
@@ -10708,21 +6824,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(centerX, centerY, centerZ);
         mesh.scale.set(sizeX, sizeY, sizeZ);
-        mesh.visible = state.visible !== false;
         mesh.renderOrder = -30;
         mesh.frustumCulled = false;
         const runtime = { mesh, material, geometry, layer };
+        applyVolumeStateToRuntime(layer, runtime);
         return runtime;
       }
 
-      function applyVolumeStateToRuntime(layer, runtime) {
+      function applyVolumeStateToRuntime(layer, runtime, frame = currentFrame()) {
         if (!runtime || !runtime.material || !runtime.mesh) {
           return;
         }
         const state = volumeStateByKey[volumeStateKeyForLayer(layer)] || {};
         const option = volumeColormapOptionFor(layer, state.colormap);
         const windowState = normalizedVolumeWindowFor(layer, state);
-        runtime.mesh.visible = state.visible !== false;
+        runtime.mesh.visible = volumeVisibleForFrame(layer, state, frame);
         runtime.material.uniforms.low.value = Number(windowState.low);
         runtime.material.uniforms.high.value = Number(windowState.high);
         runtime.material.uniforms.opacity.value = Number(state.opacity);
@@ -10730,6 +6846,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         runtime.material.uniforms.alpha_coef.value = Number(state.alphaCoef);
         runtime.material.uniforms.gradient_step.value = Number(state.gradientStep);
         runtime.material.uniforms.stretch_mode.value = volumeStretchModeValue(state.stretch);
+        runtime.material.uniforms.rotation.value.copy(
+          volumeQuaternionForZRotation(volumeRotationAngleForFrame(layer, state, frame))
+        );
         applyLassoSelectionMaskUniforms(runtime.material.uniforms, activeVolumeLassoSelectionMask());
         if (option) {
           runtime.material.uniforms.colormap.value = volumeColorTextureFor(option);
@@ -10737,6 +6856,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function renderVolumeControls() {
+        if (
+          !volumePanelEl
+          || !volumeSelectEl
+          || !volumeVisibleEl
+          || !volumeColormapEl
+          || !volumeStretchEl
+          || !volumeVMinEl
+          || !volumeVMaxEl
+          || !volumeOpacityEl
+          || !volumeAlphaEl
+          || !volumeStepsEl
+          || !volumeOpacityLabelEl
+          || !volumeAlphaLabelEl
+          || !volumeStepsLabelEl
+          || !volumeSummaryEl
+        ) {
+          return;
+        }
         const enabled = volumeStateKeys.length > 0;
         volumePanelEl.dataset.enabled = enabled ? "true" : "false";
         if (!enabled) {
@@ -11144,31 +7281,154 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return (2.0 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5)) / viewportHeight;
       }
 
+      function apparentPixelSpanForPoint(basePointScale, position) {
+        const worldPerPixel = Math.max(worldUnitsPerScreenPixelAt(position), 1e-6);
+        return Math.max(Number(basePointScale) || 0.0, 0.0) / worldPerPixel;
+      }
+
+      function screenPixelsToWorldScale(pixelSpan, position) {
+        return Math.max(Number(pixelSpan) || 0.0, 0.0) * Math.max(worldUnitsPerScreenPixelAt(position), 1e-6);
+      }
+
+      // Optical point-spread functions are set primarily by the imaging system
+      // (diffraction / seeing / detector sampling), not by the source's 3D distance.
+      // So keep a persistent screen-space halo floor and only let apparent size gently
+      // broaden the core and wings as a source becomes more resolved on screen.
       function glowScaleForPoint(basePointScale, position, glowStrength) {
         const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
-        const worldPerPixel = worldUnitsPerScreenPixelAt(position);
-        const desiredWorldScale = Number(basePointScale) * (1.45 + 1.18 * strength);
-        const minWorldScale = worldPerPixel * (9.0 + 9.0 * strength);
-        const maxWorldScale = worldPerPixel * (24.0 + 20.0 * strength);
-        return clampRange(desiredWorldScale, minWorldScale, maxWorldScale);
+        const apparentPixels = apparentPixelSpanForPoint(basePointScale, position);
+        const targetPixels = (7.0 + 4.5 * strength)
+          + Math.min(apparentPixels * (0.32 + 0.05 * strength), 6.0 + 2.0 * strength);
+        const clampedPixels = clampRange(targetPixels, 7.0 + 4.5 * strength, 18.0 + 8.0 * strength);
+        return screenPixelsToWorldScale(clampedPixels, position);
       }
 
       function starCoreScaleForPoint(basePointScale, position, glowStrength) {
         const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
-        const worldPerPixel = worldUnitsPerScreenPixelAt(position);
-        const desiredWorldScale = Number(basePointScale) * (0.44 + 0.10 * strength);
-        const minWorldScale = worldPerPixel * (3.2 + 1.4 * strength);
-        const maxWorldScale = worldPerPixel * (6.8 + 2.2 * strength);
-        return clampRange(desiredWorldScale, minWorldScale, maxWorldScale);
+        const apparentPixels = apparentPixelSpanForPoint(basePointScale, position);
+        const targetPixels = Math.max(
+          3.0 + 1.0 * strength,
+          apparentPixels * (0.72 + 0.04 * strength)
+        );
+        const clampedPixels = clampRange(targetPixels, 3.0 + 0.8 * strength, 18.0 + 2.0 * strength);
+        return screenPixelsToWorldScale(clampedPixels, position);
       }
 
       function starBloomScaleForPoint(basePointScale, position, glowStrength) {
         const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
-        const worldPerPixel = worldUnitsPerScreenPixelAt(position);
-        const desiredWorldScale = Number(basePointScale) * (2.10 + 1.65 * strength);
-        const minWorldScale = worldPerPixel * (18.0 + 16.0 * strength);
-        const maxWorldScale = worldPerPixel * (40.0 + 28.0 * strength);
-        return clampRange(desiredWorldScale, minWorldScale, maxWorldScale);
+        const apparentPixels = apparentPixelSpanForPoint(basePointScale, position);
+        const targetPixels = (14.0 + 8.0 * strength)
+          + Math.min(apparentPixels * (0.48 + 0.08 * strength), 12.0 + 5.0 * strength);
+        const clampedPixels = clampRange(targetPixels, 14.0 + 8.0 * strength, 34.0 + 14.0 * strength);
+        return screenPixelsToWorldScale(clampedPixels, position);
+      }
+
+      function registerCameraResponsivePointSprite(sprite, scaleKind, position, pointScaleValue, selectionKey) {
+        const entry = {
+          sprite,
+          scaleKind,
+          position: position instanceof THREE.Vector3 ? position.clone() : new THREE.Vector3(
+            Number(position && position.x) || 0.0,
+            Number(position && position.y) || 0.0,
+            Number(position && position.z) || 0.0,
+          ),
+          pointScale: Math.max(Number(pointScaleValue) || 0.0, 0.0),
+          baseScale: Math.max(Number(pointScaleValue) || 0.0, 0.0),
+          selectionKey: selectionKey ? String(selectionKey) : "",
+        };
+        cameraResponsivePointEntries.push(entry);
+        if (entry.selectionKey) {
+          if (!selectionSpriteEntriesByKey.has(entry.selectionKey)) {
+            selectionSpriteEntriesByKey.set(entry.selectionKey, []);
+          }
+          selectionSpriteEntriesByKey.get(entry.selectionKey).push(entry);
+        }
+        return entry;
+      }
+
+      function cameraResponsivePointBaseScale(entry) {
+        if (!entry || !entry.sprite) {
+          return 0.0;
+        }
+        if (entry.scaleKind === "bloom") {
+          return starBloomScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
+        }
+        if (entry.scaleKind === "glow") {
+          return glowScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
+        }
+        if (entry.scaleKind === "core") {
+          return starCoreScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
+        }
+        return Math.max(Number(entry.pointScale) || 0.0, 0.0);
+      }
+
+      function updateCameraResponsivePointSprites() {
+        if (!cameraResponsivePointEntries.length) {
+          return;
+        }
+        const activeKeys = activeHoveredClusterKeys();
+        cameraResponsivePointEntries.forEach((entry) => {
+          if (!entry || !entry.sprite) {
+            return;
+          }
+          const baseScale = cameraResponsivePointBaseScale(entry);
+          entry.baseScale = baseScale;
+          if (entry.sprite.userData && typeof entry.sprite.userData === "object") {
+            entry.sprite.userData.baseScale = baseScale;
+          }
+          const isActive = entry.selectionKey && activeKeys.has(entry.selectionKey);
+          const scale = baseScale * (isActive ? 1.45 : 1.0);
+          entry.sprite.scale.set(scale, scale, 1.0);
+        });
+      }
+
+      function registerCameraResponsiveImagePlane(mesh, options = {}) {
+        if (!mesh || !mesh.material) {
+          return null;
+        }
+        const entry = {
+          mesh,
+          baseOpacity: clamp01(Number(options.baseOpacity) || 0.0),
+          hideBelowScaleBarPc: Math.max(Number(options.hideBelowScaleBarPc) || 0.0, 0.0),
+          fadeStartScaleBarPc: Math.max(Number(options.fadeStartScaleBarPc) || 0.0, 0.0),
+        };
+        cameraResponsiveImagePlaneEntries.push(entry);
+        return entry;
+      }
+
+      function scaleBarLengthPcForCurrentView() {
+        const canvasHeight = Math.max(canvas.clientHeight || root.clientHeight || 0, 1);
+        const distance = cameraViewMode === "earth" && Number.isFinite(earthViewFocusDistance) && earthViewFocusDistance > 0.0
+          ? earthViewFocusDistance
+          : Math.max(camera.position.distanceTo(controls.target), 1e-6);
+        const worldPerPixel = (2.0 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5))) / canvasHeight;
+        return worldPerPixel * 120.0;
+      }
+
+      function updateCameraResponsiveImagePlanes() {
+        if (!cameraResponsiveImagePlaneEntries.length) {
+          return;
+        }
+        cameraResponsiveImagePlaneEntries.forEach((entry) => {
+          const mesh = entry && entry.mesh;
+          const material = mesh && mesh.material;
+          if (!mesh || !material) {
+            return;
+          }
+          const hideBelow = Math.max(Number(entry.hideBelowScaleBarPc) || 0.0, 0.0);
+          const fadeStart = Math.max(Number(entry.fadeStartScaleBarPc) || hideBelow, hideBelow);
+          let fadeFactor = 1.0;
+          if (hideBelow > 0.0 && Number.isFinite(currentScaleBarLengthPc)) {
+            if (currentScaleBarLengthPc <= hideBelow) {
+              fadeFactor = 0.0;
+            } else if (fadeStart > hideBelow && currentScaleBarLengthPc < fadeStart) {
+              fadeFactor = (currentScaleBarLengthPc - hideBelow) / Math.max(fadeStart - hideBelow, 1e-6);
+            }
+          }
+          const effectiveOpacity = clamp01(Number(entry.baseOpacity) || 0.0) * clamp01(fadeFactor);
+          material.opacity = effectiveOpacity;
+          mesh.visible = effectiveOpacity > 1e-4;
+        });
       }
 
       function textTextureFor(text, color, size, family) {
@@ -11889,6 +8149,76 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return group;
       }
 
+      function imagePlaneSpecForDecoration(decoration) {
+        const key = String((decoration && decoration.key) || "");
+        if (!key) {
+          return null;
+        }
+        return imagePlaneSpecByKey.get(key) || null;
+      }
+
+      function imagePlaneTextureFor(imagePlaneSpec) {
+        const dataUrl = String(imagePlaneSpec && imagePlaneSpec.image_data_url ? imagePlaneSpec.image_data_url : "");
+        if (!dataUrl) {
+          return null;
+        }
+        if (imagePlaneTextureCache.has(dataUrl)) {
+          return imagePlaneTextureCache.get(dataUrl);
+        }
+        const texture = new THREE.TextureLoader().load(dataUrl);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = true;
+        if ("colorSpace" in texture && THREE.SRGBColorSpace) {
+          texture.colorSpace = THREE.SRGBColorSpace;
+        } else if ("encoding" in texture && THREE.sRGBEncoding) {
+          texture.encoding = THREE.sRGBEncoding;
+        }
+        imagePlaneTextureCache.set(dataUrl, texture);
+        return texture;
+      }
+
+      function createImagePlane(decoration) {
+        const imagePlaneSpec = imagePlaneSpecForDecoration(decoration);
+        const texture = imagePlaneTextureFor(imagePlaneSpec);
+        if (!texture) {
+          return null;
+        }
+        const width = Math.max(Number(imagePlaneSpec && imagePlaneSpec.width_pc) || 0.0, 1.0);
+        const height = Math.max(Number(imagePlaneSpec && imagePlaneSpec.height_pc) || 0.0, 1.0);
+        const opacity = clamp01(Number(decoration.opacity) || 0.0);
+        if (!(opacity > 0.0)) {
+          return null;
+        }
+        const center = decoration.center || { x: 0.0, y: 0.0, z: 0.0 };
+        const geometry = new THREE.PlaneGeometry(width, height, 1, 1);
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          toneMapped: false,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(
+          Number(center.x) || 0.0,
+          Number(center.y) || 0.0,
+          Number(center.z) || 0.0
+        );
+        mesh.rotation.z = Number(decoration.rotation_rad) || 0.0;
+        const renderOrder = Number.isFinite(Number(decoration.render_order))
+          ? Number(decoration.render_order)
+          : Number(imagePlaneSpec && imagePlaneSpec.render_order);
+        mesh.renderOrder = Number.isFinite(renderOrder) ? renderOrder : -20;
+        registerCameraResponsiveImagePlane(mesh, {
+          baseOpacity: opacity,
+          hideBelowScaleBarPc: Number(imagePlaneSpec && imagePlaneSpec.hide_below_scale_bar_pc),
+          fadeStartScaleBarPc: Number(imagePlaneSpec && imagePlaneSpec.fade_start_scale_bar_pc),
+        });
+        return mesh;
+      }
+
       function makeLineObject(trace, materialBucket) {
         if (!trace.segments || !trace.segments.length) {
           return null;
@@ -11896,6 +8226,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const traceState = traceStyleStateForKey(trace.key);
         const lineColor = (traceState && traceState.color) || (trace.line || {}).color || "#ffffff";
         let lineOpacity = traceState ? clamp01(traceState.opacity) : (trace.opacity ?? 1.0);
+        lineOpacity *= traceVisibilityOpacityMultiplier(trace);
         const focusedTraceKey = dendrogramFocusTraceKey();
         if (focusedTraceKey && String(trace.key) !== focusedTraceKey) {
           lineOpacity *= 0.16;
@@ -11921,6 +8252,173 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         line.computeLineDistances();
         materialBucket.push(material);
         return line;
+      }
+
+      function makeSingleSegmentLine(startPoint, endPoint, options = {}, materialBucket = frameLineMaterials) {
+        if (!(startPoint instanceof THREE.Vector3) || !(endPoint instanceof THREE.Vector3)) {
+          return null;
+        }
+        const positions = [
+          startPoint.x, startPoint.y, startPoint.z,
+          endPoint.x, endPoint.y, endPoint.z,
+        ];
+        const geometry = new LineSegmentsGeometry();
+        geometry.setPositions(positions);
+        const material = new LineMaterial({
+          color: String(options.color || "#ffffff"),
+          linewidth: Math.max(Number(options.widthPx) || 1.0, 0.25),
+          dashed: false,
+          transparent: clamp01(Number(options.opacity) || 1.0) < 1.0,
+          opacity: clamp01(Number(options.opacity) || 1.0),
+          worldUnits: false,
+        });
+        material.resolution.set(root.clientWidth, root.clientHeight);
+        const line = new LineSegments2(geometry, material);
+        line.computeLineDistances();
+        materialBucket.push(material);
+        if (Number.isFinite(Number(options.renderOrder))) {
+          line.renderOrder = Number(options.renderOrder);
+        }
+        return line;
+      }
+
+      function createTaperedPolyline(decoration) {
+        const rawPoints = Array.isArray(decoration && decoration.points) ? decoration.points : [];
+        if (rawPoints.length < 2) {
+          return null;
+        }
+        const points = rawPoints
+          .map((point) => new THREE.Vector3(
+            Number(point && point.x) || 0.0,
+            Number(point && point.y) || 0.0,
+            Number(point && point.z) || 0.0
+          ));
+        const segmentCount = Math.max(points.length - 1, 1);
+        const startWidth = Math.max(Number(decoration.start_width_px) || 2.0, 0.25);
+        const endWidth = Math.max(Number(decoration.end_width_px) || 0.5, 0.1);
+        const baseOpacity = clamp01(Number(decoration.opacity) || 1.0);
+        const color = String(decoration.color || "#ffffff");
+        const renderOrder = Number.isFinite(Number(decoration.render_order))
+          ? Number(decoration.render_order)
+          : -6;
+        const group = new THREE.Group();
+        for (let index = 0; index < segmentCount; index += 1) {
+          const alpha = segmentCount <= 1 ? 0.0 : (index / (segmentCount - 1));
+          const line = makeSingleSegmentLine(
+            points[index],
+            points[index + 1],
+            {
+              color,
+              widthPx: startWidth + (endWidth - startWidth) * alpha,
+              opacity: baseOpacity,
+              renderOrder,
+            },
+            frameLineMaterials,
+          );
+          if (line) {
+            group.add(line);
+          }
+        }
+        return group;
+      }
+
+      function createSolarSystemMarker(decoration) {
+        const base = decoration && decoration.base ? decoration.base : {};
+        const x = Number(base.x);
+        const y = Number(base.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          return null;
+        }
+        const bottomZ = Number.isFinite(Number(decoration.bottom_z)) ? Number(decoration.bottom_z) : -400.0;
+        const topZ = Number.isFinite(Number(decoration.top_z)) ? Number(decoration.top_z) : 1800.0;
+        const labelZ = Number.isFinite(Number(decoration.label_z)) ? Number(decoration.label_z) : (topZ + 320.0);
+        const color = String(decoration.color || "#ffe45c");
+        const renderOrder = Number.isFinite(Number(decoration.render_order))
+          ? Number(decoration.render_order)
+          : 8;
+        const hideBelowScaleBarPc = Math.max(Number(decoration.hide_below_scale_bar_pc) || 0.0, 0.0);
+        const fadeStartScaleBarPc = Math.max(Number(decoration.fade_start_scale_bar_pc) || 0.0, 0.0);
+        const startPoint = new THREE.Vector3(x, y, bottomZ);
+        const endPoint = new THREE.Vector3(x, y, topZ);
+        const group = new THREE.Group();
+
+        const core = makeSingleSegmentLine(startPoint, endPoint, {
+          color,
+          widthPx: 1.55,
+          opacity: 0.92,
+          renderOrder: renderOrder + 0.1,
+        }, frameLineMaterials);
+        if (core) {
+          registerCameraResponsiveImagePlane(core, {
+            baseOpacity: 0.92,
+            hideBelowScaleBarPc,
+            fadeStartScaleBarPc,
+          });
+          group.add(core);
+        }
+
+        const labelText = String(decoration.label || "Solar System");
+        const label = makeTextSprite(labelText, {
+          color,
+          size: 26,
+          family: "Helvetica",
+          screenStable: true,
+          screenPixels: 28,
+          screenScaleMultiplier: 1.0,
+        });
+        label.material.opacity = 0.98;
+        label.position.set(x, y, labelZ);
+        label.renderOrder = renderOrder + 0.2;
+        registerCameraResponsiveImagePlane(label, {
+          baseOpacity: 0.98,
+          hideBelowScaleBarPc,
+          fadeStartScaleBarPc,
+        });
+        screenStableTextSprites.push(label);
+        group.add(label);
+
+        return group;
+      }
+
+      function createGalacticCenterAxes(decoration) {
+        const center = decoration && decoration.center ? decoration.center : {};
+        const x = Number(center.x);
+        const y = Number(center.y);
+        const z = Number(center.z);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+          return null;
+        }
+        const halfLengthXY = Math.max(Number(decoration.half_length_xy) || 0.0, 1.0);
+        const halfLengthZ = Math.max(Number(decoration.half_length_z) || 0.0, 1.0);
+        const color = String(decoration.color || "#7a8089");
+        const opacity = clamp01(Number(decoration.opacity) || 0.62);
+        const widthPx = Math.max(Number(decoration.width_px) || 1.0, 0.25);
+        const renderOrder = Number.isFinite(Number(decoration.render_order))
+          ? Number(decoration.render_order)
+          : -8;
+        const group = new THREE.Group();
+        const segments = [
+          [new THREE.Vector3(x - halfLengthXY, y, z), new THREE.Vector3(x + halfLengthXY, y, z)],
+          [new THREE.Vector3(x, y - halfLengthXY, z), new THREE.Vector3(x, y + halfLengthXY, z)],
+          [new THREE.Vector3(x, y, z - halfLengthZ), new THREE.Vector3(x, y, z + halfLengthZ)],
+        ];
+        segments.forEach(([startPoint, endPoint]) => {
+          const line = makeSingleSegmentLine(
+            startPoint,
+            endPoint,
+            {
+              color,
+              widthPx,
+              opacity,
+              renderOrder,
+            },
+            frameLineMaterials,
+          );
+          if (line) {
+            group.add(line);
+          }
+        });
+        return group;
       }
 
       function buildSelectionBoxGroupForFrame(timeMyr) {
@@ -12095,6 +8593,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const traceOpacityMultiplier = traceState
           ? clamp01(traceState.opacity) / Math.max(clamp01(Number(trace.default_opacity ?? 1.0)), 1e-6)
           : 1.0;
+        const traceVisibilityMultiplier = traceVisibilityOpacityMultiplier(trace);
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
         trace.points.forEach((point) => {
           if (!clusterFilterPassesPoint(point)) {
@@ -12119,7 +8618,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             opacityMultiplier *= selectedClusterKeys.has(pointKey) ? 1.0 : 0.16;
           }
           const baseOpacity = Number(pointState.opacity ?? point.opacity ?? 1.0);
-          const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * opacityMultiplier * globalPointOpacityScale));
+          const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * traceVisibilityMultiplier * opacityMultiplier * globalPointOpacityScale));
           if (effectiveOpacity <= 0.001) {
             return;
           }
@@ -12130,6 +8629,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             scaleFloor
           );
           const selectionKey = normalizedSelectionKeyFor(point.selection);
+          const pointPosition = new THREE.Vector3(point.x, point.y, point.z);
           const glowStrength = Math.max(globalPointGlowStrength, 0.0);
           let interactionSprite = null;
           if (glowStrength > 0.02) {
@@ -12137,10 +8637,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             const bloomSprite = new THREE.Sprite(starBloomMaterialFor(traceColor || point.color, bloomOpacity));
             const bloomScale = starBloomScaleForPoint(
               scale,
-              { x: point.x, y: point.y, z: point.z },
+              pointPosition,
               glowStrength
             );
-            bloomSprite.position.set(point.x, point.y, point.z);
+            bloomSprite.position.copy(pointPosition);
             bloomSprite.scale.set(bloomScale, bloomScale, 1.0);
             bloomSprite.renderOrder = -3;
             bloomSprite.userData = {
@@ -12150,24 +8650,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
               isBloom: true,
             };
             group.add(bloomSprite);
-            if (selectionKey) {
-              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
-                selectionSpriteEntriesByKey.set(selectionKey, []);
-              }
-              selectionSpriteEntriesByKey.get(selectionKey).push({
-                sprite: bloomSprite,
-                baseScale: bloomScale,
-              });
-            }
+            registerCameraResponsivePointSprite(bloomSprite, "bloom", pointPosition, scale, selectionKey);
 
             const glowOpacity = clampRange(effectiveOpacity * (0.24 + 0.30 * glowStrength), 0.0, 0.98);
             const glowSprite = new THREE.Sprite(starGlowMaterialFor(traceColor || point.color, glowOpacity));
             const glowScale = glowScaleForPoint(
               scale,
-              { x: point.x, y: point.y, z: point.z },
+              pointPosition,
               glowStrength
             );
-            glowSprite.position.set(point.x, point.y, point.z);
+            glowSprite.position.copy(pointPosition);
             glowSprite.scale.set(glowScale, glowScale, 1.0);
             glowSprite.renderOrder = -2;
             glowSprite.userData = {
@@ -12177,24 +8669,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
               isGlow: true,
             };
             group.add(glowSprite);
-            if (selectionKey) {
-              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
-                selectionSpriteEntriesByKey.set(selectionKey, []);
-              }
-              selectionSpriteEntriesByKey.get(selectionKey).push({
-                sprite: glowSprite,
-                baseScale: glowScale,
-              });
-            }
+            registerCameraResponsivePointSprite(glowSprite, "glow", pointPosition, scale, selectionKey);
 
             const coreOpacity = clampRange(effectiveOpacity * (0.88 + 0.36 * glowStrength), 0.0, 1.0);
             const coreSprite = new THREE.Sprite(starCoreMaterialFor("#ffffff", coreOpacity));
             const coreScale = starCoreScaleForPoint(
               scale,
-              { x: point.x, y: point.y, z: point.z },
+              pointPosition,
               glowStrength
             );
-            coreSprite.position.set(point.x, point.y, point.z);
+            coreSprite.position.copy(pointPosition);
             coreSprite.scale.set(coreScale, coreScale, 1.0);
             coreSprite.userData = {
               hovertext: point.hovertext || trace.name || "",
@@ -12206,18 +8690,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             group.add(coreSprite);
             hoverTargets.push(coreSprite);
             interactionSprite = coreSprite;
-            if (selectionKey) {
-              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
-                selectionSpriteEntriesByKey.set(selectionKey, []);
-              }
-              selectionSpriteEntriesByKey.get(selectionKey).push({
-                sprite: coreSprite,
-                baseScale: coreScale,
-              });
-            }
+            registerCameraResponsivePointSprite(coreSprite, "core", pointPosition, scale, selectionKey);
           } else {
             const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, traceColor || point.color, effectiveOpacity));
-            sprite.position.set(point.x, point.y, point.z);
+            sprite.position.copy(pointPosition);
             sprite.scale.set(scale, scale, scale);
             sprite.userData = {
               hovertext: point.hovertext || trace.name || "",
@@ -12228,15 +8704,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             group.add(sprite);
             hoverTargets.push(sprite);
             interactionSprite = sprite;
-            if (selectionKey) {
-              if (!selectionSpriteEntriesByKey.has(selectionKey)) {
-                selectionSpriteEntriesByKey.set(selectionKey, []);
-              }
-              selectionSpriteEntriesByKey.get(selectionKey).push({
-                sprite,
-                baseScale: scale,
-              });
-            }
+            registerCameraResponsivePointSprite(sprite, "marker", pointPosition, scale, selectionKey);
           }
         });
         parent.add(group);
@@ -12249,7 +8717,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const group = new THREE.Group();
         const traceState = traceStyleStateForKey(trace.key);
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
-        const opacityValue = traceState ? clamp01(traceState.opacity) : 1.0;
+        const opacityValue = (traceState ? clamp01(traceState.opacity) : 1.0) * traceVisibilityOpacityMultiplier(trace);
         trace.labels.forEach((label) => {
           if (!label.text) {
             return;
@@ -12323,6 +8791,34 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         if (decoration.kind === "milky_way_model") {
           parent.add(createMilkyWayModel(decoration));
+          return;
+        }
+        if (decoration.kind === "tapered_polyline") {
+          const polyline = createTaperedPolyline(decoration);
+          if (polyline) {
+            parent.add(polyline);
+          }
+          return;
+        }
+        if (decoration.kind === "solar_system_marker") {
+          const marker = createSolarSystemMarker(decoration);
+          if (marker) {
+            parent.add(marker);
+          }
+          return;
+        }
+        if (decoration.kind === "galactic_center_axes") {
+          const axes = createGalacticCenterAxes(decoration);
+          if (axes) {
+            parent.add(axes);
+          }
+          return;
+        }
+        if (decoration.kind === "image_plane") {
+          const imagePlane = createImagePlane(decoration);
+          if (imagePlane) {
+            parent.add(imagePlane);
+          }
         }
       }
 
@@ -12543,6 +9039,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function traceVisible(trace) {
+        const actionState = actionTraceVisibilityState(trace);
+        if (actionState) {
+          return Boolean(actionState.visible);
+        }
         if (isGalacticReferenceTrace(trace) && !galacticReferenceVisible) {
           return false;
         }
@@ -12739,6 +9239,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         visibleToggle.appendChild(visibleText);
         controls.appendChild(visibleToggle);
 
+        let showAllTimesInput = null;
+        let showAllTimesToggle = null;
+        let showAllTimesText = null;
+        if (volumeSupportsShowAllTimes(layer)) {
+          showAllTimesToggle = document.createElement("label");
+          showAllTimesToggle.className = "oviz-three-legend-toggle";
+          showAllTimesInput = document.createElement("input");
+          showAllTimesInput.type = "checkbox";
+          showAllTimesToggle.appendChild(showAllTimesInput);
+          showAllTimesText = document.createElement("span");
+          showAllTimesText.textContent = layer.co_rotate_with_frame
+            ? "Show at all times (co-rotating)"
+            : "Show at all times";
+          showAllTimesToggle.appendChild(showAllTimesText);
+          controls.appendChild(showAllTimesToggle);
+        }
+
         const colormapSelect = document.createElement("select");
         ((layer.colormap_options || [])).forEach((option) => {
           const optionEl = document.createElement("option");
@@ -12807,6 +9324,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           clampVolumeStateForLayer(summaryLayer, state);
           if (syncInputs) {
             visibleInput.checked = state.visible !== false;
+            if (showAllTimesInput) {
+              showAllTimesInput.checked = Boolean(state.showAllTimes);
+            }
             colormapSelect.value = String(state.colormap);
             stretchSelect.value = String(state.stretch);
             vminInput.value = formatVolumeNumber(state.vmin);
@@ -12837,6 +9357,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           refreshVolumeControls(false);
           updateVolumeFromLegend(false);
         });
+        if (showAllTimesInput) {
+          showAllTimesInput.addEventListener("change", () => {
+            state.showAllTimes = Boolean(showAllTimesInput.checked);
+            refreshVolumeControls(false);
+            updateVolumeFromLegend(false);
+          });
+        }
         colormapSelect.addEventListener("change", () => {
           state.colormap = String(colormapSelect.value);
           refreshVolumeControls(false);
@@ -12876,1360 +9403,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return controls;
       }
 
-      function closeLegendPopover() {
-        activeLegendEditorKey = "";
-        if (legendPopoverEl) {
-          legendPopoverEl.dataset.open = "false";
-          legendPopoverEl.innerHTML = "";
-        }
-      }
+__LEGEND_RUNTIME_JS__
 
-      function positionInspectorDock() {
-        if (!inspectorDockEl || !legendPanelEl) {
-          return;
-        }
-        if (window.matchMedia("(max-width: 720px)").matches) {
-          inspectorDockEl.style.top = "";
-          return;
-        }
-        const rootRect = root.getBoundingClientRect();
-        const legendRect = legendPanelEl.getBoundingClientRect();
-        const nextTop = Math.max(142, Math.round(legendRect.bottom - rootRect.top + 12));
-        inspectorDockEl.style.top = `${nextTop}px`;
-      }
+__WIDGET_RUNTIME_JS__
 
-      function positionLegendPopover(anchorEl) {
-        if (!legendPopoverEl || !anchorEl) {
-          return;
-        }
-        const rootRect = root.getBoundingClientRect();
-        const anchorRect = anchorEl.getBoundingClientRect();
-        const legendRect = legendPanelEl ? legendPanelEl.getBoundingClientRect() : anchorRect;
-        const popoverWidth = legendPopoverEl.offsetWidth || 244;
-        const popoverHeight = legendPopoverEl.offsetHeight || 320;
-        let left = Math.max(anchorRect.right, legendRect.right) - rootRect.left + 12;
-        if (left + popoverWidth > root.clientWidth - 12) {
-          left = anchorRect.left - rootRect.left - popoverWidth - 12;
-        }
-        left = clampRange(left, 12, Math.max(12, root.clientWidth - popoverWidth - 12));
-        const top = clampRange(
-          anchorRect.top - rootRect.top - 6,
-          12,
-          Math.max(12, root.clientHeight - popoverHeight - 12)
-        );
-        legendPopoverEl.style.left = `${left}px`;
-        legendPopoverEl.style.top = `${top}px`;
-      }
+__WIDGET_CONTENT_RUNTIME_JS__
 
-      function renderLegendPopover(item, toggleButton) {
-        if (!legendPopoverEl || !item || !toggleButton) {
-          closeLegendPopover();
-          return;
-        }
-        legendPopoverEl.innerHTML = "";
-        const head = document.createElement("div");
-        head.className = "oviz-three-legend-popover-head";
+__INTERACTION_RUNTIME_JS__
 
-        const title = document.createElement("div");
-        title.className = "oviz-three-legend-popover-title";
-        const eyebrow = document.createElement("div");
-        eyebrow.className = "oviz-three-legend-popover-eyebrow";
-        eyebrow.textContent = volumeLayerForKey(item.key) ? "Volume" : "Trace";
-        const name = document.createElement("div");
-        name.className = "oviz-three-legend-popover-name";
-        name.textContent = String(item.name || "");
-        name.style.color = legendColorForItem(item);
-        title.appendChild(eyebrow);
-        title.appendChild(name);
-        head.appendChild(title);
+__SCENE_RUNTIME_JS__
 
-        const closeButton = document.createElement("button");
-        closeButton.type = "button";
-        closeButton.className = "oviz-three-legend-popover-close";
-        closeButton.textContent = "×";
-        closeButton.title = "Close legend editor";
-        closeButton.addEventListener("click", () => {
-          closeLegendPopover();
-          renderLegend();
-        });
-        head.appendChild(closeButton);
-        legendPopoverEl.appendChild(head);
+__VIEWER_RUNTIME_JS__
 
-        const controls = volumeLayerForKey(item.key)
-          ? buildVolumeLegendControls(item, toggleButton)
-          : buildTraceLegendControls(item, toggleButton);
-        if (controls) {
-          setLegendPanelOpen(true);
-          legendPopoverEl.appendChild(controls);
-          legendPopoverEl.dataset.open = "true";
-          window.requestAnimationFrame(() => positionLegendPopover(toggleButton));
-        } else {
-          closeLegendPopover();
-        }
-      }
-
-      function setLegendPanelOpen(isOpen) {
-        legendPanelOpen = Boolean(isOpen);
-        if (legendPanelEl) {
-          legendPanelEl.dataset.open = legendPanelOpen ? "true" : "false";
-        }
-        if (legendPanelBodyEl) {
-          legendPanelBodyEl.style.display = legendPanelOpen ? "flex" : "none";
-        }
-        if (legendPanelToggleEl) {
-          legendPanelToggleEl.textContent = legendPanelOpen ? "▾" : "▸";
-          legendPanelToggleEl.setAttribute(
-            "title",
-            legendPanelOpen ? "Collapse the legend" : "Expand the legend"
-          );
-          legendPanelToggleEl.setAttribute("aria-expanded", legendPanelOpen ? "true" : "false");
-        }
-        if (legendPanelEl) {
-          const rect = legendPanelRectState || defaultLegendPanelRect();
-          applyLegendPanelRect(rect);
-        }
-        if (!legendPanelOpen) {
-          closeLegendPopover();
-        }
-        legendResizeEls.forEach((handle) => {
-          handle.style.display = legendPanelOpen ? "" : "none";
-        });
-        window.requestAnimationFrame(positionInspectorDock);
-      }
-
-      function clearInspectorTimers() {
-        if (inspectorHoverOpenTimer !== null) {
-          window.clearTimeout(inspectorHoverOpenTimer);
-          inspectorHoverOpenTimer = null;
-        }
-        if (inspectorHoverCloseTimer !== null) {
-          window.clearTimeout(inspectorHoverCloseTimer);
-          inspectorHoverCloseTimer = null;
-        }
-      }
-
-      function setInspectorOpen(isOpen) {
-        inspectorOpen = Boolean(isOpen);
-        if (inspectorDockEl) {
-          inspectorDockEl.dataset.open = inspectorOpen ? "true" : "false";
-        }
-        if (inspectorToggleEl) {
-          inspectorToggleEl.setAttribute("aria-expanded", inspectorOpen ? "true" : "false");
-          inspectorToggleEl.setAttribute(
-            "title",
-            inspectorPinned
-              ? "Settings pinned open. Click to unpin."
-              : "Hover to preview the settings. Click to pin them open."
-          );
-        }
-      }
-
-      function setInspectorPinned(isPinned, options = {}) {
-        inspectorPinned = Boolean(isPinned);
-        const syncOpen = options.syncOpen !== false;
-        if (inspectorDockEl) {
-          inspectorDockEl.dataset.pinned = inspectorPinned ? "true" : "false";
-        }
-        if (syncOpen) {
-          clearInspectorTimers();
-          setInspectorOpen(inspectorPinned || inspectorOpen);
-        } else if (inspectorToggleEl) {
-          inspectorToggleEl.setAttribute(
-            "title",
-            inspectorPinned
-              ? "Settings pinned open. Click to unpin."
-              : "Hover to preview the settings. Click to pin them open."
-          );
-        }
-      }
-
-      function scheduleInspectorOpen(delayMs = 90) {
-        if (inspectorPinned) {
-          setInspectorOpen(true);
-          return;
-        }
-        clearInspectorTimers();
-        inspectorHoverOpenTimer = window.setTimeout(() => {
-          inspectorHoverOpenTimer = null;
-          setInspectorOpen(true);
-        }, delayMs);
-      }
-
-      function scheduleInspectorClose(delayMs = 160) {
-        if (inspectorPinned) {
-          return;
-        }
-        clearInspectorTimers();
-        inspectorHoverCloseTimer = window.setTimeout(() => {
-          inspectorHoverCloseTimer = null;
-          setInspectorOpen(false);
-        }, delayMs);
-      }
-
-      function visibleLegendItemsForCurrentGroup() {
-        const defaults = groupDefaults(currentGroup);
-        return legendItems.filter((item) => {
-          const mode = defaults[item.key];
-          return !(mode === false || mode === undefined);
-        });
-      }
-
-      function renderLegend() {
-        if (!legendTraceListEl || !legendVolumeListEl) {
-          return;
-        }
-        const items = visibleLegendItemsForCurrentGroup();
-        const traceItems = items.filter((item) => !volumeLayerForKey(item.key));
-        const volumeItems = items.filter((item) => volumeLayerForKey(item.key));
-        legendTraceListEl.innerHTML = "";
-        legendVolumeListEl.innerHTML = "";
-        legendEditButtonByKey.clear();
-
-        if (legendTraceSectionEl) {
-          legendTraceSectionEl.dataset.empty = traceItems.length ? "false" : "true";
-        }
-        if (legendVolumeSectionEl) {
-          legendVolumeSectionEl.dataset.empty = volumeItems.length ? "false" : "true";
-        }
-
-        if (!traceItems.length && !volumeItems.length) {
-          const emptyState = document.createElement("div");
-          emptyState.className = "oviz-three-legend-title";
-          emptyState.textContent = "No visible traces for this group.";
-          legendTraceListEl.appendChild(emptyState);
-          closeLegendPopover();
-          return;
-        }
-
-        function appendLegendEntries(targetEl, sectionItems) {
-          sectionItems.forEach((item) => {
-          const itemKey = String(item.key);
-          const entry = document.createElement("div");
-          const itemColor = legendColorForItem(item);
-          entry.className = "oviz-three-legend-entry";
-          entry.dataset.active = legendState[itemKey] ? "true" : "false";
-          entry.dataset.editorOpen = activeLegendEditorKey === itemKey ? "true" : "false";
-          entry.style.borderColor = legendState[itemKey] ? itemColor : "rgba(255, 255, 255, 0.06)";
-
-          const toggleButton = document.createElement("button");
-          toggleButton.type = "button";
-          toggleButton.className = "oviz-three-legend-item";
-          toggleButton.dataset.active = legendState[itemKey] ? "true" : "false";
-          toggleButton.title = `${String(item.name || "")}: click to show or hide`;
-
-          const swatch = document.createElement("span");
-          swatch.className = "oviz-three-legend-swatch";
-          swatch.style.background = itemColor;
-          toggleButton.appendChild(swatch);
-
-          const meta = document.createElement("span");
-          meta.className = "oviz-three-legend-meta";
-
-          const name = document.createElement("span");
-          name.className = "oviz-three-legend-name";
-          name.textContent = String(item.name || "");
-          name.style.color = itemColor;
-          meta.appendChild(name);
-          toggleButton.appendChild(meta);
-
-          toggleButton.addEventListener("click", () => {
-            legendState[itemKey] = !legendState[itemKey];
-            renderLegend();
-            renderFrame(currentFrameIndex);
-          });
-          if (!volumeLayerForKey(item.key)) {
-            toggleButton.addEventListener("dblclick", () => {
-              const traceItems = items.filter((candidate) => !volumeLayerForKey(candidate.key));
-              const onlyThisVisible = traceItems.every((candidate) => {
-                const candidateKey = String(candidate.key);
-                return legendState[candidateKey] === (candidateKey === itemKey);
-              });
-              traceItems.forEach((candidate) => {
-                const candidateKey = String(candidate.key);
-                legendState[candidateKey] = onlyThisVisible ? true : candidateKey === itemKey;
-              });
-              renderLegend();
-              renderFrame(currentFrameIndex);
-            });
-          }
-          entry.appendChild(toggleButton);
-
-          const editButton = document.createElement("button");
-          editButton.type = "button";
-          editButton.className = "oviz-three-legend-edit";
-          editButton.textContent = activeLegendEditorKey === itemKey ? "×" : "›";
-          editButton.title = activeLegendEditorKey === itemKey
-            ? "Close legend editor"
-            : `Edit ${String(item.name || "item")}`;
-          editButton.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (activeLegendEditorKey === itemKey) {
-              closeLegendPopover();
-              renderLegend();
-              return;
-            }
-            activeLegendEditorKey = itemKey;
-            renderLegend();
-          });
-          entry.appendChild(editButton);
-
-          legendEditButtonByKey.set(itemKey, editButton);
-            targetEl.appendChild(entry);
-          });
-        }
-
-        appendLegendEntries(legendTraceListEl, traceItems);
-        appendLegendEntries(legendVolumeListEl, volumeItems);
-
-        if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
-          const activeItem = items.find((item) => String(item.key) === activeLegendEditorKey);
-          renderLegendPopover(activeItem, legendEditButtonByKey.get(activeLegendEditorKey));
-        } else {
-          closeLegendPopover();
-        }
-        window.requestAnimationFrame(positionInspectorDock);
-      }
-
-      function setToolsDrawerOpen(isOpen) {
-        const nextOpen = Boolean(isOpen);
-        toolsShellEl.dataset.open = nextOpen ? "true" : "false";
-        toolsToggleEl.textContent = nextOpen ? "Selection ▾" : "Selection ▸";
-        if (nextOpen && controlsShellEl.dataset.open === "true") {
-          controlsShellEl.dataset.open = "false";
-          controlsToggleEl.textContent = "Controls ▸";
-        }
-      }
-
-      function setControlsDrawerOpen(isOpen) {
-        const nextOpen = Boolean(isOpen);
-        controlsShellEl.dataset.open = nextOpen ? "true" : "false";
-        controlsToggleEl.textContent = nextOpen ? "Controls ▾" : "Controls ▸";
-        if (nextOpen && toolsShellEl.dataset.open === "true") {
-          toolsShellEl.dataset.open = "false";
-          toolsToggleEl.textContent = "Selection ▸";
-        }
-      }
-
-      function renderFrame(index) {
-        currentFrameIndex = Math.max(0, Math.min(index, frameSpecs.length - 1));
-        sliderEl.value = String(currentFrameIndex);
-        const frame = frameSpecs[currentFrameIndex];
-        timeLabelEl.textContent = `Time (Myr): ${frame.name}`;
-        updateTimeSliderTickState();
-        tooltipEl.style.display = "none";
-        hoverTargets.length = 0;
-        selectionSpriteEntriesByKey.clear();
-        screenStableTextSprites.length = 0;
-        clearGroup(plotGroup);
-        plotGroup.position.set(0.0, 0.0, 0.0);
-        frameLineMaterials.length = 0;
-        volumeRuntimeByKey.clear();
-
-        frame.traces.forEach((trace) => {
-          if (!traceVisible(trace)) {
-            return;
-          }
-
-          if (trace.segments && trace.segments.length) {
-            const line = makeLineObject(trace, frameLineMaterials);
-            if (line) {
-              plotGroup.add(line);
-            }
-          }
-          if (trace.points && trace.points.length) {
-            addMarkerTrace(plotGroup, trace);
-          }
-          if (trace.labels && trace.labels.length) {
-            addTextTrace(plotGroup, trace);
-          }
-        });
-
-        if (currentSelectionMode === "click" && currentSelection && approximatelyZero(Number(frame.time))) {
-          const footprint = buildSelectionFootprint(currentSelection, frameLineMaterials);
-          if (footprint) {
-            plotGroup.add(footprint);
-          }
-        }
-
-        (frame.decorations || []).forEach((decoration) => {
-          addDecoration(plotGroup, decoration);
-        });
-
-        const selectionBoxGroup = buildSelectionBoxGroupForFrame(frame ? frame.time : 0.0);
-        if (selectionBoxGroup) {
-          plotGroup.add(selectionBoxGroup);
-        }
-
-        addManualLabels(plotGroup);
-
-        const focusOffset = focusTrackingOffsetForFrame(frame);
-        if (focusOffset) {
-          plotGroup.position.copy(focusOffset.multiplyScalar(-1.0));
-        }
-
-        applySceneHoverState();
-        resize();
-        renderVolumeControls();
-        renderBoxMetricsWidget();
-        renderAgeKdeWidget();
-        renderClusterFilterWidget();
-        renderDendrogramWidget();
-      }
-
-      function resize() {
-        const width = root.clientWidth;
-        const height = root.clientHeight;
-        renderer.setSize(width, height, false);
-        camera.aspect = width / Math.max(height, 1);
-        camera.updateProjectionMatrix();
-        [...axisLineMaterials, ...frameLineMaterials].forEach((material) => {
-          material.resolution.set(width, height);
-        });
-        if (legendPanelEl) {
-          applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
-        }
-        if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
-          positionLegendPopover(legendEditButtonByKey.get(activeLegendEditorKey));
-        }
-        positionInspectorDock();
-        renderTimeSliderTicks();
-        updateScaleBar();
-        applyScaleBarPosition();
-        renderBoxMetricsWidget();
-        renderAgeKdeWidget();
-        renderClusterFilterWidget();
-        renderDendrogramWidget();
-      }
-
-      function play() {
-        if (playbackTimer || frameSpecs.length <= 1) {
-          return;
-        }
-        playbackTimer = window.setInterval(() => {
-          const nextIndex = (currentFrameIndex + 1) % frameSpecs.length;
-          renderFrame(nextIndex);
-        }, sceneSpec.playback_interval_ms || 500);
-        updatePlaybackToggleButton();
-      }
-
-      function pause() {
-        if (playbackTimer) {
-          window.clearInterval(playbackTimer);
-          playbackTimer = null;
-        }
-        updatePlaybackToggleButton();
-      }
-
-      function applyWidgetMode(widgetKey) {
-        const panelEl = widgetPanelForKey(widgetKey);
-        if (!panelEl) {
-          return;
-        }
-        const mode = widgetEnabled(widgetKey) ? widgetModeForKey(widgetKey) : "hidden";
-        panelEl.dataset.mode = mode;
-      }
-
-      function setWidgetMode(widgetKey, mode) {
-        if (!widgetEnabled(widgetKey)) {
-          return;
-        }
-        const panelEl = widgetPanelForKey(widgetKey);
-        if (!panelEl) {
-          return;
-        }
-        const currentMode = widgetModeForKey(widgetKey);
-        const nextMode = ["normal", "fullscreen", "hidden"].includes(mode) ? mode : "normal";
-        if (nextMode === "fullscreen" && currentMode === "normal") {
-          storeWidgetRect(widgetKey);
-        }
-        setWidgetModeValue(widgetKey, nextMode);
-        if (widgetKey === "sky") {
-          applySkyPanelMode();
-        } else if (widgetKey === "box_metrics") {
-          applyBoxMetricsPanelMode();
-        } else if (widgetKey === "age_kde") {
-          applyAgeKdePanelMode();
-        } else if (widgetKey === "cluster_filter") {
-          applyClusterFilterPanelMode();
-        } else if (widgetKey === "dendrogram") {
-          applyDendrogramPanelMode();
-        } else {
-          applyWidgetMode(widgetKey);
-        }
-        if (nextMode === "normal") {
-          restoreWidgetRect(widgetKey);
-          raiseWidget(widgetKey);
-        } else if (nextMode === "fullscreen") {
-          raiseWidget(widgetKey);
-          panelEl.style.left = "0px";
-          panelEl.style.top = "0px";
-          panelEl.style.right = "0px";
-          panelEl.style.bottom = "0px";
-          panelEl.style.width = "auto";
-          panelEl.style.height = "auto";
-        }
-        resize();
-        renderBoxMetricsWidget();
-        if (widgetKey === "sky" && nextMode !== "hidden") {
-          updateSkyPanel();
-        }
-        renderBoxMetricsWidget();
-        renderAgeKdeWidget();
-        renderClusterFilterWidget();
-        renderDendrogramWidget();
-        if (widgetKey === "box_metrics" || widgetKey === "dendrogram") {
-          renderFrame(currentFrameIndex);
-        }
-      }
-
-      function renderWidgetMenu() {
-        widgetSelectEl.innerHTML = "";
-        const placeholder = document.createElement("option");
-        placeholder.value = "";
-        placeholder.textContent = "Widgets";
-        placeholder.selected = true;
-        widgetSelectEl.appendChild(placeholder);
-
-        const items = [];
-        if (skySpec.enabled) {
-          items.push({ key: "sky", label: "Sky View" });
-        }
-        if (selectionBoxSpec.enabled) {
-          items.push({ key: "box_metrics", label: "Box Metrics" });
-        }
-        if (ageKdeSpec.enabled) {
-          items.push({ key: "age_kde", label: "Age KDE" });
-        }
-        if (clusterFilterSpec.enabled) {
-          items.push({ key: "cluster_filter", label: "Cluster Filter" });
-        }
-        if (dendrogramSpec.enabled) {
-          items.push({ key: "dendrogram", label: "Dendrogram" });
-        }
-
-        items.forEach((item) => {
-          const option = document.createElement("option");
-          option.value = item.key;
-          option.textContent = item.label;
-          widgetSelectEl.appendChild(option);
-        });
-        widgetSelectEl.style.display = items.length ? "block" : "none";
-        widgetSelectEl.value = "";
-      }
-
-      function currentFrameAllowsSelection() {
-        const frame = currentFrame();
-        return Boolean(frame);
-      }
-
-      function canvasPointFromEvent(event) {
-        const rect = canvas.getBoundingClientRect();
-        return {
-          x: event.clientX - rect.left,
-          y: event.clientY - rect.top,
-        };
-      }
-
-      function updateLassoOverlay() {
-        if (!lassoState || !Array.isArray(lassoState.points) || !lassoState.points.length) {
-          lassoOverlayEl.dataset.active = "false";
-          lassoPolylineEl.setAttribute("points", "");
-          return;
-        }
-        const points = lassoState.points.slice();
-        if (points.length > 2) {
-          points.push(points[0]);
-        }
-        lassoOverlayEl.dataset.active = "true";
-        lassoPolylineEl.setAttribute("points", points.map((point) => `${point.x},${point.y}`).join(" "));
-      }
-
-      function pointInPolygon(point, polygon) {
-        let inside = false;
-        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-          const xi = polygon[i].x;
-          const yi = polygon[i].y;
-          const xj = polygon[j].x;
-          const yj = polygon[j].y;
-          const denom = yj - yi;
-          if (Math.abs(denom) < 1e-9) {
-            continue;
-          }
-          const intersect = ((yi > point.y) !== (yj > point.y))
-            && (point.x < ((xj - xi) * (point.y - yi)) / denom + xi);
-          if (intersect) {
-            inside = !inside;
-          }
-        }
-        return inside;
-      }
-
-      function spriteScreenPoint(sprite) {
-        const projected = new THREE.Vector3();
-        sprite.getWorldPosition(projected);
-        projected.project(camera);
-        if (
-          !Number.isFinite(projected.x)
-          || !Number.isFinite(projected.y)
-          || !Number.isFinite(projected.z)
-          || projected.z < -1.0
-          || projected.z > 1.0
-        ) {
-          return null;
-        }
-        return {
-          x: (projected.x * 0.5 + 0.5) * canvas.clientWidth,
-          y: (-projected.y * 0.5 + 0.5) * canvas.clientHeight,
-        };
-      }
-
-      function startLassoSelection(event) {
-        if (!currentFrameAllowsSelection() || widgetPointerState || event.button !== 0) {
-          return false;
-        }
-        if (!(event.shiftKey || lassoArmed)) {
-          return false;
-        }
-        lassoState = {
-          pointerId: event.pointerId,
-          points: [canvasPointFromEvent(event)],
-          moved: false,
-        };
-        setLocalHoveredClusterKey("");
-        controls.enabled = false;
-        document.body.style.userSelect = "none";
-        if (typeof canvas.setPointerCapture === "function" && event.pointerId !== undefined) {
-          try {
-            canvas.setPointerCapture(event.pointerId);
-          } catch (_err) {
-          }
-        }
-        updateLassoOverlay();
-        tooltipEl.style.display = "none";
-        event.preventDefault();
-        return true;
-      }
-
-      function onLassoPointerMove(event) {
-        if (!lassoState) {
-          return;
-        }
-        const point = canvasPointFromEvent(event);
-        const lastPoint = lassoState.points[lassoState.points.length - 1];
-        const dx = point.x - lastPoint.x;
-        const dy = point.y - lastPoint.y;
-        if ((dx * dx + dy * dy) < 4.0) {
-          return;
-        }
-        lassoState.points.push(point);
-        lassoState.moved = true;
-        updateLassoOverlay();
-        tooltipEl.style.display = "none";
-        event.preventDefault();
-      }
-
-      function finishLassoSelection(event) {
-        if (!lassoState) {
-          return;
-        }
-        if (typeof canvas.releasePointerCapture === "function" && lassoState.pointerId !== undefined) {
-          try {
-            canvas.releasePointerCapture(lassoState.pointerId);
-          } catch (_err) {
-          }
-        }
-        controls.enabled = true;
-        document.body.style.userSelect = "";
-        const polygon = Array.isArray(lassoState.points) ? lassoState.points.slice() : [];
-        const shouldSuppressClick = Boolean(lassoState.moved || lassoArmed);
-        lassoState = null;
-        updateLassoOverlay();
-        if (shouldSuppressClick) {
-          suppressNextCanvasClick = true;
-        }
-        if (polygon.length < 3) {
-          return;
-        }
-        disposeLassoSelectionMask(currentLassoSelectionMask);
-        currentLassoSelectionMask = captureLassoSelectionMask(polygon);
-        const selected = [];
-        hoverTargets.forEach((sprite) => {
-          const selection = sprite && sprite.userData ? sprite.userData.selection : null;
-          if (!selection) {
-            return;
-          }
-          const screenPoint = spriteScreenPoint(sprite);
-          if (screenPoint && pointInPolygon(screenPoint, polygon)) {
-            selected.push(selection);
-          }
-        });
-        setClusterSelections(selected, "lasso");
-        if (event) {
-          event.preventDefault();
-        }
-      }
-
-      function pickSprite(event) {
-        const rect = canvas.getBoundingClientRect();
-        pointer.x = ((event.clientX - rect.left) / rect.width) * 2.0 - 1.0;
-        pointer.y = -((event.clientY - rect.top) / rect.height) * 2.0 + 1.0;
-        raycaster.setFromCamera(pointer, camera);
-        const hits = raycaster.intersectObjects(hoverTargets, false);
-        return hits.length ? hits[0].object : null;
-      }
-
-      function pointerRayFromEvent(event) {
-        const rect = canvas.getBoundingClientRect();
-        pointer.x = ((event.clientX - rect.left) / rect.width) * 2.0 - 1.0;
-        pointer.y = -((event.clientY - rect.top) / rect.height) * 2.0 + 1.0;
-        raycaster.setFromCamera(pointer, camera);
-        return raycaster.ray;
-      }
-
-      function doubleClickTargetFromEvent(event) {
-        pointerRayFromEvent(event);
-        const spriteHits = raycaster.intersectObjects(hoverTargets, false);
-        if (spriteHits.length && spriteHits[0].object) {
-          const worldPoint = new THREE.Vector3();
-          const hitObject = spriteHits[0].object;
-          hitObject.getWorldPosition(worldPoint);
-          return {
-            worldPoint,
-            selection: hitObject.userData ? (hitObject.userData.selection || null) : null,
-            selectionKey: hitObject.userData ? normalizeMemberKey(hitObject.userData.selectionKey || "") : "",
-            manualLabelId: hitObject.userData ? String(hitObject.userData.manualLabelId || "") : "",
-          };
-        }
-
-        const plotHits = raycaster.intersectObjects(plotGroup.children, true);
-        for (const hit of plotHits) {
-          if (!hit || !hit.object) {
-            continue;
-          }
-          if (hoverTargets.includes(hit.object)) {
-            continue;
-          }
-          if (hit.point && Number.isFinite(hit.point.x) && Number.isFinite(hit.point.y) && Number.isFinite(hit.point.z)) {
-            return {
-              worldPoint: hit.point.clone(),
-              selection: null,
-              selectionKey: "",
-              manualLabelId: "",
-            };
-          }
-        }
-
-        const cameraDirection = new THREE.Vector3();
-        camera.getWorldDirection(cameraDirection);
-        if (cameraDirection.lengthSq() > 1e-12) {
-          const focusPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(
-            cameraDirection.normalize(),
-            controls.target.clone()
-          );
-          const planePoint = new THREE.Vector3();
-          if (raycaster.ray.intersectPlane(focusPlane, planePoint)) {
-            return {
-              worldPoint: planePoint,
-              selection: null,
-              selectionKey: "",
-              manualLabelId: "",
-            };
-          }
-        }
-        return null;
-      }
-
-      function recenterCameraTarget(worldPoint) {
-        if (!worldPoint || !Number.isFinite(worldPoint.x) || !Number.isFinite(worldPoint.y) || !Number.isFinite(worldPoint.z)) {
-          return;
-        }
-        cameraViewMode = "free";
-        earthViewFocusDistance = null;
-        const delta = new THREE.Vector3().subVectors(worldPoint, controls.target);
-        if (delta.lengthSq() <= 1e-18) {
-          return;
-        }
-        controls.target.add(delta);
-        camera.position.add(delta);
-        applyCameraViewMode();
-        controls.update();
-        updateScaleBar();
-      }
-
-      function onCanvasClick(event) {
-        if (suppressNextCanvasClick) {
-          suppressNextCanvasClick = false;
-          return;
-        }
-        if (widgetPointerState || !clickSelectionEnabled) {
-          return;
-        }
-        if (selectionBoxRayHitFromEvent(event)) {
-          return;
-        }
-        const hit = pickSprite(event);
-        const selection = hit && hit.userData ? hit.userData.selection : null;
-        if (!selection) {
-            return;
-        }
-        const frame = currentFrame();
-        if (!frame || !approximatelyZero(Number(selection.click_time_myr)) || !approximatelyZero(Number(frame.time))) {
-          return;
-        }
-        setClusterSelections([selection], "click");
-      }
-
-      function onCanvasDoubleClick(event) {
-        if (widgetPointerState || lassoState || event.button !== 0) {
-          return;
-        }
-        if (selectionBoxRayHitFromEvent(event)) {
-          return;
-        }
-        const target = doubleClickTargetFromEvent(event);
-        if (!target || !target.worldPoint) {
-          return;
-        }
-        if (target.manualLabelId) {
-          return;
-        }
-        if (target.selectionKey) {
-          focusSelectionKey = target.selectionKey;
-          renderFrame(currentFrameIndex);
-          recenterCameraTarget(new THREE.Vector3(0.0, 0.0, 0.0));
-        } else {
-          focusSelectionKey = "";
-          recenterCameraTarget(target.worldPoint);
-        }
-        event.preventDefault();
-      }
-
-      function onWidgetPointerStart(event) {
-        const panelEl = event.target.closest(".oviz-three-widget-panel");
-        if (!panelEl) {
-          return;
-        }
-        const widgetKey = String(panelEl.dataset.widgetKey || "");
-        if (widgetModeForKey(widgetKey) !== "normal") {
-          return;
-        }
-        const resizeHandle = event.target.closest(".oviz-three-widget-resize");
-        const dragHandle = event.target.closest(".oviz-three-widget-drag");
-        if (!resizeHandle && !dragHandle) {
-          return;
-        }
-        if (event.target.closest(".oviz-three-widget-window-controls")) {
-          return;
-        }
-        const rect = panelEl.getBoundingClientRect();
-        widgetPointerState = {
-          widgetKey,
-          panelEl,
-          mode: resizeHandle ? "resize" : "drag",
-          dir: resizeHandle ? (resizeHandle.dataset.dir || "se").toLowerCase() : null,
-          startX: event.clientX,
-          startY: event.clientY,
-          startLeft: rect.left,
-          startTop: rect.top,
-          startWidth: rect.width,
-          startHeight: rect.height,
-          startRight: rect.right,
-          startBottom: rect.bottom,
-          handle: resizeHandle || dragHandle,
-        };
-        panelEl.style.left = `${rect.left}px`;
-        panelEl.style.top = `${rect.top}px`;
-        panelEl.style.right = "auto";
-        panelEl.style.bottom = "auto";
-        panelEl.style.width = `${rect.width}px`;
-        panelEl.style.height = `${rect.height}px`;
-        raiseWidget(widgetKey);
-        controls.enabled = false;
-        if (widgetPointerState.handle && typeof widgetPointerState.handle.setPointerCapture === "function" && event.pointerId !== undefined) {
-          try {
-            widgetPointerState.handle.setPointerCapture(event.pointerId);
-          } catch (_err) {
-          }
-        }
-        document.body.style.userSelect = "none";
-        event.preventDefault();
-        event.stopPropagation();
-      }
-
-      function onScaleBarPointerStart(event) {
-        if (!scaleBarEl || event.button !== 0) {
-          return;
-        }
-        const rect = scaleBarEl.getBoundingClientRect();
-        const rootRect = root.getBoundingClientRect();
-        scaleBarPointerState = {
-          startX: event.clientX,
-          startY: event.clientY,
-          startLeft: rect.left - rootRect.left,
-          startTop: rect.top - rootRect.top,
-          width: rect.width,
-          height: rect.height,
-        };
-        scaleBarEl.dataset.dragging = "true";
-        controls.enabled = false;
-        if (typeof scaleBarEl.setPointerCapture === "function" && event.pointerId !== undefined) {
-          try {
-            scaleBarEl.setPointerCapture(event.pointerId);
-          } catch (_err) {
-          }
-        }
-        document.body.style.userSelect = "none";
-        focusViewer();
-        event.preventDefault();
-        event.stopPropagation();
-      }
-
-      function updateScaleBarInteraction(event) {
-        if (!scaleBarPointerState || !scaleBarEl) {
-          return false;
-        }
-        const left = scaleBarPointerState.startLeft + (event.clientX - scaleBarPointerState.startX);
-        const top = scaleBarPointerState.startTop + (event.clientY - scaleBarPointerState.startY);
-        const next = clampScaleBarPosition(left, top, scaleBarPointerState.width, scaleBarPointerState.height);
-        scaleBarPosition = { left: next.left, top: next.top };
-        scaleBarEl.style.left = `${next.left}px`;
-        scaleBarEl.style.top = `${next.top}px`;
-        scaleBarEl.style.right = "auto";
-        scaleBarEl.style.bottom = "auto";
-        event.preventDefault();
-        event.stopPropagation();
-        return true;
-      }
-
-      function finishScaleBarInteraction(event) {
-        if (!scaleBarPointerState || !scaleBarEl) {
-          return false;
-        }
-        if (typeof scaleBarEl.releasePointerCapture === "function" && event.pointerId !== undefined) {
-          try {
-            scaleBarEl.releasePointerCapture(event.pointerId);
-          } catch (_err) {
-          }
-        }
-        scaleBarEl.dataset.dragging = "false";
-        controls.enabled = true;
-        document.body.style.userSelect = "";
-        scaleBarPointerState = null;
-        return true;
-      }
-
-      function onWidgetPointerMove(event) {
-        if (!widgetPointerState) {
-          return;
-        }
-        if (widgetPointerState.mode === "drag") {
-          const left = widgetPointerState.startLeft + (event.clientX - widgetPointerState.startX);
-          const top = widgetPointerState.startTop + (event.clientY - widgetPointerState.startY);
-          const next = clampWidgetPosition(left, top, widgetPointerState.startWidth, widgetPointerState.startHeight);
-          widgetPointerState.panelEl.style.left = `${next.left}px`;
-          widgetPointerState.panelEl.style.top = `${next.top}px`;
-        } else {
-          const next = resizeWidgetRect(widgetPointerState, event.clientX, event.clientY);
-          widgetPointerState.panelEl.style.left = `${next.left}px`;
-          widgetPointerState.panelEl.style.top = `${next.top}px`;
-          widgetPointerState.panelEl.style.width = `${next.width}px`;
-          widgetPointerState.panelEl.style.height = `${next.height}px`;
-        }
-        resize();
-        renderBoxMetricsWidget();
-        renderAgeKdeWidget();
-        event.preventDefault();
-        event.stopPropagation();
-      }
-
-      function onWidgetPointerEnd(event) {
-        if (!widgetPointerState) {
-          return;
-        }
-        if (widgetPointerState.handle && typeof widgetPointerState.handle.releasePointerCapture === "function" && event.pointerId !== undefined) {
-          try {
-            widgetPointerState.handle.releasePointerCapture(event.pointerId);
-          } catch (_err) {
-          }
-        }
-        controls.enabled = true;
-        document.body.style.userSelect = "";
-        storeWidgetRect(widgetPointerState.widgetKey);
-        widgetPointerState = null;
-      }
-
-      function initSkyPanel() {
-        if (!skySpec.enabled) {
-          applySkyPanelMode();
-          return;
-        }
-        skyFrameEl.addEventListener("load", () => {
-          lastSentSkyHoverClusterKey = null;
-          postParentHoverToSkyFrame();
-        });
-        skyFrameEl.srcdoc = buildEmptySkySrcdoc();
-        skyHideButtonEl.addEventListener("click", () => setWidgetMode("sky", "hidden"));
-        skyFullButtonEl.addEventListener("click", () => {
-          setWidgetMode("sky", skyPanelMode === "fullscreen" ? "normal" : "fullscreen");
-        });
-        applySkyPanelMode();
-      }
-
-      function initBoxMetricsPanel() {
-        if (!selectionBoxSpec.enabled) {
-          applyBoxMetricsPanelMode();
-          return;
-        }
-        boxMetricsHideButtonEl.addEventListener("click", () => setWidgetMode("box_metrics", "hidden"));
-        boxMetricsFullButtonEl.addEventListener("click", () => {
-          setWidgetMode("box_metrics", boxMetricsPanelMode === "fullscreen" ? "normal" : "fullscreen");
-        });
-        boxMetricsResetButtonEl.addEventListener("click", () => {
-          selectionBoxState = buildDefaultSelectionBoxState();
-          syncSelectionBoxVisibilityInput(true);
-          renderFrame(currentFrameIndex);
-          scheduleSelectionBoxMetricsRecompute(true);
-        });
-        if (boxMetricsVisibleEl) {
-          boxMetricsVisibleEl.addEventListener("change", () => {
-            selectionBoxState.visible = Boolean(boxMetricsVisibleEl.checked);
-            renderFrame(currentFrameIndex);
-            renderBoxMetricsWidget();
-          });
-        }
-        syncSelectionBoxVisibilityInput(true);
-        applyBoxMetricsPanelMode();
-        scheduleSelectionBoxMetricsRecompute(true);
-      }
-
-      function initAgeKdePanel() {
-        if (!ageKdeSpec.enabled) {
-          applyAgeKdePanelMode();
-          return;
-        }
-        ageKdeHideButtonEl.addEventListener("click", () => setWidgetMode("age_kde", "hidden"));
-        ageKdeFullButtonEl.addEventListener("click", () => {
-          setWidgetMode("age_kde", ageKdePanelMode === "fullscreen" ? "normal" : "fullscreen");
-        });
-        if (ageKdeFilterRangeMinEl && ageKdeFilterRangeMaxEl) {
-          ageKdeFilterRangeMinEl.addEventListener("input", () => {
-            const parameter = ageKdeFilterParameterSpec();
-            if (!parameter) {
-              return;
-            }
-            const currentAxisRange = ageKdeAxisFilterRange();
-            const minAxisValue = ageKdeSliderValueToAxisValue(ageKdeFilterRangeMinEl.value);
-            const maxAxisValue = currentAxisRange ? Number(currentAxisRange.max) : ageKdeSliderValueToAxisValue(ageKdeFilterRangeMaxEl.value);
-            setClusterAgeFilterFromKdeAxisRange(Math.min(minAxisValue, maxAxisValue), maxAxisValue);
-          });
-          ageKdeFilterRangeMaxEl.addEventListener("input", () => {
-            const parameter = ageKdeFilterParameterSpec();
-            if (!parameter) {
-              return;
-            }
-            const currentAxisRange = ageKdeAxisFilterRange();
-            const minAxisValue = currentAxisRange ? Number(currentAxisRange.min) : ageKdeSliderValueToAxisValue(ageKdeFilterRangeMinEl.value);
-            const maxAxisValue = ageKdeSliderValueToAxisValue(ageKdeFilterRangeMaxEl.value);
-            setClusterAgeFilterFromKdeAxisRange(minAxisValue, Math.max(minAxisValue, maxAxisValue));
-          });
-        }
-        renderAgeKdeWidget();
-        applyAgeKdePanelMode();
-      }
-
-      function initClusterFilterPanel() {
-        if (!clusterFilterSpec.enabled) {
-          applyClusterFilterPanelMode();
-          return;
-        }
-        clusterFilterParameterEl.innerHTML = "";
-        clusterFilterParameters.forEach((parameter) => {
-          const option = document.createElement("option");
-          option.value = String(parameter.key || "");
-          option.textContent = String(parameter.label || parameter.key || "");
-          clusterFilterParameterEl.appendChild(option);
-        });
-        if (!clusterFilterParameterKey && clusterFilterParameters.length) {
-          clusterFilterParameterKey = String(clusterFilterParameters[0].key || "");
-        }
-        clusterFilterHideButtonEl.addEventListener("click", () => setWidgetMode("cluster_filter", "hidden"));
-        clusterFilterFullButtonEl.addEventListener("click", () => {
-          setWidgetMode("cluster_filter", clusterFilterPanelMode === "fullscreen" ? "normal" : "fullscreen");
-        });
-        clusterFilterParameterEl.addEventListener("change", () => {
-          clusterFilterParameterKey = String(clusterFilterParameterEl.value || "");
-          clampClusterFilterRangeForParameter(activeClusterFilterParameterSpec());
-          applyClusterFilterState();
-        });
-        clusterFilterRangeMinEl.addEventListener("input", () => {
-          const parameter = activeClusterFilterParameterSpec();
-          if (!parameter) {
-            return;
-          }
-          const rangeState = clampClusterFilterRangeForParameter(parameter);
-          rangeState.min = Math.min(clusterFilterSliderValueToActual(clusterFilterRangeMinEl.value, parameter), Number(rangeState.max));
-          clusterFilterRangeStateByKey[String(parameter.key)] = rangeState;
-          applyClusterFilterState();
-        });
-        clusterFilterRangeMaxEl.addEventListener("input", () => {
-          const parameter = activeClusterFilterParameterSpec();
-          if (!parameter) {
-            return;
-          }
-          const rangeState = clampClusterFilterRangeForParameter(parameter);
-          rangeState.max = Math.max(clusterFilterSliderValueToActual(clusterFilterRangeMaxEl.value, parameter), Number(rangeState.min));
-          clusterFilterRangeStateByKey[String(parameter.key)] = rangeState;
-          applyClusterFilterState();
-        });
-        renderClusterFilterWidget();
-        applyClusterFilterPanelMode();
-      }
-
-      function dendrogramHitRegionAtCanvasPoint(x, y) {
-        let bestNode = null;
-        let bestNodeDistanceSq = Infinity;
-        let bestBranch = null;
-        let bestBranchDistanceSq = Infinity;
-        for (let index = dendrogramHitRegions.length - 1; index >= 0; index -= 1) {
-          const region = dendrogramHitRegions[index];
-          if (!region) {
-            continue;
-          }
-          if (region.type === "node") {
-            const dx = x - Number(region.centerX);
-            const dy = y - Number(region.centerY);
-            const distanceSq = dx * dx + dy * dy;
-            if (distanceSq <= Math.pow(Number(region.radius) || 0.0, 2.0) && distanceSq < bestNodeDistanceSq) {
-              bestNode = region;
-              bestNodeDistanceSq = distanceSq;
-            }
-            continue;
-          }
-          if (!Array.isArray(region.segments)) {
-            continue;
-          }
-          let minDistanceSq = Infinity;
-          region.segments.forEach((segment) => {
-            if (!Array.isArray(segment) || segment.length < 4) {
-              return;
-            }
-            minDistanceSq = Math.min(minDistanceSq, pointSegmentDistanceSq(x, y, segment[0], segment[1], segment[2], segment[3]));
-          });
-          const hitRadius = Math.max(Number(region.hitRadius) || 0.0, 0.0);
-          if (minDistanceSq <= hitRadius * hitRadius && minDistanceSq < bestBranchDistanceSq) {
-            bestBranch = region;
-            bestBranchDistanceSq = minDistanceSq;
-          }
-        }
-        if (bestNode && bestNodeDistanceSq <= 18.0) {
-          return bestNode;
-        }
-        return bestBranch || bestNode || null;
-      }
-
-      function onDendrogramPointerMove(event) {
-        if (!dendrogramSpec.enabled || widgetModeForKey("dendrogram") === "hidden" || !dendrogramCanvasEl) {
-          return;
-        }
-        const rect = dendrogramCanvasEl.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        const hitRegion = dendrogramHitRegionAtCanvasPoint(x, y);
-        if (hitRegion) {
-          setDendrogramHoveredSelectionKeys(hitRegion.selectionKeys, hitRegion.label, hitRegion.count, hitRegion.key);
-        } else {
-          clearDendrogramHoverState();
-        }
-      }
-
-      function onDendrogramClick(event) {
-        if (!dendrogramSpec.enabled || widgetModeForKey("dendrogram") === "hidden" || !dendrogramCanvasEl) {
-          return;
-        }
-        const rect = dendrogramCanvasEl.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        const hitRegion = dendrogramHitRegionAtCanvasPoint(x, y);
-        if (!hitRegion) {
-          clearDendrogramPinnedState();
-          return;
-        }
-        if (String(dendrogramPinnedRegionKey || "") === String(hitRegion.key || "")) {
-          clearDendrogramPinnedState();
-          return;
-        }
-        setDendrogramPinnedSelectionKeys(hitRegion.selectionKeys, hitRegion.label, hitRegion.count, hitRegion.key);
-      }
-
-      function initDendrogramPanel() {
-        if (!dendrogramSpec.enabled) {
-          applyDendrogramPanelMode();
-          return;
-        }
-        dendrogramHideButtonEl.addEventListener("click", () => setWidgetMode("dendrogram", "hidden"));
-        dendrogramFullButtonEl.addEventListener("click", () => {
-          setWidgetMode("dendrogram", dendrogramPanelMode === "fullscreen" ? "normal" : "fullscreen");
-        });
-        dendrogramTraceEl.addEventListener("change", () => {
-          dendrogramTraceKey = String(dendrogramTraceEl.value || "");
-          clearDendrogramSelectionState();
-          renderFrame(currentFrameIndex);
-        });
-        dendrogramConnectionEl.addEventListener("change", () => {
-          dendrogramConnectionMode = String(dendrogramConnectionEl.value || "birth_to_older_track");
-          clearDendrogramSelectionState();
-          renderDendrogramWidget();
-        });
-        dendrogramModeEl.addEventListener("change", () => {
-          dendrogramThresholdMode = String(dendrogramModeEl.value || "distance_pc");
-          clearDendrogramSelectionState();
-          renderDendrogramWidget();
-        });
-        dendrogramThresholdEl.addEventListener("change", () => {
-          if (currentDendrogramThresholdMode() === "birth_age_myr") {
-            dendrogramThresholdAgeMyr = Math.max(Number(dendrogramThresholdEl.value) || 0.0, 0.0);
-          } else {
-            dendrogramThresholdPc = Math.max(Number(dendrogramThresholdEl.value) || 0.0, 0.0);
-          }
-          clearDendrogramSelectionState();
-          renderDendrogramWidget();
-        });
-        dendrogramCanvasEl.addEventListener("pointermove", onDendrogramPointerMove);
-        dendrogramCanvasEl.addEventListener("pointerleave", clearDendrogramHoverState);
-        dendrogramCanvasEl.addEventListener("click", onDendrogramClick);
-        renderDendrogramWidget();
-        applyDendrogramPanelMode();
-      }
-
-      function updateActiveVolumeRuntime() {
-        const layer = selectedVolumeLayer();
-        const state = selectedVolumeState();
-        if (!state) {
-          renderVolumeControls();
-          return;
-        }
-        if (layer) {
-          clampVolumeStateForLayer(layer, state);
-        }
-        renderVolumeControls();
-        if (!layer) {
-          return;
-        }
-        const runtime = volumeRuntimeByKey.get(String(layer.key));
-        if (runtime) {
-          applyVolumeStateToRuntime(layer, runtime);
-          if (skySpec.enabled && !currentSelection) {
-            updateSkyPanel();
-          }
-          return;
-        }
-        const frame = currentFrame();
-        if (frame && frameVolumeLayerForStateKey(activeVolumeKey, frame)) {
-          renderFrame(currentFrameIndex);
-          if (skySpec.enabled && !currentSelection) {
-            updateSkyPanel();
-          }
-        }
-      }
-
-      function initVolumeControls() {
-        renderVolumeControls();
-        if (!volumeStateKeys.length) {
-          return;
-        }
-
-        volumeSelectEl.addEventListener("change", () => {
-          const selectedControlKey = String(volumeSelectEl.value || "");
-          if (selectedControlKey.startsWith("variant:")) {
-            const variantGroup = selectedControlKey.slice("variant:".length);
-            const activeLayer = volumeLayerForKey(activeVolumeKey);
-            if (volumeVariantGroupForLayer(activeLayer) !== variantGroup) {
-              const nextStateKey = firstVolumeVariantStateKey(variantGroup);
-              if (nextStateKey) {
-                activeVolumeKey = nextStateKey;
-              }
-            }
-          } else if (selectedControlKey.startsWith("state:")) {
-            activeVolumeKey = selectedControlKey.slice("state:".length);
-          } else {
-            activeVolumeKey = selectedControlKey;
-          }
-          setExclusiveVolumeVariantSelection(activeVolumeKey);
-          updateActiveVolumeRuntime();
-        });
-        if (volumeSmoothingEl) {
-          volumeSmoothingEl.addEventListener("change", () => {
-            activeVolumeKey = String(volumeSmoothingEl.value || activeVolumeKey || "");
-            setExclusiveVolumeVariantSelection(activeVolumeKey);
-            updateActiveVolumeRuntime();
-          });
-        }
-        volumeVisibleEl.addEventListener("change", () => {
-          const state = selectedVolumeState();
-          if (!state) {
-            return;
-          }
-          state.visible = Boolean(volumeVisibleEl.checked);
-          updateActiveVolumeRuntime();
-        });
-        volumeColormapEl.addEventListener("change", () => {
-          const state = selectedVolumeState();
-          if (!state) {
-            return;
-          }
-          state.colormap = String(volumeColormapEl.value);
-          updateActiveVolumeRuntime();
-        });
-        volumeStretchEl.addEventListener("change", () => {
-          const state = selectedVolumeState();
-          if (!state) {
-            return;
-          }
-          state.stretch = normalizeVolumeStretch(volumeStretchEl.value);
-          updateActiveVolumeRuntime();
-        });
-        volumeOpacityEl.addEventListener("input", () => {
-          const state = selectedVolumeState();
-          if (!state) {
-            return;
-          }
-          state.opacity = Number(volumeOpacityEl.value);
-          updateActiveVolumeRuntime();
-        });
-        volumeAlphaEl.addEventListener("input", () => {
-          const state = selectedVolumeState();
-          if (!state) {
-            return;
-          }
-          state.alphaCoef = Number(volumeAlphaEl.value);
-          updateActiveVolumeRuntime();
-        });
-        volumeStepsEl.addEventListener("input", () => {
-          const state = selectedVolumeState();
-          if (!state) {
-            return;
-          }
-          state.steps = Number(volumeStepsEl.value);
-          updateActiveVolumeRuntime();
-        });
-        volumeVMinEl.addEventListener("change", () => {
-          const state = selectedVolumeState();
-          if (!state) {
-            return;
-          }
-          state.vmin = Number(volumeVMinEl.value);
-          updateActiveVolumeRuntime();
-        });
-        volumeVMaxEl.addEventListener("change", () => {
-          const state = selectedVolumeState();
-          if (!state) {
-            return;
-          }
-          state.vmax = Number(volumeVMaxEl.value);
-          updateActiveVolumeRuntime();
-        });
-      }
+__ACTION_RUNTIME_JS__
 
       function manualLabelHitFromEvent(event) {
         const hitObject = pickSprite(event);
@@ -14250,7 +9436,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function startManualLabelInteraction(event) {
-        if (widgetPointerState || lassoState || event.button !== 0) {
+        if (minimalModeEnabled || widgetPointerState || lassoState || event.button !== 0) {
           return false;
         }
         const hitInfo = manualLabelHitFromEvent(event);
@@ -14366,12 +9552,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function initControls() {
-        setToolsDrawerOpen(toolsShellEl.dataset.open === "true");
-        setControlsDrawerOpen(controlsShellEl.dataset.open === "true");
+        renderActionBar();
+        setToolsDrawerOpen(Boolean(toolsShellEl && toolsShellEl.dataset.open === "true"));
+        setControlsDrawerOpen(Boolean(controlsShellEl && controlsShellEl.dataset.open === "true"));
         setLegendPanelOpen(legendPanelOpen);
         applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
-        setInspectorPinned(inspectorPinned, { syncOpen: false });
-        setInspectorOpen(inspectorPinned || inspectorOpen);
         groupSelectEl.innerHTML = "";
         const groups = sceneSpec.group_order || [defaultGroup];
         groups.forEach((groupName) => {
@@ -14382,51 +9567,79 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
         groupSelectEl.value = currentGroup;
         groupSelectEl.style.display = groups.length > 1 ? "block" : "none";
-        focusGroupSelectEl.innerHTML = "";
-        const focusNoneOption = document.createElement("option");
-        focusNoneOption.value = "";
-        focusNoneOption.textContent = "None";
-        focusGroupSelectEl.appendChild(focusNoneOption);
-        (animationSpec.focus_options || []).forEach((item) => {
-          const option = document.createElement("option");
-          option.value = String(item.key || "");
-          option.textContent = String(item.name || item.key || "");
-          focusGroupSelectEl.appendChild(option);
-        });
+        if (focusGroupSelectEl) {
+          focusGroupSelectEl.innerHTML = "";
+          const focusNoneOption = document.createElement("option");
+          focusNoneOption.value = "";
+          focusNoneOption.textContent = "None";
+          focusGroupSelectEl.appendChild(focusNoneOption);
+          (animationSpec.focus_options || []).forEach((item) => {
+            const option = document.createElement("option");
+            option.value = String(item.key || "");
+            option.textContent = String(item.name || item.key || "");
+            focusGroupSelectEl.appendChild(option);
+          });
+        }
         renderWidgetMenu();
         groupSelectEl.addEventListener("change", () => {
+          if (!actionInterruptsMuted()) {
+            interruptActionRun("legend", { disableOrbit: false });
+          }
           currentGroup = groupSelectEl.value;
           resetLegendState(currentGroup);
           renderLegend();
           renderFrame(currentFrameIndex);
         });
+        if (legendPanelEl) {
+          legendPanelEl.addEventListener("pointerdown", (event) => {
+            const target = event.target;
+            if (!target || actionInterruptsMuted()) {
+              return;
+            }
+            if (
+              target.closest(".oviz-three-legend-entry")
+              || target.closest(".oviz-three-legend-section-toggle")
+              || target.closest(".oviz-three-group-select")
+            ) {
+              interruptActionRun("legend", { disableOrbit: false });
+            }
+          });
+        }
         renderSceneControls();
-        widgetSelectEl.addEventListener("change", () => {
-          const widgetKey = String(widgetSelectEl.value || "");
-          if (widgetKey) {
-            setWidgetMode(widgetKey, "normal");
-          }
-          widgetSelectEl.value = "";
-        });
-        zenModeButtonEl.addEventListener("click", () => {
-          setZenMode(!zenModeEnabled);
-          focusViewer();
-        });
-        resetViewButtonEl.addEventListener("click", () => {
-          resetCameraAndSelections();
-          focusViewer();
-        });
-        saveStateButtonEl.addEventListener("click", async () => {
-          saveStateButtonEl.disabled = true;
-          const previousText = saveStateButtonEl.textContent;
-          saveStateButtonEl.textContent = "Saving...";
-          try {
-            await saveSceneStateToHtml();
-          } finally {
-            saveStateButtonEl.disabled = false;
-            saveStateButtonEl.textContent = previousText;
-          }
-        });
+        if (widgetSelectEl) {
+          widgetSelectEl.addEventListener("change", () => {
+            const widgetKey = String(widgetSelectEl.value || "");
+            if (widgetKey) {
+              setWidgetMode(widgetKey, "normal");
+            }
+            widgetSelectEl.value = "";
+          });
+        }
+        if (zenModeButtonEl) {
+          zenModeButtonEl.addEventListener("click", () => {
+            setZenMode(!zenModeEnabled);
+            focusViewer();
+          });
+        }
+        if (resetViewButtonEl) {
+          resetViewButtonEl.addEventListener("click", () => {
+            resetCameraAndSelections();
+            focusViewer();
+          });
+        }
+        if (saveStateButtonEl) {
+          saveStateButtonEl.addEventListener("click", async () => {
+            saveStateButtonEl.disabled = true;
+            const previousText = saveStateButtonEl.textContent;
+            saveStateButtonEl.textContent = "Saving...";
+            try {
+              await saveSceneStateToHtml();
+            } finally {
+              saveStateButtonEl.disabled = false;
+              saveStateButtonEl.textContent = previousText;
+            }
+          });
+        }
 
         sliderEl.max = String(Math.max(frameSpecs.length - 1, 0));
         renderTimeSliderTicks();
@@ -14439,10 +9652,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
           focusViewer();
         };
-        legendPanelToggleEl.addEventListener("pointerdown", (event) => {
-          event.stopPropagation();
-        });
-        legendPanelToggleEl.addEventListener("click", handleLegendPanelToggle);
+        if (legendPanelToggleEl) {
+          legendPanelToggleEl.addEventListener("pointerdown", (event) => {
+            event.stopPropagation();
+          });
+          legendPanelToggleEl.addEventListener("click", handleLegendPanelToggle);
+        }
         legendPanelEl.addEventListener("click", (event) => {
           const toggleButton = event.target && event.target.closest
             ? event.target.closest(".oviz-three-legend-panel-toggle")
@@ -14452,126 +9667,143 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
           handleLegendPanelToggle(event);
         });
+        if (legendTraceSectionToggleEl) {
+          legendTraceSectionToggleEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setLegendSectionOpen("traces", !(legendSectionOpenState.traces !== false));
+            focusViewer();
+          });
+        }
+        if (legendVolumeSectionToggleEl) {
+          legendVolumeSectionToggleEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setLegendSectionOpen("volumes", !(legendSectionOpenState.volumes !== false));
+            focusViewer();
+          });
+        }
         if (legendDragHandleEl) {
           legendDragHandleEl.addEventListener("pointerdown", onLegendPointerStart);
         }
         legendResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onLegendPointerStart));
-        inspectorToggleEl.addEventListener("click", () => {
-          if (inspectorPinned) {
-            setInspectorPinned(false);
-            setInspectorOpen(false);
-          } else {
-            setInspectorPinned(true);
-            setInspectorOpen(true);
-          }
-          focusViewer();
-        });
-        inspectorToggleEl.addEventListener("pointerenter", () => {
-          if (!inspectorPinned) {
-            scheduleInspectorOpen();
-          }
-        });
-        inspectorDockEl.addEventListener("pointerenter", () => {
-          if (!inspectorPinned) {
-            clearInspectorTimers();
-          }
-        });
-        inspectorDockEl.addEventListener("pointerleave", () => {
-          scheduleInspectorClose();
-        });
-        inspectorDockEl.addEventListener("focusin", () => {
-          clearInspectorTimers();
-          setInspectorOpen(true);
-        });
-        inspectorDockEl.addEventListener("focusout", () => {
-          window.setTimeout(() => {
-            if (!inspectorDockEl.contains(document.activeElement)) {
-              scheduleInspectorClose(120);
-            }
-          }, 0);
+        sliderEl.addEventListener("pointerdown", () => {
+          handleManualCameraInteractionStart();
         });
         sliderEl.addEventListener("input", () => {
-          pause();
-          renderFrame(Number(sliderEl.value));
-        });
-        playButtonEl.addEventListener("click", () => {
-          if (playbackTimer) {
-            pause();
-          } else {
-            play();
+          handleManualCameraInteractionStart();
+          if (!actionInterruptsMuted()) {
+            interruptActionRun("time", { disableOrbit: false });
           }
+          pause({ snap: false });
+          scheduleSliderScrubRender(Number(sliderEl.value));
         });
-        if (pauseButtonEl) {
-          pauseButtonEl.addEventListener("click", pause);
+        if (playBackwardButtonEl) {
+          playBackwardButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("time", { disableOrbit: false });
+            }
+            play(-1);
+          });
         }
-        toolsToggleEl.addEventListener("click", () => {
-          setToolsDrawerOpen(toolsShellEl.dataset.open !== "true");
-        });
-        controlsToggleEl.addEventListener("click", () => {
-          setControlsDrawerOpen(controlsShellEl.dataset.open !== "true");
-        });
-        keyHelpButtonEl.addEventListener("click", () => {
-          const nextOpen = keyHelpEl.dataset.open !== "true";
-          setKeyHelpOpen(nextOpen);
-          if (!nextOpen) {
+        if (playForwardButtonEl) {
+          playForwardButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("time", { disableOrbit: false });
+            }
+            play(1);
+          });
+        }
+        if (toolsToggleEl && toolsShellEl) {
+          toolsToggleEl.addEventListener("click", () => {
+            setToolsDrawerOpen(toolsShellEl.dataset.open !== "true");
+          });
+        }
+        if (controlsToggleEl && controlsShellEl) {
+          controlsToggleEl.addEventListener("click", () => {
+            setControlsDrawerOpen(controlsShellEl.dataset.open !== "true");
+          });
+        }
+        if (keyHelpButtonEl && keyHelpEl) {
+          keyHelpButtonEl.addEventListener("click", () => {
+            const nextOpen = keyHelpEl.dataset.open !== "true";
+            setKeyHelpOpen(nextOpen);
+            if (!nextOpen) {
+              focusViewer();
+            }
+          });
+        }
+        if (keyHelpCloseEl) {
+          keyHelpCloseEl.addEventListener("click", () => {
+            setKeyHelpOpen(false);
             focusViewer();
-          }
-        });
-        keyHelpCloseEl.addEventListener("click", () => {
-          setKeyHelpOpen(false);
-          focusViewer();
-        });
-        lassoButtonEl.addEventListener("click", () => {
-          lassoArmed = !lassoArmed;
-          updateSelectionUI();
-        });
-        clearSelectionButtonEl.addEventListener("click", clearClusterSelections);
-        clickSelectToggleEl.addEventListener("change", () => {
-          clickSelectionEnabled = Boolean(clickSelectToggleEl.checked);
-          updateSelectionUI();
-        });
-        volumeLassoToggleEl.addEventListener("change", () => {
-          lassoVolumeSelectionEnabled = Boolean(volumeLassoToggleEl.checked);
-          updateSelectionUI();
-          const frame = currentFrame();
-          if (frame && frameVolumeLayers(frame).length) {
+          });
+        }
+        if (clearSelectionButtonEl) {
+          clearSelectionButtonEl.addEventListener("click", clearClusterSelections);
+        }
+        if (clickSelectToggleEl) {
+          clickSelectToggleEl.addEventListener("change", () => {
+            clickSelectionEnabled = Boolean(clickSelectToggleEl.checked);
+            updateSelectionUI();
+          });
+        }
+        if (volumeLassoToggleEl) {
+          volumeLassoToggleEl.addEventListener("change", () => {
+            lassoVolumeSelectionEnabled = Boolean(volumeLassoToggleEl.checked);
+            updateSelectionUI();
+            const frame = currentFrame();
+            if (frame && frameVolumeLayers(frame).length) {
+              renderFrame(currentFrameIndex);
+            }
+            if (skySpec.enabled && !currentSelection) {
+              updateSkyPanel();
+            }
+          });
+        }
+        if (themeSelectEl) {
+          themeSelectEl.addEventListener("change", () => {
+            applyThemePreset(themeSelectEl.value);
+          });
+        }
+        if (scrollSpeedEl) {
+          scrollSpeedEl.addEventListener("input", () => {
+            globalScrollSpeed = Number(scrollSpeedEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+          });
+        }
+        if (cameraFovEl) {
+          cameraFovEl.addEventListener("input", () => {
+            camera.fov = Number(cameraFovEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+          });
+        }
+        if (globalPointSizeEl) {
+          globalPointSizeEl.addEventListener("input", () => {
+            globalPointSizeScale = Number(globalPointSizeEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
             renderFrame(currentFrameIndex);
-          }
-          if (skySpec.enabled && !currentSelection) {
-            updateSkyPanel();
-          }
-        });
-        themeSelectEl.addEventListener("change", () => {
-          applyThemePreset(themeSelectEl.value);
-        });
-        scrollSpeedEl.addEventListener("input", () => {
-          globalScrollSpeed = Number(scrollSpeedEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-        });
-        cameraFovEl.addEventListener("input", () => {
-          camera.fov = Number(cameraFovEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-        });
-        globalPointSizeEl.addEventListener("input", () => {
-          globalPointSizeScale = Number(globalPointSizeEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        globalPointOpacityEl.addEventListener("input", () => {
-          globalPointOpacityScale = Number(globalPointOpacityEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        globalPointGlowEl.addEventListener("input", () => {
-          globalPointGlowStrength = Number(globalPointGlowEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
+          });
+        }
+        if (globalPointOpacityEl) {
+          globalPointOpacityEl.addEventListener("input", () => {
+            globalPointOpacityScale = Number(globalPointOpacityEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
+        if (globalPointGlowEl) {
+          globalPointGlowEl.addEventListener("input", () => {
+            globalPointGlowStrength = Number(globalPointGlowEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
         if (sizeByStarsToggleEl) {
           sizeByStarsToggleEl.addEventListener("change", () => {
             sizePointsByStarsEnabled = Boolean(sizeByStarsToggleEl.checked);
@@ -14579,35 +9811,45 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             renderFrame(currentFrameIndex);
           });
         }
-        focusGroupSelectEl.addEventListener("change", () => {
-          focusTraceKey = String(focusGroupSelectEl.value || "");
-          focusSelectionKey = "";
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        fadeTimeEl.addEventListener("change", () => {
-          fadeInTimeMyr = Number(fadeTimeEl.value);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        fadeInOutToggleEl.addEventListener("change", () => {
-          fadeInAndOutEnabled = Boolean(fadeInOutToggleEl.checked);
-          applyGlobalControlState();
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
-        axesVisibleToggleEl.addEventListener("change", () => {
-          axesVisible = Boolean(axesVisibleToggleEl.checked);
-          renderSceneControls();
-          buildAxes();
-        });
-        galacticReferenceToggleEl.addEventListener("change", () => {
-          galacticReferenceVisible = Boolean(galacticReferenceToggleEl.checked);
-          renderSceneControls();
-          renderFrame(currentFrameIndex);
-        });
+        if (focusGroupSelectEl) {
+          focusGroupSelectEl.addEventListener("change", () => {
+            focusTraceKey = String(focusGroupSelectEl.value || "");
+            focusSelectionKey = "";
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
+        if (fadeTimeEl) {
+          fadeTimeEl.addEventListener("change", () => {
+            fadeInTimeMyr = Number(fadeTimeEl.value);
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
+        if (fadeInOutToggleEl) {
+          fadeInOutToggleEl.addEventListener("change", () => {
+            fadeInAndOutEnabled = Boolean(fadeInOutToggleEl.checked);
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
+        if (axesVisibleToggleEl) {
+          axesVisibleToggleEl.addEventListener("change", () => {
+            axesVisible = Boolean(axesVisibleToggleEl.checked);
+            renderSceneControls();
+            buildAxes();
+          });
+        }
+        if (galacticReferenceToggleEl) {
+          galacticReferenceToggleEl.addEventListener("change", () => {
+            galacticReferenceVisible = Boolean(galacticReferenceToggleEl.checked);
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
         nearbyRegionLabelsToggleEls.forEach((toggleEl) => {
           toggleEl.addEventListener("change", () => {
             nearbyRegionLabelsVisible = Boolean(toggleEl.checked);
@@ -14655,51 +9897,73 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             focusViewer();
           });
         }
-        viewFromEarthButtonEl.addEventListener("click", () => {
-          viewFromEarth();
-        });
+        if (viewFromEarthButtonEl) {
+          viewFromEarthButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("camera", { disableOrbit: true });
+            }
+            viewFromEarth();
+          });
+        }
         orbitCameraButtons.forEach((buttonEl) => {
           buttonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("camera", { disableOrbit: true });
+            }
             setCameraAutoOrbitEnabled(!cameraAutoOrbitEnabled);
             focusViewer();
           });
         });
-        resetCameraButtonEl.addEventListener("click", () => {
-          resetCameraView();
-          renderSceneControls();
-        });
-        resetControlsButtonEl.addEventListener("click", () => {
-          activeThemeKey = "default";
-          globalScrollSpeed = 1.0;
-          globalPointSizeScale = 1.0;
-          globalPointOpacityScale = 1.0;
-          globalPointGlowStrength = 0.85;
-          sizePointsByStarsEnabled = false;
-          fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
-          fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
-          focusTraceKey = String(animationSpec.focus_trace_key_default || "");
-          axesVisible = Boolean(sceneSpec.show_axes);
-          galacticReferenceVisible = true;
-          nearbyRegionLabelsVisible = true;
-          setCameraAutoOrbitEnabled(false);
-          cameraViewMode = "free";
-          earthViewFocusDistance = null;
-          camera.fov = Number(initialCameraState.fov);
-          applyGlobalControlState();
-          applyCameraViewMode();
-          applyThemePreset(activeThemeKey, { rerender: false });
-          renderSceneControls();
-          buildAxes();
-          renderLegend();
-          updateSkyPanel();
-          renderFrame(currentFrameIndex);
-        });
+        if (resetCameraButtonEl) {
+          resetCameraButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("camera", { disableOrbit: true });
+            }
+            resetCameraView();
+            renderSceneControls();
+          });
+        }
+        if (resetControlsButtonEl) {
+          resetControlsButtonEl.addEventListener("click", () => {
+            activeThemeKey = "default";
+            globalScrollSpeed = 1.0;
+            globalPointSizeScale = 1.0;
+            globalPointOpacityScale = 1.0;
+            globalPointGlowStrength = 0.85;
+            sizePointsByStarsEnabled = false;
+            fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
+            fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
+            focusTraceKey = String(animationSpec.focus_trace_key_default || "");
+            axesVisible = Boolean(sceneSpec.show_axes);
+            galacticReferenceVisible = true;
+            nearbyRegionLabelsVisible = true;
+            setCameraAutoOrbitEnabled(false);
+            cameraViewMode = "free";
+            earthViewFocusDistance = null;
+            camera.fov = Number(initialCameraState.fov);
+            if (typeof applyActionCameraViewOffset === "function") {
+              applyActionCameraViewOffset(initialCameraState.viewOffset);
+            }
+            applyGlobalControlState();
+            applyCameraViewMode();
+            applyThemePreset(activeThemeKey, { rerender: false });
+            renderSceneControls();
+            buildAxes();
+            renderLegend();
+            updateSkyPanel();
+            renderFrame(currentFrameIndex);
+          });
+        }
         widgetDragHandles.forEach((handle) => handle.addEventListener("pointerdown", onWidgetPointerStart));
         widgetResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onWidgetPointerStart));
         setZenMode(zenModeEnabled);
       }
 
       function onCanvasPointerDown(event) {
+        if (!actionInterruptsMuted()) {
+          interruptActionRun("camera", { disableOrbit: true });
+        }
+        handleManualCameraInteractionStart();
         focusViewer();
         if (startSelectionBoxInteraction(event)) {
           return;
@@ -14729,10 +9993,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function onWindowPointerDown(event) {
         const target = event.target;
         if (target) {
-          if (toolsShellEl.dataset.open === "true" && !toolsShellEl.contains(target)) {
+          if (toolsShellEl && toolsShellEl.dataset.open === "true" && !toolsShellEl.contains(target)) {
             setToolsDrawerOpen(false);
           }
-          if (controlsShellEl.dataset.open === "true" && !controlsShellEl.contains(target)) {
+          if (controlsShellEl && controlsShellEl.dataset.open === "true" && !controlsShellEl.contains(target)) {
             setControlsDrawerOpen(false);
           }
         }
@@ -14763,6 +10027,27 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         finishLassoSelection(event);
       }
 
+      function updateAnimatedFramePlayback(now) {
+        if (timeActionTrack) {
+          return;
+        }
+        if (playbackDirection !== 0 && frameSpecs.length > 1) {
+          if (lastPlaybackAdvanceTimestamp === null) {
+            lastPlaybackAdvanceTimestamp = now;
+            return;
+          }
+          const elapsedMs = Math.max(0.0, now - lastPlaybackAdvanceTimestamp);
+          if (elapsedMs < playbackIntervalMs) {
+            return;
+          }
+          const steps = Math.max(1, Math.floor(elapsedMs / playbackIntervalMs));
+          lastPlaybackAdvanceTimestamp += steps * playbackIntervalMs;
+          const frameCount = frameSpecs.length;
+          const nextIndex = ((currentFrameIndex + (playbackDirection * steps)) % frameCount + frameCount) % frameCount;
+          renderFrame(nextIndex);
+        }
+      }
+
       function animate(timestamp) {
         window.requestAnimationFrame(animate);
         const now = Number(timestamp) || 0.0;
@@ -14770,10 +10055,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           ? 0.0
           : clampRange((now - lastAnimationTimestamp) / 1000.0, 0.0, 0.05);
         lastAnimationTimestamp = now;
+        updateViewerActions(now);
+        updateAnimatedFramePlayback(now);
         updateKeyboardMotion(deltaSeconds);
+        updateGalacticSimpleDefaultOrbit(deltaSeconds);
         controls.update();
-        updateScreenStableTextSprites();
+        updateCameraResponsivePointSprites();
         updateScaleBar();
+        updateCameraResponsiveImagePlanes();
+        updateScreenStableTextSprites();
         renderAgeKdeWidget();
         renderer.render(scene, camera);
       }
@@ -14790,9 +10080,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       await restoreInitialLassoSelectionMask();
       renderLegend();
       updateSelectionUI();
-      updatePlaybackToggleButton();
+      updatePlaybackButtons();
       renderFrame(currentFrameIndex);
       resize();
+      setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);
+      initialActionViewState = captureCurrentActionViewState();
+      syncActionButtons();
       window.setTimeout(() => focusViewer(), 0);
       animate();
 
@@ -14800,6 +10093,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       canvas.addEventListener("pointerenter", focusViewer);
       canvas.addEventListener("pointermove", onPointerMove);
       canvas.addEventListener("pointerleave", onPointerLeave);
+      canvas.addEventListener("wheel", onCanvasWheel, { passive: false, capture: true });
       canvas.addEventListener("click", onCanvasClick);
       canvas.addEventListener("dblclick", onCanvasDoubleClick);
       scaleBarEl.addEventListener("pointerdown", onScaleBarPointerStart);
@@ -14834,24 +10128,28 @@ class ThreeJSFigure:
         return self.scene_spec
 
     def to_html(self) -> str:
-        width = int(self.scene_spec.get("width") or 900)
-        height = int(self.scene_spec.get("height") or 700)
-        html = _THREEJS_HTML_TEMPLATE.replace("__ROOT_ID__", self._root_id)
-        html = html.replace("__WIDTH_PX__", str(width))
-        html = html.replace("__HEIGHT_PX__", str(height))
-        html = html.replace("__SCENE_JSON__", json.dumps(self.scene_spec))
-        return html
+        return render_threejs_html(
+            self.scene_spec,
+            root_id=self._root_id,
+            html_template=_THREEJS_HTML_TEMPLATE,
+            topbar_html=_THREEJS_TOPBAR_HTML,
+            minimal_topbar_html=_THREEJS_MINIMAL_TOPBAR_HTML,
+            shell_html=THREEJS_SHELL_HTML,
+            legend_runtime_js=THREEJS_LEGEND_RUNTIME_JS,
+            widget_runtime_js=THREEJS_WIDGET_RUNTIME_JS,
+            widget_content_runtime_js=THREEJS_WIDGET_CONTENT_RUNTIME_JS,
+            interaction_runtime_js=THREEJS_INTERACTION_RUNTIME_JS,
+            scene_runtime_js=THREEJS_SCENE_RUNTIME_JS,
+            sky_runtime_js=THREEJS_SKY_RUNTIME_JS,
+            viewer_runtime_js=THREEJS_VIEWER_RUNTIME_JS,
+            action_runtime_js=THREEJS_ACTION_RUNTIME_JS,
+        )
 
     def _data_url(self) -> str:
-        encoded = base64.b64encode(self.to_html().encode("utf-8")).decode("ascii")
-        return f"data:text/html;charset=utf-8;base64,{encoded}"
+        return threejs_data_url(self.to_html())
 
     def _iframe_html(self) -> str:
-        return (
-            f'<iframe src="{self._data_url()}" '
-            'style="width: 100vw; height: 100vh; border: 0; display: block; max-width: none; margin: 0 0 0 calc(50% - 50vw);" '
-            f'loading="eager" referrerpolicy="no-referrer"></iframe>'
-        )
+        return threejs_iframe_html(self._data_url())
 
     def _repr_html_(self) -> str:
         return self._iframe_html()

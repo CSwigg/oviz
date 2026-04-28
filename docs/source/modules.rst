@@ -1,7 +1,7 @@
-dash_gaia_orbits
-================
+API Reference
+=============
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
 
-   dash_gaia_orbits
+   oviz

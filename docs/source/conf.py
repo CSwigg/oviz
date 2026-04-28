@@ -1,34 +1,27 @@
-import os
+from __future__ import annotations
+
 import sys
-sys.path.insert(0, os.path.relpath('../../dash_gaia_orbits/'))
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
+from pathlib import Path
 
-# -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'dash_gaia_orbits'
-copyright = '2024, Cameren Swiggum'
-author = 'Cameren Swiggum'
-release = '0.0.1'
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 
-# -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+
+project = "oviz"
+copyright = "2024, Cameren Swiggum"
+author = "Cameren Swiggum"
+release = "0.1.0"
+
 
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon'
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
 ]
 
-templates_path = ['_templates']
-exclude_patterns = []
+templates_path = ["_templates"]
+exclude_patterns: list[str] = []
 
 
-
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-
-html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']
+html_theme = "sphinx_rtd_theme"
+html_static_path = ["_static"]

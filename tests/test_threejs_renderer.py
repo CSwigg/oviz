@@ -13,6 +13,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from oviz import Layer, LayerCollection, Scene3D, galactic_lite_profile, website_background_profile  # noqa: E402
 from oviz.viz import Animate3D  # noqa: E402
 
 
@@ -79,6 +80,17 @@ class _FakeCollection:
         return None
 
 
+class _FakeFamilyCollection(_FakeCollection):
+    def __init__(self, show_tracks=False):
+        super().__init__(show_tracks=show_tracks)
+        self.family = _FakeCluster(show_tracks=show_tracks)
+        self.family.data_name = "Family A"
+        self.family.color = "violet"
+
+    def get_all_clusters(self):
+        return [self.cluster, self.family]
+
+
 class ThreeJSRendererTests(unittest.TestCase):
     def test_make_plot_keeps_plotly_renderer_default(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
@@ -102,7 +114,6 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn(">Group<", html)
         self.assertIn("Cluster A", html)
         self.assertIn("Shift+drag or use Lasso", html)
-        self.assertIn("oviz-three-lasso-button", html)
         self.assertIn("Enable click select", html)
         self.assertIn("Lasso volumetric data", html)
         self.assertIn("let lassoVolumeSelectionEnabled = false;", html)
@@ -161,6 +172,236 @@ class ThreeJSRendererTests(unittest.TestCase):
             html_text = out_file.read_text()
             self.assertIn("oviz-three-legend-panel", html_text)
             self.assertNotIn("Three.js modules are loaded from a CDN", html_text)
+
+    def test_threejs_renderer_rejects_actions_for_plotly(self):
+        viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
+
+        with self.assertRaisesRegex(ValueError, "actions are currently only supported"):
+            viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="plotly",
+                show=False,
+                actions=[
+                    {
+                        "key": "paper-1",
+                        "label": "Paper 1",
+                        "steps": [{"type": "legend_group", "group": "All"}],
+                    }
+                ],
+            )
+
+    def test_threejs_renderer_serializes_actions(self):
+        viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            threejs_initial_state={"lite_mode_enabled": True},
+            actions=[
+                {
+                    "key": "paper-1",
+                    "label": "Paper 1",
+                    "description": "Focus on the main cluster trace",
+                    "steps": [
+                        {
+                            "type": "legend_group",
+                            "group": "All",
+                            "duration_ms": 320,
+                        },
+                        {
+                            "type": "camera",
+                            "target": {"kind": "trace", "name": "Cluster A"},
+                            "anchor_target": {"kind": "point", "x": 0.0, "y": 0.0, "z": 0.0},
+                            "duration_ms": 900,
+                            "distance_scale": 0.6,
+                            "camera": {"view_offset": {"x": 0.22, "y": 0.0}},
+                            "orbit": {"enabled": True, "speed_multiplier": 1.4, "direction": -1, "persist": True},
+                        },
+                        {
+                            "type": "time",
+                            "start": "with_previous",
+                            "direction": "backward",
+                            "interval_ms": 180,
+                            "stop_after_frames": 1,
+                        },
+                    ],
+                }
+            ],
+        )
+
+        html = fig.to_html()
+        actions_payload = viz.fig_dict["actions"]
+
+        self.assertTrue(actions_payload["enabled"])
+        self.assertEqual(len(actions_payload["items"]), 1)
+        self.assertEqual(actions_payload["items"][0]["label"], "Paper 1")
+        self.assertEqual(actions_payload["items"][0]["steps"][0]["group"], "All")
+        self.assertEqual(actions_payload["items"][0]["steps"][1]["target"]["key"], "trace-0")
+        self.assertEqual(actions_payload["items"][0]["steps"][1]["anchor_target"]["kind"], "point")
+        self.assertEqual(actions_payload["items"][0]["steps"][1]["distance_scale"], 0.6)
+        self.assertEqual(actions_payload["items"][0]["steps"][1]["orbit"]["direction"], -1.0)
+        self.assertEqual(actions_payload["items"][0]["steps"][1]["camera"]["view_offset"]["x"], 0.22)
+        self.assertEqual(actions_payload["items"][0]["steps"][2]["direction"], "backward")
+        self.assertIn("oviz-three-action-bar", html)
+        self.assertIn("oviz-three-action-button", html)
+        self.assertIn("startViewerAction", html)
+        self.assertIn('controls.addEventListener("start"', html)
+        self.assertIn("handleManualCameraInteractionStart", html)
+        self.assertIn("clearSelectedAction: options.clearSelectedAction === true", html)
+        self.assertIn("function applyActionCameraViewOffset(viewOffset)", html)
+        self.assertIn("function restoreTimeIntervalMsForAction(action)", html)
+        self.assertIn("intervalMs: restoreTimeIntervalMs", html)
+        self.assertIn("Paper 1", html)
+
+    def test_threejs_renderer_keeps_actions_in_minimal_mode(self):
+        viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            threejs_initial_state={"lite_mode_enabled": True},
+            actions=[
+                {
+                    "key": "paper-1",
+                    "label": "Paper 1",
+                    "steps": [{"type": "legend_group", "group": "All"}],
+                }
+            ],
+        )
+
+        html = fig.to_html()
+        self.assertEqual(viz.fig_dict["export_profile"], "lite")
+        self.assertTrue(viz.fig_dict["actions"]["enabled"])
+        self.assertIn("oviz-three-action-bar", html)
+        self.assertIn("Paper 1", html)
+        self.assertIn("initialState.lite_mode_enabled", html)
+
+    def test_threejs_renderer_keeps_grouped_family_traces_in_galactic_lite_mode(self):
+        viz = Animate3D(
+            _FakeFamilyCollection(show_tracks=True),
+            figure_theme="dark",
+            trace_grouping_dict={
+                "Clusters": ["Cluster A"],
+                "Families": ["Family A"],
+            },
+        )
+        viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            galactic_mode=True,
+            threejs_initial_state={
+                "lite_mode_enabled": True,
+                "galactic_lite_mode_enabled": True,
+            },
+        )
+
+        trace_names = [trace["name"] for trace in viz.fig_dict["frames"][0]["traces"]]
+        legend_names = [item["name"] for item in viz.fig_dict["legend"]["items"]]
+
+        self.assertIn("Family A", trace_names)
+        self.assertIn("Family A", legend_names)
+
+    def test_threejs_renderer_rejects_invalid_actions(self):
+        viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
+
+        with self.assertRaisesRegex(ValueError, "lite threejs exports"):
+            viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                actions=[
+                    {
+                        "key": "paper-1",
+                        "label": "Paper 1",
+                        "steps": [{"type": "legend_group", "group": "All"}],
+                    }
+                ],
+            )
+
+    def test_scene3d_supports_profile_helpers(self):
+        viz = Scene3D(_FakeCollection(show_tracks=True), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            preset="galactic_lite",
+            threejs_initial_state={
+                "galaxy_image": True,
+                "galaxy_image_path": "/tmp/galaxy.png",
+            },
+        )
+
+        self.assertEqual(fig.__class__.__name__, "ThreeJSFigure")
+        self.assertEqual(viz.fig_dict["export_profile"], "lite")
+        self.assertTrue(viz.fig_dict["galactic_simple"]["enabled"])
+        self.assertEqual(viz.fig_dict["initial_state"]["lite_mode_enabled"], True)
+        self.assertEqual(viz.threejs_initial_state["galaxy_image_path"], "/tmp/galaxy.png")
+
+    def test_profile_helpers_normalize_legacy_aliases(self):
+        profile = galactic_lite_profile(
+            galaxy_image=True,
+            galaxy_image_path="/tmp/galaxy.png",
+            minimal_mode_enabled=False,
+            galactic_plane_opacity=0.4,
+        )
+
+        self.assertTrue(profile["lite_mode_enabled"])
+        self.assertTrue(profile["galactic_lite_mode_enabled"])
+        self.assertEqual(profile["galaxy_image_path"], "/tmp/galaxy.png")
+        self.assertEqual(profile["galaxy_image_opacity"], 0.4)
+
+    def test_website_background_profile_has_expected_defaults(self):
+        profile = website_background_profile(galaxy_image=True, galaxy_image_path="/tmp/galaxy.png")
+
+        self.assertTrue(profile["lite_mode_enabled"])
+        self.assertTrue(profile["galactic_lite_mode_enabled"])
+        self.assertTrue(profile["track_orbit_target_to_sun"])
+        self.assertFalse(profile["click_selection_enabled"])
+        self.assertEqual(profile["camera"]["view_offset"]["x"], 0.22)
+
+    def test_static_lite_scene_disables_timeline_footer(self):
+        static_sun_df = pd.DataFrame(
+            {
+                "x": [0.0],
+                "y": [0.0],
+                "z": [27.0],
+                "name": ["Sun"],
+                "age_myr": [8000.0],
+            }
+        )
+        layers = LayerCollection(
+            [
+                Layer.from_dataframe(
+                    static_sun_df,
+                    layer_name="Sun",
+                    min_size=5.0,
+                    max_size=5.0,
+                    color="yellow",
+                    opacity=1.0,
+                    marker_style="circle",
+                    assume_stationary=True,
+                )
+            ]
+        )
+        viz = Scene3D(
+            layers,
+            figure_theme="dark",
+            xyz_widths=(1000, 1000, 400),
+            trace_grouping_dict={"Sun": ["Sun"]},
+        )
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            galactic_mode=True,
+            preset="galactic_lite",
+        )
+
+        self.assertFalse(viz.fig_dict["timeline"]["enabled"])
+        html = fig.to_html()
+        self.assertIn('const timelineSpec = sceneSpec.timeline || { enabled: frameSpecs.length > 1 };', html)
+        self.assertIn('footerEl.style.display = "none";', html)
 
     def test_threejs_milky_way_model_is_t0_only(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
@@ -305,6 +546,29 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('type: "oviz-parent-hover-cluster"', html)
         self.assertIn('aladin.on("objectHovered"', html)
 
+    def test_threejs_renderer_keeps_selection_metadata_without_sky_panel(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        viz.data_collection.cluster.df_int["x_helio"] = [10.0, 10.0]
+        viz.data_collection.cluster.df_int["y_helio"] = [-5.0, -5.0]
+        viz.data_collection.cluster.df_int["z_helio"] = [2.0, 2.0]
+
+        viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=False,
+        )
+
+        zero_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == 0.0)
+        cluster_trace = next(trace for trace in zero_frame["traces"] if trace["name"] == "Cluster A")
+        selection = cluster_trace["points"][0]["selection"]
+
+        self.assertFalse(viz.fig_dict["sky_panel"]["enabled"])
+        self.assertEqual(selection["trace_name"], "Cluster A")
+        self.assertEqual(selection["cluster_name"], "member_1")
+        self.assertTrue(np.isfinite(selection["ra_deg"]))
+        self.assertTrue(np.isfinite(selection["dec_deg"]))
+
     def test_threejs_renderer_builds_trace_catalog_without_members_file(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         viz.data_collection.cluster.df_int["x_helio"] = [10.0, 20.0]
@@ -334,12 +598,22 @@ class ThreeJSRendererTests(unittest.TestCase):
             renderer="threejs",
             show=False,
             enable_sky_panel=True,
-            threejs_initial_state={"lasso_volume_selection_enabled": True},
+            threejs_initial_state={
+                "lasso_volume_selection_enabled": True,
+                "camera": {"view_offset": {"x": 0.28, "y": 0.0}},
+                "global_controls": {
+                    "camera_auto_orbit_speed": 0.45,
+                    "camera_auto_orbit_direction": -1,
+                },
+            },
         )
 
         html = fig.to_html()
         self.assertTrue(viz.fig_dict["initial_state"]["lasso_volume_selection_enabled"])
         self.assertIn('"lasso_volume_selection_enabled": true', html)
+        self.assertIn('"view_offset": {"x": 0.28, "y": 0.0}', html)
+        self.assertIn('"camera_auto_orbit_speed": 0.45', html)
+        self.assertIn('"camera_auto_orbit_direction": -1', html)
         self.assertIn("Volume lasso", html)
         self.assertNotIn("Dust lasso", html)
 

@@ -4,44 +4,61 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
-from paper.other.paths import SOLAR_ENCOUNTER_CATALOG_CURRENT
+
+HOME_DIR = Path.home()
+REPO_ROOT = HOME_DIR / "Desktop" / "oviz"
+NOTEBOOK_PATH = HOME_DIR / "Desktop" / "astro_research" / "radcliffe" / "oviz_notebooks" / "main_figure.ipynb"
+SUPERNOVAE_ROOT = HOME_DIR / "Desktop" / "astro_research" / "supernovae_map"
+SUPERNOVAE_CATALOG_PATH = SUPERNOVAE_ROOT / "paper" / "solar_encounter_catalog_current.csv.gz"
+DESKTOP_ROOT = HOME_DIR / "Desktop"
+DEFAULT_OUTPUT_HTML = Path("/tmp/main_figure.html")
+GALACTIC_PLANE_IMAGE_PATH = HOME_DIR / "Downloads" / "Top-down_view_of_the_Milky_Way.jpg"
 
 
-REPO_ROOT = Path("/Users/cam/Desktop/oviz")
-NOTEBOOK_PATH = Path("/Users/cam/Desktop/astro_research/radcliffe/oviz_notebooks/main_figure.ipynb")
-SUPERNOVAE_ROOT = Path("/Users/cam/Desktop/astro_research/supernovae_map")
-SUPERNOVAE_CATALOG_PATH = SOLAR_ENCOUNTER_CATALOG_CURRENT
-DEFAULT_OUTPUT_HTML = Path("/tmp/main_figure_uncodixified.html")
-DEFAULT_UI_DESIGN_KEY = "uncodixified"
+def _sanitize_notebook_cell_source(source: str) -> str:
+    lines = source.splitlines()
+    for line in lines:
+        stripped = line.lstrip()
+        if not stripped:
+            continue
+        if stripped.startswith("%%"):
+            return "\n".join(f"# {cell_line}" if cell_line else "" for cell_line in lines).strip()
+        break
+
+    sanitized_lines = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("%") or stripped.startswith("!"):
+            sanitized_lines.append(f"# {line}")
+            continue
+        sanitized_lines.append(line)
+
+    return "\n".join(sanitized_lines).strip()
 
 
-def convert_notebook_to_script(notebook_path: Path, workdir: Path) -> Path:
-    subprocess.run(
-        [
-            "jupyter",
-            "nbconvert",
-            "--to",
-            "script",
-            str(notebook_path),
-            "--output",
-            "main_figure_nb.py",
-            "--output-dir",
-            str(workdir),
-        ],
-        check=True,
-        cwd=str(workdir),
-    )
-    candidates = sorted(workdir.glob("main_figure_nb.py*"))
-    if not candidates:
-        raise FileNotFoundError("nbconvert did not produce a Python script.")
-    return candidates[0]
+def convert_notebook_to_script_source(notebook_path: Path) -> str:
+    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+    cells = notebook.get("cells", [])
+    code_blocks = []
+
+    for cell in cells:
+        if cell.get("cell_type") != "code":
+            continue
+        cell_source = "".join(cell.get("source", []))
+        sanitized = _sanitize_notebook_cell_source(cell_source)
+        if sanitized:
+            code_blocks.append(sanitized)
+
+    if not code_blocks:
+        raise RuntimeError(f"No code cells found in notebook: {notebook_path}")
+
+    return "\n\n".join(code_blocks) + "\n"
 
 
 def build_supernova_volume_source_block() -> str:
@@ -283,7 +300,8 @@ def _sn_build_supernova_volume_layers(
 
 def _build_supernova_volumes_for_main_figure(time_values):
     if not SUPERNOVAE_CATALOG_PATH.exists():
-        raise FileNotFoundError(f"Missing supernova catalog: {{SUPERNOVAE_CATALOG_PATH}}")
+        print(f"Skipping supernova volumes; missing catalog: {{SUPERNOVAE_CATALOG_PATH}}")
+        return []
 
     time_grid = np.asarray(time_values, dtype=float)
     orbit_cfg = OrbitConfig(backend="galpy", spiral_model="none")
@@ -315,7 +333,36 @@ supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)
 """.strip()
 
 
-def patch_script_source(source: str, output_html: Path, ui_design_key: str | None, theme_key: str | None) -> str:
+def patch_script_source(
+    source: str,
+    output_html: Path,
+    theme_key: str | None,
+    *,
+    minimal_mode: bool = False,
+    galactic_simple: bool = False,
+) -> str:
+    source = source.replace("/Users/cam", str(HOME_DIR))
+    source = source.replace("/Users/cam/Desktop", str(DESKTOP_ROOT))
+
+    if galactic_simple:
+        source, replaced_time_grid = re.subn(
+            r"(?m)^time_int\s*=\s*np\.round\(np\.arange\(0,\s*-66,\s*-1\),\s*1\)\s*$",
+            "time_int = np.round(np.arange(0, -66, -1), 1)",
+            source,
+            count=1,
+        )
+        if replaced_time_grid != 1:
+            raise RuntimeError("Could not restore the galactic simple time grid to 1 Myr steps.")
+
+        source, downsampled_edenhofer = re.subn(
+            r'("name"\s*:\s*"Edenhofer\+2024 Dust",[\s\S]*?"max_resolution"\s*:\s*)200(\s*,)',
+            r"\g<1>100\2",
+            source,
+            count=1,
+        )
+        if downsampled_edenhofer != 1:
+            raise RuntimeError("Could not reduce the Edenhofer dust max_resolution for galactic simple mode.")
+
     output_html_str = str(output_html)
     source, replaced = re.subn(
         r"(?m)^save_name\s*=\s*['\"][^'\"]+['\"]",
@@ -329,29 +376,40 @@ def patch_script_source(source: str, output_html: Path, ui_design_key: str | Non
     control_bits = []
     if theme_key:
         control_bits.append(f"'theme_key': {theme_key!r}")
-
-    make_plot_injections = []
-    if ui_design_key:
-        make_plot_injections.append(f"threejs_ui_design={ui_design_key!r}")
+    if galactic_simple:
+        control_bits.extend([
+            "'camera_fov': 42.0",
+            "'point_size_scale': 0.88",
+            "'point_glow_strength': 0.60",
+            "'fade_in_time_myr': 7.0",
+        ])
 
     if "threejs_initial_state=" not in source:
         initial_state_bits = [
             "'current_group': 'Clusters'",
             "'click_selection_enabled': False",
-            "'active_volume_key': 'supernova-density'",
-            "'legend_state': {'volume-0': False, 'supernova-density': True}",
-            "'volume_state_by_key': {'volume-0': {'visible': False}, 'supernova-density': {'visible': True}}",
+            "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
+            "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
+            "'volume_state_by_key': ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}})",
         ]
+        if minimal_mode:
+            initial_state_bits.append("'minimal_mode_enabled': True")
+        if galactic_simple:
+            initial_state_bits.extend([
+                "'galactic_simple_mode_enabled': True",
+                f"'galactic_plane_image_path': {str(GALACTIC_PLANE_IMAGE_PATH)!r}",
+                "'galactic_plane_size_pc': 40000.0",
+                "'galactic_plane_opacity': 0.6",
+                "'initial_zoom_anchor': {'x': 0.0, 'y': 0.0, 'z': 0.0}",
+                "'camera': {'position': {'x': 3700.0, 'y': -6550.0, 'z': 4700.0}, 'target': {'x': 3000.0, 'y': 0.0, 'z': 0.0}, 'up': {'x': 0.0, 'y': 0.0, 'z': 1.0}}",
+            ])
         if control_bits:
             initial_state_bits.append("'global_controls': {" + ", ".join(control_bits) + "}")
-        injection_lines = []
-        if make_plot_injections:
-            injection_lines.extend(f"    {entry},\n" for entry in make_plot_injections)
-        injection_lines.append(
+        injection_lines = [
             '    threejs_initial_state={'
             + ", ".join(initial_state_bits)
             + '},\n'
-        )
+        ]
         source, injected = re.subn(
             r'(renderer\s*=\s*"threejs",\s*\n)',
             (
@@ -363,15 +421,6 @@ def patch_script_source(source: str, output_html: Path, ui_design_key: str | Non
         )
         if injected != 1:
             raise RuntimeError("Could not inject threejs_initial_state into make_plot call.")
-    elif make_plot_injections and "threejs_ui_design=" not in source:
-        source, injected = re.subn(
-            r'(renderer\s*=\s*"threejs",\s*\n)',
-            '\\1' + "".join(f"    {entry},\n" for entry in make_plot_injections),
-            source,
-            count=1,
-        )
-        if injected != 1:
-            raise RuntimeError("Could not inject threejs_ui_design into make_plot call.")
 
     if "df_hunt_good" in source and "Full Cluster Catalog" not in source:
         catalog_trace_block = """
@@ -432,6 +481,53 @@ trace_groupings = {
         if inserted_groupings != 1:
             raise RuntimeError("Could not patch trace groupings with Full Cluster Catalog.")
 
+    if minimal_mode:
+        source, replaced_young_min_size = re.subn(
+            r"(young_trace\s*=\s*Trace\([^\n]*?data_name\s*=\s*'Clusters\s*\(<\s*15\s*Myr\)'[^\n]*?min_size\s*=\s*)([^,]+)",
+            r"\g<1>0.0",
+            source,
+            count=1,
+        )
+        if replaced_young_min_size != 1:
+            raise RuntimeError("Could not adjust young cluster minimum size for minimal mode.")
+
+    if galactic_simple:
+        source, recolored_full_sample = re.subn(
+            r"(full_sample_trace\s*=\s*Trace\([^\n]*?data_name\s*=\s*'Clusters\s*\(<\s*60\s*Myr\)'[^\n]*?color\s*=\s*)(['\"][^'\"]+['\"])",
+            r"\g<1>'#58e1ff'",
+            source,
+            count=1,
+        )
+        if recolored_full_sample != 1:
+            raise RuntimeError("Could not recolor the <60 Myr cluster trace for galactic simple mode.")
+
+        source, adjusted_full_sample_opacity = re.subn(
+            r"(full_sample_trace\s*=\s*Trace\([^\n]*?data_name\s*=\s*'Clusters\s*\(<\s*60\s*Myr\)'[^\n]*?opacity\s*=\s*)([^,\)]+)",
+            r"\g<1>0.8",
+            source,
+            count=1,
+        )
+        if adjusted_full_sample_opacity != 1:
+            raise RuntimeError("Could not adjust the <60 Myr cluster opacity for galactic simple mode.")
+
+        source, removed_young_from_collection = re.subn(
+            r"(?m)^(\s*)young_trace,\s*$",
+            "",
+            source,
+            count=1,
+        )
+        if removed_young_from_collection != 1:
+            raise RuntimeError("Could not remove the <15 Myr trace from the galactic simple TraceCollection.")
+
+        source, removed_young_from_grouping = re.subn(
+            r'"Clusters"\s*:\s*\[\s*\'Sun\'\s*,\s*\'Clusters\s*\(<\s*60\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*15\s*Myr\)\'\s*\]',
+            "\"Clusters\": ['Sun', 'Clusters (< 60 Myr)']",
+            source,
+            count=1,
+        )
+        if removed_young_from_grouping != 1:
+            raise RuntimeError("Could not remove the <15 Myr cluster trace from galactic simple groupings.")
+
     if "supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)" not in source:
         supernova_block = build_supernova_volume_source_block()
         source, inserted_supernova = re.subn(
@@ -452,6 +548,15 @@ trace_groupings = {
     if replaced_supernova_volumes != 1:
         raise RuntimeError("Could not replace notebook volume list with supernova volumes.")
 
+    source, edenhofer_time_patch = re.subn(
+        r'("colormap"\s*:\s*greys_cmap,\s*# or just "ice"\s*\n)(\s*})',
+        r'\1    "supports_show_all_times": True,\n    "co_rotate_with_frame": True,\n\2',
+        source,
+        count=1,
+    )
+    if edenhofer_time_patch != 1:
+        raise RuntimeError("Could not patch Edenhofer volume frame behavior.")
+
     return source
 
 
@@ -464,6 +569,36 @@ def run_script_source(source: str) -> None:
     exec(compile(source, str(NOTEBOOK_PATH.with_suffix(".py")), "exec"), globals_dict)
 
 
+def run_main_figure(
+    output_html: Path = DEFAULT_OUTPUT_HTML,
+    *,
+    theme_key: str | None = None,
+    minimal_mode: bool = False,
+    galactic_simple: bool = False,
+) -> Path:
+    output_html.parent.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl")
+    os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
+    os.environ.setdefault("MPLBACKEND", "Agg")
+
+    if not NOTEBOOK_PATH.exists():
+        raise FileNotFoundError(f"Missing notebook: {NOTEBOOK_PATH}")
+    if not REPO_ROOT.exists():
+        raise FileNotFoundError(f"Missing repo root: {REPO_ROOT}")
+
+    notebook_source = convert_notebook_to_script_source(NOTEBOOK_PATH)
+    patched_source = patch_script_source(
+        notebook_source,
+        output_html=output_html,
+        theme_key=theme_key,
+        minimal_mode=minimal_mode,
+        galactic_simple=galactic_simple,
+    )
+
+    run_script_source(patched_source)
+    return output_html
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -473,37 +608,26 @@ def parse_args() -> argparse.Namespace:
         help="HTML output path for the rendered figure.",
     )
     parser.add_argument(
-        "--ui-design-key",
-        default=DEFAULT_UI_DESIGN_KEY,
-        help="Three.js UI design preset to force into the figure initial state.",
-    )
-    parser.add_argument(
         "--theme-key",
         default=None,
         help="Optional Three.js color theme preset to force into the figure initial state.",
+    )
+    parser.add_argument(
+        "--minimal-mode",
+        action="store_true",
+        help="Render the figure in minimal presentation mode.",
     )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    args.output_html.parent.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl")
-    os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
-    os.environ.setdefault("MPLBACKEND", "Agg")
-
-    with tempfile.TemporaryDirectory(prefix="oviz_main_figure_") as tmp_dir:
-        tmp_path = Path(tmp_dir)
-        script_path = convert_notebook_to_script(NOTEBOOK_PATH, tmp_path)
-        patched_source = patch_script_source(
-            script_path.read_text(encoding="utf-8"),
-            output_html=args.output_html,
-            ui_design_key=args.ui_design_key,
-            theme_key=args.theme_key,
-        )
-
-    run_script_source(patched_source)
-    print(f"Wrote {args.output_html}")
+    output_html = run_main_figure(
+        output_html=args.output_html,
+        theme_key=args.theme_key,
+        minimal_mode=bool(args.minimal_mode),
+    )
+    print(f"Wrote {output_html}")
 
 
 if __name__ == "__main__":

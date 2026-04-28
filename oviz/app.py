@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
+import base64
 import copy
 import json
 
@@ -33,12 +34,37 @@ def _is_array_like(value):
     return isinstance(value, (list, tuple, np.ndarray))
 
 
+def _coerce_plotly_array(value):
+    if isinstance(value, dict) and "bdata" in value:
+        try:
+            decoded = np.frombuffer(base64.b64decode(value["bdata"]), dtype=np.dtype(value.get("dtype", "f8")))
+            shape = value.get("shape")
+            if shape:
+                if isinstance(shape, str):
+                    dims = tuple(int(part.strip()) for part in shape.split(",") if part.strip())
+                elif _is_array_like(shape):
+                    dims = tuple(int(part) for part in shape)
+                else:
+                    dims = ()
+                if dims:
+                    decoded = decoded.reshape(dims)
+            return decoded
+        except Exception:
+            return None
+
+    if _is_array_like(value):
+        return np.asarray(value)
+    return None
+
+
 def _extract_age_values_from_trace(trace: dict):
     customdata = trace.get("customdata")
     if customdata is None:
         return None
 
-    arr = np.asarray(customdata)
+    arr = _coerce_plotly_array(customdata)
+    if arr is None:
+        return None
     if arr.ndim != 2 or arr.shape[1] < 1:
         return None
 
@@ -110,16 +136,16 @@ def _apply_mask_to_trace(trace: dict, mask: np.ndarray):
 
     for key in ("x", "y", "z", "text", "hovertext", "customdata"):
         val = trace.get(key)
-        if _is_array_like(val) and len(val) == n:
-            arr = np.asarray(val)
+        arr = _coerce_plotly_array(val)
+        if arr is not None and len(arr) == n:
             trace[key] = arr[mask].tolist()
 
     marker = trace.get("marker")
     if isinstance(marker, dict):
         for mk in ("size", "color", "opacity", "symbol"):
             val = marker.get(mk)
-            if _is_array_like(val) and len(val) == n:
-                arr = np.asarray(val)
+            arr = _coerce_plotly_array(val)
+            if arr is not None and len(arr) == n:
                 marker[mk] = arr[mask].tolist()
 
 
@@ -166,7 +192,10 @@ def _extract_selected_point(click_data: dict | None):
     if custom is None:
         return None
 
-    arr = np.asarray(custom).flatten()
+    arr = _coerce_plotly_array(custom)
+    if arr is None:
+        return None
+    arr = np.asarray(arr).flatten()
     if arr.size <= CUSTOMDATA_IDX_Z0:
         return None
 
@@ -373,7 +402,9 @@ def _infer_frame_time_from_data(frame: dict):
         custom = trace.get("customdata")
         if custom is None:
             continue
-        arr = np.asarray(custom)
+        arr = _coerce_plotly_array(custom)
+        if arr is None:
+            continue
         if arr.ndim != 2 or arr.shape[0] == 0 or arr.shape[1] <= CUSTOMDATA_IDX_AGE_AT_T:
             continue
         age_now = _to_float(arr[0][CUSTOMDATA_IDX_AGE_NOW])
@@ -888,7 +919,9 @@ def _collect_cluster_centers(fig_dict: dict):
         if custom is None:
             continue
 
-        arr = np.asarray(custom)
+        arr = _coerce_plotly_array(custom)
+        if arr is None:
+            continue
         if arr.ndim != 2 or arr.shape[1] <= CUSTOMDATA_IDX_B0_DEG:
             continue
 

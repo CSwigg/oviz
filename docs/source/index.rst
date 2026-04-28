@@ -1,15 +1,16 @@
-.. dash_gaia_orbits documentation master file, created by
-   sphinx-quickstart on Tue Jan 30 18:54:14 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+oviz Documentation
+==================
 
-Welcome to dash_gaia_orbits's documentation!
-============================================
+`oviz` is a Python package for orbit visualization of stellar clusters and associations.
+The maintained interactive path is the standalone Three.js viewer, with Plotly support
+kept for older notebook-oriented workflows.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Contents
 
+   overview
+   modules
 
 
 Indices and tables

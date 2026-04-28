@@ -30,7 +30,9 @@ def _base_fig_dict():
             )
         ]
     )
-    return fig.to_dict()
+    fig_dict = fig.to_dict()
+    fig_dict["data"][0]["customdata"] = customdata.tolist()
+    return fig_dict
 
 
 def test_extract_selected_point_reads_customdata_schema():
@@ -58,6 +60,32 @@ def test_filter_figure_by_age_keeps_customdata_shape_consistent():
     assert len(trace["x"]) == 1
     assert len(trace["customdata"]) == 1
     assert np.isclose(trace["customdata"][0][0], 5.0)
+
+
+def test_filter_figure_by_age_accepts_plotly_encoded_customdata():
+    customdata = np.array([
+        [5.0, 4.0, 120.0, -20.0, 150.0, 100.0, 50.0, 20.0],
+        [15.0, 14.0, 125.0, -18.0, 190.0, 140.0, 40.0, 10.0],
+    ])
+    fig = go.Figure(
+        data=[
+            go.Scatter3d(
+                x=[1.0, 2.0],
+                y=[3.0, 4.0],
+                z=[5.0, 6.0],
+                mode="markers",
+                customdata=customdata,
+                meta={"trace_kind": "cluster"},
+                name="Cluster A",
+            )
+        ]
+    )
+
+    filtered = _filter_figure_by_age(fig.to_dict(), age_min=0.0, age_max=10.0)
+
+    trace = filtered["data"][0]
+    assert len(trace["x"]) == 1
+    assert len(trace["customdata"]) == 1
 
 
 def test_apply_footprint_adds_overlay_traces():
