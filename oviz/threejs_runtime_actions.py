@@ -237,6 +237,7 @@ THREEJS_ACTION_RUNTIME_JS = """
         if (groupSelectEl) {
           groupSelectEl.value = currentGroup;
         }
+        syncLegendGroupChooser();
         renderLegend();
         const nextDurationMs = Math.max(Number(durationMs) || 0, 0);
         if (nextDurationMs <= 0 || nextStateMatchesCurrent) {
@@ -383,6 +384,7 @@ THREEJS_ACTION_RUNTIME_JS = """
           if (groupSelectEl) {
             groupSelectEl.value = currentGroup;
           }
+          syncLegendGroupChooser();
         }
         renderLegend();
         renderFrame(currentFrameIndex);

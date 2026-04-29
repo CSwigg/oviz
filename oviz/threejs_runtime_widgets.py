@@ -91,19 +91,39 @@ THREEJS_WIDGET_RUNTIME_JS = """
           };
         }
         if (widgetKey === "age_kde") {
+          const width = Math.min(
+            Math.max(window.innerWidth * 0.36, 380),
+            540,
+            Math.max(280, window.innerWidth - 24)
+          );
+          const height = Math.min(
+            Math.max(window.innerHeight * 0.44, 380),
+            460,
+            Math.max(280, window.innerHeight - 24)
+          );
           return {
-            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.36, 540) - 44),
+            left: Math.max(12, window.innerWidth - width - 44),
             top: 96,
-            width: Math.min(window.innerWidth * 0.36, 540),
-            height: Math.min(window.innerHeight * 0.42, 360),
+            width,
+            height,
           };
         }
         if (widgetKey === "cluster_filter") {
+          const width = Math.min(
+            Math.max(window.innerWidth * 0.34, 380),
+            520,
+            Math.max(280, window.innerWidth - 24)
+          );
+          const height = Math.min(
+            Math.max(window.innerHeight * 0.42, 360),
+            440,
+            Math.max(280, window.innerHeight - 24)
+          );
           return {
-            left: Math.max(12, window.innerWidth - Math.min(window.innerWidth * 0.34, 480) - 72),
+            left: Math.max(12, window.innerWidth - width - 72),
             top: 108,
-            width: Math.min(window.innerWidth * 0.34, 480),
-            height: Math.min(window.innerHeight * 0.40, 340),
+            width,
+            height,
           };
         }
         if (widgetKey === "dendrogram") {
@@ -187,11 +207,16 @@ THREEJS_WIDGET_RUNTIME_JS = """
         const width = Number(panelEl.dataset.normalWidth);
         const height = Number(panelEl.dataset.normalHeight);
         const defaults = widgetDefaultRect(widgetKey);
+        const maxWidth = Math.max(140, window.innerWidth - 12);
+        const maxHeight = Math.max(140, window.innerHeight - 12);
+        const sliderWidget = widgetKey === "age_kde" || widgetKey === "cluster_filter";
+        const minWidth = Math.min(sliderWidget ? 360 : 320, maxWidth);
+        const minHeight = Math.min(sliderWidget ? 360 : 260, maxHeight);
+        const nextWidth = Math.min(Math.max(Number.isFinite(width) ? width : defaults.width, minWidth), maxWidth);
+        const nextHeight = Math.min(Math.max(Number.isFinite(height) ? height : defaults.height, minHeight), maxHeight);
         const next = [left, top, width, height].every(Number.isFinite)
-          ? clampWidgetPosition(left, top, width, height)
-          : clampWidgetPosition(defaults.left, defaults.top, defaults.width, defaults.height);
-        const nextWidth = Number.isFinite(width) ? width : defaults.width;
-        const nextHeight = Number.isFinite(height) ? height : defaults.height;
+          ? clampWidgetPosition(left, top, nextWidth, nextHeight)
+          : clampWidgetPosition(defaults.left, defaults.top, nextWidth, nextHeight);
         panelEl.style.left = `${next.left}px`;
         panelEl.style.top = `${next.top}px`;
         panelEl.style.right = "auto";
@@ -265,6 +290,10 @@ THREEJS_WIDGET_RUNTIME_JS = """
         }
         const currentMode = widgetModeForKey(widgetKey);
         const nextMode = ["normal", "fullscreen", "hidden"].includes(mode) ? mode : "normal";
+        if (nextMode !== "hidden") {
+          setToolsDrawerOpen(false);
+          setControlsDrawerOpen(false);
+        }
         if (nextMode === "fullscreen" && currentMode === "normal") {
           storeWidgetRect(widgetKey);
         }

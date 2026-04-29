@@ -13,7 +13,7 @@ THREEJS_SHELL_HTML = """
                 <span class="oviz-three-group-current"></span>
                 <span class="oviz-three-group-chevron" aria-hidden="true">⌄</span>
               </button>
-              <div class="oviz-three-group-menu" role="listbox" aria-label="Legend group">
+              <div class="oviz-three-group-menu" role="listbox" aria-label="Legend group" aria-hidden="true" inert>
                 <div class="oviz-three-group-menu-list"></div>
               </div>
               <select class="oviz-three-group-select" aria-label="Legend group"></select>

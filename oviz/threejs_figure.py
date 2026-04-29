@@ -27,8 +27,8 @@ _THREEJS_TOPBAR_HTML = """
         <div class="oviz-three-title"></div>
         <div class="oviz-three-widget-menu">
           <div class="oviz-three-tools-shell" data-open="false">
-            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
-            <div class="oviz-three-tools-drawer">
+            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls" aria-expanded="false" aria-haspopup="true">Selection ▸</button>
+            <div class="oviz-three-tools-drawer" aria-hidden="true" inert>
               <div class="oviz-three-selection">
                 <div class="oviz-three-selection-row">
                   <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
@@ -45,8 +45,8 @@ _THREEJS_TOPBAR_HTML = """
             </div>
           </div>
           <div class="oviz-three-controls-shell" data-open="false">
-            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
-            <div class="oviz-three-controls-drawer">
+            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls" aria-expanded="false" aria-haspopup="true">Controls ▸</button>
+            <div class="oviz-three-controls-drawer" aria-hidden="true" inert>
                 <div class="oviz-three-controls">
                   <div class="oviz-three-controls-title">Controls</div>
                   <label class="oviz-three-controls-field">
@@ -2836,6 +2836,594 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-zen="true"] .oviz-three-note,
       #__ROOT_ID__[data-zen="true"] .oviz-three-scale-bar {
         display: none !important;
+      }
+      #__ROOT_ID__ {
+        --oviz-instrument-bg: rgba(6, 8, 12, 0.54);
+        --oviz-instrument-bg-strong: rgba(8, 10, 15, 0.74);
+        --oviz-instrument-border: rgba(238, 242, 247, 0.10);
+        --oviz-instrument-border-strong: rgba(246, 200, 95, 0.48);
+        --oviz-instrument-hover: rgba(255, 255, 255, 0.055);
+        --oviz-instrument-text: rgba(238, 242, 247, 0.88);
+        --oviz-instrument-muted: rgba(238, 242, 247, 0.56);
+        --oviz-instrument-dim: rgba(238, 242, 247, 0.38);
+        --oviz-instrument-accent: #f6c85f;
+        --oviz-instrument-ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #__ROOT_ID__ .oviz-three-topbar,
+      #__ROOT_ID__ .oviz-three-widget-menu,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell {
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu {
+        gap: 12px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        max-width: min(calc(100vw - 28px), 920px) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu button,
+      #__ROOT_ID__ .oviz-three-widget-menu select,
+      #__ROOT_ID__ .oviz-three-tools-toggle,
+      #__ROOT_ID__ .oviz-three-controls-toggle {
+        min-height: 30px !important;
+        padding: 0 2px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.70) !important;
+        box-shadow: none !important;
+        font: 720 11.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+        text-shadow: 0 0 9px rgba(0, 0, 0, 0.84) !important;
+        transition: color 160ms ease, box-shadow 180ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu button:hover,
+      #__ROOT_ID__ .oviz-three-widget-menu select:hover,
+      #__ROOT_ID__ .oviz-three-tools-toggle:hover,
+      #__ROOT_ID__ .oviz-three-controls-toggle:hover {
+        background: transparent !important;
+        border-color: transparent !important;
+        color: rgba(255, 255, 255, 0.96) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu button:focus-visible,
+      #__ROOT_ID__ .oviz-three-widget-menu select:focus-visible,
+      #__ROOT_ID__ .oviz-three-tools-toggle:focus-visible,
+      #__ROOT_ID__ .oviz-three-controls-toggle:focus-visible,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell[data-open="true"] > .oviz-three-tools-toggle,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell[data-open="true"] > .oviz-three-controls-toggle,
+      #__ROOT_ID__ .oviz-three-widget-menu button[data-active="true"],
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-auto-orbit[aria-pressed="true"] {
+        outline: none !important;
+        color: rgba(255, 255, 255, 0.96) !important;
+        box-shadow: inset 0 -1px 0 rgba(246, 200, 95, 0.66) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-select {
+        min-width: 92px !important;
+        padding-right: 17px !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        background:
+          linear-gradient(45deg, transparent 50%, rgba(238, 242, 247, 0.58) 50%) right 7px center / 4px 4px no-repeat,
+          linear-gradient(135deg, rgba(238, 242, 247, 0.58) 50%, transparent 50%) right 4px center / 4px 4px no-repeat,
+          transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
+        top: calc(100% + 8px) !important;
+        box-sizing: border-box !important;
+        max-height: min(76vh, 720px) !important;
+        overflow-y: auto !important;
+        overflow-x: visible !important;
+        padding: 14px 16px 16px !important;
+        border: 1px solid var(--oviz-instrument-border) !important;
+        border-radius: 9px !important;
+        background: linear-gradient(180deg, rgba(10, 12, 17, 0.74), rgba(6, 8, 12, 0.54)) !important;
+        box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28) !important;
+        backdrop-filter: blur(14px) saturate(118%) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(118%) !important;
+        transform: translate3d(0, -7px, 0) scale(0.99) !important;
+        transform-origin: top right !important;
+        transition: opacity 190ms ease, transform 260ms var(--oviz-instrument-ease) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer {
+        width: min(316px, calc(100vw - 32px)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
+        width: min(400px, calc(100vw - 32px)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell[data-open="true"] .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell[data-open="true"] .oviz-three-controls-drawer {
+        transform: translate3d(0, 0, 0) scale(1) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-selection,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls {
+        gap: 10px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-title,
+      #__ROOT_ID__ .oviz-three-controls-hint,
+      #__ROOT_ID__ .oviz-three-selection-readout,
+      #__ROOT_ID__ .oviz-three-volume-summary,
+      #__ROOT_ID__ .oviz-three-legend-summary {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-row {
+        gap: 10px !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field,
+      #__ROOT_ID__ .oviz-three-controls-toggle-row,
+      #__ROOT_ID__ .oviz-three-selection-toggle,
+      #__ROOT_ID__ .oviz-three-volume-field,
+      #__ROOT_ID__ .oviz-three-volume-toggle,
+      #__ROOT_ID__ .oviz-three-legend-toggle {
+        gap: 5px !important;
+        color: var(--oviz-instrument-muted) !important;
+        font: 620 11px/1.24 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field,
+      #__ROOT_ID__ .oviz-three-volume-field,
+      #__ROOT_ID__ .oviz-three-legend-field,
+      #__ROOT_ID__ .oviz-three-controls-row,
+      #__ROOT_ID__ .oviz-three-volume-row,
+      #__ROOT_ID__ .oviz-three-legend-control-row {
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-controls-field input[type="text"],
+      #__ROOT_ID__ .oviz-three-controls-field select,
+      #__ROOT_ID__ .oviz-three-volume input[type="number"],
+      #__ROOT_ID__ .oviz-three-volume select,
+      #__ROOT_ID__ .oviz-three-filter-field select,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-legend-field select {
+        min-height: 28px !important;
+        padding: 3px 0 4px !important;
+        border: 0 !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.16) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.84) !important;
+        font: 650 11.5px/1.16 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        box-shadow: none !important;
+        transition: border-color 170ms ease, color 170ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="number"]:focus,
+      #__ROOT_ID__ .oviz-three-controls-field input[type="text"]:focus,
+      #__ROOT_ID__ .oviz-three-controls-field select:focus,
+      #__ROOT_ID__ .oviz-three-volume input[type="number"]:focus,
+      #__ROOT_ID__ .oviz-three-volume select:focus,
+      #__ROOT_ID__ .oviz-three-filter-field select:focus,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="number"]:focus,
+      #__ROOT_ID__ .oviz-three-legend-field select:focus {
+        outline: none !important;
+        border-bottom-color: rgba(246, 200, 95, 0.58) !important;
+        color: rgba(255, 255, 255, 0.95) !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-toggle-row input[type="checkbox"],
+      #__ROOT_ID__ .oviz-three-selection-toggle input[type="checkbox"],
+      #__ROOT_ID__ .oviz-three-legend-toggle input[type="checkbox"],
+      #__ROOT_ID__ .oviz-three-volume-toggle input[type="checkbox"],
+      #__ROOT_ID__ .oviz-three-box-visible {
+        position: relative !important;
+        width: 12px !important;
+        height: 12px !important;
+        flex: 0 0 12px !important;
+        margin: 0 !important;
+        border: 1px solid rgba(238, 242, 247, 0.42) !important;
+        border-radius: 3px !important;
+        background: rgba(255, 255, 255, 0.025) !important;
+        accent-color: var(--oviz-instrument-accent) !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-toggle-row input[type="checkbox"]:checked,
+      #__ROOT_ID__ .oviz-three-selection-toggle input[type="checkbox"]:checked,
+      #__ROOT_ID__ .oviz-three-legend-toggle input[type="checkbox"]:checked,
+      #__ROOT_ID__ .oviz-three-volume-toggle input[type="checkbox"]:checked,
+      #__ROOT_ID__ .oviz-three-box-visible:checked {
+        border-color: rgba(246, 200, 95, 0.82) !important;
+        background: rgba(246, 200, 95, 0.82) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-toggle-row input[type="checkbox"]:checked::after,
+      #__ROOT_ID__ .oviz-three-selection-toggle input[type="checkbox"]:checked::after,
+      #__ROOT_ID__ .oviz-three-legend-toggle input[type="checkbox"]:checked::after,
+      #__ROOT_ID__ .oviz-three-volume-toggle input[type="checkbox"]:checked::after,
+      #__ROOT_ID__ .oviz-three-box-visible:checked::after {
+        content: "" !important;
+        position: absolute !important;
+        left: 3px !important;
+        top: 1px !important;
+        width: 4px !important;
+        height: 7px !important;
+        border-right: 2px solid rgba(0, 0, 0, 0.78) !important;
+        border-bottom: 2px solid rgba(0, 0, 0, 0.78) !important;
+        transform: rotate(40deg) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-toggle-row input[type="checkbox"]:focus-visible,
+      #__ROOT_ID__ .oviz-three-selection-toggle input[type="checkbox"]:focus-visible,
+      #__ROOT_ID__ .oviz-three-legend-toggle input[type="checkbox"]:focus-visible,
+      #__ROOT_ID__ .oviz-three-volume-toggle input[type="checkbox"]:focus-visible,
+      #__ROOT_ID__ .oviz-three-box-visible:focus-visible {
+        outline: none !important;
+        box-shadow: 0 0 0 3px rgba(246, 200, 95, 0.14) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"],
+      #__ROOT_ID__ .oviz-three-volume input[type="range"],
+      #__ROOT_ID__ .oviz-three-filter-range,
+      #__ROOT_ID__ .oviz-three-age-filter-range,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"],
+      #__ROOT_ID__ .oviz-three-slider {
+        height: 30px !important;
+        min-height: 30px !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        accent-color: var(--oviz-instrument-accent) !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        cursor: pointer !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"]::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-volume input[type="range"]::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-filter-range::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-slider::-webkit-slider-runnable-track,
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-webkit-slider-runnable-track {
+        height: 2px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: rgba(238, 242, 247, 0.22) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"]::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-volume input[type="range"]::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-filter-range::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-slider::-webkit-slider-thumb,
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-webkit-slider-thumb {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        width: 12px !important;
+        height: 12px !important;
+        margin-top: -5px !important;
+        border: 1px solid rgba(255, 255, 255, 0.66) !important;
+        border-radius: 50% !important;
+        background: rgba(246, 200, 95, 0.92) !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.055) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"]::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-volume input[type="range"]::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-filter-range::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-slider::-moz-range-track,
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-moz-range-track {
+        height: 2px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: rgba(238, 242, 247, 0.22) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"]::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-volume input[type="range"]::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-filter-range::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-slider::-moz-range-thumb,
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-moz-range-thumb {
+        width: 12px !important;
+        height: 12px !important;
+        border: 1px solid rgba(255, 255, 255, 0.66) !important;
+        border-radius: 50% !important;
+        background: rgba(246, 200, 95, 0.92) !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.055) !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-slider-shell,
+      #__ROOT_ID__ .oviz-three-age-filter-slider-shell {
+        height: 38px !important;
+        margin-top: 6px !important;
+        padding: 2px 0 4px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-slider-shell::before,
+      #__ROOT_ID__ .oviz-three-age-filter-slider-shell::before {
+        left: 10px !important;
+        right: 10px !important;
+        top: 18px !important;
+        height: 2px !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range,
+      #__ROOT_ID__ .oviz-three-age-filter-range {
+        position: absolute !important;
+        inset: 0 !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        margin: 0 !important;
+        pointer-events: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-webkit-slider-runnable-track {
+        height: 38px !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-webkit-slider-thumb {
+        width: 14px !important;
+        height: 14px !important;
+        margin-top: 12px !important;
+        pointer-events: auto !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-moz-range-track {
+        height: 38px !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-moz-range-thumb {
+        width: 14px !important;
+        height: 14px !important;
+        pointer-events: auto !important;
+      }
+      #__ROOT_ID__ .oviz-three-selection button,
+      #__ROOT_ID__ .oviz-three-controls-actions button,
+      #__ROOT_ID__ .oviz-three-action-button {
+        min-height: 28px !important;
+        padding: 0 2px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.64) !important;
+        box-shadow: none !important;
+        font: 680 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        transition: color 160ms ease, box-shadow 180ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-selection button:hover,
+      #__ROOT_ID__ .oviz-three-controls-actions button:hover,
+      #__ROOT_ID__ .oviz-three-action-button:hover,
+      #__ROOT_ID__ .oviz-three-selection button[data-active="true"],
+      #__ROOT_ID__ .oviz-three-controls-actions button[data-active="true"],
+      #__ROOT_ID__ .oviz-three-action-button[data-active="true"] {
+        background: transparent !important;
+        border-color: transparent !important;
+        color: rgba(255, 255, 255, 0.94) !important;
+        box-shadow: inset 0 -1px 0 rgba(246, 200, 95, 0.58) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-panel,
+      #__ROOT_ID__ .oviz-three-key-help {
+        border: 1px solid var(--oviz-instrument-border) !important;
+        border-radius: 10px !important;
+        background: linear-gradient(180deg, rgba(10, 12, 17, 0.74), rgba(6, 8, 12, 0.58)) !important;
+        box-shadow: 0 18px 54px rgba(0, 0, 0, 0.30) !important;
+        backdrop-filter: blur(14px) saturate(120%) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(120%) !important;
+      }
+      #__ROOT_ID__ .oviz-three-age-panel,
+      #__ROOT_ID__ .oviz-three-filter-panel {
+        min-width: min(360px, calc(100vw - 24px)) !important;
+        min-height: min(360px, calc(100vh - 24px)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-age-body,
+      #__ROOT_ID__ .oviz-three-filter-body {
+        gap: 10px !important;
+        padding: 12px 12px 18px !important;
+      }
+      #__ROOT_ID__ .oviz-three-age-filter,
+      #__ROOT_ID__ .oviz-three-filter-slider-shell {
+        padding-bottom: 4px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-drag {
+        height: 32px !important;
+        padding: 0 12px !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.08) !important;
+        background: rgba(255, 255, 255, 0.018) !important;
+        color: rgba(255, 255, 255, 0.88) !important;
+        font: 760 11.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-panel button:not(.oviz-three-window-button) {
+        min-height: 28px !important;
+        border-radius: 6px !important;
+        font: 650 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-window-button {
+        width: 22px !important;
+        height: 22px !important;
+        border-radius: 999px !important;
+      }
+      #__ROOT_ID__ .oviz-three-footer {
+        gap: 10px !important;
+        padding: 0 !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-footer button {
+        width: 32px !important;
+        height: 32px !important;
+        border: 1px solid transparent !important;
+        border-radius: 999px !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.78) !important;
+        transition: color 160ms ease, background 180ms ease, border-color 180ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-footer button:hover,
+      #__ROOT_ID__ .oviz-three-footer button[data-active="true"] {
+        color: rgba(255, 255, 255, 0.96) !important;
+        border-color: rgba(246, 200, 95, 0.22) !important;
+        background: rgba(246, 200, 95, 0.055) !important;
+      }
+      #__ROOT_ID__ .oviz-three-time-label {
+        color: rgba(255, 255, 255, 0.94) !important;
+        font: 760 14px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        text-shadow: 0 0 10px rgba(0, 0, 0, 0.82) !important;
+      }
+      #__ROOT_ID__ .oviz-three-slider-shell {
+        height: 42px !important;
+      }
+      #__ROOT_ID__ .oviz-three-slider-track-wrap {
+        height: 30px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-scale-bar {
+        gap: 5px !important;
+        padding: 7px 10px !important;
+        border: 1px solid rgba(238, 242, 247, 0.08) !important;
+        border-radius: 8px !important;
+        background: rgba(6, 8, 12, 0.38) !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16) !important;
+        backdrop-filter: blur(10px) saturate(116%) !important;
+        -webkit-backdrop-filter: blur(10px) saturate(116%) !important;
+      }
+      #__ROOT_ID__ .oviz-three-scale-label {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font: 760 11.5px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-scale-line::before {
+        border-top-color: rgba(238, 242, 247, 0.66) !important;
+        border-top-width: 1px !important;
+      }
+      #__ROOT_ID__ .oviz-three-scale-line::after {
+        border-left-color: rgba(238, 242, 247, 0.66) !important;
+        border-right-color: rgba(238, 242, 247, 0.66) !important;
+        border-left-width: 1px !important;
+        border-right-width: 1px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-name {
+        max-inline-size: min(34vw, 300px) !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-row {
+        grid-template-columns: 15px minmax(0, auto) !important;
+        column-gap: 4px !important;
+        align-items: center !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-edit {
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        min-height: 18px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        color: rgba(255, 255, 255, 0.42) !important;
+        background: transparent !important;
+        font: 720 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-edit:hover,
+      #__ROOT_ID__ .oviz-three-legend-edit:focus-visible,
+      #__ROOT_ID__ .oviz-three-legend-edit[data-open="true"] {
+        outline: none !important;
+        color: rgba(255, 255, 255, 0.88) !important;
+        box-shadow: inset 0 -1px 0 rgba(246, 200, 95, 0.58) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls {
+        display: grid !important;
+        gap: 8px !important;
+        width: min(292px, calc(100vw - 36px)) !important;
+        max-width: min(292px, calc(100vw - 36px)) !important;
+        max-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 8px 0 18px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        transform: translateY(-8px) !important;
+        transform-origin: top left !important;
+        transition:
+          max-height 300ms var(--oviz-instrument-ease),
+          margin 240ms var(--oviz-instrument-ease),
+          padding 240ms var(--oviz-instrument-ease),
+          opacity 200ms ease,
+          transform 260ms var(--oviz-instrument-ease) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls[data-visible="true"] {
+        max-height: min(72vh, 680px) !important;
+        margin: 5px 0 10px 0 !important;
+        padding: 6px 8px 10px 18px !important;
+        overflow-y: visible !important;
+        overflow-x: visible !important;
+        opacity: 1 !important;
+        transform: translateY(0) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-control-row {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field {
+        display: grid !important;
+        grid-template-columns: minmax(70px, max-content) 154px !important;
+        align-items: center !important;
+        gap: 10px !important;
+        min-height: 32px !important;
+        overflow: visible !important;
+        color: rgba(238, 242, 247, 0.50) !important;
+        font: 620 10.5px/1.18 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"] {
+        width: 140px !important;
+        min-width: 140px !important;
+        max-width: 140px !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        margin: 0 7px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-webkit-slider-runnable-track {
+        height: 2px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-webkit-slider-thumb {
+        width: 12px !important;
+        height: 12px !important;
+        margin-top: -5px !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.06) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-moz-range-track {
+        height: 2px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-moz-range-thumb {
+        width: 12px !important;
+        height: 12px !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.06) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-legend-field select {
+        width: 154px !important;
+        max-width: 154px !important;
+        min-height: 30px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="color"] {
+        width: 44px !important;
+        height: 24px !important;
+        padding: 0 !important;
+        border: 1px solid rgba(238, 242, 247, 0.18) !important;
+        border-radius: 2px !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-menu {
+        max-height: 282px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-menu-list {
+        max-height: 282px !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-button:focus-visible,
+      #__ROOT_ID__ .oviz-three-group-option:focus-visible {
+        outline: none !important;
+        box-shadow: inset 0 -1px 0 rgba(246, 200, 95, 0.62) !important;
       }
       @media (max-width: 980px) {
         #__ROOT_ID__ .oviz-three-topbar {
@@ -8957,6 +9545,42 @@ __SKY_RUNTIME_JS__
         };
       }
 
+      function pointHoverText(point, trace) {
+        if (point && point.hovertext) {
+          return String(point.hovertext);
+        }
+        const motion = point && typeof point.motion === "object" ? point.motion : null;
+        const selection = point && typeof point.selection === "object" ? point.selection : null;
+        const rawName = String(
+          (selection && selection.cluster_name)
+          || (motion && motion.key)
+          || (trace && trace.name)
+          || "Point"
+        ).trim();
+        const label = rawName.replace(/_/g, " ") || "Point";
+        const parts = [`<b style="font-size:16px;">${escapeHtml(label)}</b>`];
+        const traceName = String((trace && trace.name) || "").trim();
+        if (traceName && traceName !== rawName) {
+          parts.push(escapeHtml(traceName));
+        }
+        const frame = typeof currentFrame === "function" ? currentFrame() : null;
+        const timeMyr = Number((motion && motion.time_myr) ?? (frame && frame.time));
+        const ageNowMyr = Number(motion && motion.age_now_myr);
+        if (Number.isFinite(ageNowMyr)) {
+          parts.push(`Age (now) = ${ageNowMyr.toFixed(1)} Myr`);
+          if (Number.isFinite(timeMyr)) {
+            parts.push(`Age (t) = ${(ageNowMyr + timeMyr).toFixed(1)} Myr`);
+          }
+        }
+        const xValue = Number(point && point.x);
+        const yValue = Number(point && point.y);
+        const zValue = Number(point && point.z);
+        if (Number.isFinite(xValue) && Number.isFinite(yValue) && Number.isFinite(zValue)) {
+          parts.push(`(x,y,z) = (${xValue.toFixed(1)}, ${yValue.toFixed(1)}, ${zValue.toFixed(1)})`);
+        }
+        return parts.join("<br>");
+      }
+
       function starSizeStatsForTrace(trace) {
         if (!trace || !Array.isArray(trace.points)) {
           return { hasValues: false, median: 1.0 };
@@ -9023,7 +9647,7 @@ __SKY_RUNTIME_JS__
             return;
           }
           let opacityMultiplier = 1.0;
-          const pointKey = normalizedSelectionKeyFor(point.selection);
+          const pointKey = clusterFilterSelectionKeyForPoint(point) || normalizedSelectionKeyFor(point.selection);
           const focusedTraceKey = dendrogramFocusTraceKey();
           const dendrogramActiveKeys = activeDendrogramSelectionKeys();
           if (focusedTraceKey) {
@@ -9047,7 +9671,7 @@ __SKY_RUNTIME_JS__
             pointState.size * sizeScaleFactor * starsFactor * globalPointSizeScale * pointScale,
             scaleFloor
           );
-          const selectionKey = normalizedSelectionKeyFor(point.selection);
+          const selectionKey = clusterFilterSelectionKeyForPoint(point) || normalizedSelectionKeyFor(point.selection);
           const pointPosition = new THREE.Vector3(point.x, point.y, point.z);
           const glowStrength = Math.max(globalPointGlowStrength, 0.0);
           let interactionSprite = null;
@@ -9100,7 +9724,7 @@ __SKY_RUNTIME_JS__
             coreSprite.position.copy(pointPosition);
             coreSprite.scale.set(coreScale, coreScale, 1.0);
             coreSprite.userData = {
-              hovertext: point.hovertext || trace.name || "",
+              hovertext: pointHoverText(point, trace),
               selection: point.selection || null,
               selectionKey,
               baseScale: coreScale,
@@ -9115,7 +9739,7 @@ __SKY_RUNTIME_JS__
             sprite.position.copy(pointPosition);
             sprite.scale.set(scale, scale, scale);
             sprite.userData = {
-              hovertext: point.hovertext || trace.name || "",
+              hovertext: pointHoverText(point, trace),
               selection: point.selection || null,
               selectionKey,
               baseScale: scale,

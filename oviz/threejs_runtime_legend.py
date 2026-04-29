@@ -14,6 +14,15 @@ THREEJS_LEGEND_RUNTIME_JS = """
         legendGroupDropdownOpen = Boolean(isOpen);
         if (groupDropdownEl) {
           groupDropdownEl.dataset.open = legendGroupDropdownOpen ? "true" : "false";
+          const menuEl = groupDropdownEl.querySelector(".oviz-three-group-menu");
+          if (menuEl) {
+            menuEl.setAttribute("aria-hidden", legendGroupDropdownOpen ? "false" : "true");
+            if (legendGroupDropdownOpen) {
+              menuEl.removeAttribute("inert");
+            } else {
+              menuEl.setAttribute("inert", "");
+            }
+          }
         }
         if (groupDropdownTriggerEl) {
           groupDropdownTriggerEl.setAttribute("aria-expanded", legendGroupDropdownOpen ? "true" : "false");
@@ -125,6 +134,9 @@ THREEJS_LEGEND_RUNTIME_JS = """
             || groupDropdownListEl.querySelector(".oviz-three-group-option");
           if (option) {
             option.focus();
+            if (typeof option.scrollIntoView === "function") {
+              option.scrollIntoView({ block: "nearest" });
+            }
           }
         });
       }

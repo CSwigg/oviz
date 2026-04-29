@@ -619,6 +619,31 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertTrue(np.isfinite(selection["ra_deg"]))
         self.assertTrue(np.isfinite(selection["dec_deg"]))
 
+    def test_threejs_renderer_can_compact_repeated_frame_payloads(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            threejs_initial_state={"compact_payload_enabled": True},
+        )
+
+        frame_by_time = {float(frame["time"]): frame for frame in viz.fig_dict["frames"]}
+        zero_point = frame_by_time[0.0]["traces"][0]["points"][0]
+        past_point = frame_by_time[-1.0]["traces"][0]["points"][0]
+
+        self.assertIn("selection", zero_point)
+        self.assertIn("hovertext", zero_point)
+        self.assertNotIn("selection", past_point)
+        self.assertNotIn("hovertext", past_point)
+        if "motion" in past_point:
+            self.assertLessEqual(
+                set(past_point["motion"]),
+                {"key", "age_now_myr", "time_myr"},
+            )
+        self.assertIn('"compact_payload_enabled":true', fig.to_html())
+
     def test_threejs_renderer_builds_trace_catalog_without_members_file(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         viz.data_collection.cluster.df_int["x_helio"] = [10.0, 20.0]

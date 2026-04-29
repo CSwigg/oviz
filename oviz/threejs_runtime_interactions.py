@@ -259,6 +259,22 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         renderFrame(currentFrameIndex);
       }
 
+      function setDrawerAccessibility(shellEl, toggleEl, drawerSelector, isOpen) {
+        if (!shellEl || !toggleEl) {
+          return;
+        }
+        const drawerEl = shellEl.querySelector(drawerSelector);
+        toggleEl.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        if (drawerEl) {
+          drawerEl.setAttribute("aria-hidden", isOpen ? "false" : "true");
+          if (isOpen) {
+            drawerEl.removeAttribute("inert");
+          } else {
+            drawerEl.setAttribute("inert", "");
+          }
+        }
+      }
+
       function setToolsDrawerOpen(isOpen) {
         if (!toolsShellEl || !toolsToggleEl) {
           return;
@@ -266,10 +282,12 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         const nextOpen = minimalModeEnabled ? false : Boolean(isOpen);
         toolsShellEl.dataset.open = nextOpen ? "true" : "false";
         toolsToggleEl.textContent = nextOpen ? "Selection ▾" : "Selection ▸";
+        setDrawerAccessibility(toolsShellEl, toolsToggleEl, ".oviz-three-tools-drawer", nextOpen);
         if (nextOpen && controlsShellEl && controlsShellEl.dataset.open === "true") {
           controlsShellEl.dataset.open = "false";
           if (controlsToggleEl) {
             controlsToggleEl.textContent = "Controls ▸";
+            setDrawerAccessibility(controlsShellEl, controlsToggleEl, ".oviz-three-controls-drawer", false);
           }
         }
       }
@@ -281,10 +299,12 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         const nextOpen = minimalModeEnabled ? false : Boolean(isOpen);
         controlsShellEl.dataset.open = nextOpen ? "true" : "false";
         controlsToggleEl.textContent = nextOpen ? "Controls ▾" : "Controls ▸";
+        setDrawerAccessibility(controlsShellEl, controlsToggleEl, ".oviz-three-controls-drawer", nextOpen);
         if (nextOpen && toolsShellEl && toolsShellEl.dataset.open === "true") {
           toolsShellEl.dataset.open = "false";
           if (toolsToggleEl) {
             toolsToggleEl.textContent = "Selection ▸";
+            setDrawerAccessibility(toolsShellEl, toolsToggleEl, ".oviz-three-tools-drawer", false);
           }
         }
       }

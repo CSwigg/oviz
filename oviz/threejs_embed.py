@@ -57,7 +57,13 @@ def render_threejs_html(
     html = html.replace("__SKY_RUNTIME_JS__", sky_runtime_js)
     html = html.replace("__VIEWER_RUNTIME_JS__", viewer_runtime_js)
     html = html.replace("__ACTION_RUNTIME_JS__", action_runtime_js)
-    html = html.replace("__SCENE_JSON__", json.dumps(scene_spec))
+    compact_payload = bool((scene_spec.get("initial_state") or {}).get("compact_payload_enabled"))
+    scene_json = (
+        json.dumps(scene_spec, separators=(",", ":"))
+        if compact_payload
+        else json.dumps(scene_spec)
+    )
+    html = html.replace("__SCENE_JSON__", scene_json)
     return html
 
 

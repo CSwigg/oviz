@@ -73,6 +73,41 @@ def _timeline_enabled(plot, frame_specs) -> bool:
     return any(bool(getattr(cluster, "has_time_varying_geometry", True)) for cluster in clusters)
 
 
+def _compact_motion_payload(motion):
+    if not isinstance(motion, dict):
+        return None
+
+    compact = {}
+    key = str(motion.get("key") or "").strip()
+    if key:
+        compact["key"] = key
+    for numeric_key in ("age_now_myr", "time_myr"):
+        value = motion.get(numeric_key)
+        try:
+            numeric_value = float(value)
+        except Exception:
+            continue
+        if np.isfinite(numeric_value):
+            compact[numeric_key] = numeric_value
+    return compact or None
+
+
+def _compact_threejs_frame_payloads(frame_specs):
+    """Trim repeated per-frame point metadata while preserving t=0 selection data."""
+    for frame_spec in frame_specs:
+        keep_selection = np.isclose(float(frame_spec.get("time", np.nan)), 0.0, atol=1e-9)
+        for trace in frame_spec.get("traces", []) or []:
+            for point in trace.get("points", []) or []:
+                if not keep_selection:
+                    point.pop("selection", None)
+                    point.pop("hovertext", None)
+                compact_motion = _compact_motion_payload(point.get("motion"))
+                if compact_motion is None:
+                    point.pop("motion", None)
+                else:
+                    point["motion"] = compact_motion
+
+
 def build_threejs_scene_spec(
     plot,
     frames,
@@ -261,10 +296,16 @@ def build_threejs_scene_spec(
     if getattr(plot, "enable_sky_panel", False) and frame_specs:
         default_sky_catalog = catalog_from_frame_spec(frame_specs[initial_frame_index])
 
+    normalized_initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
+    compact_payload = bool(normalized_initial_state.get("compact_payload_enabled"))
+
     if minimal_mode:
         default_sky_catalog = {}
     else:
         annotate_point_motion_ranges(frame_specs)
+
+    if compact_payload:
+        _compact_threejs_frame_payloads(frame_specs)
 
     title_cfg = layout_json.get("title", {})
     if isinstance(title_cfg, dict):
@@ -273,7 +314,6 @@ def build_threejs_scene_spec(
         title_text = str(title_cfg)
 
     compact_layout = {"scene": copy.deepcopy(scene_layout)}
-    normalized_initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
     initial_state = {
         "click_selection_enabled": False,
         "current_group": default_group,
