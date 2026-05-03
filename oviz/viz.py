@@ -112,6 +112,8 @@ DEFAULT_THREEJS_VOLUME_COLORMAPS = (
     'gist_heat',
     'Greys',
 )
+DEFAULT_THREEJS_VOLUME_SAMPLE_STEPS = 100
+DEFAULT_THREEJS_VOLUME_MAX_RESOLUTION_CAP = 512
 
 class Animate3D:
     """
@@ -204,6 +206,8 @@ class Animate3D:
         threejs_initial_state=None,
         preset=None,
         actions=None,
+        compress_scene_spec="auto",
+        scene_spec_compression_threshold_bytes=None,
     ):
         """
         Main method to generate a 3D animated plot. Integrates orbits if necessary and
@@ -259,6 +263,8 @@ class Animate3D:
         caller_initial_state = copy.deepcopy(threejs_initial_state) if threejs_initial_state else {}
         self.threejs_initial_state = merge_threejs_profile(profile_initial_state, caller_initial_state)
         self.threejs_actions = copy.deepcopy(actions) if actions else []
+        self.threejs_compress_scene_spec = compress_scene_spec
+        self.threejs_scene_spec_compression_threshold_bytes = scene_spec_compression_threshold_bytes
         lite_mode_enabled = bool(
             self.threejs_initial_state.get("lite_mode_enabled")
             or self.threejs_initial_state.get("minimal_mode_enabled")
@@ -1726,7 +1732,15 @@ class Animate3D:
         scene_spec = self._build_threejs_scene_spec(frames)
         self.fig = scene_spec
         self.fig_dict = scene_spec
-        self.figure = ThreeJSFigure(scene_spec)
+        self.figure = ThreeJSFigure(
+            scene_spec,
+            compress_scene_spec=getattr(self, "threejs_compress_scene_spec", "auto"),
+            scene_spec_compression_threshold_bytes=getattr(
+                self,
+                "threejs_scene_spec_compression_threshold_bytes",
+                None,
+            ),
+        )
 
     def _build_threejs_scene_spec(self, frames):
         """Serialize the current animation into a renderer-agnostic scene spec."""
@@ -2111,6 +2125,7 @@ class Animate3D:
         fallback_center,
         volume_layers=None,
         galactic_simple_config=None,
+        galaxy_image_config=None,
     ):
         """Return frame-local decorative objects for the Three.js renderer."""
         decorations = []
@@ -2131,6 +2146,27 @@ class Animate3D:
                 'key': layer.get('key'),
                 'state_key': layer.get('state_key') or layer.get('key'),
             })
+
+        if galaxy_image_config and galaxy_image_config.get('enabled'):
+            image_data_url = galaxy_image_config.get('image_data_url')
+            image_size_pc = float(_coerce_float(galaxy_image_config.get('size_pc'), 40000.0))
+            plane_center = self._threejs_milky_way_center(frame_json, fallback_center)
+            if image_data_url and image_size_pc > 0.0:
+                if bool(galaxy_image_config.get('only_at_t0', True)):
+                    fade_alpha = 1.0 if np.isclose(float(time_value), 0.0, atol=1e-9) else 0.0
+                else:
+                    fade_alpha = 1.0
+                decorations.append({
+                    'kind': 'image_plane',
+                    'key': str(galaxy_image_config.get('key') or 'galaxy-image-overlay'),
+                    'center': {
+                        'x': float(plane_center.get('x', 0.0)),
+                        'y': float(plane_center.get('y', 0.0)),
+                        'z': 0.0,
+                    },
+                    'opacity': float(np.clip(galaxy_image_config.get('opacity', 0.6) * fade_alpha, 0.0, 1.0)),
+                    'render_order': -20,
+                })
 
         if galactic_simple_config and galactic_simple_config.get('enabled'):
             image_data_url = galactic_simple_config.get('image_data_url')
@@ -3233,6 +3269,21 @@ def _coerce_threejs_volume_bound_offset(bound_offset):
     }
 
 
+def _threejs_volume_max_resolution_cap(volume_cfg, data_shape_zyx, *, minimum):
+    data_limit = max(int(v) for v in data_shape_zyx)
+    requested_cap = volume_cfg.get(
+        'max_resolution_cap',
+        volume_cfg.get('max_resolution_limit', DEFAULT_THREEJS_VOLUME_MAX_RESOLUTION_CAP),
+    )
+    return int(
+        np.clip(
+            _coerce_float(requested_cap, DEFAULT_THREEJS_VOLUME_MAX_RESOLUTION_CAP),
+            int(minimum),
+            data_limit,
+        )
+    )
+
+
 def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, index=0):
     center_offset = center_offset or {'x': 0.0, 'y': 0.0, 'z': 0.0}
     data = volume_cfg.get('data')
@@ -3250,7 +3301,8 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
     if max_resolution is None:
         target_shape_zyx = data_shape_zyx
     else:
-        max_resolution = int(np.clip(_coerce_float(max_resolution, max(data_shape_zyx)), 8, 512))
+        max_resolution_cap = _threejs_volume_max_resolution_cap(volume_cfg, data_shape_zyx, minimum=8)
+        max_resolution = int(np.clip(_coerce_float(max_resolution, max(data_shape_zyx)), 8, max_resolution_cap))
         target_shape_zyx = tuple(min(max_resolution, dim) for dim in data_shape_zyx)
     sampled = (
         _downsample_threejs_volume_with_zoom(data, target_shape_zyx)
@@ -3322,8 +3374,8 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
     apply_center_offset = bool(volume_cfg.get('apply_center_offset', False))
     bound_offset = _coerce_threejs_volume_bound_offset(volume_cfg.get('bound_offset'))
 
-    sample_setting = volume_cfg.get('samples', volume_cfg.get('steps', 192))
-    default_steps = int(np.clip(_coerce_float(sample_setting, 192), 24, 768))
+    sample_setting = volume_cfg.get('samples', volume_cfg.get('steps', DEFAULT_THREEJS_VOLUME_SAMPLE_STEPS))
+    default_steps = int(np.clip(_coerce_float(sample_setting, DEFAULT_THREEJS_VOLUME_SAMPLE_STEPS), 24, 768))
     default_opacity = float(np.clip(_coerce_float(volume_cfg.get('opacity'), 0.15), 0.0, 1.0))
     default_alpha_coef = float(np.clip(_coerce_float(volume_cfg.get('alpha_coef'), 50.0), 1.0, 200.0))
     default_gradient_step = float(np.clip(_coerce_float(volume_cfg.get('gradient_step'), 0.005), 1e-4, 0.05))
@@ -3425,20 +3477,12 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         return _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=center_offset, index=index)
 
     hdu_selector = volume_cfg.get('hdu')
-    max_resolution = int(np.clip(_coerce_float(volume_cfg.get('max_resolution'), 96), 24, 512))
-    sky_overlay_max_resolution = None
-    if include_sky_overlay:
-        sky_overlay_max_resolution = int(
-            np.clip(
-                _coerce_float(volume_cfg.get('sky_overlay_max_resolution'), max(max_resolution, 256)),
-                64,
-                512,
-            )
-        )
+    requested_max_resolution = volume_cfg.get('max_resolution')
+    requested_sky_overlay_max_resolution = volume_cfg.get('sky_overlay_max_resolution')
     apply_center_offset = bool(volume_cfg.get('apply_center_offset', True))
     bound_offset = _coerce_threejs_volume_bound_offset(volume_cfg.get('bound_offset'))
-    sample_setting = volume_cfg.get('samples', volume_cfg.get('steps', 192))
-    default_steps = int(np.clip(_coerce_float(sample_setting, 192), 24, 768))
+    sample_setting = volume_cfg.get('samples', volume_cfg.get('steps', DEFAULT_THREEJS_VOLUME_SAMPLE_STEPS))
+    default_steps = int(np.clip(_coerce_float(sample_setting, DEFAULT_THREEJS_VOLUME_SAMPLE_STEPS), 24, 768))
     default_opacity = float(np.clip(_coerce_float(volume_cfg.get('opacity'), 0.15), 0.0, 1.0))
     default_alpha_coef = float(np.clip(_coerce_float(volume_cfg.get('alpha_coef'), 50.0), 1.0, 200.0))
     default_gradient_step = float(np.clip(_coerce_float(volume_cfg.get('gradient_step'), 0.005), 1e-4, 0.05))
@@ -3449,8 +3493,19 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         hdu = hdu_info['hdu']
         data = hdu_info['cube_data_zyx']
         data_shape_zyx = tuple(int(v) for v in data.shape)
+        max_resolution_cap = _threejs_volume_max_resolution_cap(volume_cfg, data_shape_zyx, minimum=24)
+        max_resolution = int(np.clip(_coerce_float(requested_max_resolution, 96), 24, max_resolution_cap))
         target_shape_zyx = tuple(min(max_resolution, dim) for dim in data_shape_zyx)
         sampled = _downsample_threejs_volume_with_zoom(data, target_shape_zyx)
+        sky_overlay_max_resolution = None
+        if include_sky_overlay:
+            sky_overlay_max_resolution = int(
+                np.clip(
+                    _coerce_float(requested_sky_overlay_max_resolution, max(max_resolution, 256)),
+                    64,
+                    max_resolution_cap,
+                )
+            )
         sky_overlay_shape_zyx = None
         sky_overlay_sampled = None
         if sky_overlay_max_resolution is not None:

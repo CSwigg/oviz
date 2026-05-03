@@ -1,4 +1,8 @@
+import base64
+import gzip
+import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -14,6 +18,7 @@ os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from oviz import Layer, LayerCollection, Scene3D, galactic_lite_profile, website_background_profile  # noqa: E402
+from oviz.threejs_figure import ThreeJSFigure  # noqa: E402
 from oviz.viz import Animate3D  # noqa: E402
 
 
@@ -92,6 +97,39 @@ class _FakeFamilyCollection(_FakeCollection):
 
 
 class ThreeJSRendererTests(unittest.TestCase):
+    def _embedded_scene_spec_marker(self, html):
+        start_marker = "/*__SCENE_SPEC_START__*/"
+        end_marker = "/*__SCENE_SPEC_END__*/"
+        start = html.find(start_marker)
+        self.assertGreaterEqual(start, 0)
+        end = html.find(end_marker, start)
+        self.assertGreater(end, start)
+        return html[start : end + len(end_marker)]
+
+    def _decode_embedded_compressed_scene_spec(self, html):
+        pattern = (
+            r"/\*__SCENE_SPEC_START__\*/const sceneSpec = await "
+            r"inflateOvizGzipBase64SceneSpec\((.*?)\);/\*__SCENE_SPEC_END__\*/"
+        )
+        match = re.search(pattern, html, re.S)
+        self.assertIsNotNone(match)
+        encoded_expr = match.group(1).strip()
+        payload_match = re.fullmatch(r"readOvizSceneSpecPayload\((.*?)\)", encoded_expr, re.S)
+        if payload_match:
+            payload_id = json.loads(payload_match.group(1))
+            payload_pattern = (
+                rf'<script type="application/octet-stream" id="{re.escape(payload_id)}">\n'
+                r"(.*?)\n</script>"
+            )
+            payload_script_match = re.search(payload_pattern, html, re.S)
+            self.assertIsNotNone(payload_script_match)
+            encoded = re.sub(r"\s+", "", payload_script_match.group(1))
+        elif encoded_expr.endswith('.join("")'):
+            encoded = "".join(json.loads(encoded_expr[: -len('.join("")')]))
+        else:
+            encoded = json.loads(encoded_expr)
+        return json.loads(gzip.decompress(base64.b64decode(encoded)).decode("utf-8"))
+
     def test_make_plot_keeps_plotly_renderer_default(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         fig = viz.make_plot(time=np.array([0.0, -1.0]), renderer="plotly", show=False)
@@ -119,9 +157,10 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Shift+drag or use Lasso", html)
         self.assertIn("Enable click select", html)
         self.assertIn("Lasso volumetric data", html)
-        self.assertIn("let lassoVolumeSelectionEnabled = false;", html)
-        self.assertIn("oviz-three-tools-toggle", html)
+        self.assertIn("let lassoVolumeSelectionEnabled = true;", html)
+        self.assertTrue(fig.scene_spec["initial_state"]["lasso_volume_selection_enabled"])
         self.assertIn("oviz-three-controls-toggle", html)
+        self.assertIn("oviz-three-sky-controls-toggle", html)
         self.assertIn("oviz-three-zen-mode", html)
         self.assertIn("oviz-three-reset-view", html)
         self.assertIn("data-zen=\"false\"", html)
@@ -129,8 +168,31 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("activeLegendEditorKey", html)
         self.assertIn("focusSelectionKey", html)
         self.assertIn("Camera FOV", html)
+        self.assertIn('class="oviz-three-camera-fov" type="range" min="0.05"', html)
+        self.assertIn('class="oviz-three-camera-fov" type="range" min="0.05" max="120"', html)
+        self.assertIn("new THREE.PerspectiveCamera(60", html)
         self.assertIn("Focus group", html)
         self.assertIn("Star glow", html)
+        self.assertIn("let globalPointGlowStrength = 0.60;", html)
+        self.assertIn("const pointScaleBaseline = Math.max(Number(sceneSpec.point_size_baseline_scale) || (4.0 / 3.0), 0.01);", html)
+        self.assertIn("const pointScale = (Math.max(sceneSpec.max_span || 1, 1) / 2600.0) * pointScaleBaseline;", html)
+        self.assertIn("function starCoreMaterialFor", html)
+        self.assertIn("function starCoreScaleForPoint", html)
+        self.assertNotIn("function starBloomMaterialFor", html)
+        self.assertNotIn("function starBloomScaleForPoint", html)
+        self.assertIn("Glow keeps its old apparent radius while the regular marker stays on the smaller baseline.", html)
+        self.assertIn("6.45 + 1.26 * strength", html)
+        self.assertIn("function writeStarPsfTexture", html)
+        self.assertIn("const airyCore = 0.82", html)
+        self.assertIn("const saturatedCore = 1.00", html)
+        self.assertIn("blending: THREE.AdditiveBlending", html)
+        self.assertNotIn("function diffractionSpikeAlpha", html)
+        self.assertIn("THREE.LinearMipmapLinearFilter", html)
+        self.assertNotIn("screenPixelsToWorldScale", html)
+        self.assertIn('registerCameraResponsivePointSprite(glowSprite, "glow"', html)
+        self.assertIn('registerCameraResponsivePointSprite(coreSprite, "core"', html)
+        self.assertNotIn('registerCameraResponsivePointSprite(bloomSprite, "bloom"', html)
+        self.assertIn('registerCameraResponsivePointSprite(sprite, "marker"', html)
         self.assertIn("Size points by n_stars", html)
         self.assertIn('"n_stars": 42.0', html)
         self.assertIn('"has_n_stars"', html)
@@ -146,7 +208,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn(">Aurora<", html)
         self.assertIn("Keyboard controls are active as soon as the viewer loads.", html)
         self.assertIn("Shift + W / A / S / D", html)
-        self.assertIn("View from Earth", html)
+        self.assertIn("Toggle between 3D View and Sky View.", html)
+        self.assertIn(">3D View<", html)
+        self.assertIn("oviz-three-earth-view-toggle", html)
         self.assertIn("Reset camera", html)
         self.assertIn("oviz-three-scale-bar", html)
         self.assertIn("oviz-three-save-state", html)
@@ -175,6 +239,118 @@ class ThreeJSRendererTests(unittest.TestCase):
             html_text = out_file.read_text()
             self.assertIn("oviz-three-legend-panel", html_text)
             self.assertNotIn("Three.js modules are loaded from a CDN", html_text)
+
+    def test_threejs_html_can_force_compressed_scene_spec_payload(self):
+        scene_spec = {
+            "renderer": "threejs",
+            "width": 900,
+            "height": 700,
+            "initial_state": {"compact_payload_enabled": True},
+            "frames": [
+                {
+                    "name": "0",
+                    "time": 0.0,
+                    "traces": [
+                        {
+                            "name": "Dense Trace",
+                            "points": [
+                                {
+                                    "x": 1.0,
+                                    "y": 2.0,
+                                    "z": 3.0,
+                                    "payload": "abcdefghij" * 200,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        html = ThreeJSFigure(scene_spec).to_html(compress_scene_spec=True)
+
+        self.assertIn("/*__SCENE_SPEC_START__*/const sceneSpec = await inflateOvizGzipBase64SceneSpec(", html)
+        self.assertIn('type="application/octet-stream"', html)
+        self.assertIn("readOvizSceneSpecPayload(", html)
+        self.assertIn('new DecompressionStream("gzip")', html)
+        self.assertIn("support DecompressionStream('gzip')", html)
+        self.assertNotIn('support DecompressionStream("gzip")', html)
+        self.assertIn("compress_scene_spec=False", html)
+        self.assertIn('"compression_method":"gzip+base64"', html)
+        self.assertIn('"raw_scene_spec_size_bytes":', html)
+        self.assertIn('"compressed_size_bytes":', html)
+        self.assertIn('"embedded_base64_size_bytes":', html)
+        self.assertNotIn('"payload":"abcdefghij', html)
+        self.assertEqual(self._decode_embedded_compressed_scene_spec(html), scene_spec)
+
+    def test_threejs_html_auto_compresses_scene_spec_above_threshold(self):
+        scene_spec = {
+            "renderer": "threejs",
+            "width": 900,
+            "height": 700,
+            "initial_state": {},
+            "frames": [{"name": "0", "time": 0.0, "traces": []}],
+        }
+        fig = ThreeJSFigure(scene_spec)
+
+        raw_html = fig.to_html(scene_spec_compression_threshold_bytes=10**9)
+        auto_compressed_html = fig.to_html(scene_spec_compression_threshold_bytes=1)
+        forced_raw_html = fig.to_html(
+            compress_scene_spec=False,
+            scene_spec_compression_threshold_bytes=1,
+        )
+
+        self.assertIn("/*__SCENE_SPEC_START__*/const sceneSpec = {", self._embedded_scene_spec_marker(raw_html))
+        self.assertNotIn("await inflateOvizGzipBase64SceneSpec(", self._embedded_scene_spec_marker(raw_html))
+        self.assertIn(
+            "/*__SCENE_SPEC_START__*/const sceneSpec = await inflateOvizGzipBase64SceneSpec(",
+            self._embedded_scene_spec_marker(auto_compressed_html),
+        )
+        self.assertEqual(self._decode_embedded_compressed_scene_spec(auto_compressed_html), scene_spec)
+        self.assertIn("/*__SCENE_SPEC_START__*/const sceneSpec = {", self._embedded_scene_spec_marker(forced_raw_html))
+        self.assertNotIn("await inflateOvizGzipBase64SceneSpec(", self._embedded_scene_spec_marker(forced_raw_html))
+        self.assertIn('"compression_method":"none"', forced_raw_html)
+
+    def test_threejs_save_state_recompresses_large_scene_spec_exports(self):
+        scene_spec = {
+            "renderer": "threejs",
+            "width": 900,
+            "height": 700,
+            "initial_state": {"compact_payload_enabled": True},
+            "frames": [
+                {
+                    "name": "0",
+                    "time": 0.0,
+                    "traces": [
+                        {
+                            "type": "points",
+                            "name": "large",
+                            "points": [
+                                {
+                                    "x": 1.0,
+                                    "y": 2.0,
+                                    "z": 3.0,
+                                    "payload": "abcdefghij" * 200,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        html = ThreeJSFigure(scene_spec).to_html(compress_scene_spec=True)
+
+        self.assertIn("async function buildExportHtml(exportSceneSpec)", html)
+        self.assertIn("const currentHtml = removeExistingSceneSpecPayloadHtml(", html)
+        self.assertIn("await gzipBase64EncodeText(sceneJsonText)", html)
+        self.assertIn('new CompressionStream("gzip")', html)
+        self.assertIn("sceneSpecMarkerWrappedCompressedPayload(payloadId)", html)
+        self.assertIn("insertSceneSpecPayloadHtml(exportHtml, payloadHtml)", html)
+        self.assertIn("const htmlText = await buildExportHtml(exportSceneSpec);", html)
+        self.assertIn("compression_mode: sceneSpecPayloadCompressionMode()", html)
+        self.assertIn("compression_method: \"gzip+base64\"", html)
+        self.assertIn("<\\/script>`", html)
 
     def test_threejs_renderer_rejects_actions_for_plotly(self):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
@@ -410,6 +586,43 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertFalse(profile["click_selection_enabled"])
         self.assertEqual(profile["camera"]["view_offset"]["x"], 0.22)
 
+    def test_standard_scene_supports_standalone_galaxy_image_overlay(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = Path(tmp_dir) / "galaxy.jpg"
+            image_path.write_bytes(b"\xff\xd8\xff\xd9")
+            viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
+            viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                threejs_initial_state={
+                    "galaxy_image": True,
+                    "galaxy_image_path": str(image_path),
+                    "galaxy_image_size_pc": 40000.0,
+                    "galaxy_image_opacity": 0.35,
+                },
+            )
+
+        self.assertFalse(viz.fig_dict["galactic_simple"]["enabled"])
+        self.assertEqual(len(viz.fig_dict["image_planes"]), 1)
+        image_plane = viz.fig_dict["image_planes"][0]
+        self.assertEqual(image_plane["key"], "galaxy-image-overlay")
+        self.assertTrue(image_plane["image_data_url"].startswith("data:image/jpeg;base64,"))
+        self.assertEqual(image_plane["width_pc"], 40000.0)
+
+        zero_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == 0.0)
+        past_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == -1.0)
+        zero_image = next(
+            item for item in zero_frame["decorations"] if item.get("key") == "galaxy-image-overlay"
+        )
+        past_image = next(
+            item for item in past_frame["decorations"] if item.get("key") == "galaxy-image-overlay"
+        )
+        self.assertEqual(zero_image["kind"], "image_plane")
+        self.assertAlmostEqual(zero_image["opacity"], 0.35)
+        self.assertEqual(past_image["opacity"], 0.0)
+        self.assertIn("Cluster A", [trace["name"] for trace in zero_frame["traces"]])
+
     def test_static_lite_scene_disables_timeline_footer(self):
         static_sun_df = pd.DataFrame(
             {
@@ -541,14 +754,16 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual([label["text"] for label in label_trace["labels"]], ["Orion", "Sco-Cen"])
         self.assertTrue(all(label["screen_stable"] for label in label_trace["labels"]))
 
-    def test_threejs_renderer_scale_bar_is_draggable_and_saved(self):
+    def test_threejs_renderer_scale_bar_is_fixed_and_not_saved(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         fig = viz.make_plot(time=np.array([0.0, -1.0]), renderer="threejs", show=False)
         html = fig.to_html()
 
         self.assertIn('class="oviz-three-scale-bar" data-dragging="false"', html)
-        self.assertIn('scaleBarEl.addEventListener("pointerdown", onScaleBarPointerStart);', html)
+        self.assertIn("pointer-events: none;", html)
+        self.assertIn("function onScaleBarPointerStart(event) {\n        return false;\n      }", html)
         self.assertIn("function captureScaleBarState()", html)
+        self.assertIn("function captureScaleBarState() {\n        return null;\n      }", html)
         self.assertIn("scale_bar_state: captureScaleBarState()", html)
 
     def test_threejs_renderer_can_serialize_sky_panel_state(self):
@@ -588,13 +803,458 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertTrue(np.isfinite(selection["dec_deg"]))
         self.assertIn("AladinLite/api/v3/latest/aladin.js", html)
         self.assertIn("oviz-three-sky-panel", html)
-        self.assertIn('aladinOptions.projection = "MOL";', html)
+        self.assertIn('aladinOptions.projection = skyDomeBackgroundOnly ? "TAN" : "MOL";', html)
         self.assertIn("expandLayersControl: false", html)
         self.assertIn(".aladin-stack-box", html)
         self.assertIn("View: Mollweide all-sky", html)
         self.assertIn('type: "oviz-sky-hover-cluster"', html)
         self.assertIn('type: "oviz-parent-hover-cluster"', html)
         self.assertIn('aladin.on("objectHovered"', html)
+
+    def test_threejs_renderer_can_enable_local_sky_dome_from_image_path(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = Path(tmp_dir) / "local_sky.png"
+            image_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+            viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                enable_sky_panel=False,
+                threejs_initial_state={
+                    "sky_dome": {
+                        "enabled": True,
+                        "image_path": str(image_path),
+                        "projection": "MOL",
+                        "projection_metadata": {
+                            "coordinate_frame": "galactic",
+                            "lon_center_deg": 0.0,
+                            "lat_center_deg": 0.0,
+                        },
+                        "radius_pc": 32000.0,
+                        "opacity": 0.42,
+                        "full_opacity_scale_bar_pc": 180.0,
+                        "fade_out_scale_bar_pc": 900.0,
+                        "capture_width_px": 2048,
+                    },
+                },
+            )
+
+        scene_spec = viz.fig_dict
+        sky_dome = scene_spec["sky_dome"]
+        self.assertFalse(scene_spec["sky_panel"]["enabled"])
+        self.assertTrue(sky_dome["enabled"])
+        self.assertEqual(sky_dome["source"], "local_image")
+        self.assertTrue(sky_dome["image_data_url"].startswith("data:image/png;base64,"))
+        self.assertEqual(sky_dome["projection"], "MOL")
+        self.assertEqual(
+            sky_dome["projection_metadata"],
+            {
+                "coordinate_frame": "galactic",
+                "lon_center_deg": 0.0,
+                "lat_center_deg": 0.0,
+            },
+        )
+        self.assertEqual(sky_dome["radius_pc"], 32000.0)
+        self.assertEqual(sky_dome["opacity"], 0.42)
+        self.assertEqual(sky_dome["full_opacity_scale_bar_pc"], 180.0)
+        self.assertEqual(sky_dome["fade_out_scale_bar_pc"], 900.0)
+        self.assertNotIn("image_path", sky_dome)
+        self.assertNotIn("capture_width_px", sky_dome)
+
+    def test_threejs_renderer_can_enable_local_sky_dome_from_data_url(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=False,
+            threejs_initial_state={
+                "sky_dome_image_data_url": "data:image/jpeg;base64,abcd",
+                "sky_dome_projection": "CAR",
+                "sky_dome_projection_metadata": {"coordinate_frame": "icrs"},
+                "sky_dome_radius_pc": 25000.0,
+                "sky_dome_opacity": 0.65,
+            },
+        )
+
+        sky_dome = viz.fig_dict["sky_dome"]
+        self.assertTrue(sky_dome["enabled"])
+        self.assertEqual(sky_dome["source"], "local_image")
+        self.assertEqual(sky_dome["image_data_url"], "data:image/jpeg;base64,abcd")
+        self.assertEqual(sky_dome["projection"], "CAR")
+        self.assertEqual(sky_dome["projection_metadata"], {"coordinate_frame": "icrs"})
+        self.assertEqual(sky_dome["radius_pc"], 25000.0)
+        self.assertEqual(sky_dome["opacity"], 0.65)
+
+    def test_threejs_renderer_exposes_embedded_sky_dome_source_selector(self):
+        image_data_url = "data:image/png;base64,iVBORw0KGgo="
+        scene_spec = {
+            "renderer": "threejs",
+            "width": 900,
+            "height": 700,
+            "initial_state": {},
+            "theme": {},
+            "center": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "ranges": {"x": [-1.0, 1.0], "y": [-1.0, 1.0], "z": [-1.0, 1.0]},
+            "max_span": 2.0,
+            "show_axes": False,
+            "layout": {"scene": {}},
+            "frames": [{"name": "0", "time": 0.0, "traces": []}],
+            "sky_panel": {"enabled": False},
+            "sky_dome": {
+                "enabled": True,
+                "default_source_key": "main",
+                "radius_pc": 32000.0,
+                "opacity": 0.5,
+                "sources": [
+                    {
+                        "key": "main",
+                        "label": "Main sky",
+                        "projection": "MOL",
+                        "data_url": image_data_url,
+                        "main": True,
+                    },
+                    {
+                        "key": "alternate",
+                        "label": "Alternate sky",
+                        "projection": "CAR",
+                        "image_data_url": image_data_url,
+                    },
+                ],
+            },
+        }
+
+        html = ThreeJSFigure(scene_spec).to_html(compress_scene_spec=False)
+
+        self.assertIn("oviz-three-sky-source-select", html)
+        self.assertIn("function normalizeSkyDomeSourceOptions", html)
+        self.assertIn("function setSkyDomeSourceByKey", html)
+        self.assertIn("function applyInitialSkyDomeSource", html)
+        self.assertIn('startsWith("data:image/")', html)
+        self.assertIn("skyDomeHasLocalSources()", html)
+        self.assertIn("sky_dome_source_key", html)
+        self.assertIn('"default_source_key": "main"', html)
+
+    def test_threejs_renderer_can_enable_aladin_sky_dome_without_local_image(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=True,
+            sky_survey="P/DSS2/color",
+            threejs_initial_state={
+                "sky_dome_enabled": True,
+                "sky_dome_projection": "MOL",
+                "sky_dome_capture_width_px": 2048,
+                "sky_dome_capture_height_px": 1024,
+                "sky_dome_capture_format": "image/png",
+                "sky_dome_capture_quality": 0.8,
+            },
+        )
+
+        sky_dome = viz.fig_dict["sky_dome"]
+        self.assertTrue(sky_dome["enabled"])
+        self.assertEqual(sky_dome["source"], "aladin")
+        self.assertEqual(sky_dome["projection"], "MOL")
+        self.assertEqual(sky_dome["capture_width_px"], 2048)
+        self.assertEqual(sky_dome["capture_height_px"], 1024)
+        self.assertEqual(sky_dome["capture_format"], "image/png")
+        self.assertEqual(sky_dome["capture_quality"], 0.8)
+        self.assertNotIn("image_data_url", sky_dome)
+        self.assertNotIn("capture_face_px", sky_dome)
+
+        html = fig.to_html()
+        self.assertIn('class="oviz-three-sky-dome-frame"', html)
+        self.assertIn('type: "oviz-aladin-sky-snapshot"', html)
+        self.assertIn("getViewDataURL({", html)
+        self.assertIn("const skyDomeCaptureQuality = ${skyDomeCaptureQuality};", html)
+        self.assertIn("quality: skyDomeCaptureQuality", html)
+        self.assertIn("setSkyDomeTextureFromDataUrl", html)
+        self.assertIn('aladin.setProjection(skyDomeBackgroundOnly ? "TAN" : "MOL")', html)
+        self.assertIn("skyDomeUsesAladinBackground()", html)
+        self.assertIn("captureOnlyMode\n          && skyDomeUsesAladinBackground()", html)
+        self.assertIn('buildAladinSrcdoc([], [], "overview", null, true)', html)
+        self.assertIn("galacticAxisMatrix", html)
+        self.assertIn("skyDomeAxisTransformMatrix", html)
+        self.assertIn("root.dataset.skyAxisTransform", html)
+        self.assertIn('mode === "live_aladin"', html)
+        self.assertNotIn("oviz-aladin-sky-cubemap", html)
+
+    def test_threejs_renderer_can_use_live_aladin_sky_dome_background(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=True,
+            sky_survey="P/DSS2/color",
+            threejs_initial_state={
+                "sky_dome_enabled": True,
+                "sky_dome_background_mode": "live_aladin",
+            },
+        )
+
+        sky_dome = viz.fig_dict["sky_dome"]
+        self.assertEqual(sky_dome["source"], "aladin")
+        self.assertEqual(sky_dome["background_mode"], "live_aladin")
+
+        html = fig.to_html()
+        self.assertIn('mode === "live_aladin"', html)
+        self.assertIn("captureOnlyMode\n          && skyDomeUsesAladinBackground()", html)
+        self.assertIn('type: "oviz-sky-background-view"', html)
+        self.assertIn("controls.enableDamping = !liveAladinSkyBackground", html)
+        self.assertIn('controls.addEventListener("change"', html)
+        self.assertIn("{ force: skyDomeBackgroundUserCameraActive }", html)
+        self.assertIn('skyDomeSurvey = skyDomeLocalSourceName(data.survey || (skySpec && skySpec.survey) || "aladin")', html)
+        self.assertIn('root.dataset.skyDomeMotion = skyDomeBackgroundUserCameraActive ? "camera-moving" : "settled"', html)
+        self.assertIn("function scheduleSkyBackgroundView(data)", html)
+        self.assertIn("pendingSkyBackgroundView = data", html)
+        self.assertIn("function updateSkyDomeBackgroundPredictiveTransform", html)
+        self.assertIn("markSkyDomeBackgroundViewApplied(data.seq)", html)
+        self.assertIn('type: "oviz-aladin-sky-background-view-applied"', html)
+        self.assertIn('if (skyDomeBackgroundFrameReady) {\n              setSkyDomeSnapshotStatus("loaded", "");', html)
+        self.assertIn("const cameraFovDeg = Math.min(Math.max(Number(camera.fov) || 60.0, 0.05), 120.0);", html)
+        self.assertIn("const horizontalFovDeg = 2.0 * Math.atan(", html)
+        self.assertIn("const fovDeg = Math.min(Math.max(horizontalFovDeg, 0.05), 179.0);", html)
+        self.assertNotIn("cameraFovDeg: fovDeg", html)
+        self.assertIn("cameraFovDeg,", html)
+        self.assertIn("const alignedFov = Math.min(Math.max(Number(skyDomeBackgroundAlignedView.fovDeg) || 1.0, 0.05), 179.0);", html)
+        self.assertIn("const alignedTan = Math.max(Math.tan(THREE.MathUtils.degToRad(alignedFov * 0.5)), 1e-6);", html)
+        self.assertIn("aladinInstance.setFoV(Math.min(Math.max(fovDeg, 0.05), 179.0));", html)
+        self.assertIn("const scale = Math.min(Math.max(alignedTan / currentTan, 0.55), 1.9);", html)
+        self.assertIn("function zoomEarthViewByWheelDelta(deltaY)", html)
+        self.assertIn("function exitEarthView()", html)
+        self.assertIn("function toggleEarthView()", html)
+        self.assertIn("function resetToSunReferenceFrameForSkyView()", html)
+        self.assertIn("resetToSunReferenceFrameForSkyView();", html)
+        self.assertIn("oviz-three-earth-view-toggle", html)
+        self.assertIn("earthViewReturnCameraState", html)
+        self.assertIn('earthViewToggleButtonEl.textContent = isEarthView ? "Sky View" : "3D View"', html)
+        self.assertIn('if (cameraViewMode === "earth")', html)
+        self.assertNotIn("function exitEarthViewToFree", html)
+        self.assertNotIn("function maybeEnterEarthViewAfterScrollZoom", html)
+        self.assertNotIn("function enterEarthViewFromScroll", html)
+        self.assertIn('if (cameraViewMode === "earth") {\n            fadeFactor = 0.0;', html)
+        self.assertIn('if (cameraViewMode !== "earth") {\n          return 0.0;', html)
+        self.assertIn("function animateSkyDomeViewOpacity", html)
+        self.assertIn("setSkyDomeViewOpacityScale(0.0", html)
+        self.assertIn("preserveDirection: true", html)
+        self.assertIn("preserveFov: false", html)
+        self.assertIn("function leveledSkyViewDirectionForEarthView", html)
+        self.assertIn("function updateControlSensitivityForView", html)
+        self.assertIn("function startSkyViewCameraDrag", html)
+        self.assertIn("function rotateSkyViewCameraByPixels", html)
+        self.assertIn("const xOffset = (2.0 * dx / width) * Math.tan(horizontalFovRad * 0.5);", html)
+        self.assertIn(".addScaledVector(right, xOffset)", html)
+        self.assertIn(".addScaledVector(up, yOffset)", html)
+        self.assertIn("controls.enableRotate = !isEarthView", html)
+        self.assertIn("controls.enabled = !isEarthView", html)
+        self.assertIn("controls.rotateSpeed = 0.0", html)
+        self.assertIn("function lockEarthViewCameraToTarget()", html)
+        self.assertIn("lockEarthViewCameraToTarget();", html)
+        self.assertIn('canvas.addEventListener("pointerdown", onCanvasPointerDown, { capture: true });', html)
+        self.assertIn("startLockedDirection", html)
+        self.assertIn("startDirection,", html)
+        self.assertIn("exitTargetDirection", html)
+        self.assertIn("exitStartDirection", html)
+        self.assertIn("endDistance: exitTargetDistance", html)
+        self.assertIn("(!galacticReferenceVisible || cameraViewMode === \"earth\")", html)
+        self.assertIn("lockDirection: preserveDirection", html)
+        self.assertIn("oviz-three-sky-layer-preset-select", html)
+        self.assertIn("oviz-three-sky-layer-list", html)
+        self.assertIn("oviz-three-sky-layer-summary", html)
+        self.assertIn("oviz-three-sky-layer-body", html)
+        self.assertIn("oviz-three-sky-layer-opacity", html)
+        self.assertIn("oviz-three-sky-layer-stretch", html)
+        self.assertIn("oviz-three-sky-layer-colormap", html)
+        self.assertIn("oviz-three-sky-layer-cut-min", html)
+        self.assertIn("oviz-three-sky-layer-cut-max", html)
+        self.assertIn("oviz-three-sky-hips-search", html)
+        self.assertIn("function moveActiveSkyLayer", html)
+        self.assertIn("function visibleSkyLayers", html)
+        self.assertIn("Search or paste HiPS ID", html)
+        self.assertIn("function fetchSkyLayerHipsRegistry()", html)
+        self.assertIn("MocServer/query", html)
+        self.assertIn("MAXREC\", \"5000\"", html)
+        self.assertIn("skyLayerStretchOptions", html)
+        self.assertIn("skyLayerColormapOptions", html)
+        self.assertIn("P/Mellinger/color", html)
+        self.assertIn("Mellinger Color", html)
+        self.assertIn("P/PLANCK/R2/HFI/color", html)
+        self.assertIn("Planck Dust Emission Color", html)
+        self.assertIn('value: "log", label: "Log10"', html)
+        self.assertIn('value: "asinh", label: "Asinh"', html)
+        self.assertIn('value: "grayscale", label: "Gray"', html)
+        self.assertNotIn("oviz-three-sky-layer-active-select", html)
+        self.assertNotIn("oviz-three-legend-sky-section", html)
+        self.assertIn('type: "oviz-sky-layer-state"', html)
+        self.assertIn("fallbackSkyLayerPresetOptions", html)
+        self.assertIn("function postAladinHipsFavorites()", html)
+        self.assertIn("aladinInstance.hipsFavorites", html)
+        self.assertIn('type: "oviz-aladin-hips-favorites"', html)
+        self.assertIn("setAladinDefaultSkyLayerPresets(data.favorites)", html)
+        self.assertIn("function setOverlaySkyImageLayer", html)
+        self.assertIn("aladinInstance.newImageSurvey(survey)", html)
+        self.assertIn("aladinInstance.setOverlayImageLayer(overlaySurvey, layerName)", html)
+        self.assertIn("aladinInstance.setImageSurvey(survey)", html)
+        self.assertIn("applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });", html)
+        self.assertIn("function skyDomeFrameVisualFilterCss", html)
+        self.assertNotIn("Show sky dome", html)
+        self.assertNotIn("Keep sky visible", html)
+        self.assertIn("aladinInstance.stopAnimation()", html)
+        self.assertIn("aladinInstance.gotoPosition(lDeg, bDeg)", html)
+        self.assertIn("const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 16.0 : 50.0", html)
+        self.assertIn("updateSkyDomeBackgroundFrame(\n            (typeof performance", html)
+
+    def test_threejs_renderer_can_use_native_hips_sky_dome_background(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=True,
+            sky_survey="P/DSS2/color",
+            threejs_initial_state={
+                "sky_dome_enabled": True,
+                "sky_dome_background_mode": "native_hips",
+                "sky_dome_source": "hips",
+                "sky_dome_hips_base_url": "https://alasky.cds.unistra.fr/DSS/DSSColor",
+                "sky_dome_hips_tile_order": 9,
+                "sky_dome_hips_allsky_tile_subdivisions": 18,
+                "sky_dome_hips_max_active_tiles": 96,
+                "sky_dome_hips_max_concurrent_tile_loads": 6,
+                "sky_dome_hips_startup_preload_tiles": 24,
+                "sky_dome_hips_startup_wait_ms": 1200,
+                "sky_dome_hips_brightness": 2.5,
+                "sky_dome_hips_contrast": 1.2,
+                "sky_dome_hips_gamma": 1.4,
+                "sky_dome_force_visible": True,
+            },
+        )
+
+        sky_dome = viz.fig_dict["sky_dome"]
+        self.assertEqual(sky_dome["source"], "hips")
+        self.assertEqual(sky_dome["background_mode"], "native_hips")
+        self.assertEqual(sky_dome["hips_base_url"], "https://alasky.cds.unistra.fr/DSS/DSSColor")
+        self.assertEqual(sky_dome["hips_tile_order"], 9)
+        self.assertEqual(sky_dome["hips_allsky_tile_subdivisions"], 18)
+        self.assertEqual(sky_dome["hips_max_active_tiles"], 96)
+        self.assertEqual(sky_dome["hips_max_concurrent_tile_loads"], 6)
+        self.assertEqual(sky_dome["hips_startup_preload_tiles"], 24)
+        self.assertEqual(sky_dome["hips_startup_wait_ms"], 1200.0)
+        self.assertEqual(sky_dome["hips_brightness"], 2.5)
+        self.assertEqual(sky_dome["hips_contrast"], 1.2)
+        self.assertEqual(sky_dome["hips_gamma"], 1.4)
+        self.assertTrue(sky_dome["force_visible"])
+        self.assertNotIn("capture_width_px", sky_dome)
+        self.assertNotIn("image_data_url", sky_dome)
+
+        html = fig.to_html()
+        self.assertIn("function skyDomeUsesNativeHips()", html)
+        self.assertIn("function initializeNativeHipsSkyDome()", html)
+        self.assertIn("function healpixNestedVectorFromXyf", html)
+        self.assertIn("function healpixNestedVectorFromFaceXY", html)
+        self.assertIn("function healpixNestedPixelFromVector", html)
+        self.assertIn("function nativeHipsTilesForCurrentView", html)
+        self.assertIn("function preloadNativeHipsStartupTiles", html)
+        self.assertIn("preloadNativeHipsStartupTiles();", html)
+        self.assertIn("function skyDomeWorldCenterForCurrentView", html)
+        self.assertIn("return camera.position.clone();", html)
+        self.assertIn("function skyDomeHipsAllskyTileSubdivisions", html)
+        self.assertIn("function skyDomeHipsTileOrderForFov", html)
+        self.assertIn("Norder${safeOrder}/Dir${dirIndex}/Npix${safePix}.${skyDomeHipsTileFormat()}", html)
+        self.assertIn("Allsky.${skyDomeHipsTileFormat()}", html)
+        self.assertIn("function pumpNativeHipsTileLoads()", html)
+        self.assertIn("function skyDomeHipsBrightness()", html)
+        self.assertIn("function applySkyDomeFrameVisualSettings()", html)
+        self.assertIn("side: THREE.DoubleSide", html)
+        self.assertIn("oviz-three-sky-layer-preset-select", html)
+        self.assertIn("oviz-three-sky-layer-list", html)
+        self.assertIn("oviz-three-sky-layer-summary", html)
+        self.assertIn("oviz-three-sky-layer-stretch", html)
+        self.assertIn("oviz-three-sky-layer-colormap", html)
+        self.assertNotIn("oviz-three-sky-layer-active-select", html)
+        self.assertIn("function syncSkyLayerControls()", html)
+        self.assertNotIn("Show sky dome", html)
+        self.assertNotIn("Keep sky visible", html)
+        self.assertIn("function syncSkyDomeControls()", html)
+        self.assertIn("function refreshSkyDomeControlStatus()", html)
+        self.assertIn('root.dataset.skyDomeMode = "native-hips"', html)
+        self.assertIn('skyDomeFrameEl.removeAttribute("srcdoc")', html)
+
+    def test_threejs_renderer_can_use_hips2fits_sky_dome_background(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=True,
+            sky_survey="P/DSS2/color",
+            threejs_initial_state={
+                "sky_dome_enabled": True,
+                "sky_dome_background_mode": "hips2fits",
+                "sky_dome_source": "hips2fits",
+                "sky_dome_projection": "CAR",
+                "sky_dome_hips_survey": "P/DSS2/color",
+                "sky_dome_hips_frame": "galactic",
+                "sky_dome_hips2fits_width": 8192,
+                "sky_dome_hips2fits_height": 4096,
+                "sky_dome_hips2fits_preview_width": 4096,
+                "sky_dome_hips2fits_preview_height": 2048,
+                "sky_dome_hips2fits_medium_width": 4096,
+                "sky_dome_hips2fits_medium_height": 2048,
+                "sky_dome_hips2fits_projection": "CAR",
+                "sky_dome_hips2fits_coordsys": "galactic",
+                "sky_dome_hips2fits_format": "jpg",
+                "sky_dome_hips2fits_center_frame": "galactic",
+                "sky_dome_hips2fits_l_deg": 0.0,
+                "sky_dome_hips2fits_b_deg": 0.0,
+                "sky_dome_hips2fits_fov_deg": 360.0,
+                "sky_dome_flip_y": True,
+            },
+        )
+
+        sky_dome = viz.fig_dict["sky_dome"]
+        self.assertEqual(sky_dome["source"], "hips2fits")
+        self.assertEqual(sky_dome["background_mode"], "hips2fits")
+        self.assertEqual(sky_dome["hips_survey"], "P/DSS2/color")
+        self.assertEqual(sky_dome["hips_frame"], "galactic")
+        self.assertEqual(sky_dome["hips2fits_width"], 8192)
+        self.assertEqual(sky_dome["hips2fits_height"], 4096)
+        self.assertEqual(sky_dome["hips2fits_preview_width"], 4096)
+        self.assertEqual(sky_dome["hips2fits_preview_height"], 2048)
+        self.assertEqual(sky_dome["hips2fits_medium_width"], 4096)
+        self.assertEqual(sky_dome["hips2fits_medium_height"], 2048)
+        self.assertEqual(sky_dome["hips2fits_projection"], "CAR")
+        self.assertEqual(sky_dome["hips2fits_coordsys"], "galactic")
+        self.assertEqual(sky_dome["hips2fits_format"], "jpg")
+        self.assertEqual(sky_dome["hips2fits_center_frame"], "galactic")
+        self.assertEqual(sky_dome["hips2fits_l_deg"], 0.0)
+        self.assertEqual(sky_dome["hips2fits_b_deg"], 0.0)
+        self.assertEqual(sky_dome["hips2fits_fov_deg"], 360.0)
+        self.assertTrue(sky_dome["flip_y"])
+        self.assertNotIn("image_data_url", sky_dome)
+
+        html = fig.to_html()
+        self.assertIn("function skyDomeUsesHips2Fits()", html)
+        self.assertIn("function skyDomeHips2FitsUrl(width = null, height = null)", html)
+        self.assertIn("function initializeHips2FitsSkyDome()", html)
+        self.assertIn("function skyDomeTextureCoordinateFrameName()", html)
+        self.assertIn("uniform mat3 galacticToIcrsMatrix;", html)
+        self.assertIn("uniform int textureFrameMode;", html)
+        self.assertIn("function skyDomeHips2FitsCenterIcrsDeg()", html)
+        self.assertIn("icrsDegFromGalacticDeg(", html)
+        self.assertIn("function skyDomeHips2FitsPreviewWidth()", html)
+        self.assertIn("function skyDomeHips2FitsMediumWidth()", html)
+        self.assertIn("loaded-preview", html)
+        self.assertIn("loading-medium", html)
+        self.assertIn("loading-hires", html)
+        self.assertIn("hips-image-services/hips2fits", html)
+        self.assertIn('root.dataset.skyDomeMode = String(modeName || "remote-image")', html)
+        self.assertIn('skyDomeCaptureFrameSignature = skyDomeUsesHips2Fits() ? "hips2fits" : "native-hips";', html)
 
     def test_threejs_renderer_keeps_selection_metadata_without_sky_panel(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
@@ -853,6 +1513,60 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("CDELT2: latSpan / height", html)
         self.assertIn("setOverlayImageLayer(imageLayer", html)
         self.assertIn("Rendered at t=0 only as a WebGL2 ray-marched volume.", html)
+        self.assertIn("function volumeWindowStepForLayer", html)
+        self.assertIn("syncVolumeWindowInput(vminInput, state.vmin", html)
+        self.assertIn('vminInput.addEventListener("input"', html)
+        self.assertIn('vmaxInput.addEventListener("input"', html)
+        self.assertNotIn('vminInput.step = "any"', html)
+        self.assertNotIn('vmaxInput.step = "any"', html)
+
+    def test_threejs_renderer_volume_defaults_to_100_samples(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cube_path = Path(tmp_dir) / "default_samples_cube.fits"
+            cube = np.linspace(0.0, 1.0, 2 * 3 * 4, dtype=np.float32).reshape(2, 3, 4)
+            fits.HDUList([
+                fits.PrimaryHDU(),
+                fits.ImageHDU(cube, name="MEAN"),
+            ]).writeto(cube_path)
+
+            fig = viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                volumes=[{
+                    "path": str(cube_path),
+                    "name": "Default Samples Cube",
+                    "max_resolution": 8,
+                }],
+            )
+
+        layer = viz.fig_dict["volumes"]["layers"][0]
+        html = fig.to_html()
+        self.assertEqual(layer["default_controls"]["steps"], 100)
+        self.assertEqual(layer["default_controls"]["samples"], 100)
+        self.assertIn('samplesInput.step = "1"', html)
+
+    def test_threejs_renderer_inline_volume_honors_max_resolution_cap(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        cube = np.linspace(0.0, 1.0, 12 * 12 * 12, dtype=np.float32).reshape(12, 12, 12)
+
+        viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            volumes=[{
+                "data": cube,
+                "name": "Capped Inline Cube",
+                "max_resolution": 10,
+                "max_resolution_cap": 9,
+            }],
+        )
+
+        layer = viz.fig_dict["volumes"]["layers"][0]
+        self.assertEqual(layer["shape"], {"x": 9, "y": 9, "z": 9})
+        self.assertEqual(layer["source_shape"], {"x": 12, "y": 12, "z": 12})
 
     def test_threejs_renderer_volume_auto_detects_hdu_and_centered_bounds(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")

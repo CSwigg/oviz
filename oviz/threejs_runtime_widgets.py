@@ -243,6 +243,9 @@ THREEJS_WIDGET_RUNTIME_JS = """
         applyWidgetMode("sky");
         skyFullButtonEl.setAttribute("title", skyPanelMode === "fullscreen" ? "Restore sky panel" : "Maximize sky panel");
         skyFullButtonEl.setAttribute("aria-label", skyPanelMode === "fullscreen" ? "Restore sky panel" : "Maximize sky panel");
+        if (typeof updateSkyPanel === "function") {
+          updateSkyPanel();
+        }
       }
 
       function applyAgeKdePanelMode() {
@@ -293,6 +296,7 @@ THREEJS_WIDGET_RUNTIME_JS = """
         if (nextMode !== "hidden") {
           setToolsDrawerOpen(false);
           setControlsDrawerOpen(false);
+          setSkyControlsDrawerOpen(false);
         }
         if (nextMode === "fullscreen" && currentMode === "normal") {
           storeWidgetRect(widgetKey);

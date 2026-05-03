@@ -290,6 +290,13 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             setDrawerAccessibility(controlsShellEl, controlsToggleEl, ".oviz-three-controls-drawer", false);
           }
         }
+        if (nextOpen && skyControlsShellEl && skyControlsShellEl.dataset.open === "true") {
+          skyControlsShellEl.dataset.open = "false";
+          if (skyControlsToggleEl) {
+            skyControlsToggleEl.textContent = "Sky ▸";
+            setDrawerAccessibility(skyControlsShellEl, skyControlsToggleEl, ".oviz-three-sky-controls-drawer", false);
+          }
+        }
       }
 
       function setControlsDrawerOpen(isOpen) {
@@ -305,6 +312,37 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           if (toolsToggleEl) {
             toolsToggleEl.textContent = "Selection ▸";
             setDrawerAccessibility(toolsShellEl, toolsToggleEl, ".oviz-three-tools-drawer", false);
+          }
+        }
+        if (nextOpen && skyControlsShellEl && skyControlsShellEl.dataset.open === "true") {
+          skyControlsShellEl.dataset.open = "false";
+          if (skyControlsToggleEl) {
+            skyControlsToggleEl.textContent = "Sky ▸";
+            setDrawerAccessibility(skyControlsShellEl, skyControlsToggleEl, ".oviz-three-sky-controls-drawer", false);
+          }
+        }
+      }
+
+      function setSkyControlsDrawerOpen(isOpen) {
+        if (!skyControlsShellEl || !skyControlsToggleEl) {
+          return;
+        }
+        const nextOpen = minimalModeEnabled ? false : Boolean(isOpen);
+        skyControlsShellEl.dataset.open = nextOpen ? "true" : "false";
+        skyControlsToggleEl.textContent = nextOpen ? "Sky ▾" : "Sky ▸";
+        setDrawerAccessibility(skyControlsShellEl, skyControlsToggleEl, ".oviz-three-sky-controls-drawer", nextOpen);
+        if (nextOpen && toolsShellEl && toolsShellEl.dataset.open === "true") {
+          toolsShellEl.dataset.open = "false";
+          if (toolsToggleEl) {
+            toolsToggleEl.textContent = "Selection ▸";
+            setDrawerAccessibility(toolsShellEl, toolsToggleEl, ".oviz-three-tools-drawer", false);
+          }
+        }
+        if (nextOpen && controlsShellEl && controlsShellEl.dataset.open === "true") {
+          controlsShellEl.dataset.open = "false";
+          if (controlsToggleEl) {
+            controlsToggleEl.textContent = "Controls ▸";
+            setDrawerAccessibility(controlsShellEl, controlsToggleEl, ".oviz-three-controls-drawer", false);
           }
         }
       }
@@ -689,11 +727,22 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function onCanvasWheel(event) {
-        if (!initialZoomAnchorActive()) {
-          return;
-        }
         const deltaY = Number(event.deltaY);
         if (!Number.isFinite(deltaY) || Math.abs(deltaY) <= 1e-6) {
+          return;
+        }
+        if (cameraViewMode === "earth") {
+          if (!zoomEarthViewByWheelDelta(deltaY)) {
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          if (typeof event.stopImmediatePropagation === "function") {
+            event.stopImmediatePropagation();
+          }
+          return;
+        }
+        if (!initialZoomAnchorActive()) {
           return;
         }
         const speedScale = Math.max(globalScrollSpeed, 0.2);
@@ -710,34 +759,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function onScaleBarPointerStart(event) {
-        if (!actionInterruptsMuted()) {
-          interruptActionRun("camera", { disableOrbit: true });
-        }
-        if (!scaleBarEl || event.button !== 0 || minimalModeEnabled) {
-          return;
-        }
-        const rect = scaleBarEl.getBoundingClientRect();
-        const rootRect = root.getBoundingClientRect();
-        scaleBarPointerState = {
-          startX: event.clientX,
-          startY: event.clientY,
-          startLeft: rect.left - rootRect.left,
-          startTop: rect.top - rootRect.top,
-          width: rect.width,
-          height: rect.height,
-        };
-        scaleBarEl.dataset.dragging = "true";
-        controls.enabled = false;
-        if (typeof scaleBarEl.setPointerCapture === "function" && event.pointerId !== undefined) {
-          try {
-            scaleBarEl.setPointerCapture(event.pointerId);
-          } catch (_err) {
-          }
-        }
-        document.body.style.userSelect = "none";
-        focusViewer();
-        event.preventDefault();
-        event.stopPropagation();
+        return false;
       }
 
       function updateScaleBarInteraction(event) {

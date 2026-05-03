@@ -75,7 +75,7 @@ THREEJS_ACTION_RUNTIME_JS = """
       }
 
       function traceVisibleForGroupState(trace, groupName, stateOverride) {
-        if (isGalacticReferenceTrace(trace) && !galacticReferenceVisible) {
+        if (isGalacticReferenceTrace(trace) && (!galacticReferenceVisible || cameraViewMode === "earth")) {
           return false;
         }
         if (isNearbyRegionLabelTrace(trace) && !nearbyRegionLabelsVisible) {

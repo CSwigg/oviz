@@ -41,9 +41,9 @@ THREEJS_SCENE_RUNTIME_JS = """
           }
         }
         state.opacity = Math.min(Math.max(Number(state.opacity), 0.0), 1.0);
-        state.steps = Math.round(Math.min(Math.max(Number(state.steps), 24.0), 768.0) / 8.0) * 8.0;
+        state.steps = Math.round(Math.min(Math.max(Number(state.steps), 24.0), 768.0));
         if (!Number.isFinite(state.steps) || state.steps < 24) {
-          state.steps = Number((layer.default_controls || {}).steps || 192);
+          state.steps = Number((layer.default_controls || {}).steps || 100);
         }
         state.alphaCoef = Math.min(Math.max(Number(state.alphaCoef), 1.0), 200.0);
         if (!Number.isFinite(state.alphaCoef)) {
@@ -290,11 +290,23 @@ THREEJS_SCENE_RUNTIME_JS = """
         return { low, high };
       }
 
+      function volumeLayerTimeMyr(layer) {
+        if (!layer) {
+          return null;
+        }
+        const rawTime = layer.time_myr;
+        if (rawTime === null || rawTime === undefined || rawTime === "" || rawTime === false) {
+          return null;
+        }
+        const timeValue = Number(rawTime);
+        return Number.isFinite(timeValue) ? timeValue : null;
+      }
+
       function volumeSupportsShowAllTimes(layer) {
         return Boolean(
           layer
           && layer.supports_show_all_times
-          && !Number.isFinite(Number(layer.time_myr))
+          && volumeLayerTimeMyr(layer) === null
         );
       }
 
@@ -303,8 +315,8 @@ THREEJS_SCENE_RUNTIME_JS = """
           return false;
         }
         const frameTime = frame ? Number(frame.time) : 0.0;
-        const layerTime = Number(layer.time_myr);
-        if (Number.isFinite(layerTime)) {
+        const layerTime = volumeLayerTimeMyr(layer);
+        if (layerTime !== null) {
           return approximatelyZero(frameTime - layerTime);
         }
         if (state.showAllTimes && volumeSupportsShowAllTimes(layer)) {
@@ -791,8 +803,8 @@ THREEJS_SCENE_RUNTIME_JS = """
         });
         volumeStretchEl.value = String(state.stretch);
 
-        volumeVMinEl.value = formatVolumeNumber(state.vmin);
-        volumeVMaxEl.value = formatVolumeNumber(state.vmax);
+        syncVolumeWindowInput(volumeVMinEl, state.vmin, controlLayer);
+        syncVolumeWindowInput(volumeVMaxEl, state.vmax, controlLayer);
         volumeOpacityEl.value = String(state.opacity);
         volumeAlphaEl.value = String(state.alphaCoef);
         volumeStepsEl.value = String(state.steps);
@@ -1161,6 +1173,9 @@ THREEJS_SCENE_RUNTIME_JS = """
         renderAgeKdeWidget();
         renderClusterFilterWidget();
         renderDendrogramWidget();
+        if (typeof updateSkyPanel === "function") {
+          updateSkyPanel();
+        }
       }
 
       function animateToFrame(targetIndex, options = {}) {
@@ -1168,17 +1183,22 @@ THREEJS_SCENE_RUNTIME_JS = """
         renderFrame(clampedTarget);
       }
 
-      function updateActiveVolumeRuntime() {
+      function updateActiveVolumeRuntime(options = {}) {
+        const syncControls = options.syncControls !== false;
         const layer = selectedVolumeLayer();
         const state = selectedVolumeState();
         if (!state) {
-          renderVolumeControls();
+          if (syncControls) {
+            renderVolumeControls();
+          }
           return;
         }
         if (layer) {
           clampVolumeStateForLayer(layer, state);
         }
-        renderVolumeControls();
+        if (syncControls) {
+          renderVolumeControls();
+        }
         if (!layer) {
           return;
         }
@@ -1293,21 +1313,29 @@ THREEJS_SCENE_RUNTIME_JS = """
           state.steps = Number(volumeStepsEl.value);
           updateActiveVolumeRuntime();
         });
-        volumeVMinEl.addEventListener("change", () => {
+        function updateVolumeWindowFromInput(inputEl, key, options = {}) {
           const state = selectedVolumeState();
           if (!state) {
             return;
           }
-          state.vmin = Number(volumeVMinEl.value);
-          updateActiveVolumeRuntime();
+          const value = finiteNumberInputValue(inputEl);
+          if (value === null) {
+            return;
+          }
+          state[key] = value;
+          updateActiveVolumeRuntime(options);
+        }
+        volumeVMinEl.addEventListener("input", () => {
+          updateVolumeWindowFromInput(volumeVMinEl, "vmin", { syncControls: false });
+        });
+        volumeVMinEl.addEventListener("change", () => {
+          updateVolumeWindowFromInput(volumeVMinEl, "vmin");
+        });
+        volumeVMaxEl.addEventListener("input", () => {
+          updateVolumeWindowFromInput(volumeVMaxEl, "vmax", { syncControls: false });
         });
         volumeVMaxEl.addEventListener("change", () => {
-          const state = selectedVolumeState();
-          if (!state) {
-            return;
-          }
-          state.vmax = Number(volumeVMaxEl.value);
-          updateActiveVolumeRuntime();
+          updateVolumeWindowFromInput(volumeVMaxEl, "vmax");
         });
       }
 """.strip()

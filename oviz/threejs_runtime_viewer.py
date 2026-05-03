@@ -208,7 +208,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         Object.assign(theme, nextTheme);
         root.dataset.themeKey = activeThemeKey;
         applyThemeCssVars();
-        scene.background = new THREE.Color(theme.scene_bgcolor || theme.paper_bgcolor || "#000000");
+        applySceneBackground();
         if (options.syncInput !== false && themeSelectEl) {
           themeSelectEl.value = activeThemeKey;
         }
@@ -227,10 +227,25 @@ THREEJS_VIEWER_RUNTIME_JS = """
         globalPointGlowStrength = clampRange(globalPointGlowStrength, 0.0, 4.0);
         fadeInTimeMyr = Math.max(Number.isFinite(Number(fadeInTimeMyr)) ? Number(fadeInTimeMyr) : 0.0, 0.0);
         focusTraceKey = String(focusTraceKey || "");
-        camera.fov = clampRange(camera.fov, 18.0, 90.0);
+        camera.fov = clampRange(camera.fov, 0.05, 120.0);
         controls.zoomSpeed = globalScrollSpeed;
+        updateControlSensitivityForView();
         syncCameraAutoOrbitMode();
         camera.updateProjectionMatrix();
+      }
+
+      function updateControlSensitivityForView() {
+        if (!controls || !camera) {
+          return;
+        }
+        if (cameraViewMode === "earth") {
+          const fovScale = clampRange((Number(camera.fov) || 90.0) / 90.0, 0.06, 1.35);
+          controls.rotateSpeed = 0.0;
+          controls.panSpeed = 0.55 * fovScale;
+          return;
+        }
+        controls.rotateSpeed = 0.7;
+        controls.panSpeed = 0.7;
       }
 
       function normalizeCameraAutoOrbitSpeed(value) {
@@ -302,11 +317,46 @@ THREEJS_VIEWER_RUNTIME_JS = """
         syncCameraAutoOrbitUi();
       }
 
+      function syncEarthViewToggleUi() {
+        const isEarthView = cameraViewMode === "earth";
+        if (root && root.dataset) {
+          root.dataset.cameraViewMode = cameraViewMode;
+        }
+        if (earthViewToggleButtonEl) {
+          earthViewToggleButtonEl.textContent = isEarthView ? "Sky View" : "3D View";
+          earthViewToggleButtonEl.dataset.active = isEarthView ? "true" : "false";
+          earthViewToggleButtonEl.setAttribute("aria-pressed", isEarthView ? "true" : "false");
+          earthViewToggleButtonEl.title = isEarthView
+            ? "Return to the previous 3D view"
+            : "Move to the sky view from the observer position";
+        }
+        if (viewFromEarthButtonEl) {
+          viewFromEarthButtonEl.textContent = isEarthView ? "Sky View" : "3D View";
+          viewFromEarthButtonEl.dataset.active = isEarthView ? "true" : "false";
+          viewFromEarthButtonEl.setAttribute("aria-pressed", isEarthView ? "true" : "false");
+          viewFromEarthButtonEl.title = isEarthView
+            ? "Return to the previous 3D view"
+            : "Move to the sky view from the observer position";
+        }
+      }
+
       function applyCameraViewMode() {
         const isEarthView = cameraViewMode === "earth";
-        controls.enableRotate = true;
+        controls.enabled = !isEarthView;
+        controls.enableRotate = !isEarthView;
         controls.enableZoom = !isEarthView;
         controls.enablePan = !isEarthView;
+        updateControlSensitivityForView();
+        if (skyDomeFrameEl && !isEarthView) {
+          skyDomeFrameEl.style.opacity = "0";
+        }
+        if (typeof updateSkyDomeBackgroundFrame === "function") {
+          updateSkyDomeBackgroundFrame(
+            (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
+            { force: true }
+          );
+        }
+        syncEarthViewToggleUi();
       }
 
       function trackedZoomAnchorPointForFrame(frame) {
@@ -417,6 +467,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         setCameraAutoOrbitEnabled(false);
         cameraViewMode = "free";
         earthViewFocusDistance = null;
+        earthViewReturnCameraState = null;
         galacticSimpleOrbitTargetTrackingActive = false;
         camera.position.copy(initialCameraState.position);
         controls.target.copy(initialCameraState.target);
@@ -514,33 +565,785 @@ THREEJS_VIEWER_RUNTIME_JS = """
         return new THREE.Vector3(gcX, 0.0, 0.0);
       }
 
-      function viewFromEarth() {
-        const earthPoint = new THREE.Vector3(0.0, 0.0, 20.8);
+      function earthViewPoint() {
+        return new THREE.Vector3(0.0, 0.0, 0.0);
+      }
+
+      function cameraDirectionForEarthView(targetPoint = null) {
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+        if (direction.lengthSq() > 1e-12) {
+          return direction.normalize();
+        }
+        const earthPoint = earthViewPoint();
+        const fallbackTarget = targetPoint || earthViewTargetPoint();
+        direction.subVectors(fallbackTarget, earthPoint);
+        if (direction.lengthSq() <= 1e-12) {
+          direction.set(1.0, 0.0, 0.0);
+        }
+        return direction.normalize();
+      }
+
+      function leveledSkyViewDirectionForEarthView(targetPoint = null) {
+        const direction = cameraDirectionForEarthView(targetPoint);
+        direction.z = 0.0;
+        if (direction.lengthSq() <= 1e-12) {
+          const earthPoint = earthViewPoint();
+          const fallbackTarget = targetPoint || earthViewTargetPoint();
+          direction.subVectors(fallbackTarget, earthPoint);
+          direction.z = 0.0;
+        }
+        if (direction.lengthSq() <= 1e-12) {
+          direction.set(1.0, 0.0, 0.0);
+        }
+        return direction.normalize();
+      }
+
+      function skyViewUpVectorForDirection(direction) {
+        const up = sceneUpVector && sceneUpVector.lengthSq && sceneUpVector.lengthSq() > 1e-12
+          ? sceneUpVector.clone()
+          : new THREE.Vector3(0.0, 0.0, 1.0);
+        const safeDirection = direction && direction.lengthSq && direction.lengthSq() > 1e-12
+          ? direction.clone().normalize()
+          : new THREE.Vector3(1.0, 0.0, 0.0);
+        up.sub(safeDirection.clone().multiplyScalar(up.dot(safeDirection)));
+        if (up.lengthSq() <= 1e-12) {
+          up.set(0.0, 0.0, 1.0);
+        }
+        return up.normalize();
+      }
+
+      function lockEarthViewCameraToTarget() {
+        if (cameraViewMode !== "earth") {
+          return;
+        }
+        const earthPoint = earthViewPoint();
+        const direction = new THREE.Vector3().subVectors(earthPoint, camera.position);
+        if (direction.lengthSq() <= 1e-12) {
+          camera.getWorldDirection(direction);
+        }
+        if (direction.lengthSq() <= 1e-12) {
+          direction.set(1.0, 0.0, 0.0);
+        }
+        direction.normalize();
+        controls.target.copy(earthPoint);
+        camera.up.copy(skyViewUpVectorForDirection(direction));
+        camera.lookAt(earthPoint);
+        camera.updateMatrixWorld(true);
+      }
+
+      function cameraFovForScaleBarLength(scaleBarPc, referenceDistancePc) {
+        const targetScaleBarPc = Number(scaleBarPc);
+        const referenceDistance = Number(referenceDistancePc);
+        if (!Number.isFinite(targetScaleBarPc) || !(targetScaleBarPc > 0.0) || !Number.isFinite(referenceDistance) || !(referenceDistance > 0.0)) {
+          return Number(camera.fov) || 90.0;
+        }
+        const canvasHeight = Math.max(canvas.clientHeight || root.clientHeight || 0, 1);
+        const tangent = targetScaleBarPc * canvasHeight / Math.max(240.0 * referenceDistance, 1e-9);
+        const fovDeg = 2.0 * Math.atan(Math.max(tangent, 1e-9)) * 180.0 / Math.PI;
+        return clampRange(fovDeg, 0.05, 120.0);
+      }
+
+      function cameraDistanceForScaleBarLength(scaleBarPc, fovDeg) {
+        const targetScaleBarPc = Number(scaleBarPc);
+        const fov = Number(fovDeg);
+        if (!Number.isFinite(targetScaleBarPc) || !(targetScaleBarPc > 0.0) || !Number.isFinite(fov) || !(fov > 0.0)) {
+          return Math.max(camera.position.distanceTo(controls.target), 1.0);
+        }
+        const canvasHeight = Math.max(canvas.clientHeight || root.clientHeight || 0, 1);
+        const tangent = Math.tan(THREE.MathUtils.degToRad(fov * 0.5));
+        if (!(tangent > 1e-12)) {
+          return Math.max(camera.position.distanceTo(controls.target), 1.0);
+        }
+        return Math.max(targetScaleBarPc * canvasHeight / (240.0 * 2.0 * tangent), 1e-6);
+      }
+
+      function cancelCameraTransition() {
+        if (cameraTransitionAnimationFrame) {
+          window.cancelAnimationFrame(cameraTransitionAnimationFrame);
+          cameraTransitionAnimationFrame = 0;
+        }
+      }
+
+      function cancelSkyDomeOpacityAnimation() {
+        if (skyDomeOpacityAnimationFrame) {
+          window.cancelAnimationFrame(skyDomeOpacityAnimationFrame);
+          skyDomeOpacityAnimationFrame = 0;
+        }
+      }
+
+      function setSkyDomeViewOpacityScale(value, options = {}) {
+        skyDomeViewOpacityScale = Math.min(Math.max(Number(value) || 0.0, 0.0), 1.0);
+        if (skyDomeFrameEl && skyDomeViewOpacityScale <= 0.002) {
+          skyDomeFrameEl.style.opacity = "0";
+        }
+        const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        if (typeof updateSkyDome === "function") {
+          updateSkyDome(now);
+        }
+        if (typeof updateSkyDomeBackgroundFrame === "function") {
+          updateSkyDomeBackgroundFrame(now, { force: options.force !== false });
+        }
+        if (typeof refreshSkyDomeControlStatus === "function") {
+          refreshSkyDomeControlStatus();
+        }
+      }
+
+      function animateSkyDomeViewOpacity(targetOpacity, options = {}, onComplete = null) {
+        cancelSkyDomeOpacityAnimation();
+        const startOpacity = Math.min(Math.max(Number(skyDomeViewOpacityScale) || 0.0, 0.0), 1.0);
+        const endOpacity = Math.min(Math.max(Number(targetOpacity) || 0.0, 0.0), 1.0);
+        const durationMs = Math.max(Number(options.durationMs) || 420.0, 1.0);
+        const startMs = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        const step = (timestampMs) => {
+          const now = Number(timestampMs) || ((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now());
+          const linear = clampRange((now - startMs) / durationMs, 0.0, 1.0);
+          const eased = linear * linear * linear * (linear * (linear * 6.0 - 15.0) + 10.0);
+          setSkyDomeViewOpacityScale(startOpacity + ((endOpacity - startOpacity) * eased), { force: true });
+          if (linear < 1.0) {
+            skyDomeOpacityAnimationFrame = window.requestAnimationFrame(step);
+            return;
+          }
+          skyDomeOpacityAnimationFrame = 0;
+          setSkyDomeViewOpacityScale(endOpacity, { force: true });
+          if (typeof onComplete === "function") {
+            onComplete();
+          }
+        };
+        skyDomeOpacityAnimationFrame = window.requestAnimationFrame(step);
+      }
+
+      function animateCameraTransition(targetPosition, targetControlsTarget, targetFov, onComplete = null, options = {}) {
+        cancelCameraTransition();
+        const startPosition = camera.position.clone();
+        const startTarget = controls.target.clone();
+        const startUp = camera.up.clone();
+        const startFov = Number(camera.fov) || 60.0;
+        const endPosition = targetPosition.clone();
+        const endTarget = targetControlsTarget.clone();
+        const endUp = options && options.targetUp ? options.targetUp.clone() : startUp.clone();
+        const endFov = clampRange(targetFov, 0.05, 120.0);
+        const lockDirection = Boolean(options && options.lockDirection && options.direction);
+        const lockedDirection = lockDirection
+          ? options.direction.clone().normalize()
+          : null;
+        const startLockedDirection = lockDirection && options && options.startDirection
+          ? options.startDirection.clone().normalize()
+          : null;
+        const startDistance = Math.max(startPosition.distanceTo(startTarget), 1e-6);
+        const rawEndDistance = Number(options && options.endDistance);
+        const endDistance = Number.isFinite(rawEndDistance) && rawEndDistance > 0.0
+          ? rawEndDistance
+          : Math.max(endPosition.distanceTo(endTarget), 1e-6);
+        const startMs = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        const durationMs = Math.max(Number(options && options.durationMs) || 720.0, 1.0);
+        const step = (timestampMs) => {
+          const now = Number(timestampMs) || ((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now());
+          const linear = clampRange((now - startMs) / durationMs, 0.0, 1.0);
+          const eased = linear * linear * linear * (linear * (linear * 6.0 - 15.0) + 10.0);
+          camera.position.copy(startPosition).lerp(endPosition, eased);
+          if (lockDirection && lockedDirection) {
+            const distance = startDistance + ((endDistance - startDistance) * eased);
+            let stepDirection = lockedDirection;
+            if (startLockedDirection) {
+              stepDirection = startLockedDirection.clone().lerp(lockedDirection, eased);
+              if (stepDirection.lengthSq() <= 1e-12) {
+                stepDirection = lockedDirection;
+              } else {
+                stepDirection.normalize();
+              }
+            }
+            controls.target.copy(camera.position).add(stepDirection.clone().multiplyScalar(distance));
+          } else {
+            controls.target.copy(startTarget).lerp(endTarget, eased);
+          }
+          camera.up.copy(startUp).lerp(endUp, eased);
+          if (camera.up.lengthSq() <= 1e-12) {
+            camera.up.copy(endUp);
+          }
+          camera.up.normalize();
+          camera.fov = startFov + (endFov - startFov) * eased;
+          camera.updateProjectionMatrix();
+          updateControlSensitivityForView();
+          controls.update();
+          renderSceneControls();
+          updateScaleBar();
+          updateCameraResponsiveImagePlanes();
+          updateSkyDomeBackgroundFrame(now, { force: true });
+          if (linear < 1.0) {
+            cameraTransitionAnimationFrame = window.requestAnimationFrame(step);
+            return;
+          }
+          cameraTransitionAnimationFrame = 0;
+          if (typeof onComplete === "function") {
+            onComplete();
+          }
+        };
+        cameraTransitionAnimationFrame = window.requestAnimationFrame(step);
+      }
+
+      function setCameraFovFromZoomFactor(zoomFactor) {
+        const factor = Number(zoomFactor);
+        if (!Number.isFinite(factor) || !(factor > 0.0)) {
+          return false;
+        }
+        const previousFov = Number(camera.fov) || 90.0;
+        const nextFov = clampRange(previousFov * factor, 0.05, 120.0);
+        if (Math.abs(nextFov - previousFov) <= 1e-6) {
+          return false;
+        }
+        cancelCameraTransition();
+        camera.fov = nextFov;
+        camera.updateProjectionMatrix();
+        updateControlSensitivityForView();
+        if (cameraViewMode === "earth") {
+          lockEarthViewCameraToTarget();
+        } else {
+          controls.update();
+        }
+        renderSceneControls();
+        updateScaleBar();
+        updateCameraResponsiveImagePlanes();
+        updateSkyDomeBackgroundFrame(
+          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
+          { force: true }
+        );
+        return true;
+      }
+
+      function zoomEarthViewByWheelDelta(deltaY) {
+        const numericDelta = Number(deltaY);
+        if (!Number.isFinite(numericDelta) || Math.abs(numericDelta) <= 1e-6) {
+          return false;
+        }
+        const speedScale = Math.max(globalScrollSpeed, 0.2);
+        const clampedDelta = clampRange(numericDelta, -240.0, 240.0);
+        const zoomFactor = Math.exp(clampedDelta * 0.0015 * speedScale);
+        return setCameraFovFromZoomFactor(zoomFactor);
+      }
+
+      function stopPointerEvent(event) {
+        if (!event) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === "function") {
+          event.stopImmediatePropagation();
+        }
+      }
+
+      function rotateSkyViewCameraByPixels(deltaX, deltaY) {
+        const dx = Number(deltaX);
+        const dy = Number(deltaY);
+        if (!Number.isFinite(dx) || !Number.isFinite(dy) || (Math.abs(dx) <= 1e-6 && Math.abs(dy) <= 1e-6)) {
+          return false;
+        }
+        const height = Math.max(Number(canvas && canvas.clientHeight) || 1.0, 1.0);
+        const width = Math.max(Number(canvas && canvas.clientWidth) || height, 1.0);
+        const verticalFovRad = THREE.MathUtils.degToRad(clampRange(Number(camera.fov) || 90.0, 0.05, 120.0));
+        const horizontalFovRad = 2.0 * Math.atan(Math.tan(verticalFovRad * 0.5) * (width / height));
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+        if (direction.lengthSq() <= 1e-12) {
+          return false;
+        }
+        direction.normalize();
+        const up = camera.up.clone();
+        if (up.lengthSq() <= 1e-12) {
+          up.copy(skyViewUpVectorForDirection(direction));
+        }
+        up.normalize();
+        const right = new THREE.Vector3().crossVectors(up, direction);
+        if (right.lengthSq() <= 1e-12) {
+          return false;
+        }
+        right.normalize();
+        const xOffset = (2.0 * dx / width) * Math.tan(horizontalFovRad * 0.5);
+        const yOffset = (2.0 * dy / height) * Math.tan(verticalFovRad * 0.5);
+        const nextDirection = direction.clone()
+          .addScaledVector(right, xOffset)
+          .addScaledVector(up, yOffset);
+        if (nextDirection.lengthSq() <= 1e-12) {
+          return false;
+        }
+        nextDirection.normalize();
+        const earthPoint = earthViewPoint();
+        const orbitDistance = Math.max(camera.position.distanceTo(earthPoint), 1e-6);
+        controls.target.copy(earthPoint);
+        camera.position.copy(earthPoint).sub(nextDirection.clone().multiplyScalar(orbitDistance));
+        camera.up.copy(skyViewUpVectorForDirection(nextDirection));
+        camera.lookAt(earthPoint);
+        camera.updateMatrixWorld(true);
+        updateScaleBar();
+        updateCameraResponsiveImagePlanes();
+        updateSkyDomeBackgroundFrame(
+          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
+          { force: true }
+        );
+        return true;
+      }
+
+      function startSkyViewCameraDrag(event) {
+        if (
+          cameraViewMode !== "earth"
+          || widgetPointerState
+          || selectionBoxPointerState
+          || manualLabelPointerState
+          || lassoState
+          || !event
+          || event.button !== 0
+          || event.shiftKey
+          || lassoArmed
+        ) {
+          return false;
+        }
+        skyViewDragState = {
+          pointerId: event.pointerId,
+          lastX: Number(event.clientX) || 0.0,
+          lastY: Number(event.clientY) || 0.0,
+          moved: false,
+        };
+        controls.enabled = false;
+        setSkyDomeBackgroundCameraActive(true);
+        document.body.style.userSelect = "none";
+        if (typeof canvas.setPointerCapture === "function" && event.pointerId !== undefined) {
+          try {
+            canvas.setPointerCapture(event.pointerId);
+          } catch (_err) {
+          }
+        }
+        tooltipEl.style.display = "none";
+        stopPointerEvent(event);
+        return true;
+      }
+
+      function updateSkyViewCameraDrag(event) {
+        if (!skyViewDragState || !event) {
+          return false;
+        }
+        if (skyViewDragState.pointerId !== undefined && event.pointerId !== undefined && skyViewDragState.pointerId !== event.pointerId) {
+          return true;
+        }
+        const nextX = Number(event.clientX) || skyViewDragState.lastX;
+        const nextY = Number(event.clientY) || skyViewDragState.lastY;
+        const dx = nextX - skyViewDragState.lastX;
+        const dy = nextY - skyViewDragState.lastY;
+        skyViewDragState.lastX = nextX;
+        skyViewDragState.lastY = nextY;
+        if (rotateSkyViewCameraByPixels(dx, dy)) {
+          skyViewDragState.moved = true;
+        }
+        tooltipEl.style.display = "none";
+        stopPointerEvent(event);
+        return true;
+      }
+
+      function finishSkyViewCameraDrag(event) {
+        if (!skyViewDragState) {
+          return false;
+        }
+        if (typeof canvas.releasePointerCapture === "function" && skyViewDragState.pointerId !== undefined) {
+          try {
+            canvas.releasePointerCapture(skyViewDragState.pointerId);
+          } catch (_err) {
+          }
+        }
+        const moved = Boolean(skyViewDragState.moved);
+        skyViewDragState = null;
+        controls.enabled = cameraViewMode !== "earth";
+        setSkyDomeBackgroundCameraActive(false);
+        document.body.style.userSelect = "";
+        if (moved) {
+          suppressNextCanvasClick = true;
+        }
+        if (event) {
+          stopPointerEvent(event);
+        }
+        return true;
+      }
+
+      function captureEarthViewReturnCameraState() {
+        return {
+          position: camera.position.clone(),
+          target: controls.target.clone(),
+          up: camera.up.clone(),
+          fov: Number(camera.fov) || 60.0,
+        };
+      }
+
+      function resetToSunReferenceFrameForSkyView() {
+        const hasSelectionFocus = Boolean(normalizeMemberKey(focusSelectionKey));
+        const hasTraceFocus = Boolean(String(focusTraceKey || ""));
+        if (!hasSelectionFocus && !hasTraceFocus) {
+          return false;
+        }
+        const previousPlotOffset = plotGroup.position.clone();
+        focusSelectionKey = "";
+        focusTraceKey = "";
+        renderFrame(currentFrameIndex);
+        const nextPlotOffset = plotGroup.position.clone();
+        const worldDelta = nextPlotOffset.clone().sub(previousPlotOffset);
+        if (worldDelta.lengthSq() > 1e-18) {
+          camera.position.add(worldDelta);
+          controls.target.add(worldDelta);
+          controls.update();
+          camera.updateMatrixWorld(true);
+        }
+        renderSceneControls();
+        updateScaleBar();
+        updateCameraResponsiveImagePlanes();
+        return true;
+      }
+
+      function fallbackEarthViewReturnCameraState() {
+        return {
+          position: initialCameraState.position.clone(),
+          target: initialCameraState.target.clone(),
+          up: initialCameraState.up.clone(),
+          fov: Number(initialCameraState.fov) || 60.0,
+        };
+      }
+
+      function enterEarthViewFromCurrentCamera(options = {}) {
+        const wasEarthView = cameraViewMode === "earth";
+        const transitionSerial = ++skyViewTransitionSerial;
+        cancelSkyDomeOpacityAnimation();
+        setSkyDomeViewOpacityScale(0.0, { force: true });
+        if (!wasEarthView && (!options || options.storeReturnState !== false)) {
+          earthViewReturnCameraState = captureEarthViewReturnCameraState();
+        }
+        const earthPoint = earthViewPoint();
         let targetPoint = earthViewTargetPoint();
         if (!targetPoint || !Number.isFinite(targetPoint.x) || !Number.isFinite(targetPoint.y) || !Number.isFinite(targetPoint.z)) {
           targetPoint = new THREE.Vector3(8122.0, 0.0, 0.0);
         }
-        const direction = new THREE.Vector3().subVectors(targetPoint, earthPoint);
+        const previousScaleBarPc = scaleBarLengthPcForCurrentView();
+        const preserveScaleBar = Boolean(options && options.preserveScaleBar);
+        const preserveDirection = !options || options.preserveDirection !== false;
+        const preserveFov = Boolean(options && options.preserveFov);
+        const startDirection = preserveDirection
+          ? cameraDirectionForEarthView(targetPoint)
+          : null;
+        const direction = preserveDirection
+          ? leveledSkyViewDirectionForEarthView(targetPoint)
+          : new THREE.Vector3().subVectors(targetPoint, earthPoint);
+        if (!preserveDirection) {
+          direction.z = 0.0;
+        }
         if (direction.lengthSq() <= 1e-12) {
           direction.set(1.0, 0.0, 0.0);
-          targetPoint = earthPoint.clone().add(direction);
         }
-        earthViewFocusDistance = Math.max(direction.length(), 1e-6);
         direction.normalize();
-        const orbitRadius = Math.max(1e-3, Math.min(0.05, earthViewFocusDistance * 1e-6));
+        const focusDistance = Math.max(targetPoint.distanceTo(earthPoint), 1e-6);
+        const orbitRadius = Math.max(1e-3, Math.min(0.05, focusDistance * 1e-6));
+        const targetPosition = earthPoint.clone().sub(direction.clone().multiplyScalar(orbitRadius));
+        const targetFov = preserveFov
+          ? clampRange(Number(camera.fov) || 60.0, 0.05, 120.0)
+          : (
+            preserveScaleBar
+              ? cameraFovForScaleBarLength(previousScaleBarPc, focusDistance)
+              : 90.0
+          );
+        const targetUp = skyViewUpVectorForDirection(direction);
         cameraViewMode = "earth";
-        controls.target.copy(earthPoint);
-        camera.position.copy(earthPoint.clone().sub(direction.clone().multiplyScalar(orbitRadius)));
-        camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
-        camera.fov = 90.0;
+        earthViewFocusDistance = focusDistance;
         applyGlobalControlState();
         applyCameraViewMode();
-        controls.update();
-        renderSceneControls();
-        updateScaleBar();
+        animateCameraTransition(
+          targetPosition,
+          earthPoint,
+          targetFov,
+          () => {
+            controls.target.copy(earthPoint);
+            camera.position.copy(targetPosition);
+            camera.up.copy(targetUp);
+            camera.fov = targetFov;
+            renderFrame(currentFrameIndex);
+            applyGlobalControlState();
+            applyCameraViewMode();
+            controls.update();
+            renderSceneControls();
+            updateScaleBar();
+            updateCameraResponsiveImagePlanes();
+            updateSkyDomeBackgroundFrame(
+              (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
+              { force: true }
+            );
+            window.setTimeout(() => {
+              if (transitionSerial !== skyViewTransitionSerial || cameraViewMode !== "earth") {
+                return;
+              }
+              animateSkyDomeViewOpacity(1.0, { durationMs: 420.0 });
+            }, 70);
+          },
+          {
+            lockDirection: preserveDirection,
+            direction,
+            startDirection,
+            endDistance: orbitRadius,
+            durationMs: 820.0,
+            targetUp,
+          }
+        );
+      }
+
+      function exitEarthView() {
+        if (cameraViewMode !== "earth") {
+          return false;
+        }
+        const transitionSerial = ++skyViewTransitionSerial;
+        const returnState = earthViewReturnCameraState || fallbackEarthViewReturnCameraState();
+        const targetPosition = returnState.position.clone();
+        const targetControlsTarget = returnState.target.clone();
+        const targetUp = returnState.up.clone();
+        const targetFov = Number(returnState.fov) || 60.0;
+        const exitTargetDirection = new THREE.Vector3().subVectors(targetControlsTarget, targetPosition);
+        const exitTargetDistance = Math.max(exitTargetDirection.length(), 1e-6);
+        if (exitTargetDirection.lengthSq() <= 1e-12) {
+          camera.getWorldDirection(exitTargetDirection);
+        }
+        if (exitTargetDirection.lengthSq() <= 1e-12) {
+          exitTargetDirection.set(1.0, 0.0, 0.0);
+        }
+        exitTargetDirection.normalize();
+        animateSkyDomeViewOpacity(0.0, { durationMs: 360.0 }, () => {
+          if (transitionSerial !== skyViewTransitionSerial) {
+            return;
+          }
+          const exitStartDirection = new THREE.Vector3();
+          camera.getWorldDirection(exitStartDirection);
+          if (exitStartDirection.lengthSq() <= 1e-12) {
+            exitStartDirection.subVectors(controls.target, camera.position);
+          }
+          if (exitStartDirection.lengthSq() <= 1e-12) {
+            exitStartDirection.copy(exitTargetDirection);
+          }
+          exitStartDirection.normalize();
+          setSkyDomeViewOpacityScale(0.0, { force: true });
+          animateCameraTransition(
+            targetPosition,
+            targetControlsTarget,
+            targetFov,
+            () => {
+              cameraViewMode = "free";
+              earthViewFocusDistance = null;
+              controls.target.copy(targetControlsTarget);
+              camera.position.copy(targetPosition);
+              camera.up.copy(targetUp);
+              camera.fov = targetFov;
+              earthViewReturnCameraState = null;
+              setSkyDomeViewOpacityScale(0.0, { force: true });
+              applyGlobalControlState();
+              applyCameraViewMode();
+              controls.update();
+              renderSceneControls();
+              updateScaleBar();
+              updateCameraResponsiveImagePlanes();
+            },
+            {
+              durationMs: 820.0,
+              targetUp,
+              lockDirection: true,
+              direction: exitTargetDirection,
+              startDirection: exitStartDirection,
+              endDistance: exitTargetDistance,
+            }
+          );
+        });
+        return true;
+      }
+
+      function viewFromEarth() {
+        resetToSunReferenceFrameForSkyView();
+        enterEarthViewFromCurrentCamera({ preserveScaleBar: false, preserveDirection: true, preserveFov: false });
+      }
+
+      function toggleEarthView() {
+        if (cameraViewMode === "earth") {
+          return exitEarthView();
+        }
+        viewFromEarth();
+        return true;
+      }
+
+      function skyDomeControlsUseNativeHips() {
+        const mode = String(
+          (skyDomeSpec && (
+            skyDomeSpec.background_mode
+            || skyDomeSpec.mode
+            || skyDomeSpec.render_mode
+          ))
+          || ""
+        ).toLowerCase();
+        const source = String(skyDomeSpec && skyDomeSpec.source || "").toLowerCase();
+        return Boolean(
+          skyDomeSpec
+          && (
+            source === "hips"
+            || source === "native_hips"
+            || source === "native-hips"
+            || mode === "native_hips"
+            || mode === "native-hips"
+            || mode === "hips"
+          )
+        );
+      }
+
+      function skyDomeControlsAvailable() {
+        return Boolean(
+          skyDomeSpec
+          && typeof skyDomeSpec === "object"
+          && (
+            Object.prototype.hasOwnProperty.call(skyDomeSpec, "enabled")
+            || skyDomeSpec.source
+            || skyDomeSpec.background_mode
+            || skyDomeSpec.hips_base_url
+            || skyDomeHasLocalSources()
+          )
+        );
+      }
+
+      function refreshSkyDomeControlStatus() {
+        if (!skyDomeStatusEl) {
+          return;
+        }
+        if (!skyDomeControlsAvailable()) {
+          skyDomeStatusEl.textContent = "";
+          skyDomeStatusEl.hidden = true;
+          return;
+        }
+        const mode = root && root.dataset ? String(root.dataset.skyDomeMode || "") : "";
+        const status = root && root.dataset ? String(root.dataset.skyDomeSnapshotStatus || skyDomeSnapshotStatus || "idle") : String(skyDomeSnapshotStatus || "idle");
+        const message = root && root.dataset ? String(root.dataset.skyDomeSnapshotMessage || "") : "";
+        const liveOpacity = root && root.dataset && root.dataset.skyDomeOpacity
+          ? Number(root.dataset.skyDomeOpacity)
+          : skyDomeOpacityForCurrentView();
+        const parts = [
+          `Status: ${status}`,
+          `Opacity: ${Number.isFinite(liveOpacity) ? liveOpacity.toFixed(2) : "0.00"}`,
+        ];
+        if (skyDomeControlsUseNativeHips()) {
+          parts.push(`Source: ${skyDomeHipsSurveyName()} HiPS`);
+          const loadedTiles = root && root.dataset ? String(root.dataset.skyDomeHipsLoadedTiles || "0") : "0";
+          const activeTiles = root && root.dataset ? String(root.dataset.skyDomeHipsActiveTiles || "0") : "0";
+          const loadingTiles = root && root.dataset ? String(root.dataset.skyDomeHipsLoadingTiles || "0") : "0";
+          const pendingTiles = root && root.dataset ? String(root.dataset.skyDomeHipsPendingTiles || "0") : "0";
+          parts.push(`Tiles: ${loadedTiles}/${activeTiles} loaded, ${loadingTiles} loading, ${pendingTiles} pending`);
+        } else if (mode) {
+          parts.push(`Mode: ${mode}`);
+        }
+        const lowerStatus = status.toLowerCase();
+        const quietStatus = lowerStatus === "loaded" || lowerStatus === "idle" || lowerStatus === "disabled";
+        if (!message && quietStatus && !skyDomeControlsUseNativeHips()) {
+          skyDomeStatusEl.textContent = "";
+          skyDomeStatusEl.hidden = true;
+          return;
+        }
+        skyDomeStatusEl.hidden = false;
+        if (message) {
+          skyDomeStatusEl.textContent = message;
+        } else if (lowerStatus.includes("error") || lowerStatus.includes("unavailable")) {
+          skyDomeStatusEl.textContent = "Sky image unavailable.";
+        } else if (lowerStatus.includes("loading")) {
+          skyDomeStatusEl.textContent = "Loading sky image...";
+        } else {
+          skyDomeStatusEl.textContent = skyDomeControlsUseNativeHips() ? parts.join(" | ") : "";
+          skyDomeStatusEl.hidden = !skyDomeStatusEl.textContent;
+        }
+      }
+
+      function syncSkyDomeControls() {
+        if (!skyDomeControlsEl) {
+          return;
+        }
+        const available = skyDomeControlsAvailable();
+        skyDomeControlsEl.hidden = !available;
+        if (!available) {
+          return;
+        }
+        const nativeHips = skyDomeControlsUseNativeHips();
+        const stretchControlsAvailable = (
+          nativeHips
+          || (typeof skyDomeUsesAladinBackground === "function" && skyDomeUsesAladinBackground())
+          || (typeof skyDomeUsesHips2Fits === "function" && skyDomeUsesHips2Fits())
+        );
+        skyDomeHipsControlEls.forEach((controlEl) => {
+          controlEl.hidden = !stretchControlsAvailable;
+        });
+        if (skyDomeVisibleToggleEl) {
+          skyDomeVisibleToggleEl.checked = skyDomeIsEnabled();
+        }
+        if (skyDomeForceVisibleToggleEl) {
+          skyDomeForceVisibleToggleEl.checked = Boolean(skyDomeForceVisible);
+        }
+        if (skyDomeOpacityEl) {
+          skyDomeOpacityEl.value = String(Math.min(Math.max(Number(skyDomeSpec.opacity ?? 0.55), 0.0), 1.0));
+        }
+        if (skyDomeOpacityLabelEl) {
+          skyDomeOpacityLabelEl.textContent = `Opacity (${Math.min(Math.max(Number(skyDomeSpec.opacity ?? 0.55), 0.0), 1.0).toFixed(2)})`;
+        }
+        if (skyDomeBrightnessEl) {
+          skyDomeBrightnessEl.value = String(skyDomeHipsBrightness());
+        }
+        if (skyDomeBrightnessLabelEl) {
+          skyDomeBrightnessLabelEl.textContent = `Brightness (${skyDomeHipsBrightness().toFixed(2)}x)`;
+        }
+        if (skyDomeContrastEl) {
+          skyDomeContrastEl.value = String(skyDomeHipsContrast());
+        }
+        if (skyDomeContrastLabelEl) {
+          skyDomeContrastLabelEl.textContent = `Contrast (${skyDomeHipsContrast().toFixed(2)}x)`;
+        }
+        if (skyDomeGammaEl) {
+          skyDomeGammaEl.value = String(skyDomeHipsGamma());
+        }
+        if (skyDomeGammaLabelEl) {
+          skyDomeGammaLabelEl.textContent = `Gamma (${skyDomeHipsGamma().toFixed(2)})`;
+        }
+        if (typeof syncSkyLayerControls === "function") {
+          syncSkyLayerControls();
+        }
+        refreshSkyDomeControlStatus();
+      }
+
+      function updateSkyDomeFromControls(options = {}) {
+        if (skyDomeSpec.enabled && !skyDomeMesh) {
+          initializeSkyDomeFromSceneSpec();
+        }
+        if (skyDomeUsesNativeHips() && skyDomeHipsState) {
+          if (skyDomeHipsState.allskyMesh) {
+            applyNativeHipsMaterialSettings(
+              skyDomeHipsState.allskyMesh.material,
+              skyDomeHipsState.allskyTexture,
+              skyDomeOpacityForCurrentView()
+            );
+          }
+          skyDomeHipsState.tileCache.forEach((entry) => {
+            if (entry && entry.mesh) {
+              applyNativeHipsMaterialSettings(entry.mesh.material, entry.texture, skyDomeOpacityForCurrentView());
+            }
+          });
+          updateNativeHipsTiles(
+            (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
+            Boolean(options.forceTiles)
+          );
+        }
+        if (typeof applySkyDomeFrameVisualSettings === "function") {
+          applySkyDomeFrameVisualSettings();
+        }
+        updateSkyDome((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now());
+        if (options.syncControls !== false) {
+          syncSkyDomeControls();
+        }
       }
 
       function renderSceneControls() {
+        syncEarthViewToggleUi();
+        const cameraFovValue = Number.isFinite(Number(camera.fov)) ? Number(camera.fov) : 60.0;
+        const cameraFovLabel = cameraFovValue < 1.0
+          ? cameraFovValue.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
+          : String(Math.round(cameraFovValue));
         if (themeSelectEl) {
           themeSelectEl.value = activeThemeKey;
         }
@@ -554,7 +1357,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
           cameraFovEl.value = String(camera.fov);
         }
         if (cameraFovLabelEl) {
-          cameraFovLabelEl.textContent = `Camera FOV (${Math.round(Number(camera.fov))} deg)`;
+          cameraFovLabelEl.textContent = `Camera FOV (${cameraFovLabel} deg)`;
         }
         if (globalPointSizeEl) {
           globalPointSizeEl.value = String(globalPointSizeScale);
@@ -595,6 +1398,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         nearbyRegionLabelsToggleEls.forEach((toggleEl) => {
           toggleEl.checked = nearbyRegionLabelsVisible;
         });
+        syncSkyDomeControls();
         renderManualLabelControls();
         syncCameraAutoOrbitUi();
       }
@@ -611,6 +1415,9 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         if (zenModeEnabled) {
           tooltipEl.style.display = "none";
+          if (typeof setSkyControlsDrawerOpen === "function") {
+            setSkyControlsDrawerOpen(false);
+          }
         }
       }
 
@@ -723,7 +1530,9 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (cameraViewMode !== "free") {
           cameraViewMode = "free";
           earthViewFocusDistance = null;
+          earthViewReturnCameraState = null;
           applyCameraViewMode();
+          renderFrame(currentFrameIndex);
         }
       }
 
@@ -811,6 +1620,11 @@ THREEJS_VIEWER_RUNTIME_JS = """
 
       function zoomCameraByKeyboard(sign, deltaSeconds) {
         if (!Number.isFinite(sign) || Math.abs(sign) <= 1e-12 || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0.0) {
+          return;
+        }
+        if (cameraViewMode === "earth") {
+          const speedScale = Math.max(globalScrollSpeed, 0.2);
+          setCameraFovFromZoomFactor(Math.exp(sign * deltaSeconds * 1.8 * speedScale));
           return;
         }
         if (initialZoomAnchorActive()) {

@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK_PATH = HOME_DIR / "Desktop" / "astro_research" / "radcliffe" / "oviz_notebooks" / "main_figure.ipynb"
 SUPERNOVAE_ROOT = HOME_DIR / "Desktop" / "astro_research" / "supernovae_map"
 SUPERNOVAE_CATALOG_PATH = SUPERNOVAE_ROOT / "paper" / "solar_encounter_catalog_current.csv.gz"
+MCCALLUM_NE_GRID_PATH = HOME_DIR / "Downloads" / "ne_grid.fits"
 MIST_PARSEC_AGES_PATH = (
     SUPERNOVAE_ROOT
     / "outputs"
@@ -25,7 +27,18 @@ MIST_PARSEC_AGES_PATH = (
 )
 DESKTOP_ROOT = HOME_DIR / "Desktop"
 DEFAULT_OUTPUT_HTML = Path(__file__).resolve().with_suffix(".html")
+WEBSITE_OUTPUT_HTML = (
+    HOME_DIR
+    / "Desktop"
+    / "astro_research"
+    / "cam_website"
+    / "interactive_figures"
+    / "main_figure.html"
+)
 GALACTIC_PLANE_IMAGE_PATH = HOME_DIR / "Downloads" / "Top-down_view_of_the_Milky_Way.jpg"
+MAIN_FIGURE_DUST_MAX_RESOLUTION = 640
+MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 640
+MAIN_FIGURE_DUST_SAMPLES = 100
 
 
 def _sanitize_notebook_cell_source(source: str) -> str:
@@ -66,6 +79,48 @@ def convert_notebook_to_script_source(notebook_path: Path) -> str:
         raise RuntimeError(f"No code cells found in notebook: {notebook_path}")
 
     return "\n\n".join(code_blocks) + "\n"
+
+
+def patch_edenhofer_volume_integer_setting(
+    source: str,
+    setting_name: str,
+    value: int,
+    *,
+    insert_after: str | None = None,
+) -> str:
+    edenhofer_block_pattern = (
+        r'(?ms)(edenhofer_volume\s*=\s*\{.*?'
+        r'"name"\s*:\s*"Edenhofer\+2024 Dust".*?'
+        r'^\s*\})'
+    )
+    block_match = re.search(edenhofer_block_pattern, source)
+    if not block_match:
+        raise RuntimeError("Could not find the Edenhofer dust volume block.")
+
+    block = block_match.group(1)
+    updated_block, replaced = re.subn(
+        rf'(?m)^(\s*"{re.escape(setting_name)}"\s*:\s*)\d+(\s*,)',
+        rf"\g<1>{int(value)}\2",
+        block,
+        count=1,
+    )
+    if replaced == 0 and insert_after is not None:
+        insert_pattern = rf'(?m)^(\s*)"{re.escape(insert_after)}"\s*:\s*\d+\s*,\s*$'
+
+        def insert_setting(match):
+            indent = match.group(1)
+            return f'{match.group(0)}\n{indent}"{setting_name}": {int(value)},'
+
+        updated_block, replaced = re.subn(
+            insert_pattern,
+            insert_setting,
+            block,
+            count=1,
+        )
+    if replaced != 1:
+        raise RuntimeError(f"Could not update the Edenhofer dust {setting_name}.")
+
+    return source[:block_match.start(1)] + updated_block + source[block_match.end(1):]
 
 
 def build_supernova_volume_source_block() -> str:
@@ -340,6 +395,52 @@ supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)
 """.strip()
 
 
+def build_mccallum_ne_volume_source_block() -> str:
+    return f"""
+import os
+from pathlib import Path as _OvizPath
+
+MCCALLUM_NE_GRID_PATH = _OvizPath(
+    os.environ.get("OVIZ_MCCALLUM_NE_FITS", {str(MCCALLUM_NE_GRID_PATH)!r})
+).expanduser()
+
+
+def _build_mccallum_ne_volumes_for_main_figure():
+    if not MCCALLUM_NE_GRID_PATH.exists():
+        print(f"Skipping McCallum+2025 electron-density volume; missing FITS cube: {{MCCALLUM_NE_GRID_PATH}}")
+        return []
+
+    return [
+        {{
+            "key": "mccallum-ne",
+            "state_key": "mccallum-ne",
+            "state_name": "McCallum+2025 electron density",
+            "name": "McCallum+2025 Electron Density",
+            "path": str(MCCALLUM_NE_GRID_PATH),
+            "hdu": "PRIMARY",
+            "max_resolution": 384,
+            "max_resolution_cap": 384,
+            "opacity": 0.12,
+            "samples": 100,
+            "alpha_coef": 200,
+            "gradient_step": 0.006,
+            "stretch": "log10",
+            "default_vmin_quantile": 0.90,
+            "default_vmax_quantile": 0.9995,
+            "colormap": "inferno",
+            "unit_label": "cm^-3",
+            "visible": False,
+            "supports_show_all_times": True,
+            "co_rotate_with_frame": True,
+            "show_all_times": False,
+        }}
+    ]
+
+
+mccallum_ne_volumes = _build_mccallum_ne_volumes_for_main_figure()
+""".strip()
+
+
 def build_mist_age_source_block() -> str:
     return f"""
 mist_parsec_ages = pd.read_csv({str(MIST_PARSEC_AGES_PATH)!r})
@@ -404,14 +505,22 @@ def patch_script_source(
         if replaced_time_grid != 1:
             raise RuntimeError("Could not restore the galactic simple time grid to 1 Myr steps.")
 
-        source, downsampled_edenhofer = re.subn(
-            r'("name"\s*:\s*"Edenhofer\+2024 Dust",[\s\S]*?"max_resolution"\s*:\s*)200(\s*,)',
-            r"\g<1>100\2",
-            source,
-            count=1,
-        )
-        if downsampled_edenhofer != 1:
-            raise RuntimeError("Could not reduce the Edenhofer dust max_resolution for galactic simple mode.")
+    source = patch_edenhofer_volume_integer_setting(
+        source,
+        "max_resolution",
+        MAIN_FIGURE_DUST_MAX_RESOLUTION,
+    )
+    source = patch_edenhofer_volume_integer_setting(
+        source,
+        "max_resolution_cap",
+        MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP,
+        insert_after="max_resolution",
+    )
+    source = patch_edenhofer_volume_integer_setting(
+        source,
+        "samples",
+        MAIN_FIGURE_DUST_SAMPLES,
+    )
 
     output_html_str = str(output_html)
     source, replaced = re.subn(
@@ -428,8 +537,8 @@ def patch_script_source(
         control_bits.append(f"'theme_key': {theme_key!r}")
     if galactic_simple:
         control_bits.extend([
-            "'camera_fov': 42.0",
-            "'point_size_scale': 0.88",
+            "'camera_fov': 60.0",
+            "'point_size_scale': 1.0",
             "'point_glow_strength': 0.60",
             "'fade_in_time_myr': 7.0",
         ])
@@ -440,8 +549,32 @@ def patch_script_source(
             "'click_selection_enabled': False",
             f"'compact_payload_enabled': {bool(compact_payload)!r}",
             "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
-            "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
-            "'volume_state_by_key': ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}})",
+            "'legend_state': ({'volume-0': False, **({'mccallum-ne': False} if mccallum_ne_volumes else {}), 'supernova-density': True} if supernova_volumes else {'volume-0': True, **({'mccallum-ne': False} if mccallum_ne_volumes else {})})",
+            "'volume_state_by_key': ({'volume-0': {'visible': False}, **({'mccallum-ne': {'visible': False}} if mccallum_ne_volumes else {}), 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}, **({'mccallum-ne': {'visible': False}} if mccallum_ne_volumes else {})})",
+            "'galaxy_image': True",
+            f"'galaxy_image_path': {str(GALACTIC_PLANE_IMAGE_PATH)!r}",
+            "'galaxy_image_size_pc': 40000.0",
+            "'galaxy_image_opacity': 0.35",
+            "'galaxy_image_hide_below_scale_bar_pc': 420.0",
+            "'galaxy_image_fade_start_scale_bar_pc': 700.0",
+            "'sky_dome_enabled': True",
+            "'sky_dome_background_mode': 'live_aladin'",
+            "'sky_dome_source': 'aladin'",
+            "'sky_dome_projection': 'TAN'",
+            "'sky_dome_capture_width_px': 4096",
+            "'sky_dome_capture_height_px': 2048",
+            "'sky_dome_capture_format': 'image/jpeg'",
+            "'sky_dome_capture_quality': 0.94",
+            "'sky_dome_radius_pc': 40000.0",
+            "'sky_dome_opacity': 1.0",
+            "'sky_dome_force_visible': False",
+            "'sky_dome_full_opacity_scale_bar_pc': 120.0",
+            "'sky_dome_fade_out_scale_bar_pc': 360.0",
+            "'sky_layers': ["
+            "{'key': 'P/Mellinger/color', 'label': 'Mellinger Color', 'survey': 'P/Mellinger/color', 'opacity': 1.0, 'visible': True}, "
+            "{'key': 'P/PLANCK/R2/HFI/color', 'label': 'Planck Dust Emission Color', 'survey': 'P/PLANCK/R2/HFI/color', 'opacity': 1.0, 'visible': True}"
+            "]",
+            "'active_sky_layer_key': 'P/Mellinger/color'",
         ]
         if minimal_mode:
             initial_state_bits.append("'minimal_mode_enabled': True")
@@ -590,9 +723,20 @@ trace_groupings = {
         if inserted_supernova != 1:
             raise RuntimeError("Could not inject supernova volume helper block.")
 
+    if "mccallum_ne_volumes = _build_mccallum_ne_volumes_for_main_figure()" not in source:
+        ne_block = build_mccallum_ne_volume_source_block()
+        source, inserted_ne = re.subn(
+            r"(?m)^(supernova_volumes\s*=\s*_build_supernova_volumes_for_main_figure\(time_int\)\s*)$",
+            r"\1\n\n" + ne_block,
+            source,
+            count=1,
+        )
+        if inserted_ne != 1:
+            raise RuntimeError("Could not inject McCallum electron-density volume helper block.")
+
     source, replaced_supernova_volumes = re.subn(
         r"volumes\s*=\s*\[\s*edenhofer_volume\s*,\s*mccallum_ne\s*\]",
-        "volumes=[edenhofer_volume, *supernova_volumes]",
+        "volumes=[edenhofer_volume, *mccallum_ne_volumes, *supernova_volumes]",
         source,
         count=1,
     )
@@ -628,6 +772,7 @@ def run_main_figure(
     galactic_simple: bool = False,
     mist_ages: bool = False,
     compact_payload: bool = True,
+    website_output_html: Path | None = WEBSITE_OUTPUT_HTML,
 ) -> Path:
     output_html.parent.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl")
@@ -651,6 +796,11 @@ def run_main_figure(
     )
 
     run_script_source(patched_source)
+    if website_output_html is not None:
+        website_output_html = Path(website_output_html)
+        if output_html.resolve() != website_output_html.resolve():
+            website_output_html.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(output_html, website_output_html)
     return output_html
 
 
@@ -682,6 +832,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Keep repeated per-frame hover, selection, and motion metadata in the HTML.",
     )
+    parser.add_argument(
+        "--no-website-copy",
+        action="store_true",
+        help="Do not copy the generated HTML into the cam_website interactive_figures directory.",
+    )
     return parser.parse_args()
 
 
@@ -693,8 +848,11 @@ def main() -> None:
         minimal_mode=bool(args.minimal_mode),
         mist_ages=bool(args.mist_ages),
         compact_payload=not bool(args.full_payload),
+        website_output_html=None if args.no_website_copy else WEBSITE_OUTPUT_HTML,
     )
     print(f"Wrote {output_html}")
+    if not args.no_website_copy:
+        print(f"Copied {output_html} to {WEBSITE_OUTPUT_HTML}")
 
 
 if __name__ == "__main__":

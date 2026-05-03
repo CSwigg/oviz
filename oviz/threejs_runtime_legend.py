@@ -327,11 +327,20 @@ THREEJS_LEGEND_RUNTIME_JS = """
         function appendLegendEntries(targetEl, sectionItems) {
           sectionItems.forEach((item) => {
             const itemKey = String(item.key);
+            const itemVolumeLayer = volumeLayerForKey(item.key);
+            const itemVolumeStateKey = itemVolumeLayer ? volumeStateKeyForLayer(itemVolumeLayer) : "";
+            const itemVolumeState = itemVolumeStateKey ? volumeStateByKey[itemVolumeStateKey] : null;
+            const isVolumeItem = Boolean(itemVolumeLayer && itemVolumeState);
+            const itemActive = isVolumeItem
+              ? itemVolumeState.visible !== false
+                && legendState[itemKey] !== false
+                && legendState[itemVolumeStateKey] !== false
+              : Boolean(legendState[itemKey]);
             const entry = document.createElement("div");
             const itemColor = legendColorForItem(item);
             const editorOpen = activeLegendEditorKey === itemKey;
             entry.className = "oviz-three-legend-entry";
-            entry.dataset.active = legendState[itemKey] ? "true" : "false";
+            entry.dataset.active = itemActive ? "true" : "false";
             entry.dataset.editorOpen = editorOpen ? "true" : "false";
 
             const row = document.createElement("div");
@@ -340,7 +349,7 @@ THREEJS_LEGEND_RUNTIME_JS = """
             const toggleButton = document.createElement("button");
             toggleButton.type = "button";
             toggleButton.className = "oviz-three-legend-item";
-            toggleButton.dataset.active = legendState[itemKey] ? "true" : "false";
+            toggleButton.dataset.active = itemActive ? "true" : "false";
             toggleButton.title = minimalModeEnabled
               ? String(item.name || "")
               : `${String(item.name || "")}: click to show or hide`;
@@ -361,11 +370,25 @@ THREEJS_LEGEND_RUNTIME_JS = """
             toggleButton.appendChild(meta);
 
             toggleButton.addEventListener("click", () => {
+              if (isVolumeItem) {
+                const nextVisible = !(
+                  itemVolumeState.visible !== false
+                  && legendState[itemKey] !== false
+                  && legendState[itemVolumeStateKey] !== false
+                );
+                itemVolumeState.visible = nextVisible;
+                legendState[itemKey] = nextVisible;
+                legendState[itemVolumeStateKey] = nextVisible;
+                activeVolumeKey = String(itemVolumeStateKey);
+                renderLegend();
+                updateActiveVolumeRuntime();
+                return;
+              }
               legendState[itemKey] = !legendState[itemKey];
               renderLegend();
               renderFrame(currentFrameIndex);
             });
-            if (!minimalModeEnabled && !volumeLayerForKey(item.key)) {
+            if (!minimalModeEnabled && !itemVolumeLayer) {
               toggleButton.addEventListener("dblclick", () => {
                 const traceItems = items.filter((candidate) => !volumeLayerForKey(candidate.key));
                 const onlyThisVisible = traceItems.every((candidate) => {
@@ -409,7 +432,7 @@ THREEJS_LEGEND_RUNTIME_JS = """
               });
               row.appendChild(editButton);
               if (editorOpen) {
-                const controls = volumeLayerForKey(item.key)
+                const controls = itemVolumeLayer
                   ? buildVolumeLegendControls(item, toggleButton)
                   : buildTraceLegendControls(item, toggleButton);
                 if (controls) {

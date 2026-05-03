@@ -68,7 +68,7 @@ THREEJS_SHELL_HTML = """
           <div class="oviz-three-key-help-keys">L / C</div>
           <div>Toggle lasso mode or click selection.</div>
           <div class="oviz-three-key-help-keys">V</div>
-          <div>Activate View from Earth.</div>
+          <div>Toggle between 3D View and Sky View.</div>
           <div class="oviz-three-key-help-keys">O</div>
           <div>Toggle automatic orbit around the current anchor point.</div>
           <div class="oviz-three-key-help-keys">?</div>
@@ -116,6 +116,7 @@ THREEJS_SHELL_HTML = """
         <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="sw"></div>
         <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
+      <iframe class="oviz-three-sky-dome-frame" loading="eager" referrerpolicy="no-referrer" aria-hidden="true" tabindex="-1"></iframe>
       <div class="oviz-three-age-panel oviz-three-widget-panel" data-widget-key="age_kde" data-mode="hidden">
         <div class="oviz-three-age-drag oviz-three-widget-drag">
           <span class="oviz-three-widget-title">Age KDE</span>
