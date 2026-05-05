@@ -1106,6 +1106,9 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!skyDomeIsEnabled()) {
           return 0.0;
         }
+        if (skyBackgroundHidden) {
+          return 0.0;
+        }
         if (cameraViewMode !== "earth") {
           return 0.0;
         }

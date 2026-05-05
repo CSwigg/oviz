@@ -126,7 +126,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function activeVolumeLassoSelectionMask() {
-        return lassoVolumeSelectionEnabled ? currentLassoSelectionMask : null;
+        return lassoVolumeSelectionEnabled && lassoSelectionFilterEnabled ? currentLassoSelectionMask : null;
       }
 
       function disposeLassoSelectionMask(mask) {
@@ -134,6 +134,111 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           return;
         }
         mask.maskTexture.dispose();
+      }
+
+      function lassoSelectionFilterActive() {
+        return Boolean(
+          lassoSelectionFilterEnabled
+          && currentSelectionMode === "lasso"
+          && (selectedClusterKeys.size || hasActiveLassoSelectionMask())
+        );
+      }
+
+      function selectionStateHasContent() {
+        return Boolean(currentSelection || currentSelections.length || selectedClusterKeys.size || hasActiveLassoSelectionMask());
+      }
+
+      function selectionMaskInUse(mask, ignoredSnapshot = null) {
+        if (!mask) {
+          return false;
+        }
+        if (currentLassoSelectionMask === mask) {
+          return true;
+        }
+        return selectionUndoStack.some((snapshot) => (
+          snapshot
+          && snapshot !== ignoredSnapshot
+          && snapshot.currentLassoSelectionMask === mask
+        ));
+      }
+
+      function disposeSelectionMaskIfUnused(mask, ignoredSnapshot = null) {
+        if (!mask || selectionMaskInUse(mask, ignoredSnapshot)) {
+          return;
+        }
+        disposeLassoSelectionMask(mask);
+      }
+
+      function selectionStateSnapshot() {
+        return {
+          currentSelection: safeJsonClone(currentSelection, null),
+          currentSelections: safeJsonClone(currentSelections, []),
+          selectedClusterKeys: Array.from(selectedClusterKeys),
+          currentSelectionMode,
+          lassoSelectionFilterEnabled,
+          currentLassoSelectionMask,
+        };
+      }
+
+      function releaseSelectionSnapshot(snapshot) {
+        if (!snapshot || !snapshot.currentLassoSelectionMask) {
+          return;
+        }
+        disposeSelectionMaskIfUnused(snapshot.currentLassoSelectionMask, snapshot);
+      }
+
+      function pushSelectionUndoState() {
+        if (minimalModeEnabled) {
+          return;
+        }
+        selectionUndoStack.push(selectionStateSnapshot());
+        while (selectionUndoStack.length > MAX_SELECTION_UNDO_STATES) {
+          releaseSelectionSnapshot(selectionUndoStack.shift());
+        }
+      }
+
+      function restoreSelectionSnapshot(snapshot) {
+        if (!snapshot) {
+          return false;
+        }
+        const previousMask = currentLassoSelectionMask;
+        currentSelection = null;
+        currentSelections = uniqueSelections(Array.isArray(snapshot.currentSelections) ? snapshot.currentSelections : []);
+        selectedClusterKeys = normalizeSelectionKeySet(snapshot.selectedClusterKeys || []);
+        currentSelectionMode = currentSelections.length || selectedClusterKeys.size || snapshot.currentLassoSelectionMask
+          ? "lasso"
+          : "none";
+        lassoSelectionFilterEnabled = snapshot.lassoSelectionFilterEnabled !== false;
+        currentLassoSelectionMask = snapshot.currentLassoSelectionMask || null;
+        disposeSelectionMaskIfUnused(previousMask);
+        clearCrossHoverState();
+        updateSelectionUI();
+        updateSkyPanel();
+        renderFrame(currentFrameIndex);
+        return true;
+      }
+
+      function undoSelectionState() {
+        const snapshot = selectionUndoStack.pop();
+        if (!snapshot) {
+          return false;
+        }
+        return restoreSelectionSnapshot(snapshot);
+      }
+
+      function toggleLassoSelectionFilter() {
+        if (!selectionStateHasContent()) {
+          return false;
+        }
+        pushSelectionUndoState();
+        lassoSelectionFilterEnabled = !lassoSelectionFilterEnabled;
+        currentSelectionMode = currentSelections.length || selectedClusterKeys.size || hasActiveLassoSelectionMask()
+          ? "lasso"
+          : "none";
+        updateSelectionUI();
+        updateSkyPanel();
+        renderFrame(currentFrameIndex);
+        return true;
       }
 
       function canvasPointToNdc(point) {
@@ -200,7 +305,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         };
       }
 
-      function setClusterSelections(selections, mode = "click") {
+      function setClusterSelections(selections, mode = "lasso", options = {}) {
         if (minimalModeEnabled) {
           currentSelection = null;
           currentSelections = [];
@@ -210,36 +315,29 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           return;
         }
         const nextSelections = uniqueSelections(selections);
-        const normalizedMode = String(mode || "click");
-
-        if (normalizedMode === "lasso") {
-          currentSelections = nextSelections;
-          if (!currentSelections.length && !hasActiveLassoSelectionMask()) {
-            currentSelection = null;
-          }
-          selectedClusterKeys = new Set(
-            currentSelections
-              .map((selection) => normalizedSelectionKeyFor(selection))
-              .filter(Boolean)
-          );
-          if (currentSelection) {
-            const focusKey = normalizedSelectionKeyFor(currentSelection);
-            if (!focusKey || !selectedClusterKeys.has(focusKey)) {
-              currentSelection = null;
-            }
-          }
-        } else {
-          const nextFocus = nextSelections.length ? nextSelections[0] : null;
-          if (currentSelections.length) {
-            const focusKey = normalizedSelectionKeyFor(nextFocus);
-            if (!nextFocus || !focusKey || !selectedClusterKeys.has(focusKey)) {
-              return;
-            }
-          }
-          currentSelection = nextFocus;
+        const normalizedMode = String(mode || "lasso");
+        if (normalizedMode !== "lasso") {
+          return;
         }
+        const hasReplacementMask = Boolean(options && Object.prototype.hasOwnProperty.call(options, "lassoMask"));
+        const replacementMask = hasReplacementMask ? (options.lassoMask || null) : currentLassoSelectionMask;
+        pushSelectionUndoState();
 
-        currentSelectionMode = currentSelection ? "click" : ((currentSelections.length || hasActiveLassoSelectionMask()) ? "lasso" : "none");
+        const previousMask = currentLassoSelectionMask;
+        if (hasReplacementMask) {
+          currentLassoSelectionMask = replacementMask;
+          disposeSelectionMaskIfUnused(previousMask);
+        }
+        currentSelections = nextSelections;
+        currentSelection = null;
+        selectedClusterKeys = new Set(
+          currentSelections
+            .map((selection) => normalizedSelectionKeyFor(selection))
+            .filter(Boolean)
+        );
+        lassoSelectionFilterEnabled = true;
+
+        currentSelectionMode = currentSelections.length || hasActiveLassoSelectionMask() ? "lasso" : "none";
         clearCrossHoverState();
         updateSelectionUI();
         updateSkyPanel();
@@ -247,12 +345,18 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function clearClusterSelections() {
+        if (!selectionStateHasContent()) {
+          return;
+        }
+        pushSelectionUndoState();
+        const previousMask = currentLassoSelectionMask;
         currentSelections = [];
         currentSelection = null;
-        disposeLassoSelectionMask(currentLassoSelectionMask);
         currentLassoSelectionMask = null;
         currentSelectionMode = "none";
+        lassoSelectionFilterEnabled = true;
         selectedClusterKeys = new Set();
+        disposeSelectionMaskIfUnused(previousMask);
         clearCrossHoverState();
         updateSelectionUI();
         updateSkyPanel();
@@ -572,8 +676,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         if (polygon.length < 3) {
           return;
         }
-        disposeLassoSelectionMask(currentLassoSelectionMask);
-        currentLassoSelectionMask = captureLassoSelectionMask(polygon);
+        const nextLassoSelectionMask = captureLassoSelectionMask(polygon);
         const selected = [];
         hoverTargets.forEach((sprite) => {
           const selection = sprite && sprite.userData ? sprite.userData.selection : null;
@@ -585,19 +688,103 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             selected.push(selection);
           }
         });
-        setClusterSelections(selected, "lasso");
+        setClusterSelections(selected, "lasso", { lassoMask: nextLassoSelectionMask });
         if (event) {
           event.preventDefault();
         }
       }
 
-      function pickSprite(event) {
+      function isClusterInfoSprite(sprite) {
+        return Boolean(
+          sprite
+          && sprite.userData
+          && (
+            normalizeMemberKey(sprite.userData.selectionKey || "")
+            || normalizedSelectionKeyFor(sprite.userData.selection)
+          )
+          && sprite.userData.hovertext
+        );
+      }
+
+      function clusterInfoSpritePickRadiusPx(sprite) {
+        if (!sprite || !sprite.userData) {
+          return 0.0;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const worldPosition = new THREE.Vector3();
+        sprite.getWorldPosition(worldPosition);
+        const cameraDirection = new THREE.Vector3();
+        camera.getWorldDirection(cameraDirection);
+        const depth = worldPosition.clone().sub(camera.position).dot(cameraDirection);
+        if (!Number.isFinite(depth) || depth <= 1e-6) {
+          return 0.0;
+        }
+        const viewportHeight = Math.max(rect.height || canvas.clientHeight || 1, 1);
+        const worldHeight = 2.0 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+        const pickWorldScale = Math.max(
+          Number(sprite.userData.pickWorldScale ?? sprite.userData.baseScale ?? sprite.scale.x) || 0.0,
+          0.0
+        );
+        if (!Number.isFinite(worldHeight) || worldHeight <= 1e-9 || pickWorldScale <= 0.0) {
+          return 0.0;
+        }
+        const radiusPx = 0.5 * pickWorldScale * viewportHeight / worldHeight;
+        const minRadiusPx = cameraViewMode === "earth" ? 5.0 : 3.5;
+        const maxRadiusPx = cameraViewMode === "earth" ? 18.0 : 11.0;
+        return clampRange(radiusPx, minRadiusPx, maxRadiusPx);
+      }
+
+      function pickClusterInfoSpriteByScreenDistance(event) {
+        const clickPoint = canvasPointFromEvent(event);
+        let best = null;
+        hoverTargets.forEach((sprite) => {
+          if (!isClusterInfoSprite(sprite) || sprite.visible === false) {
+            return;
+          }
+          const screenPoint = spriteScreenPoint(sprite);
+          if (!screenPoint) {
+            return;
+          }
+          const radius = clusterInfoSpritePickRadiusPx(sprite);
+          if (!(radius > 0.0)) {
+            return;
+          }
+          const dx = Number(clickPoint.x) - Number(screenPoint.x);
+          const dy = Number(clickPoint.y) - Number(screenPoint.y);
+          const distanceSq = dx * dx + dy * dy;
+          const radiusSq = radius * radius;
+          if (distanceSq > radiusSq) {
+            return;
+          }
+          const score = distanceSq / Math.max(radiusSq, 1e-9);
+          if (!best || score < best.score) {
+            best = { sprite, score };
+          }
+        });
+        return best ? best.sprite : null;
+      }
+
+      function pickSprite(event, options = {}) {
+        const clusterHit = pickClusterInfoSpriteByScreenDistance(event);
+        if (clusterHit) {
+          return clusterHit;
+        }
+        if (options && options.clusterOnly) {
+          return null;
+        }
         const rect = canvas.getBoundingClientRect();
         pointer.x = ((event.clientX - rect.left) / rect.width) * 2.0 - 1.0;
         pointer.y = -((event.clientY - rect.top) / rect.height) * 2.0 + 1.0;
         raycaster.setFromCamera(pointer, camera);
         const hits = raycaster.intersectObjects(hoverTargets, false);
-        return hits.length ? hits[0].object : null;
+        for (const hit of hits) {
+          const object = hit && hit.object;
+          if (!object || isClusterInfoSprite(object)) {
+            continue;
+          }
+          return object;
+        }
+        return null;
       }
 
       function pointerRayFromEvent(event) {
@@ -609,11 +796,10 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function doubleClickTargetFromEvent(event) {
-        pointerRayFromEvent(event);
-        const spriteHits = raycaster.intersectObjects(hoverTargets, false);
-        if (spriteHits.length && spriteHits[0].object) {
+        const spriteHitObject = pickSprite(event);
+        if (spriteHitObject) {
           const worldPoint = new THREE.Vector3();
-          const hitObject = spriteHits[0].object;
+          const hitObject = spriteHitObject;
           hitObject.getWorldPosition(worldPoint);
           return {
             worldPoint,
@@ -623,6 +809,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           };
         }
 
+        pointerRayFromEvent(event);
         const plotHits = raycaster.intersectObjects(plotGroup.children, true);
         for (const hit of plotHits) {
           if (!hit || !hit.object) {
@@ -678,30 +865,143 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         updateScaleBar();
       }
 
+      function hideClusterInfoTooltip() {
+        activeClusterInfoSelectionKey = "";
+        activeClusterInfoSprite = null;
+        tooltipEl.style.display = "none";
+        tooltipEl.innerHTML = "";
+        tooltipEl.style.borderColor = "";
+        tooltipEl.style.color = "";
+        tooltipEl.style.boxShadow = "";
+      }
+
+      function clusterInfoSpriteForKey(selectionKey) {
+        const key = normalizeMemberKey(selectionKey);
+        const candidates = key ? (selectionSpriteEntriesByKey.get(key) || []) : [];
+        const candidateEntry = candidates.find((entry) => (
+          entry
+          && entry.sprite
+          && entry.sprite.userData
+          && entry.sprite.userData.hovertext
+        ));
+        return candidateEntry ? candidateEntry.sprite : null;
+      }
+
+      function activeClusterInfoSpriteObject() {
+        const key = normalizeMemberKey(activeClusterInfoSelectionKey);
+        if (!key) {
+          return null;
+        }
+        const currentSprite = clusterInfoSpriteForKey(key);
+        if (currentSprite) {
+          activeClusterInfoSprite = currentSprite;
+          return currentSprite;
+        }
+        if (
+          activeClusterInfoSprite
+          && activeClusterInfoSprite.userData
+          && normalizeMemberKey(activeClusterInfoSprite.userData.selectionKey || "") === key
+        ) {
+          return activeClusterInfoSprite;
+        }
+        return null;
+      }
+
+      function updateClusterInfoTooltipPosition() {
+        if (!activeClusterInfoSelectionKey || tooltipEl.style.display === "none") {
+          return;
+        }
+        const hitObject = activeClusterInfoSpriteObject();
+        if (!hitObject) {
+          hideClusterInfoTooltip();
+          return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const anchor = spriteScreenPoint(hitObject);
+        if (!anchor) {
+          hideClusterInfoTooltip();
+          return;
+        }
+        const tooltipWidth = tooltipEl.offsetWidth || 0;
+        const tooltipHeight = tooltipEl.offsetHeight || 0;
+        const horizontalOffset = 16;
+        let left = anchor.x + horizontalOffset;
+        let top = anchor.y - Math.max(tooltipHeight * 0.5, 8);
+        if (left + tooltipWidth > rect.width - 4) {
+          left = anchor.x - tooltipWidth - horizontalOffset;
+        }
+        left = clampRange(left, 4, Math.max(rect.width - tooltipWidth - 4, 4));
+        top = clampRange(top, 4, Math.max(rect.height - tooltipHeight - 4, 4));
+        tooltipEl.style.left = `${left}px`;
+        tooltipEl.style.top = `${top}px`;
+      }
+
+      function showClusterInfoTooltip(hitObject) {
+        if (!hitObject || !hitObject.userData || !hitObject.userData.hovertext) {
+          return false;
+        }
+        const tooltipColor = String(
+          hitObject.userData.tooltipColor
+          || (hitObject.userData.selection && hitObject.userData.selection.cluster_color)
+          || "#ffffff"
+        );
+        const selectionKey = normalizeMemberKey(hitObject.userData.selectionKey || normalizedSelectionKeyFor(hitObject.userData.selection));
+        if (!selectionKey) {
+          return false;
+        }
+        activeClusterInfoSelectionKey = selectionKey;
+        activeClusterInfoSprite = hitObject;
+        tooltipEl.style.display = "block";
+        tooltipEl.innerHTML = hitObject.userData.hovertext;
+        tooltipEl.style.borderColor = tooltipColor;
+        tooltipEl.style.color = tooltipColor;
+        tooltipEl.style.boxShadow = `0 0 0 1px ${tooltipColor}`;
+        updateClusterInfoTooltipPosition();
+        return true;
+      }
+
+      function canvasClickWasDrag(event) {
+        if (!canvasPointerDownInfo || event.button !== canvasPointerDownInfo.button) {
+          return false;
+        }
+        const dx = Number(event.clientX) - Number(canvasPointerDownInfo.x);
+        const dy = Number(event.clientY) - Number(canvasPointerDownInfo.y);
+        return (dx * dx + dy * dy) > 16.0;
+      }
+
       function onCanvasClick(event) {
         if (suppressNextCanvasClick) {
           suppressNextCanvasClick = false;
+          canvasPointerDownInfo = null;
           return;
         }
-        if (minimalModeEnabled || widgetPointerState || !clickSelectionEnabled) {
+        if (canvasClickWasDrag(event)) {
+          canvasPointerDownInfo = null;
           return;
         }
-        if (selectionBoxRayHitFromEvent(event)) {
+        canvasPointerDownInfo = null;
+        if (minimalModeEnabled || widgetPointerState || lassoState || event.button !== 0) {
+          hideClusterInfoTooltip();
+          setLocalHoveredClusterKey("");
           return;
         }
-        const hit = pickSprite(event);
-        const selection = hit && hit.userData ? hit.userData.selection : null;
-        if (!selection) {
-            return;
-        }
-        const frame = currentFrame();
-        if (!frame || !approximatelyZero(Number(selection.click_time_myr)) || !approximatelyZero(Number(frame.time))) {
+        const hitObject = pickSprite(event);
+        const clickedSelectionKey = hitObject && hitObject.userData
+          ? normalizeMemberKey(hitObject.userData.selectionKey || normalizedSelectionKeyFor(hitObject.userData.selection))
+          : "";
+        if (!clickedSelectionKey || !showClusterInfoTooltip(hitObject)) {
+          hideClusterInfoTooltip();
+          setLocalHoveredClusterKey("");
           return;
         }
-        setClusterSelections([selection], "click");
+        setLocalHoveredClusterKey(clickedSelectionKey);
       }
 
       function onCanvasDoubleClick(event) {
+        if (cameraViewMode === "earth") {
+          event.preventDefault();
+          return;
+        }
         if (minimalModeEnabled || widgetPointerState || lassoState || event.button !== 0) {
           return;
         }

@@ -674,9 +674,13 @@ def build_threejs_scene_spec(
     initial_state = {
         "click_selection_enabled": False,
         "lasso_volume_selection_enabled": True,
+        "lasso_selection_filter_enabled": True,
         "current_group": default_group,
         **copy.deepcopy(normalized_initial_state),
     }
+    initial_state["click_selection_enabled"] = False
+    if "lasso_selection_filter_enabled" not in initial_state:
+        initial_state["lasso_selection_filter_enabled"] = True
     if minimal_mode:
         for state_key in (
             "current_selection",
@@ -700,6 +704,7 @@ def build_threejs_scene_spec(
             initial_state.pop(state_key, None)
         initial_state["click_selection_enabled"] = False
         initial_state["lasso_volume_selection_enabled"] = False
+        initial_state["lasso_selection_filter_enabled"] = True
         initial_state["lasso_armed"] = False
 
     legend_payload = []

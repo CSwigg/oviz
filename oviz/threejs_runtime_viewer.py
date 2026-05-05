@@ -319,24 +319,30 @@ THREEJS_VIEWER_RUNTIME_JS = """
 
       function syncEarthViewToggleUi() {
         const isEarthView = cameraViewMode === "earth";
+        const currentViewLabel = isEarthView ? "Sky" : "3D";
+        const nextViewLabel = isEarthView ? "3D View" : "Sky View";
+        const buttonText = `View: ${currentViewLabel}`;
+        const buttonTitle = `Current view: ${currentViewLabel}. Click or press V to switch to ${nextViewLabel}.`;
+        const buttonAriaLabel = `Current view: ${currentViewLabel}. Switch to ${nextViewLabel}.`;
         if (root && root.dataset) {
           root.dataset.cameraViewMode = cameraViewMode;
+          root.dataset.skyBackgroundHidden = skyBackgroundHidden ? "true" : "false";
         }
         if (earthViewToggleButtonEl) {
-          earthViewToggleButtonEl.textContent = isEarthView ? "Sky View" : "3D View";
+          earthViewToggleButtonEl.textContent = buttonText;
           earthViewToggleButtonEl.dataset.active = isEarthView ? "true" : "false";
+          earthViewToggleButtonEl.dataset.viewMode = isEarthView ? "sky" : "3d";
           earthViewToggleButtonEl.setAttribute("aria-pressed", isEarthView ? "true" : "false");
-          earthViewToggleButtonEl.title = isEarthView
-            ? "Return to the previous 3D view"
-            : "Move to the sky view from the observer position";
+          earthViewToggleButtonEl.setAttribute("aria-label", buttonAriaLabel);
+          earthViewToggleButtonEl.title = buttonTitle;
         }
         if (viewFromEarthButtonEl) {
-          viewFromEarthButtonEl.textContent = isEarthView ? "Sky View" : "3D View";
+          viewFromEarthButtonEl.textContent = buttonText;
           viewFromEarthButtonEl.dataset.active = isEarthView ? "true" : "false";
+          viewFromEarthButtonEl.dataset.viewMode = isEarthView ? "sky" : "3d";
           viewFromEarthButtonEl.setAttribute("aria-pressed", isEarthView ? "true" : "false");
-          viewFromEarthButtonEl.title = isEarthView
-            ? "Return to the previous 3D view"
-            : "Move to the sky view from the observer position";
+          viewFromEarthButtonEl.setAttribute("aria-label", buttonAriaLabel);
+          viewFromEarthButtonEl.title = buttonTitle;
         }
       }
 
@@ -479,10 +485,26 @@ THREEJS_VIEWER_RUNTIME_JS = """
         renderFrame(currentFrameIndex);
       }
 
-      function resetCameraAndSelections() {
+      function resetSelectionState() {
+        const hadFocusSelection = Boolean(normalizeMemberKey(focusSelectionKey));
+        const hadSelectionContent = selectionStateHasContent();
         focusSelectionKey = "";
         lassoArmed = false;
-        clearClusterSelections();
+        hideClusterInfoTooltip();
+        clearCrossHoverState();
+        if (hadSelectionContent) {
+          clearClusterSelections();
+          return;
+        }
+        updateSelectionUI();
+        updateSkyPanel();
+        if (hadFocusSelection) {
+          renderFrame(currentFrameIndex);
+        }
+      }
+
+      function resetCameraAndSelections() {
+        resetSelectionState();
         resetCameraView();
       }
 
@@ -687,6 +709,34 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (typeof refreshSkyDomeControlStatus === "function") {
           refreshSkyDomeControlStatus();
         }
+      }
+
+      function setSkyBackgroundHidden(hidden, options = {}) {
+        skyBackgroundHidden = Boolean(hidden);
+        if (root && root.dataset) {
+          root.dataset.skyBackgroundHidden = skyBackgroundHidden ? "true" : "false";
+        }
+        const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        if (typeof updateSkyDome === "function") {
+          updateSkyDome(now);
+        }
+        if (typeof updateSkyDomeBackgroundFrame === "function") {
+          updateSkyDomeBackgroundFrame(now, { force: true });
+        }
+        if (typeof refreshSkyDomeControlStatus === "function") {
+          refreshSkyDomeControlStatus();
+        }
+        if (options && options.focus !== false) {
+          focusViewer();
+        }
+      }
+
+      function toggleSkyBackgroundHidden() {
+        if (cameraViewMode !== "earth") {
+          return false;
+        }
+        setSkyBackgroundHidden(!skyBackgroundHidden);
+        return true;
       }
 
       function animateSkyDomeViewOpacity(targetOpacity, options = {}, onComplete = null) {
@@ -898,6 +948,12 @@ THREEJS_VIEWER_RUNTIME_JS = """
         ) {
           return false;
         }
+        const clusterHit = typeof pickSprite === "function"
+          ? pickSprite(event, { clusterOnly: true })
+          : null;
+        if (clusterHit) {
+          return false;
+        }
         skyViewDragState = {
           pointerId: event.pointerId,
           lastX: Number(event.clientX) || 0.0,
@@ -913,8 +969,6 @@ THREEJS_VIEWER_RUNTIME_JS = """
           } catch (_err) {
           }
         }
-        tooltipEl.style.display = "none";
-        stopPointerEvent(event);
         return true;
       }
 
@@ -957,7 +1011,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (moved) {
           suppressNextCanvasClick = true;
         }
-        if (event) {
+        if (event && moved) {
           stopPointerEvent(event);
         }
         return true;
@@ -1002,6 +1056,69 @@ THREEJS_VIEWER_RUNTIME_JS = """
           target: initialCameraState.target.clone(),
           up: initialCameraState.up.clone(),
           fov: Number(initialCameraState.fov) || 60.0,
+        };
+      }
+
+      function serializableCameraReturnState(state) {
+        if (!state || !state.position || !state.target || !state.up) {
+          return null;
+        }
+        return {
+          position: {
+            x: Number(state.position.x),
+            y: Number(state.position.y),
+            z: Number(state.position.z),
+          },
+          target: {
+            x: Number(state.target.x),
+            y: Number(state.target.y),
+            z: Number(state.target.z),
+          },
+          up: {
+            x: Number(state.up.x),
+            y: Number(state.up.y),
+            z: Number(state.up.z),
+          },
+          fov: Number(state.fov) || 60.0,
+        };
+      }
+
+      function serializableEarthViewReturnCameraState() {
+        if (cameraViewMode !== "earth") {
+          return null;
+        }
+        return serializableCameraReturnState(earthViewReturnCameraState || fallbackEarthViewReturnCameraState());
+      }
+
+      function vector3FromPlainObject(value) {
+        if (!value || typeof value !== "object") {
+          return null;
+        }
+        const x = Number(value.x);
+        const y = Number(value.y);
+        const z = Number(value.z);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+          return null;
+        }
+        return new THREE.Vector3(x, y, z);
+      }
+
+      function cameraReturnStateFromPlainObject(value) {
+        if (!value || typeof value !== "object") {
+          return null;
+        }
+        const position = vector3FromPlainObject(value.position);
+        const target = vector3FromPlainObject(value.target);
+        const up = vector3FromPlainObject(value.up);
+        const fov = Number(value.fov);
+        if (!position || !target || !up || !Number.isFinite(fov)) {
+          return null;
+        }
+        return {
+          position,
+          target,
+          up,
+          fov: clampRange(fov, 0.05, 120.0),
         };
       }
 
@@ -1728,12 +1845,20 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (keyboardTargetIsEditable(event.target)) {
           return;
         }
+        const key = String(event.key || "");
+        const lowerKey = normalizedKeyboardKey(key);
+        if ((event.metaKey || event.ctrlKey) && !event.altKey && lowerKey === "z") {
+          const handled = undoSelectionState();
+          if (handled) {
+            clearPressedKeys();
+            event.preventDefault();
+          }
+          return;
+        }
         if (event.metaKey || event.ctrlKey || event.altKey) {
           return;
         }
 
-        const key = String(event.key || "");
-        const lowerKey = normalizedKeyboardKey(key);
         const fast = Boolean(event.shiftKey);
         const isMovementKey = ["w", "a", "s", "d", "q", "e", "r", "f", "shift"].includes(lowerKey);
         const interruptsAction = isMovementKey
@@ -1741,7 +1866,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
           || key === "ArrowLeft"
           || key === "ArrowRight"
           || /^[1-9]$/.test(key)
-          || ["l", "c", "v", "o"].includes(lowerKey);
+          || ["l", "c", "v", "b", "o"].includes(lowerKey);
 
         if (interruptsAction && !actionInterruptsMuted()) {
           interruptActionRun("keyboard", { disableOrbit: true });
@@ -1763,7 +1888,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
           return;
         }
 
-        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "o" || key === "?" || (key === "/" && event.shiftKey))) {
+        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "b" || lowerKey === "o" || key === "?" || (key === "/" && event.shiftKey))) {
           event.preventDefault();
           return;
         }
@@ -1830,14 +1955,19 @@ THREEJS_VIEWER_RUNTIME_JS = """
           return;
         }
         if (lowerKey === "c") {
-          clickSelectionEnabled = !clickSelectionEnabled;
-          updateSelectionUI();
+          toggleLassoSelectionFilter();
           event.preventDefault();
           return;
         }
         if (lowerKey === "v") {
-          viewFromEarth();
+          toggleEarthView();
           event.preventDefault();
+          return;
+        }
+        if (lowerKey === "b") {
+          if (toggleSkyBackgroundHidden()) {
+            event.preventDefault();
+          }
           return;
         }
         if (lowerKey === "o") {

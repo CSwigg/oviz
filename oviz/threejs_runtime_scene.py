@@ -1069,6 +1069,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         }
 
         applySceneHoverState();
+        updateClusterInfoTooltipPosition();
         if (updateWidgets) {
           resize();
           renderVolumeControls();

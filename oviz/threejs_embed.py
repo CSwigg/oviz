@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import gzip
 import json
+import math
+from numbers import Integral, Real
 from typing import Any
 
 
@@ -36,12 +38,28 @@ def _normalize_scene_spec_compression_threshold(threshold: int | None) -> int:
 
 
 def _scene_spec_json(scene_spec: dict[str, Any]) -> str:
+    scene_spec = _strict_json_value(scene_spec)
     compact_payload = bool((scene_spec.get("initial_state") or {}).get("compact_payload_enabled"))
     return (
-        json.dumps(scene_spec, separators=(",", ":"))
+        json.dumps(scene_spec, separators=(",", ":"), allow_nan=False)
         if compact_payload
-        else json.dumps(scene_spec)
+        else json.dumps(scene_spec, allow_nan=False)
     )
+
+
+def _strict_json_value(value: Any) -> Any:
+    if isinstance(value, Real) and not isinstance(value, bool):
+        numeric = float(value)
+        if not math.isfinite(numeric):
+            return None
+        if isinstance(value, Integral):
+            return int(value)
+        return numeric
+    if isinstance(value, dict):
+        return {key: _strict_json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_strict_json_value(item) for item in value]
+    return value
 
 
 def _scene_spec_payload(

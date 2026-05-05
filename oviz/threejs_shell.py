@@ -66,9 +66,13 @@ THREEJS_SHELL_HTML = """
           <div class="oviz-three-key-help-keys">Space</div>
           <div>Play or pause the animation.</div>
           <div class="oviz-three-key-help-keys">L / C</div>
-          <div>Toggle lasso mode or click selection.</div>
+          <div>Toggle lasso mode or hide/show the active selection effect.</div>
+          <div class="oviz-three-key-help-keys">Cmd/Ctrl + Z</div>
+          <div>Undo the last selection change.</div>
           <div class="oviz-three-key-help-keys">V</div>
           <div>Toggle between 3D View and Sky View.</div>
+          <div class="oviz-three-key-help-keys">B</div>
+          <div>In Sky View, toggle the sky background image on or off.</div>
           <div class="oviz-three-key-help-keys">O</div>
           <div>Toggle automatic orbit around the current anchor point.</div>
           <div class="oviz-three-key-help-keys">?</div>
