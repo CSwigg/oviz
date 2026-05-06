@@ -6,10 +6,19 @@ THREEJS_SHELL_HTML = """
           <button class="oviz-three-legend-panel-toggle" type="button" title="Collapse or expand the legend">▾</button>
         </div>
         <div class="oviz-three-legend-panel-body">
-          <label class="oviz-three-legend-group-field">
+          <div class="oviz-three-legend-group-field">
             <span>Group</span>
-            <select class="oviz-three-group-select"></select>
-          </label>
+            <div class="oviz-three-group-dropdown" data-open="false">
+              <button class="oviz-three-group-trigger" type="button" aria-label="Legend group" aria-expanded="false">
+                <span class="oviz-three-group-current"></span>
+                <span class="oviz-three-group-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div class="oviz-three-group-menu" role="listbox" aria-label="Legend group" aria-hidden="true" inert>
+                <div class="oviz-three-group-menu-list"></div>
+              </div>
+              <select class="oviz-three-group-select" aria-label="Legend group"></select>
+            </div>
+          </div>
           <div class="oviz-three-legend-section oviz-three-legend-trace-section" data-empty="false" data-open="true">
             <button class="oviz-three-legend-section-toggle oviz-three-legend-trace-section-toggle" type="button" title="Collapse or expand traces">
               <span class="oviz-three-legend-section-title">Traces</span>
@@ -57,9 +66,13 @@ THREEJS_SHELL_HTML = """
           <div class="oviz-three-key-help-keys">Space</div>
           <div>Play or pause the animation.</div>
           <div class="oviz-three-key-help-keys">L / C</div>
-          <div>Toggle lasso mode or click selection.</div>
+          <div>Toggle lasso mode or hide/show the active selection effect.</div>
+          <div class="oviz-three-key-help-keys">Cmd/Ctrl + Z</div>
+          <div>Undo the last selection change.</div>
           <div class="oviz-three-key-help-keys">V</div>
-          <div>Activate View from Earth.</div>
+          <div>Toggle between 3D View and Sky View.</div>
+          <div class="oviz-three-key-help-keys">B</div>
+          <div>In Sky View, toggle the sky background image on or off.</div>
           <div class="oviz-three-key-help-keys">O</div>
           <div>Toggle automatic orbit around the current anchor point.</div>
           <div class="oviz-three-key-help-keys">?</div>
@@ -107,6 +120,7 @@ THREEJS_SHELL_HTML = """
         <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="sw"></div>
         <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
+      <iframe class="oviz-three-sky-dome-frame" loading="eager" referrerpolicy="no-referrer" aria-hidden="true" tabindex="-1"></iframe>
       <div class="oviz-three-age-panel oviz-three-widget-panel" data-widget-key="age_kde" data-mode="hidden">
         <div class="oviz-three-age-drag oviz-three-widget-drag">
           <span class="oviz-three-widget-title">Age KDE</span>

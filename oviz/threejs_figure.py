@@ -6,7 +6,12 @@ import webbrowser
 from pathlib import Path
 from typing import Any
 
-from .threejs_embed import render_threejs_html, threejs_data_url, threejs_iframe_html
+from .threejs_embed import (
+    DEFAULT_SCENE_SPEC_COMPRESSION_THRESHOLD_BYTES,
+    render_threejs_html,
+    threejs_data_url,
+    threejs_iframe_html,
+)
 from .threejs_shell import THREEJS_SHELL_HTML
 from .threejs_runtime_legend import THREEJS_LEGEND_RUNTIME_JS
 from .threejs_runtime_interactions import THREEJS_INTERACTION_RUNTIME_JS
@@ -26,29 +31,20 @@ _THREEJS_TOPBAR_HTML = """
         </div>
         <div class="oviz-three-title"></div>
         <div class="oviz-three-widget-menu">
-          <div class="oviz-three-tools-shell" data-open="false">
-            <button class="oviz-three-tools-toggle" type="button" title="Show or hide selection controls">Selection ▸</button>
-            <div class="oviz-three-tools-drawer">
-              <div class="oviz-three-selection">
-                <div class="oviz-three-selection-row">
-                  <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear</button>
-                </div>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-click-select-toggle" type="checkbox" />
-                  <span>Enable click select</span>
-                </label>
-                <label class="oviz-three-selection-toggle">
-                  <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
-                  <span>Lasso volumetric data</span>
-                </label>
-              </div>
-            </div>
-          </div>
           <div class="oviz-three-controls-shell" data-open="false">
-            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls">Controls ▸</button>
-            <div class="oviz-three-controls-drawer">
+            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls" aria-expanded="false" aria-haspopup="true">Controls ▸</button>
+            <div class="oviz-three-controls-drawer" aria-hidden="true" inert>
                 <div class="oviz-three-controls">
                   <div class="oviz-three-controls-title">Controls</div>
+                <div class="oviz-three-selection">
+                  <div class="oviz-three-selection-row">
+                    <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear selection</button>
+                  </div>
+                  <label class="oviz-three-selection-toggle">
+                    <input class="oviz-three-volume-lasso-toggle" type="checkbox" />
+                    <span>Lasso volumetric data</span>
+                  </label>
+                </div>
                   <label class="oviz-three-controls-field">
                     <span>Theme</span>
                   <select class="oviz-three-theme-select">
@@ -70,7 +66,7 @@ _THREEJS_TOPBAR_HTML = """
                   </label>
                   <label class="oviz-three-controls-field">
                     <span class="oviz-three-camera-fov-label">Camera FOV</span>
-                    <input class="oviz-three-camera-fov" type="range" min="18" max="90" step="1" />
+                    <input class="oviz-three-camera-fov" type="range" min="0.05" max="120" step="0.05" />
                   </label>
                 </div>
                 <div class="oviz-three-controls-row">
@@ -119,7 +115,7 @@ _THREEJS_TOPBAR_HTML = """
                 </label>
                 <div class="oviz-three-controls-actions">
                   <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
-                  <button class="oviz-three-view-from-earth" type="button" title="Move the camera to the Earth position and look toward the Galactic center or active selection">View from Earth</button>
+                  <button class="oviz-three-view-from-earth" type="button" title="Current view: 3D. Click or press V to enter Sky view." aria-pressed="false">View: 3D</button>
                   <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
                   <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
                   <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
@@ -128,8 +124,40 @@ _THREEJS_TOPBAR_HTML = """
               </div>
             </div>
           </div>
+          <div class="oviz-three-sky-controls-shell" data-open="false">
+            <button class="oviz-three-sky-controls-toggle" type="button" title="Show or hide sky controls" aria-expanded="false" aria-haspopup="true">Sky ▸</button>
+            <div class="oviz-three-sky-controls-drawer" aria-hidden="true" inert>
+              <div class="oviz-three-controls oviz-three-sky-controls">
+                <div class="oviz-three-controls-title">Sky</div>
+                <label class="oviz-three-controls-field oviz-three-sky-source-field" hidden>
+                  <span>Sky image</span>
+                  <select class="oviz-three-sky-source-select" aria-label="Sky image"></select>
+                </label>
+                <div class="oviz-three-sky-dome-controls" hidden>
+                  <div class="oviz-three-sky-add-grid">
+                  <label class="oviz-three-controls-field">
+                      <span>Add</span>
+                      <select class="oviz-three-sky-layer-preset-select" aria-label="Add sky image"></select>
+                  </label>
+                  <label class="oviz-three-controls-field">
+                      <span>HiPS ID / URL</span>
+                      <input class="oviz-three-sky-layer-custom-input" type="text" placeholder="Search or paste HiPS ID" list="__ROOT_ID__-sky-hips-search" autocomplete="off" />
+                      <datalist class="oviz-three-sky-hips-search" id="__ROOT_ID__-sky-hips-search"></datalist>
+                  </label>
+                  </div>
+                  <div class="oviz-three-controls-actions">
+                    <button class="oviz-three-sky-layer-add" type="button">Add</button>
+                  </div>
+                  <div class="oviz-three-sky-menu-heading">Layers</div>
+                  <div class="oviz-three-sky-layer-list" aria-label="Sky layer stack"></div>
+                  <div class="oviz-three-sky-dome-status"></div>
+                </div>
+              </div>
+            </div>
+          </div>
           <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
-          <button class="oviz-three-reset-view" type="button" title="Reset the camera and clear current lasso and click selections">Reset</button>
+          <button class="oviz-three-reset-camera-view" type="button" title="Reset the camera to the initial 3D view">Reset Camera</button>
+          <button class="oviz-three-reset-selection" type="button" title="Clear the current lasso and cluster selection">Reset Selection</button>
           <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
           <select class="oviz-three-widget-select">
             <option value="">Widgets</option>
@@ -180,9 +208,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-canvas {
         display: block;
+        position: absolute;
+        inset: 0;
+        z-index: 1;
         width: 100%;
         height: 100%;
         outline: none;
+        background: transparent;
       }
       #__ROOT_ID__ .oviz-three-save-state:disabled {
         opacity: 0.55;
@@ -205,8 +237,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-zen="true"] .oviz-three-title,
       #__ROOT_ID__[data-zen="true"] .oviz-three-tools-shell,
       #__ROOT_ID__[data-zen="true"] .oviz-three-controls-shell,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-sky-controls-shell,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-select,
-      #__ROOT_ID__[data-zen="true"] .oviz-three-reset-view,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-reset-camera-view,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-reset-selection,
       #__ROOT_ID__[data-zen="true"] .oviz-three-save-state {
         display: none !important;
       }
@@ -248,7 +282,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         box-shadow: none !important;
       }
       #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-group-field {
-        display: none !important;
+        padding: 0 1px 8px;
       }
       #__ROOT_ID__[data-minimal="true"] .oviz-three-legend-section {
         gap: 0;
@@ -458,10 +492,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend-field {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 3px;
         min-width: 0;
-        color: var(--oviz-text);
-        font-size: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 11px;
       }
       #__ROOT_ID__ .oviz-three-legend-field input[type="range"],
       #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
@@ -473,10 +507,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
       #__ROOT_ID__ .oviz-three-legend-field select {
-        padding: 6px 8px;
-        border-radius: 6px;
-        border: 1px solid var(--oviz-panel-border);
-        background: rgba(0, 0, 0, 0.18);
+        padding: 2px 0 3px;
+        border-radius: 0;
+        border: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        background: transparent;
         color: var(--oviz-text);
         font: 12px Helvetica, Arial, sans-serif;
       }
@@ -484,29 +519,29 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         accent-color: var(--oviz-axis);
       }
       #__ROOT_ID__ .oviz-three-legend-field input[type="color"] {
-        height: 34px;
-        border: 1px solid var(--oviz-panel-border);
-        border-radius: 6px;
-        padding: 2px;
-        background: rgba(0, 0, 0, 0.18);
+        height: 26px;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        background: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-toggle {
         display: flex;
         align-items: center;
         gap: 8px;
-        color: var(--oviz-text);
-        font-size: 12px;
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 11px;
       }
       #__ROOT_ID__ .oviz-three-legend-toggle input {
         margin: 0;
         accent-color: var(--oviz-axis);
       }
       #__ROOT_ID__ .oviz-three-legend-summary {
-        color: var(--oviz-text);
-        font-size: 11px;
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 10px;
         line-height: 1.4;
         white-space: pre-wrap;
-        opacity: 0.88;
+        opacity: 1;
       }
       #__ROOT_ID__ .oviz-three-legend-item[data-active="false"] {
         opacity: 0.38;
@@ -612,6 +647,125 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-controls-field input[type="range"] {
         accent-color: var(--oviz-axis);
+      }
+      #__ROOT_ID__ .oviz-three-sky-dome-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-three-sky-menu-heading {
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      #__ROOT_ID__ .oviz-three-sky-add-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 7px;
+      }
+      #__ROOT_ID__ .oviz-three-sky-stretch {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-list {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        max-height: min(58vh, 520px);
+        overflow: auto;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row {
+        min-width: 0;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-active="true"] {
+        color: rgba(255, 255, 255, 0.96);
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 8px;
+        cursor: pointer;
+        list-style: none;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-summary::-webkit-details-marker {
+        display: none;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-order {
+        color: var(--oviz-muted-text);
+        font-size: 11px;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        padding: 0 8px 8px;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 11px;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input,
+      #__ROOT_ID__ .oviz-three-sky-layer-body select {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 7px;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row button {
+        min-width: 26px;
+        height: 24px;
+        padding: 0 7px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 4px;
+        background: transparent;
+        color: var(--oviz-text);
+        cursor: pointer;
+        font: 13px Helvetica, Arial, sans-serif;
+        line-height: 1;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      #__ROOT_ID__ .oviz-three-sky-dome-controls[hidden],
+      #__ROOT_ID__ .oviz-three-sky-dome-hips-controls[hidden] {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-dome-status {
+        color: var(--oviz-muted-text);
+        font-size: 11px;
+        line-height: 1.35;
+        min-height: 15px;
       }
       #__ROOT_ID__ .oviz-three-controls-toggle-row {
         display: flex;
@@ -877,15 +1031,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         position: absolute;
         z-index: 7;
         display: none;
-        min-width: 120px;
-        max-width: 320px;
+        min-width: 0;
+        max-width: 300px;
         padding: 8px 10px;
-        border-radius: 8px;
+        border-radius: 0;
         border: 1px solid var(--oviz-panel-border);
-        background: rgba(0, 0, 0, 0.82);
+        background: rgba(0, 0, 0, 0.76);
         color: #ffffff;
-        font-size: 12px;
-        line-height: 1.4;
+        font-size: 13px;
+        line-height: 1.32;
         pointer-events: none;
         white-space: normal;
       }
@@ -1012,6 +1166,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border: 0;
         display: block;
         background: var(--oviz-panel-solid);
+      }
+      #__ROOT_ID__ .oviz-three-sky-dome-frame {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 0;
+        transform-origin: 50% 50%;
+        will-change: opacity, transform;
+        transition: none;
       }
       #__ROOT_ID__ .oviz-three-age-body {
         position: absolute;
@@ -1675,34 +1843,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         position: absolute;
         top: 14px;
         left: 14px;
-        z-index: 6;
-        width: min(220px, 19vw);
-        min-width: 176px;
-        min-height: 112px;
+        z-index: 8;
+        width: auto;
+        min-width: 0;
+        min-height: 0;
         display: flex;
         flex-direction: column;
-        overflow: hidden;
+        overflow: visible;
+        border: 0 !important;
+        border-radius: 0;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] {
         min-height: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-panel-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        padding: 10px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        cursor: grab;
-        user-select: none;
-        touch-action: auto;
+        display: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-panel[data-dragging="true"] .oviz-three-legend-panel-head {
         cursor: grabbing;
-      }
-      #__ROOT_ID__ .oviz-three-legend-panel-head {
-        padding: 8px 10px;
-        border-bottom-color: rgba(255, 255, 255, 0.05);
       }
       #__ROOT_ID__ .oviz-three-legend-panel-title {
         color: var(--oviz-text);
@@ -1730,12 +1892,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         flex-direction: column;
         flex: 1 1 auto;
         min-height: 0;
-        padding: 6px 8px 8px;
+        padding: 0;
         overflow: auto;
         transition: max-height 0.18s ease, padding 0.18s ease, opacity 0.18s ease;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel button,
+      #__ROOT_ID__ .oviz-three-legend-panel button:hover,
+      #__ROOT_ID__ .oviz-three-legend-panel button:focus,
+      #__ROOT_ID__ .oviz-three-legend-panel button:active {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        outline: none;
+        -webkit-appearance: none;
+        appearance: none;
       }
       #__ROOT_ID__ .oviz-three-legend-panel-body {
-        padding: 5px 7px 7px;
+        padding: 0;
         scroll-padding-bottom: 8px;
       }
       #__ROOT_ID__ .oviz-three-legend-panel[data-open="false"] .oviz-three-legend-panel-body {
@@ -1748,12 +1924,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-legend {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 2px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        max-height: 58vh;
+        overflow: auto;
       }
       #__ROOT_ID__ .oviz-three-legend-section {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-section[data-open="false"] {
         gap: 0;
@@ -1762,15 +1945,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: none;
       }
       #__ROOT_ID__ .oviz-three-legend-section-toggle {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        width: 100%;
-        padding: 1px 2px 0;
-        border: 0;
-        background: transparent;
-        cursor: pointer;
+        display: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-section-title {
         color: var(--oviz-muted-text);
@@ -1791,14 +1966,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         transform: rotate(-90deg);
       }
       #__ROOT_ID__ .oviz-three-legend-volume-list .oviz-three-legend-entry {
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.016));
+        background: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-volume-section {
-        padding-top: 7px;
-        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        padding-top: 0;
+        border-top: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-section:last-child {
-        padding-bottom: 2px;
+        padding-bottom: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-group-field {
         display: flex;
@@ -1808,27 +1983,114 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: var(--oviz-muted-text);
         font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
-      #__ROOT_ID__ .oviz-three-legend-group-field select {
-        height: 30px;
-        width: 100%;
+      #__ROOT_ID__ .oviz-three-legend-group-field > span {
+        display: none;
       }
       #__ROOT_ID__ .oviz-three-group-select {
-        height: 30px;
-        width: 100%;
-        padding: 0 28px 0 12px;
-        border-radius: 4px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(29, 32, 37, 0.98);
-        color: var(--oviz-text);
-        cursor: pointer;
-        box-shadow: none;
-        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        -webkit-appearance: none;
-        appearance: none;
+        display: none;
       }
-      #__ROOT_ID__ .oviz-three-group-select:hover {
-        background: rgba(38, 42, 48, 0.98);
-        border-color: rgba(255, 255, 255, 0.10);
+      @keyframes oviz-three-group-option-drop {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown {
+        width: min(236px, calc(100vw - 28px));
+      }
+      #__ROOT_ID__ .oviz-three-group-trigger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 5px;
+        width: auto;
+        min-width: 0;
+        max-width: min(236px, calc(100vw - 28px));
+        padding: 0 0 5px;
+        border: 0;
+        border-bottom: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.96);
+        cursor: pointer;
+        font: 760 15px/1.16 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+        text-align: left;
+      }
+      #__ROOT_ID__ .oviz-three-group-current {
+        display: block;
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: min(212px, calc(100vw - 52px));
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-three-group-chevron {
+        flex: 0 0 auto;
+        order: -1;
+        color: rgba(255, 255, 255, 0.56);
+        font: 760 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        transform: translateY(-1px) rotate(0deg);
+        transition: transform 220ms ease, color 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-chevron {
+        color: rgba(255, 255, 255, 0.9);
+        transform: translateY(-1px) rotate(180deg);
+      }
+      #__ROOT_ID__ .oviz-three-group-menu {
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        transform: translateY(-8px);
+        transition: max-height 340ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, transform 340ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 340ms ease;
+        margin-top: 0;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-menu {
+        max-height: 260px;
+        opacity: 1;
+        transform: translateY(0);
+        margin-top: 6px;
+      }
+      #__ROOT_ID__ .oviz-three-group-menu-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        padding: 0 0 4px;
+      }
+      #__ROOT_ID__ .oviz-three-group-option {
+        width: min(236px, calc(100vw - 28px));
+        padding: 3px 0 4px;
+        border: 0;
+        border-bottom: 1px solid transparent;
+        background: transparent;
+        color: rgba(235, 238, 245, 0.5);
+        cursor: pointer;
+        font: 650 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+        opacity: 0;
+        text-align: left;
+        transform: translateY(-10px);
+        transition: color 160ms ease, border-color 160ms ease;
+        will-change: opacity, transform;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-option {
+        opacity: 1;
+        transform: translateY(0);
+        animation: oviz-three-group-option-drop 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+        animation-delay: var(--group-option-delay, 0ms);
+      }
+      #__ROOT_ID__ .oviz-three-group-option:hover,
+      #__ROOT_ID__ .oviz-three-group-option:focus-visible {
+        color: rgba(255, 255, 255, 0.9);
+        outline: none;
+      }
+      #__ROOT_ID__ .oviz-three-group-option[data-active="true"] {
+        color: rgba(255, 255, 255, 0.96);
+        border-bottom-color: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-title {
         padding: 0 2px 6px;
@@ -1836,85 +2098,106 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 500 10px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-legend-entry {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 6px;
-        padding: 5px 7px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 11px;
-        background: rgba(255, 255, 255, 0.022);
-        transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+        display: block;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        transition: opacity 0.14s ease;
       }
-      #__ROOT_ID__ .oviz-three-legend-entry {
-        gap: 4px;
-        padding: 4px 6px;
-        border-radius: 7px;
-        border-color: rgba(255, 255, 255, 0.04);
-        background: rgba(255, 255, 255, 0.01);
+      #__ROOT_ID__ .oviz-three-legend-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 0;
+        min-width: 0;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-entry[data-active="false"] {
-        opacity: 0.46;
+        opacity: 1;
       }
       #__ROOT_ID__ .oviz-three-legend-item {
-        flex: 1 1 auto;
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 0;
         min-width: 0;
+        width: auto;
         border: 0;
         background: transparent;
         padding: 0;
-        color: var(--oviz-text);
+        color: inherit;
         text-align: left;
-        font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        font: 650 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
       #__ROOT_ID__ .oviz-three-legend-item:hover,
       #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
-        background: rgba(255, 255, 255, 0.05);
-      }
-      #__ROOT_ID__ .oviz-three-legend-item:hover,
-      #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
-        background: rgba(255, 255, 255, 0.028);
+        background: transparent;
       }
       #__ROOT_ID__ .oviz-three-legend-swatch {
-        flex: 0 0 auto;
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
-      }
-      #__ROOT_ID__ .oviz-three-legend-swatch {
-        width: 7px;
-        height: 7px;
-        border-radius: 999px;
+        display: none;
       }
       #__ROOT_ID__ .oviz-three-legend-meta {
-        display: flex;
-        flex-direction: column;
+        display: block;
         min-width: 0;
       }
       #__ROOT_ID__ .oviz-three-legend-name {
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        color: inherit;
+        opacity: 1;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
       }
       #__ROOT_ID__ .oviz-three-legend-edit {
         flex: 0 0 auto;
-        width: 22px;
-        height: 22px;
+        align-self: center;
+        width: auto;
+        height: auto;
+        margin-left: 0;
+        padding: 0 0 0 1px;
         border: 0;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.05);
-        color: var(--oviz-muted-text);
-        font: 700 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        border-radius: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.46);
+        cursor: pointer;
+        font: 700 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
-      #__ROOT_ID__ .oviz-three-legend-edit,
-      #__ROOT_ID__ .oviz-three-legend-panel-toggle {
-        border-radius: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(255, 255, 255, 0.024);
+      #__ROOT_ID__ .oviz-three-legend-edit:hover,
+      #__ROOT_ID__ .oviz-three-legend-edit[data-open="true"] {
+        color: rgba(255, 255, 255, 0.94);
+      }
+      #__ROOT_ID__ .oviz-three-legend-item[data-active="false"] .oviz-three-legend-name {
+        opacity: 0.52;
+        text-decoration: none;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin: 0 0 0 0;
+        padding: 0 0 0 10px;
+        border-radius: 0;
+        background: transparent;
+        border: 0;
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        transform: translateY(-6px);
+        transition: max-height 300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 190ms ease, transform 300ms cubic-bezier(0.22, 1, 0.36, 1), margin 300ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls[data-visible="true"] {
+        max-height: 460px;
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+        margin: 1px 0 8px 0;
+      }
+      #__ROOT_ID__ .oviz-three-legend-resize,
+      #__ROOT_ID__ .oviz-three-legend-popover {
+        display: none !important;
       }
       #__ROOT_ID__ .oviz-three-legend-resize {
         position: absolute;
@@ -2012,6 +2295,37 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-color: rgba(255, 255, 255, 0.14);
         background: rgba(255, 255, 255, 0.08);
       }
+      #__ROOT_ID__ .oviz-three-earth-view-toggle {
+        position: absolute;
+        right: 18px;
+        bottom: 18px;
+        z-index: 7;
+        min-width: 104px;
+        height: 34px;
+        padding: 0 14px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: rgba(18, 20, 24, 0.92);
+        color: rgba(255, 255, 255, 0.88);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+        cursor: pointer;
+        font: 650 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+        backdrop-filter: blur(4px) saturate(103%);
+        -webkit-backdrop-filter: blur(4px) saturate(103%);
+        transition: transform 160ms ease, color 160ms ease, background 180ms ease, border-color 180ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-earth-view-toggle:hover {
+        transform: translateY(-1px);
+        color: rgba(255, 255, 255, 0.98);
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(28, 31, 36, 0.96);
+      }
+      #__ROOT_ID__ .oviz-three-earth-view-toggle[data-active="true"] {
+        color: rgba(255, 255, 255, 0.98);
+        border-color: rgba(246, 200, 95, 0.34);
+        background: rgba(246, 200, 95, 0.12);
+      }
       #__ROOT_ID__ .oviz-three-time-label {
         min-width: 124px;
         height: 30px;
@@ -2054,8 +2368,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         flex-direction: column;
         align-items: flex-start;
         gap: 6px;
-        pointer-events: auto;
-        cursor: grab;
+        pointer-events: none;
+        cursor: default;
         user-select: none;
         touch-action: none;
         border-radius: 4px;
@@ -2064,7 +2378,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         -webkit-backdrop-filter: blur(4px) saturate(103%);
       }
       #__ROOT_ID__ .oviz-three-scale-bar[data-dragging="true"] {
-        cursor: grabbing;
+        cursor: default;
       }
       #__ROOT_ID__[data-minimal="true"] .oviz-three-scale-bar {
         cursor: default;
@@ -2292,6 +2606,44 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-radius: 6px;
         background: rgba(0, 0, 0, 0.16);
       }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-title,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry:last-child,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-row,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-item,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-item:hover,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry[data-editor-open="true"],
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-edit,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-edit:hover,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-controls {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry,
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-entry:last-child {
+        display: block !important;
+        padding: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-row {
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-item {
+        display: inline-flex !important;
+        width: auto !important;
+        gap: 0 !important;
+        padding: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-edit {
+        margin-left: 0 !important;
+        padding-left: 1px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel .oviz-three-legend-controls {
+        margin: 1px 0 8px 0 !important;
+        padding: 0 0 0 10px !important;
+      }
       #__ROOT_ID__ .oviz-three-tools-shell,
       #__ROOT_ID__ .oviz-three-controls-shell {
         min-height: 0;
@@ -2416,12 +2768,984 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(255, 255, 255, 0.04);
         font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       }
+      #__ROOT_ID__ .oviz-three-legend-panel {
+        width: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel-head {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel-body {
+        gap: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-panel button,
+      #__ROOT_ID__ .oviz-three-legend-panel button:hover,
+      #__ROOT_ID__ .oviz-three-legend-panel button:focus,
+      #__ROOT_ID__ .oviz-three-legend-panel button:active {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        outline: none !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-group-field {
+        gap: 4px !important;
+        padding: 0 1px 8px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-group-field > span {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-select {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown {
+        width: min(236px, calc(100vw - 28px)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-trigger {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 5px !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: min(236px, calc(100vw - 28px)) !important;
+        padding: 0 0 5px !important;
+        border: 0 !important;
+        border-bottom: 0 !important;
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.96) !important;
+        cursor: pointer !important;
+        font: 760 15px/1.16 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+        text-align: left !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-current {
+        display: block !important;
+        flex: 0 1 auto !important;
+        min-width: 0 !important;
+        max-width: min(212px, calc(100vw - 52px)) !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-chevron {
+        flex: 0 0 auto !important;
+        order: -1 !important;
+        color: rgba(255, 255, 255, 0.56) !important;
+        font: 760 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        transform: translateY(-1px) rotate(0deg) !important;
+        transition: transform 220ms ease, color 160ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-chevron {
+        color: rgba(255, 255, 255, 0.9) !important;
+        transform: translateY(-1px) rotate(180deg) !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-menu {
+        max-height: 0 !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        transform: translateY(-8px) !important;
+        transition: max-height 340ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, transform 340ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 340ms ease !important;
+        margin-top: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-menu {
+        max-height: 260px !important;
+        opacity: 1 !important;
+        transform: translateY(0) !important;
+        margin-top: 6px !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-menu-list {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1px !important;
+        padding: 0 0 4px !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-option {
+        width: min(236px, calc(100vw - 28px)) !important;
+        padding: 3px 0 4px !important;
+        border: 0 !important;
+        border-bottom: 1px solid transparent !important;
+        background: transparent !important;
+        color: rgba(235, 238, 245, 0.5) !important;
+        cursor: pointer !important;
+        font: 650 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+        opacity: 0 !important;
+        text-align: left !important;
+        transform: translateY(-10px) !important;
+        transition: color 160ms ease, border-color 160ms ease !important;
+        will-change: opacity, transform !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-option {
+        opacity: 1 !important;
+        transform: translateY(0) !important;
+        animation: oviz-three-group-option-drop 340ms cubic-bezier(0.16, 1, 0.3, 1) both !important;
+        animation-delay: var(--group-option-delay, 0ms) !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-option:hover,
+      #__ROOT_ID__ .oviz-three-group-option:focus-visible {
+        color: rgba(255, 255, 255, 0.9) !important;
+        outline: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-option[data-active="true"] {
+        color: rgba(255, 255, 255, 0.96) !important;
+        border-bottom-color: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section {
+        gap: 0 !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-toggle {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend,
+      #__ROOT_ID__ .oviz-three-legend-volume-list {
+        gap: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-entry,
+      #__ROOT_ID__ .oviz-three-legend-volume-list .oviz-three-legend-entry,
+      #__ROOT_ID__ .oviz-three-legend-entry:last-child {
+        display: block !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-row,
+      #__ROOT_ID__ .oviz-three-legend-meta {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-row {
+        display: inline-grid !important;
+        grid-template-columns: 20px auto !important;
+        align-items: center !important;
+        column-gap: 4px !important;
+        min-width: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item {
+        display: inline-flex !important;
+        width: auto !important;
+        gap: 0 !important;
+        padding: 1px 0 !important;
+        font: 650 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        cursor: pointer !important;
+        pointer-events: auto !important;
+        text-align: left !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-swatch {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-meta {
+        display: inline-block !important;
+        min-width: auto !important;
+        max-width: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-name {
+        display: inline-block !important;
+        min-width: auto !important;
+        max-width: none !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        white-space: normal !important;
+        opacity: 1 !important;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item[data-active="false"] .oviz-three-legend-name {
+        opacity: 0.58 !important;
+        text-decoration: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item:hover,
+      #__ROOT_ID__ .oviz-three-legend-entry[data-editor-open="true"] {
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-edit {
+        display: inline-flex !important;
+        align-self: center !important;
+        justify-content: center !important;
+        width: 18px !important;
+        height: 18px !important;
+        margin-right: 0 !important;
+        margin-left: 0 !important;
+        padding: 0 !important;
+        border: 1px solid currentColor !important;
+        border-radius: 999px !important;
+        color: rgba(255, 255, 255, 0.46) !important;
+        font: 400 16px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-edit:hover,
+      #__ROOT_ID__ .oviz-three-legend-edit[data-open="true"] {
+        color: currentColor !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        margin: 0 0 0 0 !important;
+        padding: 0 0 0 24px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        max-height: 0 !important;
+        opacity: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+        transform: translateY(-6px) !important;
+        transition: max-height 300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 190ms ease, transform 300ms cubic-bezier(0.22, 1, 0.36, 1), margin 300ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls[data-visible="true"] {
+        max-height: 460px !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        transform: translateY(0) !important;
+        margin: 1px 0 8px 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-resize,
+      #__ROOT_ID__ .oviz-three-legend-popover {
+        display: none !important;
+      }
       #__ROOT_ID__[data-zen="true"] .oviz-three-legend-panel,
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel,
       #__ROOT_ID__[data-zen="true"] .oviz-three-note,
       #__ROOT_ID__[data-zen="true"] .oviz-three-scale-bar {
         display: none !important;
+      }
+      #__ROOT_ID__ {
+        --oviz-instrument-bg: rgba(6, 8, 12, 0.54);
+        --oviz-instrument-bg-strong: rgba(8, 10, 15, 0.74);
+        --oviz-instrument-border: rgba(238, 242, 247, 0.10);
+        --oviz-instrument-border-strong: rgba(246, 200, 95, 0.48);
+        --oviz-instrument-hover: rgba(255, 255, 255, 0.055);
+        --oviz-instrument-text: rgba(238, 242, 247, 0.88);
+        --oviz-instrument-muted: rgba(238, 242, 247, 0.56);
+        --oviz-instrument-dim: rgba(238, 242, 247, 0.38);
+        --oviz-instrument-accent: #f6c85f;
+        --oviz-instrument-ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #__ROOT_ID__ .oviz-three-topbar,
+      #__ROOT_ID__ .oviz-three-widget-menu,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell {
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu {
+        gap: 12px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        max-width: min(calc(100vw - 28px), 920px) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu button,
+      #__ROOT_ID__ .oviz-three-widget-menu select,
+      #__ROOT_ID__ .oviz-three-tools-toggle,
+      #__ROOT_ID__ .oviz-three-controls-toggle {
+        min-height: 30px !important;
+        padding: 0 2px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.70) !important;
+        box-shadow: none !important;
+        font: 720 11.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+        text-shadow: 0 0 9px rgba(0, 0, 0, 0.84) !important;
+        transition: color 160ms ease, box-shadow 180ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu button:hover,
+      #__ROOT_ID__ .oviz-three-widget-menu select:hover,
+      #__ROOT_ID__ .oviz-three-tools-toggle:hover,
+      #__ROOT_ID__ .oviz-three-controls-toggle:hover {
+        background: transparent !important;
+        border-color: transparent !important;
+        color: rgba(255, 255, 255, 0.96) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu button:focus-visible,
+      #__ROOT_ID__ .oviz-three-widget-menu select:focus-visible,
+      #__ROOT_ID__ .oviz-three-tools-toggle:focus-visible,
+      #__ROOT_ID__ .oviz-three-controls-toggle:focus-visible,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell[data-open="true"] > .oviz-three-tools-toggle,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell[data-open="true"] > .oviz-three-controls-toggle,
+      #__ROOT_ID__ .oviz-three-widget-menu button[data-active="true"],
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-auto-orbit[aria-pressed="true"] {
+        outline: none !important;
+        color: rgba(255, 255, 255, 0.96) !important;
+        box-shadow: inset 0 -1px 0 rgba(246, 200, 95, 0.66) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-select {
+        min-width: 92px !important;
+        padding-right: 17px !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        background:
+          linear-gradient(45deg, transparent 50%, rgba(238, 242, 247, 0.58) 50%) right 7px center / 4px 4px no-repeat,
+          linear-gradient(135deg, rgba(238, 242, 247, 0.58) 50%, transparent 50%) right 4px center / 4px 4px no-repeat,
+          transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
+        top: calc(100% + 8px) !important;
+        box-sizing: border-box !important;
+        max-height: min(76vh, 720px) !important;
+        overflow-y: auto !important;
+        overflow-x: visible !important;
+        padding: 14px 16px 16px !important;
+        border: 1px solid var(--oviz-instrument-border) !important;
+        border-radius: 9px !important;
+        background: linear-gradient(180deg, rgba(10, 12, 17, 0.74), rgba(6, 8, 12, 0.54)) !important;
+        box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28) !important;
+        backdrop-filter: blur(14px) saturate(118%) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(118%) !important;
+        transform: translate3d(0, -7px, 0) scale(0.99) !important;
+        transform-origin: top right !important;
+        transition: opacity 190ms ease, transform 260ms var(--oviz-instrument-ease) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-drawer {
+        width: min(316px, calc(100vw - 32px)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-drawer {
+        width: min(400px, calc(100vw - 32px)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell[data-open="true"] .oviz-three-tools-drawer,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell[data-open="true"] .oviz-three-controls-drawer {
+        transform: translate3d(0, 0, 0) scale(1) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-selection,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls {
+        gap: 10px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-title,
+      #__ROOT_ID__ .oviz-three-controls-hint,
+      #__ROOT_ID__ .oviz-three-selection-readout,
+      #__ROOT_ID__ .oviz-three-volume-summary,
+      #__ROOT_ID__ .oviz-three-legend-summary {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-row {
+        gap: 10px !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field,
+      #__ROOT_ID__ .oviz-three-controls-toggle-row,
+      #__ROOT_ID__ .oviz-three-selection-toggle,
+      #__ROOT_ID__ .oviz-three-volume-field,
+      #__ROOT_ID__ .oviz-three-volume-toggle,
+      #__ROOT_ID__ .oviz-three-legend-toggle {
+        gap: 5px !important;
+        color: var(--oviz-instrument-muted) !important;
+        font: 620 11px/1.24 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field,
+      #__ROOT_ID__ .oviz-three-volume-field,
+      #__ROOT_ID__ .oviz-three-legend-field,
+      #__ROOT_ID__ .oviz-three-controls-row,
+      #__ROOT_ID__ .oviz-three-volume-row,
+      #__ROOT_ID__ .oviz-three-legend-control-row {
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-controls-field input[type="text"],
+      #__ROOT_ID__ .oviz-three-controls-field select,
+      #__ROOT_ID__ .oviz-three-volume input[type="number"],
+      #__ROOT_ID__ .oviz-three-volume select,
+      #__ROOT_ID__ .oviz-three-filter-field select,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-legend-field select {
+        min-height: 28px !important;
+        padding: 3px 0 4px !important;
+        border: 0 !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.16) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.84) !important;
+        font: 650 11.5px/1.16 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        box-shadow: none !important;
+        transition: border-color 170ms ease, color 170ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="number"]:focus,
+      #__ROOT_ID__ .oviz-three-controls-field input[type="text"]:focus,
+      #__ROOT_ID__ .oviz-three-controls-field select:focus,
+      #__ROOT_ID__ .oviz-three-volume input[type="number"]:focus,
+      #__ROOT_ID__ .oviz-three-volume select:focus,
+      #__ROOT_ID__ .oviz-three-filter-field select:focus,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="number"]:focus,
+      #__ROOT_ID__ .oviz-three-legend-field select:focus {
+        outline: none !important;
+        border-bottom-color: rgba(246, 200, 95, 0.58) !important;
+        color: rgba(255, 255, 255, 0.95) !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-toggle-row input[type="checkbox"],
+      #__ROOT_ID__ .oviz-three-selection-toggle input[type="checkbox"],
+      #__ROOT_ID__ .oviz-three-legend-toggle input[type="checkbox"],
+      #__ROOT_ID__ .oviz-three-volume-toggle input[type="checkbox"],
+      #__ROOT_ID__ .oviz-three-box-visible {
+        position: relative !important;
+        width: 12px !important;
+        height: 12px !important;
+        flex: 0 0 12px !important;
+        margin: 0 !important;
+        border: 1px solid rgba(238, 242, 247, 0.42) !important;
+        border-radius: 3px !important;
+        background: rgba(255, 255, 255, 0.025) !important;
+        accent-color: var(--oviz-instrument-accent) !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-toggle-row input[type="checkbox"]:checked,
+      #__ROOT_ID__ .oviz-three-selection-toggle input[type="checkbox"]:checked,
+      #__ROOT_ID__ .oviz-three-legend-toggle input[type="checkbox"]:checked,
+      #__ROOT_ID__ .oviz-three-volume-toggle input[type="checkbox"]:checked,
+      #__ROOT_ID__ .oviz-three-box-visible:checked {
+        border-color: rgba(246, 200, 95, 0.82) !important;
+        background: rgba(246, 200, 95, 0.82) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-toggle-row input[type="checkbox"]:checked::after,
+      #__ROOT_ID__ .oviz-three-selection-toggle input[type="checkbox"]:checked::after,
+      #__ROOT_ID__ .oviz-three-legend-toggle input[type="checkbox"]:checked::after,
+      #__ROOT_ID__ .oviz-three-volume-toggle input[type="checkbox"]:checked::after,
+      #__ROOT_ID__ .oviz-three-box-visible:checked::after {
+        content: "" !important;
+        position: absolute !important;
+        left: 3px !important;
+        top: 1px !important;
+        width: 4px !important;
+        height: 7px !important;
+        border-right: 2px solid rgba(0, 0, 0, 0.78) !important;
+        border-bottom: 2px solid rgba(0, 0, 0, 0.78) !important;
+        transform: rotate(40deg) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-toggle-row input[type="checkbox"]:focus-visible,
+      #__ROOT_ID__ .oviz-three-selection-toggle input[type="checkbox"]:focus-visible,
+      #__ROOT_ID__ .oviz-three-legend-toggle input[type="checkbox"]:focus-visible,
+      #__ROOT_ID__ .oviz-three-volume-toggle input[type="checkbox"]:focus-visible,
+      #__ROOT_ID__ .oviz-three-box-visible:focus-visible {
+        outline: none !important;
+        box-shadow: 0 0 0 3px rgba(246, 200, 95, 0.14) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"],
+      #__ROOT_ID__ .oviz-three-volume input[type="range"],
+      #__ROOT_ID__ .oviz-three-filter-range,
+      #__ROOT_ID__ .oviz-three-age-filter-range,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"],
+      #__ROOT_ID__ .oviz-three-slider {
+        height: 30px !important;
+        min-height: 30px !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        accent-color: var(--oviz-instrument-accent) !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        cursor: pointer !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"]::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-volume input[type="range"]::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-filter-range::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-slider::-webkit-slider-runnable-track,
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-webkit-slider-runnable-track {
+        height: 2px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: rgba(238, 242, 247, 0.22) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"]::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-volume input[type="range"]::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-filter-range::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-slider::-webkit-slider-thumb,
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-webkit-slider-thumb {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        width: 12px !important;
+        height: 12px !important;
+        margin-top: -5px !important;
+        border: 1px solid rgba(255, 255, 255, 0.66) !important;
+        border-radius: 50% !important;
+        background: rgba(246, 200, 95, 0.92) !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.055) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"]::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-volume input[type="range"]::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-filter-range::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-slider::-moz-range-track,
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-moz-range-track {
+        height: 2px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: rgba(238, 242, 247, 0.22) !important;
+      }
+      #__ROOT_ID__ .oviz-three-controls-field input[type="range"]::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-volume input[type="range"]::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-filter-range::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-slider::-moz-range-thumb,
+      #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-slider::-moz-range-thumb {
+        width: 12px !important;
+        height: 12px !important;
+        border: 1px solid rgba(255, 255, 255, 0.66) !important;
+        border-radius: 50% !important;
+        background: rgba(246, 200, 95, 0.92) !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.055) !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-slider-shell,
+      #__ROOT_ID__ .oviz-three-age-filter-slider-shell {
+        height: 38px !important;
+        margin-top: 6px !important;
+        padding: 2px 0 4px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-slider-shell::before,
+      #__ROOT_ID__ .oviz-three-age-filter-slider-shell::before {
+        left: 10px !important;
+        right: 10px !important;
+        top: 18px !important;
+        height: 2px !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range,
+      #__ROOT_ID__ .oviz-three-age-filter-range {
+        position: absolute !important;
+        inset: 0 !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        margin: 0 !important;
+        pointer-events: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range::-webkit-slider-runnable-track,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-webkit-slider-runnable-track {
+        height: 38px !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range::-webkit-slider-thumb,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-webkit-slider-thumb {
+        width: 14px !important;
+        height: 14px !important;
+        margin-top: 12px !important;
+        pointer-events: auto !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range::-moz-range-track,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-moz-range-track {
+        height: 38px !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-filter-range::-moz-range-thumb,
+      #__ROOT_ID__ .oviz-three-age-filter-range::-moz-range-thumb {
+        width: 14px !important;
+        height: 14px !important;
+        pointer-events: auto !important;
+      }
+      #__ROOT_ID__ .oviz-three-selection button,
+      #__ROOT_ID__ .oviz-three-controls-actions button,
+      #__ROOT_ID__ .oviz-three-action-button {
+        min-height: 28px !important;
+        padding: 0 2px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.64) !important;
+        box-shadow: none !important;
+        font: 680 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        transition: color 160ms ease, box-shadow 180ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-selection button:hover,
+      #__ROOT_ID__ .oviz-three-controls-actions button:hover,
+      #__ROOT_ID__ .oviz-three-action-button:hover,
+      #__ROOT_ID__ .oviz-three-selection button[data-active="true"],
+      #__ROOT_ID__ .oviz-three-controls-actions button[data-active="true"],
+      #__ROOT_ID__ .oviz-three-action-button[data-active="true"] {
+        background: transparent !important;
+        border-color: transparent !important;
+        color: rgba(255, 255, 255, 0.94) !important;
+        box-shadow: inset 0 -1px 0 rgba(246, 200, 95, 0.58) !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-panel,
+      #__ROOT_ID__ .oviz-three-key-help {
+        border: 1px solid var(--oviz-instrument-border) !important;
+        border-radius: 10px !important;
+        background: linear-gradient(180deg, rgba(10, 12, 17, 0.74), rgba(6, 8, 12, 0.58)) !important;
+        box-shadow: 0 18px 54px rgba(0, 0, 0, 0.30) !important;
+        backdrop-filter: blur(14px) saturate(120%) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(120%) !important;
+      }
+      #__ROOT_ID__ .oviz-three-age-panel,
+      #__ROOT_ID__ .oviz-three-filter-panel {
+        min-width: min(360px, calc(100vw - 24px)) !important;
+        min-height: min(360px, calc(100vh - 24px)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-age-body,
+      #__ROOT_ID__ .oviz-three-filter-body {
+        gap: 10px !important;
+        padding: 12px 12px 18px !important;
+      }
+      #__ROOT_ID__ .oviz-three-age-filter,
+      #__ROOT_ID__ .oviz-three-filter-slider-shell {
+        padding-bottom: 4px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-drag {
+        height: 32px !important;
+        padding: 0 12px !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.08) !important;
+        background: rgba(255, 255, 255, 0.018) !important;
+        color: rgba(255, 255, 255, 0.88) !important;
+        font: 760 11.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-widget-panel button:not(.oviz-three-window-button) {
+        min-height: 28px !important;
+        border-radius: 6px !important;
+        font: 650 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-window-button {
+        width: 22px !important;
+        height: 22px !important;
+        border-radius: 999px !important;
+      }
+      #__ROOT_ID__ .oviz-three-footer {
+        gap: 10px !important;
+        padding: 0 !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-footer button {
+        width: 32px !important;
+        height: 32px !important;
+        border: 1px solid transparent !important;
+        border-radius: 999px !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.78) !important;
+        transition: color 160ms ease, background 180ms ease, border-color 180ms ease !important;
+      }
+      #__ROOT_ID__ .oviz-three-footer button:hover,
+      #__ROOT_ID__ .oviz-three-footer button[data-active="true"] {
+        color: rgba(255, 255, 255, 0.96) !important;
+        border-color: rgba(246, 200, 95, 0.22) !important;
+        background: rgba(246, 200, 95, 0.055) !important;
+      }
+      #__ROOT_ID__ .oviz-three-time-label {
+        color: rgba(255, 255, 255, 0.94) !important;
+        font: 760 14px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        text-shadow: 0 0 10px rgba(0, 0, 0, 0.82) !important;
+      }
+      #__ROOT_ID__ .oviz-three-slider-shell {
+        height: 42px !important;
+      }
+      #__ROOT_ID__ .oviz-three-slider-track-wrap {
+        height: 30px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-scale-bar {
+        gap: 5px !important;
+        padding: 7px 10px !important;
+        border: 1px solid rgba(238, 242, 247, 0.08) !important;
+        border-radius: 8px !important;
+        background: rgba(6, 8, 12, 0.38) !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16) !important;
+        backdrop-filter: blur(10px) saturate(116%) !important;
+        -webkit-backdrop-filter: blur(10px) saturate(116%) !important;
+        cursor: default !important;
+        pointer-events: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-scale-label {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font: 760 11.5px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-scale-line::before {
+        border-top-color: rgba(238, 242, 247, 0.66) !important;
+        border-top-width: 1px !important;
+      }
+      #__ROOT_ID__ .oviz-three-scale-line::after {
+        border-left-color: rgba(238, 242, 247, 0.66) !important;
+        border-right-color: rgba(238, 242, 247, 0.66) !important;
+        border-left-width: 1px !important;
+        border-right-width: 1px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-name {
+        max-inline-size: min(38vw, 360px) !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+        font-size: 15px !important;
+        line-height: 1.24 !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-row {
+        grid-template-columns: 18px minmax(0, auto) !important;
+        column-gap: 5px !important;
+        align-items: center !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-edit {
+        width: 21px !important;
+        height: 21px !important;
+        min-width: 21px !important;
+        min-height: 21px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        color: rgba(255, 255, 255, 0.42) !important;
+        background: transparent !important;
+        font: 720 15px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-edit:hover,
+      #__ROOT_ID__ .oviz-three-legend-edit:focus-visible,
+      #__ROOT_ID__ .oviz-three-legend-edit[data-open="true"] {
+        outline: none !important;
+        color: rgba(255, 255, 255, 0.88) !important;
+        box-shadow: inset 0 -1px 0 rgba(246, 200, 95, 0.58) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls {
+        display: grid !important;
+        gap: 8px !important;
+        width: min(292px, calc(100vw - 36px)) !important;
+        max-width: min(292px, calc(100vw - 36px)) !important;
+        max-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 8px 0 18px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        transform: translateY(-8px) !important;
+        transform-origin: top left !important;
+        transition:
+          max-height 300ms var(--oviz-instrument-ease),
+          margin 240ms var(--oviz-instrument-ease),
+          padding 240ms var(--oviz-instrument-ease),
+          opacity 200ms ease,
+          transform 260ms var(--oviz-instrument-ease) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-controls[data-visible="true"] {
+        max-height: min(72vh, 680px) !important;
+        margin: 5px 0 10px 0 !important;
+        padding: 6px 8px 10px 18px !important;
+        overflow-y: visible !important;
+        overflow-x: visible !important;
+        opacity: 1 !important;
+        transform: translateY(0) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-control-row {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field {
+        display: grid !important;
+        grid-template-columns: minmax(70px, max-content) 154px !important;
+        align-items: center !important;
+        gap: 10px !important;
+        min-height: 32px !important;
+        overflow: visible !important;
+        color: rgba(238, 242, 247, 0.50) !important;
+        font: 620 10.5px/1.18 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"] {
+        width: 140px !important;
+        min-width: 140px !important;
+        max-width: 140px !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        margin: 0 7px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-webkit-slider-runnable-track {
+        height: 2px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-webkit-slider-thumb {
+        width: 12px !important;
+        height: 12px !important;
+        margin-top: -5px !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.06) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-moz-range-track {
+        height: 2px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="range"]::-moz-range-thumb {
+        width: 12px !important;
+        height: 12px !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.06) !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-legend-field select {
+        width: 154px !important;
+        max-width: 154px !important;
+        min-height: 30px !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-field input[type="color"] {
+        width: 44px !important;
+        height: 24px !important;
+        padding: 0 !important;
+        border: 1px solid rgba(238, 242, 247, 0.18) !important;
+        border-radius: 2px !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-dropdown[data-open="true"] .oviz-three-group-menu {
+        max-height: 282px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-menu-list {
+        max-height: 282px !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-shell {
+        position: relative;
+        min-height: auto;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        overflow: visible;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-toggle {
+        width: auto;
+        height: 30px;
+        padding: 0 12px;
+        justify-content: center;
+        text-align: center;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(29, 32, 37, 0.98);
+        color: var(--oviz-text);
+        cursor: pointer;
+        box-shadow: none;
+        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-toggle:hover,
+      #__ROOT_ID__ .oviz-three-sky-controls-toggle:focus-visible,
+      #__ROOT_ID__ .oviz-three-sky-controls-shell[data-open="true"] > .oviz-three-sky-controls-toggle {
+        background: rgba(38, 42, 48, 0.98);
+        border-color: rgba(255, 255, 255, 0.10);
+        outline: none;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-drawer {
+        position: absolute;
+        top: calc(100% + 10px);
+        right: 0;
+        left: auto;
+        width: min(340px, calc(100vw - 32px));
+        max-height: min(70vh, 620px);
+        overflow: auto;
+        padding: 12px;
+        border: 1px solid var(--oviz-instrument-border);
+        border-radius: 8px;
+        background: var(--oviz-instrument-bg-strong);
+        box-shadow: var(--oviz-shadow-md);
+        backdrop-filter: blur(14px) saturate(112%);
+        -webkit-backdrop-filter: blur(14px) saturate(112%);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+        transition: opacity 0.16s ease, transform 0.16s ease;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-shell[data-open="true"] .oviz-three-sky-controls-drawer {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+      #__ROOT_ID__ .oviz-three-sky-source-field[hidden] {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls {
+        gap: 10px !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-dome-controls {
+        gap: 10px !important;
+        padding-top: 0 !important;
+        border-top: 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-add-grid {
+        gap: 8px !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row {
+        border: 1px solid var(--oviz-instrument-border) !important;
+        border-radius: 8px !important;
+        background: rgba(255, 255, 255, 0.035) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[open],
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-active="true"] {
+        border-color: rgba(246, 200, 95, 0.24) !important;
+        background: rgba(246, 200, 95, 0.045) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-summary {
+        min-height: 34px !important;
+        padding: 8px 9px !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-name {
+        color: rgba(238, 242, 247, 0.92) !important;
+        font: 700 12px/1.18 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-order,
+      #__ROOT_ID__ .oviz-three-sky-menu-heading {
+        color: rgba(238, 242, 247, 0.54) !important;
+        font: 650 10.5px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body {
+        gap: 8px !important;
+        padding: 0 9px 9px !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body label {
+        color: rgba(238, 242, 247, 0.58) !important;
+        font: 620 10.5px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input,
+      #__ROOT_ID__ .oviz-three-sky-layer-body select {
+        border: 1px solid rgba(238, 242, 247, 0.12) !important;
+        border-radius: 6px !important;
+        background: rgba(0, 0, 0, 0.18) !important;
+        color: var(--oviz-text) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input[type="range"] {
+        border: 0 !important;
+        background: transparent !important;
+        accent-color: rgba(246, 200, 95, 0.88) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-actions button {
+        border-color: rgba(238, 242, 247, 0.12) !important;
+        border-radius: 6px !important;
+        background: rgba(255, 255, 255, 0.035) !important;
+        font: 650 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-group-button:focus-visible,
+      #__ROOT_ID__ .oviz-three-group-option:focus-visible {
+        outline: none !important;
+        box-shadow: inset 0 -1px 0 rgba(246, 200, 95, 0.62) !important;
       }
       @media (max-width: 980px) {
         #__ROOT_ID__ .oviz-three-topbar {
@@ -2509,6 +3833,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           bottom: 12px;
           width: min(calc(100vw - 20px), 620px);
         }
+        #__ROOT_ID__ .oviz-three-earth-view-toggle {
+          right: 12px;
+          bottom: 68px;
+          min-width: 96px;
+          height: 32px;
+          padding: 0 12px;
+          font-size: 11px;
+        }
         #__ROOT_ID__ .oviz-three-scale-bar {
           display: none;
         }
@@ -2592,8 +3924,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
   <body>
     <div id="__ROOT_ID__" tabindex="0" data-zen="false" __ROOT_MINIMAL_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__>
       __TOPBAR_HTML__
+      <button class="oviz-three-earth-view-toggle" type="button" title="Current view: 3D. Click or press V to enter Sky view." aria-pressed="false" aria-label="Current view: 3D. Switch to Sky View.">View: 3D</button>
       __SHELL_HTML__
     </div>
+    __SCENE_SPEC_PAYLOAD_HTML__
 
     <script>
       (async function () {
@@ -2696,8 +4030,77 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return;
       }
 
-      /*__SCENE_SPEC_START__*/const sceneSpec = __SCENE_JSON__;/*__SCENE_SPEC_END__*/
       const root = document.getElementById("__ROOT_ID__");
+      /*__SCENE_SPEC_METADATA_START__*/const sceneSpecPayloadMetadata = __SCENE_SPEC_PAYLOAD_METADATA__;/*__SCENE_SPEC_METADATA_END__*/
+      window.__OVIZ_SCENE_SPEC_PAYLOAD_METADATA__ = sceneSpecPayloadMetadata;
+
+      function attachSceneSpecPayloadMetadata(loadedSceneSpec) {
+        if (!loadedSceneSpec || typeof loadedSceneSpec !== "object") {
+          return loadedSceneSpec;
+        }
+        const existingMetadata = loadedSceneSpec.export_metadata && typeof loadedSceneSpec.export_metadata === "object"
+          ? loadedSceneSpec.export_metadata
+          : {};
+        existingMetadata.scene_spec_payload = sceneSpecPayloadMetadata;
+        loadedSceneSpec.export_metadata = existingMetadata;
+        return loadedSceneSpec;
+      }
+
+      function decodeOvizBase64ToUint8Array(encoded) {
+        const binary = window.atob(String(encoded || "").replace(/\s+/g, ""));
+        const bytes = new Uint8Array(binary.length);
+        for (let idx = 0; idx < binary.length; idx += 1) {
+          bytes[idx] = binary.charCodeAt(idx);
+        }
+        return bytes;
+      }
+
+      function readOvizSceneSpecPayload(payloadId) {
+        const payloadEl = document.getElementById(payloadId);
+        if (!payloadEl) {
+          renderError(
+            root,
+            "oviz could not find the embedded compressed scene payload in this HTML file."
+          );
+          return "";
+        }
+        return payloadEl.textContent || "";
+      }
+
+      async function inflateOvizGzipBase64SceneSpec(encoded) {
+        if (typeof DecompressionStream === "undefined") {
+          renderError(
+            root,
+            "This oviz Three.js export uses a compressed scene payload, but this browser does not support DecompressionStream('gzip').\\n\\n"
+            + "Open the file in a current browser with gzip DecompressionStream support, or regenerate it with compress_scene_spec=False."
+          );
+          return null;
+        }
+
+        try {
+          const compressedBytes = decodeOvizBase64ToUint8Array(encoded);
+          const stream = new Blob([compressedBytes])
+            .stream()
+            .pipeThrough(new DecompressionStream("gzip"));
+          const buffer = await new Response(stream).arrayBuffer();
+          const jsonText = new TextDecoder().decode(buffer);
+          return JSON.parse(jsonText);
+        } catch (err) {
+          renderError(
+            root,
+            "oviz could not load the compressed scene payload.\\n\\n"
+            + "The embedded gzip/base64 sceneSpec data may be incomplete or unsupported by this browser.\\n\\n"
+            + String(err && err.message ? err.message : err)
+          );
+          return null;
+        }
+      }
+
+      /*__SCENE_SPEC_START__*/const sceneSpec = __SCENE_SPEC_EXPR__;/*__SCENE_SPEC_END__*/
+      if (!sceneSpec) {
+        return;
+      }
+      attachSceneSpecPayloadMetadata(sceneSpec);
       const initialState = sceneSpec.initial_state || {};
       const minimalModeEnabled = Boolean(
         initialState.lite_mode_enabled
@@ -2720,8 +4123,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const titleEl = root.querySelector(".oviz-three-title");
       const widgetMenuEl = root.querySelector(".oviz-three-widget-menu");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
-      const resetViewButtonEl = root.querySelector(".oviz-three-reset-view");
+      const resetCameraViewButtonEl = root.querySelector(".oviz-three-reset-camera-view");
+      const resetSelectionButtonEl = root.querySelector(".oviz-three-reset-selection");
       const saveStateButtonEl = root.querySelector(".oviz-three-save-state");
+      const legendGroupFieldEl = root.querySelector(".oviz-three-legend-group-field");
+      const groupDropdownEl = root.querySelector(".oviz-three-group-dropdown");
+      const groupDropdownTriggerEl = root.querySelector(".oviz-three-group-trigger");
+      const groupDropdownLabelEl = root.querySelector(".oviz-three-group-current");
+      const groupDropdownListEl = root.querySelector(".oviz-three-group-menu-list");
       const groupSelectEl = root.querySelector(".oviz-three-group-select");
       const widgetSelectEl = root.querySelector(".oviz-three-widget-select");
       const legendPanelEl = root.querySelector(".oviz-three-legend-panel");
@@ -2743,6 +4152,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const toolsToggleEl = root.querySelector(".oviz-three-tools-toggle");
       const controlsShellEl = root.querySelector(".oviz-three-controls-shell");
       const controlsToggleEl = root.querySelector(".oviz-three-controls-toggle");
+      const skyControlsShellEl = root.querySelector(".oviz-three-sky-controls-shell");
+      const skyControlsToggleEl = root.querySelector(".oviz-three-sky-controls-toggle");
       const sliderEl = root.querySelector(".oviz-three-slider");
       const sliderTrackWrapEl = root.querySelector(".oviz-three-slider-track-wrap");
       const sliderMinorTicksEl = root.querySelector(".oviz-three-slider-ticks-minor");
@@ -2752,6 +4163,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const playBackwardButtonEl = root.querySelector(".oviz-three-play-backward");
       const playForwardButtonEl = root.querySelector(".oviz-three-play-forward");
       const footerEl = root.querySelector(".oviz-three-footer");
+      const earthViewToggleButtonEl = root.querySelector(".oviz-three-earth-view-toggle");
       const tooltipEl = root.querySelector(".oviz-three-tooltip");
       const scaleBarEl = root.querySelector(".oviz-three-scale-bar");
       const scaleLabelEl = root.querySelector(".oviz-three-scale-label");
@@ -2770,6 +4182,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const globalPointOpacityLabelEl = root.querySelector(".oviz-three-global-point-opacity-label");
       const globalPointGlowEl = root.querySelector(".oviz-three-global-point-glow");
       const globalPointGlowLabelEl = root.querySelector(".oviz-three-global-point-glow-label");
+      const skyDomeSourceFieldEl = root.querySelector(".oviz-three-sky-source-field");
+      const skyDomeSourceSelectEl = root.querySelector(".oviz-three-sky-source-select");
+      const skyDomeControlsEl = root.querySelector(".oviz-three-sky-dome-controls");
+      const skyDomeVisibleToggleEl = root.querySelector(".oviz-three-sky-dome-visible-toggle");
+      const skyDomeForceVisibleToggleEl = root.querySelector(".oviz-three-sky-dome-force-visible-toggle");
+      const skyDomeOpacityEl = root.querySelector(".oviz-three-sky-dome-opacity");
+      const skyDomeOpacityLabelEl = root.querySelector(".oviz-three-sky-dome-opacity-label");
+      const skyDomeBrightnessEl = root.querySelector(".oviz-three-sky-dome-brightness");
+      const skyDomeBrightnessLabelEl = root.querySelector(".oviz-three-sky-dome-brightness-label");
+      const skyDomeContrastEl = root.querySelector(".oviz-three-sky-dome-contrast");
+      const skyDomeContrastLabelEl = root.querySelector(".oviz-three-sky-dome-contrast-label");
+      const skyDomeGammaEl = root.querySelector(".oviz-three-sky-dome-gamma");
+      const skyDomeGammaLabelEl = root.querySelector(".oviz-three-sky-dome-gamma-label");
+      const skyDomeStatusEl = root.querySelector(".oviz-three-sky-dome-status");
+      const skyDomeHipsControlEls = Array.from(root.querySelectorAll(".oviz-three-sky-dome-hips-controls"));
+      const skyLayerPresetSelectEl = root.querySelector(".oviz-three-sky-layer-preset-select");
+      const skyLayerCustomInputEl = root.querySelector(".oviz-three-sky-layer-custom-input");
+      const skyLayerSearchDatalistEl = root.querySelector(".oviz-three-sky-hips-search");
+      const skyLayerAddButtonEl = root.querySelector(".oviz-three-sky-layer-add");
+      const skyLayerListEl = root.querySelector(".oviz-three-sky-layer-list");
       const sizeByStarsToggleEl = root.querySelector(".oviz-three-size-by-stars-toggle");
       const focusGroupSelectEl = root.querySelector(".oviz-three-focus-group-select");
       const fadeTimeEl = root.querySelector(".oviz-three-fade-time");
@@ -2808,6 +4240,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const lassoPolylineEl = root.querySelector(".oviz-three-lasso-overlay polyline");
       const skyPanelEl = root.querySelector(".oviz-three-sky-panel");
       const skyFrameEl = root.querySelector(".oviz-three-sky-frame");
+      const skyDomeFrameEl = root.querySelector(".oviz-three-sky-dome-frame");
+      const skyBodyEl = null;
+      const skyCanvasEl = root.querySelector(".oviz-three-sky-canvas");
+      const skyImageSelectEl = root.querySelector(".oviz-three-sky-image-select");
+      const skyReadoutEl = root.querySelector(".oviz-three-sky-readout");
+      const skyStatusEl = root.querySelector(".oviz-three-sky-status");
       const skyFullButtonEl = root.querySelector(".oviz-three-sky-full");
       const skyHideButtonEl = root.querySelector(".oviz-three-sky-hide");
       const ageKdePanelEl = root.querySelector(".oviz-three-age-panel");
@@ -2975,6 +4413,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const groupVisibility = sceneSpec.group_visibility || {};
       const defaultGroup = sceneSpec.default_group || "All";
       const skySpec = sceneSpec.sky_panel || { enabled: false };
+      const skyDomeSpec = sceneSpec.sky_dome || { enabled: false };
       const selectionBoxSpec = sceneSpec.selection_box || { enabled: false };
       const ageKdeSpec = sceneSpec.age_kde || { enabled: false };
       const clusterFilterSpec = sceneSpec.cluster_filter || { enabled: false };
@@ -3059,7 +4498,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         734921
       );
       const themePresets = buildThemePresets(baseTheme);
-      const pointScale = Math.max(sceneSpec.max_span || 1, 1) / 4000.0;
+      const pointScaleBaseline = Math.max(Number(sceneSpec.point_size_baseline_scale) || (4.0 / 3.0), 0.01);
+      const pointScale = (Math.max(sceneSpec.max_span || 1, 1) / 2600.0) * pointScaleBaseline;
       const hoverTargets = [];
       const cameraResponsivePointEntries = [];
       const cameraResponsiveImagePlaneEntries = [];
@@ -3073,7 +4513,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const starCoreMaterialCache = new Map();
       const starGlowTextureCache = new Map();
       const starGlowMaterialCache = new Map();
-      const starBloomMaterialCache = new Map();
       const textTextureCache = new Map();
       const galaxyTextureCache = new Map();
       const imagePlaneTextureCache = new Map();
@@ -3096,7 +4535,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let currentSelections = [];
       let currentSelectionMode = "none";
       let clickSelectionEnabled = false;
-      let lassoVolumeSelectionEnabled = false;
+      let lassoVolumeSelectionEnabled = true;
       let playbackDirection = 0;
       let displayedFrameValue = currentFrameIndex;
       let frameTransitionState = null;
@@ -3121,8 +4560,81 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let localHoveredClusterKey = "";
       let skyHoveredClusterKey = "";
       let lastSentSkyHoverClusterKey = null;
+      let activeClusterInfoSelectionKey = "";
+      let activeClusterInfoSprite = null;
       let scaleBarPosition = null;
       let currentScaleBarLengthPc = NaN;
+      let skyDomeMesh = null;
+      let skyDomeTexture = null;
+      let skyDomeTexturePriority = -1;
+      let skyDomeHipsState = null;
+      let skyDomeHipsWarmupImages = [];
+      let skyDomeSurvey = "";
+      let skyDomeProjection = String(skyDomeSpec.projection || "MOL");
+      let skyDomeSnapshotStatus = "idle";
+      const skyDomeDefaultEnabled = Boolean(skyDomeSpec.enabled);
+      const skyDomeDefaultForceVisible = Boolean(skyDomeSpec.force_visible || skyDomeSpec.always_visible);
+      const skyDomeDefaultOpacity = Math.min(Math.max(Number(skyDomeSpec.opacity ?? 0.55), 0.0), 1.0);
+      const skyDomeDefaultHipsBrightness = Math.min(Math.max(Number(skyDomeSpec.hips_brightness) || 2.4, 0.1), 8.0);
+      const skyDomeDefaultHipsContrast = Math.min(Math.max(Number(skyDomeSpec.hips_contrast) || 1.25, 0.1), 4.0);
+      const skyDomeDefaultHipsGamma = Math.min(Math.max(Number(skyDomeSpec.hips_gamma) || 1.35, 0.2), 4.0);
+      let skyDomeForceVisible = skyDomeDefaultForceVisible;
+      let skyDomeCaptureFrameSignature = "";
+      let skyDomeBackgroundFrameReady = false;
+      let skyDomeBackgroundViewSignature = "";
+      let skyDomeBackgroundLatestViewSignature = "";
+      let skyDomeBackgroundLastSentAt = 0.0;
+      let skyDomeBackgroundMotionHoldUntil = 0.0;
+      let skyDomeBackgroundUserCameraActive = false;
+      let skyDomeBackgroundViewSequence = 0;
+      let skyDomeBackgroundAlignedView = null;
+      const skyDomeBackgroundSentViews = new Map();
+      const skyDomeSourceOptions = normalizeSkyDomeSourceOptions(skyDomeSpec);
+      const skyDomeSourceOptionByKey = new Map(skyDomeSourceOptions.map((source) => [source.key, source]));
+      let activeSkyDomeSourceKey = "";
+      let skyDomeLocalSourceActive = false;
+      const fallbackSkyLayerPresetOptions = [
+        { key: "P/Mellinger/color", label: "Mellinger Color", survey: "P/Mellinger/color", color: "#f2c178" },
+        { key: "P/DSS2/color", label: "DSS2 Color", survey: "P/DSS2/color", color: "#8fbfff" },
+        { key: "P/PLANCK/R2/HFI/color", label: "Planck Dust Emission Color", survey: "P/PLANCK/R2/HFI/color", color: "#ffc56e" },
+        { key: "P/PanSTARRS/DR1/color-z-zg-g", label: "Pan-STARRS DR1 Color", survey: "P/PanSTARRS/DR1/color-z-zg-g", color: "#f2c178" },
+        { key: "P/2MASS/color", label: "2MASS Color", survey: "P/2MASS/color", color: "#ff9a7a" },
+        { key: "P/allWISE/color", label: "AllWISE Color", survey: "P/allWISE/color", color: "#d6a4ff" },
+        { key: "P/GALEXGR6/AIS/color", label: "GALEX AIS Color", survey: "P/GALEXGR6/AIS/color", color: "#94f4ff" },
+        { key: "P/SDSS9/color", label: "SDSS9 Color", survey: "P/SDSS9/color", color: "#a7e0ff" },
+        { key: "P/DECaLS/DR5/color", label: "DECaLS DR5 Color", survey: "P/DECaLS/DR5/color", color: "#c7ef9f" },
+      ];
+      const skyLayerStretchOptions = [
+        { value: "linear", label: "Linear" },
+        { value: "log", label: "Log10" },
+        { value: "asinh", label: "Asinh" },
+      ];
+      const skyLayerColormapOptions = [
+        { value: "native", label: "Native" },
+        { value: "grayscale", label: "Gray" },
+        { value: "viridis", label: "Viridis" },
+        { value: "plasma", label: "Plasma" },
+        { value: "magma", label: "Magma" },
+        { value: "inferno", label: "Inferno" },
+        { value: "cividis", label: "Cividis" },
+        { value: "rainbow", label: "Rainbow" },
+        { value: "cubehelix", label: "Cubehelix" },
+      ];
+      let skyLayerPresetOptions = fallbackSkyLayerPresetOptions.slice();
+      let skyLayerPresetBySurvey = buildSkyLayerPresetBySurvey(skyLayerPresetOptions);
+      let skyLayerHipsRegistry = [];
+      let skyLayerHipsRegistryBySurvey = new Map();
+      let skyLayerHipsRegistryPromise = null;
+      let skyLayerHipsRegistryLoaded = false;
+      let skyLayerHipsRegistryFetchAttempted = false;
+      let skyLayerHipsRegistryError = "";
+      let skyLayerSearchRenderSignature = "";
+      let skyLayerSearchUpdateTimer = 0;
+      let skyLayerState = [];
+      let skyLayerStateInitialized = false;
+      let activeSkyLayerKey = "";
+      const skyPanelImageCache = new Map();
+      let skyPanelRenderSerial = 0;
       let currentZoomAnchorPoint = null;
       let galacticSimpleOrbitTargetTrackingActive = false;
       let legendPanelRectState = null;
@@ -3140,7 +4652,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let manualLabelIdCounter = 0;
       let globalPointSizeScale = 1.0;
       let globalPointOpacityScale = 1.0;
-      let globalPointGlowStrength = 1.2;
+      let globalPointGlowStrength = 0.60;
       let sizePointsByStarsEnabled = false;
       let globalScrollSpeed = 1.0;
       let cameraAutoOrbitBaseSpeed = 1.0;
@@ -3157,7 +4669,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let focusSelectionKey = "";
       let cameraViewMode = "free";
       let earthViewFocusDistance = null;
+      let earthViewReturnCameraState = null;
+      let cameraTransitionAnimationFrame = 0;
+      let skyDomeOpacityAnimationFrame = 0;
+      let skyDomeViewOpacityScale = 0.0;
+      let skyBackgroundHidden = Boolean(initialState.global_controls && initialState.global_controls.sky_background_hidden);
+      let skyViewTransitionSerial = 0;
+      let skyViewDragState = null;
       let currentLassoSelectionMask = null;
+      let lassoSelectionFilterEnabled = true;
+      const selectionUndoStack = [];
+      const MAX_SELECTION_UNDO_STATES = 32;
+      let canvasPointerDownInfo = null;
       const pressedKeys = new Set();
       let lastAnimationTimestamp = null;
       const playbackIntervalMs = Math.max(Number(sceneSpec.playback_interval_ms) || 240, 80);
@@ -3192,7 +4715,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const renderer = new THREE.WebGLRenderer({
         canvas,
         antialias: true,
-        alpha: false,
+        alpha: true,
         powerPreference: "high-performance",
       });
       renderer.setPixelRatio(window.devicePixelRatio || 1);
@@ -3204,16 +4727,107 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const volumeSupported = volumeStateKeys.length > 0 && Boolean(renderer.capabilities && renderer.capabilities.isWebGL2);
 
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color(theme.scene_bgcolor || theme.paper_bgcolor || "#000000");
+      function skyDomeUsesAladinBackground() {
+        const mode = String(
+          (skyDomeSpec && (
+            skyDomeSpec.background_mode
+            || skyDomeSpec.mode
+            || skyDomeSpec.render_mode
+          ))
+          || ""
+        ).toLowerCase();
+        return Boolean(
+          skyDomeSpec
+          && skyDomeSpec.enabled
+          && String(skyDomeSpec.source || "").toLowerCase() === "aladin"
+          && (mode === "live_aladin" || mode === "aladin-background")
+        );
+      }
+
+      function skyDomeUsesNativeHips() {
+        const mode = String(
+          (skyDomeSpec && (
+            skyDomeSpec.background_mode
+            || skyDomeSpec.mode
+            || skyDomeSpec.render_mode
+          ))
+          || ""
+        ).toLowerCase();
+        const source = String(skyDomeSpec && skyDomeSpec.source || "").toLowerCase();
+        return Boolean(
+          skyDomeSpec
+          && skyDomeSpec.enabled
+          && (
+            source === "hips"
+            || source === "native_hips"
+            || source === "native-hips"
+            || mode === "native_hips"
+            || mode === "native-hips"
+            || mode === "hips"
+          )
+        );
+      }
+
+      function skyDomeUsesHips2Fits() {
+        const mode = String(
+          (skyDomeSpec && (
+            skyDomeSpec.background_mode
+            || skyDomeSpec.mode
+            || skyDomeSpec.render_mode
+          ))
+          || ""
+        ).toLowerCase();
+        const source = String(skyDomeSpec && skyDomeSpec.source || "").toLowerCase();
+        return Boolean(
+          skyDomeSpec
+          && skyDomeSpec.enabled
+          && (
+            source === "hips2fits"
+            || source === "hips-2-fits"
+            || mode === "hips2fits"
+            || mode === "hips-2-fits"
+          )
+        );
+      }
+
+      function applySceneBackground() {
+        const bgColor = new THREE.Color(theme.scene_bgcolor || theme.paper_bgcolor || "#000000");
+        if (skyDomeUsesAladinBackground()) {
+          scene.background = null;
+          renderer.setClearColor(bgColor, 0.0);
+        } else {
+          scene.background = bgColor;
+          renderer.setClearColor(bgColor, 1.0);
+        }
+      }
+
+      const volumeSkyAxisTransform = deriveVolumeSkyAxisTransform();
+      if (root && root.dataset) {
+        root.dataset.skyAxisTransform = JSON.stringify(volumeSkyAxisTransform);
+      }
+
+      applySceneBackground();
 
       const sceneUp = sceneSpec.camera_up || { x: 0.0, y: 0.0, z: 1.0 };
       const sceneUpVector = new THREE.Vector3(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0).normalize();
       const CAMERA_AUTO_ORBIT_SPEED = 1.2;
-      const camera = new THREE.PerspectiveCamera(38, 1, 0.1, Math.max((sceneSpec.max_span || 1) * 20.0, 10000.0));
+      function cameraFarPlanePc() {
+        const farCandidates = [Math.max((sceneSpec.max_span || 1) * 20.0, 10000.0)];
+        if (skyDomeSpec && skyDomeSpec.enabled !== false) {
+          farCandidates.push((Number(skyDomeSpec.radius_pc) || 0.0) * 2.5);
+        }
+        imagePlaneSpecs.forEach((imagePlaneSpec) => {
+          farCandidates.push(Number(imagePlaneSpec && imagePlaneSpec.width_pc) || 0.0);
+          farCandidates.push(Number(imagePlaneSpec && imagePlaneSpec.height_pc) || 0.0);
+        });
+        return Math.max(...farCandidates.filter((value) => Number.isFinite(value) && value > 0.0));
+      }
+      const camera = new THREE.PerspectiveCamera(60, 1, 0.1, cameraFarPlanePc());
       camera.up.set(sceneUp.x ?? 0.0, sceneUp.y ?? 0.0, sceneUp.z ?? 1.0);
       const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.08;
+      const liveAladinSkyBackground = skyDomeUsesAladinBackground();
+      controls.enableDamping = !liveAladinSkyBackground;
+      controls.dampingFactor = liveAladinSkyBackground ? 0.0 : 0.08;
       controls.rotateSpeed = 0.7;
       controls.panSpeed = 0.7;
       controls.zoomSpeed = globalScrollSpeed;
@@ -3224,6 +4838,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       controls.target.set(sceneSpec.center.x, sceneSpec.center.y, sceneSpec.center.z);
       controls.addEventListener("start", () => {
         handleManualCameraInteractionStart();
+        setSkyDomeBackgroundCameraActive(true);
+      });
+      controls.addEventListener("end", () => {
+        setSkyDomeBackgroundCameraActive(false);
+      });
+      controls.addEventListener("change", () => {
+        if (!skyDomeUsesAladinBackground()) {
+          return;
+        }
+        updateSkyDomeBackgroundFrame(
+          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
+          { force: skyDomeBackgroundUserCameraActive }
+        );
       });
 
       const eye = (layoutScene.camera || {}).eye || { x: 0.0, y: -0.8, z: 1.5 };
@@ -3422,8 +5049,154 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return lowerTime + (upperTime - lowerTime) * state.alpha;
       }
 
-      function sceneSpecMarkerWrappedJson(exportSceneSpec) {
-        return `/*__SCENE_SPEC_START__*/const sceneSpec = ${JSON.stringify(exportSceneSpec)};/*__SCENE_SPEC_END__*/`;
+      function sceneSpecForRawExport(exportSceneSpec) {
+        const payloadSceneSpec = safeJsonClone(exportSceneSpec, {});
+        const metadata = payloadSceneSpec.export_metadata && typeof payloadSceneSpec.export_metadata === "object"
+          ? payloadSceneSpec.export_metadata
+          : null;
+        if (metadata && Object.prototype.hasOwnProperty.call(metadata, "scene_spec_payload")) {
+          delete metadata.scene_spec_payload;
+          if (Object.keys(metadata).length === 0) {
+            delete payloadSceneSpec.export_metadata;
+          }
+        }
+        return payloadSceneSpec;
+      }
+
+      function rawSceneSpecSizeBytes(jsonText) {
+        if (typeof TextEncoder !== "undefined") {
+          return new TextEncoder().encode(jsonText).length;
+        }
+        return String(jsonText || "").length;
+      }
+
+      function sceneSpecPayloadMetadataForJsonText(jsonText) {
+        return {
+          compression_mode: sceneSpecPayloadCompressionMode(),
+          compression_method: "none",
+          compressed: false,
+          raw_scene_spec_size_bytes: rawSceneSpecSizeBytes(jsonText),
+          compressed_size_bytes: null,
+          embedded_base64_size_bytes: null,
+          compression_threshold_bytes: sceneSpecPayloadCompressionThresholdBytes(),
+        };
+      }
+
+      function sceneSpecPayloadCompressionMode() {
+        const mode = sceneSpecPayloadMetadata && sceneSpecPayloadMetadata.compression_mode;
+        if (mode === true || mode === false || mode === "auto") {
+          return mode;
+        }
+        if (mode === "true") {
+          return true;
+        }
+        if (mode === "false" || mode === "none") {
+          return false;
+        }
+        return "auto";
+      }
+
+      function sceneSpecPayloadCompressionThresholdBytes() {
+        const threshold = Number(sceneSpecPayloadMetadata && sceneSpecPayloadMetadata.compression_threshold_bytes);
+        if (Number.isFinite(threshold) && threshold >= 0) {
+          return Math.floor(threshold);
+        }
+        return 8 * 1024 * 1024;
+      }
+
+      function shouldCompressExportSceneSpec(jsonText) {
+        const mode = sceneSpecPayloadCompressionMode();
+        if (mode === true) {
+          return true;
+        }
+        if (mode === false) {
+          return false;
+        }
+        return rawSceneSpecSizeBytes(jsonText) > sceneSpecPayloadCompressionThresholdBytes();
+      }
+
+      function sceneSpecPayloadMetadataForCompressedJsonText(jsonText, compressedSizeBytes, embeddedBase64SizeBytes) {
+        return {
+          compression_mode: sceneSpecPayloadCompressionMode(),
+          compression_method: "gzip+base64",
+          compressed: true,
+          raw_scene_spec_size_bytes: rawSceneSpecSizeBytes(jsonText),
+          compressed_size_bytes: compressedSizeBytes,
+          embedded_base64_size_bytes: embeddedBase64SizeBytes,
+          compression_threshold_bytes: sceneSpecPayloadCompressionThresholdBytes(),
+        };
+      }
+
+      function sceneSpecMarkerWrappedJsonText(jsonText) {
+        return `/*__SCENE_SPEC_START__*/const sceneSpec = ${jsonText};/*__SCENE_SPEC_END__*/`;
+      }
+
+      function sceneSpecMarkerWrappedCompressedPayload(payloadId) {
+        return `/*__SCENE_SPEC_START__*/const sceneSpec = await inflateOvizGzipBase64SceneSpec(readOvizSceneSpecPayload(${JSON.stringify(payloadId)}));/*__SCENE_SPEC_END__*/`;
+      }
+
+      function sceneSpecMetadataMarkerWrappedJson(metadata) {
+        return `/*__SCENE_SPEC_METADATA_START__*/const sceneSpecPayloadMetadata = ${JSON.stringify(metadata)};/*__SCENE_SPEC_METADATA_END__*/`;
+      }
+
+      function sceneSpecPayloadElementId() {
+        const idBase = String((root && root.id) || "__ROOT_ID__" || "oviz-three");
+        return `${idBase}-scene-spec-payload`;
+      }
+
+      function base64EncodeUint8Array(bytes) {
+        const chunkSize = 0x6000;
+        let encoded = "";
+        for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+          const chunk = bytes.subarray(offset, offset + chunkSize);
+          let binary = "";
+          for (let idx = 0; idx < chunk.length; idx += 1) {
+            binary += String.fromCharCode(chunk[idx]);
+          }
+          encoded += window.btoa(binary);
+        }
+        return encoded;
+      }
+
+      async function gzipBase64EncodeText(text) {
+        if (typeof CompressionStream === "undefined") {
+          return null;
+        }
+        const stream = new Blob([text])
+          .stream()
+          .pipeThrough(new CompressionStream("gzip"));
+        const buffer = await new Response(stream).arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        const encoded = base64EncodeUint8Array(bytes);
+        return {
+          encoded,
+          compressedSizeBytes: bytes.length,
+          embeddedBase64SizeBytes: encoded.length,
+        };
+      }
+
+      function sceneSpecPayloadScriptHtml(payloadId, encodedText) {
+        const encodedChunks = String(encodedText || "").match(/.{1,65536}/g) || [""];
+        return `<script type="application/octet-stream" id="${payloadId}">\n${encodedChunks.join("\\n")}\n<\\/script>`;
+      }
+
+      function removeExistingSceneSpecPayloadHtml(htmlText) {
+        return String(htmlText || "").replace(
+          /\\s*<script\\b(?=[^>]*\\btype=["']application\\/octet-stream["'])(?=[^>]*\\bid=["'][^"']*-scene-spec-payload["'])[^>]*>[\\s\\S]*?<\\/script>\\s*/gi,
+          "\\n"
+        );
+      }
+
+      function insertSceneSpecPayloadHtml(htmlText, payloadHtml) {
+        if (!payloadHtml) {
+          return htmlText;
+        }
+        const markerIndex = htmlText.indexOf("/*__SCENE_SPEC_START__*/");
+        const scriptStartIndex = markerIndex >= 0 ? htmlText.lastIndexOf("<script", markerIndex) : -1;
+        if (scriptStartIndex < 0) {
+          throw new Error("Could not locate the main viewer script for the compressed scene payload.");
+        }
+        return htmlText.slice(0, scriptStartIndex) + payloadHtml + "\\n" + htmlText.slice(scriptStartIndex);
       }
 
       function safeJsonClone(value, fallback = null) {
@@ -3471,21 +5244,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         const rootRect = root.getBoundingClientRect();
         const size = measuredScaleBarSize();
-        const computed = window.getComputedStyle(scaleBarEl);
-        let left = Number.parseFloat(computed.left);
-        let top = Number.parseFloat(computed.top);
-        if (!Number.isFinite(top)) {
-          const bottom = Number.parseFloat(computed.bottom);
-          if (Number.isFinite(bottom)) {
-            top = rootRect.height - size.height - bottom;
-          }
-        }
-        if (!Number.isFinite(left)) {
-          left = 18.0;
-        }
-        if (!Number.isFinite(top)) {
-          top = Math.max(6.0, rootRect.height - size.height - 22.0);
-        }
+        const left = 18.0;
+        const top = Math.max(6.0, rootRect.height - size.height - 22.0);
         return clampScaleBarPosition(left, top, size.width, size.height);
       }
 
@@ -3525,7 +5285,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const volumeCount = visibleItems.length - traceCount;
         const preferredTraceRows = traceCount ? clampRange(traceCount, 4, 8) : 0;
         const preferredVolumeRows = volumeCount ? clampRange(volumeCount, 1, 3) : 0;
-        const estimatedHeight = 108 + preferredTraceRows * 34 + preferredVolumeRows * 32 + ((traceCount && volumeCount) ? 14 : 0);
+        const estimatedHeight = 108
+          + preferredTraceRows * 34
+          + preferredVolumeRows * 32
+          + ((traceCount && volumeCount) ? 14 : 0);
         const minHeight = volumeCount ? 304.0 : 272.0;
         const height = Math.min(Math.max(estimatedHeight, minHeight), Math.min(root.clientHeight - topInset - 12.0, 520.0));
         return clampLegendPanelRect(14.0, topInset, width, height);
@@ -3835,7 +5598,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         if (nextRect) {
           applyLegendPanelRect(nextRect, { allowAutoCap: false });
-          if (activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
+          if (typeof positionLegendPopover === "function" && activeLegendEditorKey && legendEditButtonByKey.has(activeLegendEditorKey)) {
             positionLegendPopover(legendEditButtonByKey.get(activeLegendEditorKey));
           }
         }
@@ -3863,41 +5626,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
         const size = measuredScaleBarSize();
-        const next = scaleBarPosition && Number.isFinite(Number(scaleBarPosition.left)) && Number.isFinite(Number(scaleBarPosition.top))
-          ? clampScaleBarPosition(scaleBarPosition.left, scaleBarPosition.top, size.width, size.height)
-          : defaultScaleBarPosition();
+        const next = defaultScaleBarPosition();
         scaleBarEl.style.left = `${next.left}px`;
         scaleBarEl.style.top = `${next.top}px`;
         scaleBarEl.style.right = "auto";
         scaleBarEl.style.bottom = "auto";
-        if (scaleBarPosition) {
-          scaleBarPosition = { left: next.left, top: next.top };
-        }
+        scaleBarPosition = null;
       }
 
       function captureScaleBarState() {
-        if (!scaleBarEl) {
-          return null;
-        }
-        if (!scaleBarPosition) {
-          const rootRect = root.getBoundingClientRect();
-          const rect = scaleBarEl.getBoundingClientRect();
-          if ((Number(rect.width) || 0.0) > 0.0 && (Number(rect.height) || 0.0) > 0.0) {
-            scaleBarPosition = clampScaleBarPosition(
-              rect.left - rootRect.left,
-              rect.top - rootRect.top,
-              rect.width,
-              rect.height,
-            );
-          }
-        }
-        if (!scaleBarPosition) {
-          return null;
-        }
-        return {
-          left: Number(scaleBarPosition.left) || 0.0,
-          top: Number(scaleBarPosition.top) || 0.0,
-        };
+        return null;
       }
 
       function buildSelectionBoxMetricTimeCenters() {
@@ -4949,6 +6687,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           });
             setToolsDrawerOpen(false);
             setControlsDrawerOpen(false);
+            setSkyControlsDrawerOpen(false);
             legendPanelOpen = true;
           }
           return;
@@ -4965,11 +6704,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           currentFrameIndex = Math.max(0, Math.min(Math.round(requestedFrameIndex), Math.max(frameSpecs.length - 1, 0)));
         }
 
-        if (typeof initialState.click_selection_enabled === "boolean") {
-          clickSelectionEnabled = initialState.click_selection_enabled;
-        }
+        clickSelectionEnabled = false;
         if (typeof initialState.lasso_volume_selection_enabled === "boolean") {
           lassoVolumeSelectionEnabled = initialState.lasso_volume_selection_enabled;
+        }
+        if (typeof initialState.lasso_selection_filter_enabled === "boolean") {
+          lassoSelectionFilterEnabled = initialState.lasso_selection_filter_enabled;
         }
         if (typeof initialState.lasso_armed === "boolean") {
           lassoArmed = initialState.lasso_armed;
@@ -5020,6 +6760,33 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedGlobalControls.nearby_region_labels_visible === "boolean") {
             nearbyRegionLabelsVisible = savedGlobalControls.nearby_region_labels_visible;
           }
+          if (
+            typeof savedGlobalControls.sky_dome_source_key === "string"
+            && skyDomeSourceOptionByKey.has(savedGlobalControls.sky_dome_source_key)
+          ) {
+            activeSkyDomeSourceKey = String(savedGlobalControls.sky_dome_source_key);
+          }
+          if (typeof savedGlobalControls.sky_dome_enabled === "boolean") {
+            skyDomeSpec.enabled = savedGlobalControls.sky_dome_enabled;
+          }
+          if (typeof savedGlobalControls.sky_dome_force_visible === "boolean") {
+            skyDomeForceVisible = savedGlobalControls.sky_dome_force_visible;
+          }
+          if (Number.isFinite(Number(savedGlobalControls.sky_dome_opacity))) {
+            skyDomeSpec.opacity = Math.min(Math.max(Number(savedGlobalControls.sky_dome_opacity), 0.0), 1.0);
+          }
+          if (Number.isFinite(Number(savedGlobalControls.sky_dome_hips_brightness))) {
+            skyDomeSpec.hips_brightness = Math.min(Math.max(Number(savedGlobalControls.sky_dome_hips_brightness), 0.1), 8.0);
+          }
+          if (Number.isFinite(Number(savedGlobalControls.sky_dome_hips_contrast))) {
+            skyDomeSpec.hips_contrast = Math.min(Math.max(Number(savedGlobalControls.sky_dome_hips_contrast), 0.1), 4.0);
+          }
+          if (Number.isFinite(Number(savedGlobalControls.sky_dome_hips_gamma))) {
+            skyDomeSpec.hips_gamma = Math.min(Math.max(Number(savedGlobalControls.sky_dome_hips_gamma), 0.2), 4.0);
+          }
+          if (typeof savedGlobalControls.sky_background_hidden === "boolean") {
+            skyBackgroundHidden = savedGlobalControls.sky_background_hidden;
+          }
           if (typeof savedGlobalControls.camera_auto_orbit_enabled === "boolean") {
             cameraAutoOrbitEnabled = savedGlobalControls.camera_auto_orbit_enabled;
           }
@@ -5035,7 +6802,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (Number.isFinite(Number(savedGlobalControls.earth_view_focus_distance_pc))) {
             earthViewFocusDistance = Number(savedGlobalControls.earth_view_focus_distance_pc);
           }
+          if (savedGlobalControls.earth_view_return_camera_state) {
+            earthViewReturnCameraState = cameraReturnStateFromPlainObject(savedGlobalControls.earth_view_return_camera_state);
+          }
         }
+        skyDomeViewOpacityScale = cameraViewMode === "earth" ? 1.0 : 0.0;
 
         const savedScaleBarState = initialState.scale_bar_state;
         if (
@@ -5213,9 +6984,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         currentSelections = uniqueSelections(Array.isArray(initialState.current_selections) ? initialState.current_selections : []);
-        currentSelection = initialState.current_selection && typeof initialState.current_selection === "object"
-          ? initialState.current_selection
-          : null;
+        currentSelection = null;
         if (Array.isArray(initialState.selected_cluster_keys) && initialState.selected_cluster_keys.length) {
           selectedClusterKeys = new Set(
             initialState.selected_cluster_keys
@@ -5229,7 +6998,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
               .filter(Boolean)
           );
         }
-        currentSelectionMode = currentSelection ? "click" : ((currentSelections.length || Boolean(initialState.lasso_selection_mask)) ? "lasso" : "none");
+        currentSelectionMode = (currentSelections.length || selectedClusterKeys.size || Boolean(initialState.lasso_selection_mask)) ? "lasso" : "none";
 
         const savedWidgets = initialState.widgets;
         if (savedWidgets && typeof savedWidgets === "object") {
@@ -5299,6 +7068,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedDrawers.controls_open === "boolean") {
             setControlsDrawerOpen(savedDrawers.controls_open);
           }
+          if (typeof savedDrawers.sky_open === "boolean") {
+            setSkyControlsDrawerOpen(savedDrawers.sky_open);
+          }
         }
 
         if (typeof initialState.legend_open === "boolean") {
@@ -5308,6 +7080,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (minimalModeEnabled) {
           clickSelectionEnabled = false;
           lassoVolumeSelectionEnabled = false;
+          lassoSelectionFilterEnabled = true;
           lassoArmed = false;
           currentSelection = null;
           currentSelections = [];
@@ -5321,6 +7094,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           });
           setToolsDrawerOpen(false);
           setControlsDrawerOpen(false);
+          setSkyControlsDrawerOpen(false);
           legendPanelOpen = true;
         }
 
@@ -5365,8 +7139,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           active_manual_label_id: activeManualLabelId,
           legend_state: legendState,
           trace_style_state: traceStyleStateByKey,
-          click_selection_enabled: clickSelectionEnabled,
+          click_selection_enabled: false,
           lasso_volume_selection_enabled: lassoVolumeSelectionEnabled,
+          lasso_selection_filter_enabled: lassoSelectionFilterEnabled,
           lasso_armed: lassoArmed,
           current_selection: currentSelection,
           current_selections: currentSelections,
@@ -5389,11 +7164,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             axes_visible: axesVisible,
             galactic_reference_visible: galacticReferenceVisible,
             nearby_region_labels_visible: nearbyRegionLabelsVisible,
+            sky_dome_source_key: activeSkyDomeSourceKey || defaultSkyDomeSourceKey(),
+            sky_dome_enabled: Boolean(skyDomeSpec.enabled),
+            sky_dome_force_visible: Boolean(skyDomeForceVisible),
+            sky_dome_opacity: Number(skyDomeSpec.opacity ?? 0.55),
+            sky_dome_hips_brightness: Number(skyDomeSpec.hips_brightness ?? 2.4),
+            sky_dome_hips_contrast: Number(skyDomeSpec.hips_contrast ?? 1.25),
+            sky_dome_hips_gamma: Number(skyDomeSpec.hips_gamma ?? 1.35),
+            sky_background_hidden: Boolean(skyBackgroundHidden),
             camera_auto_orbit_enabled: cameraAutoOrbitEnabled,
             camera_auto_orbit_speed: cameraAutoOrbitBaseSpeed,
             camera_auto_orbit_direction: cameraAutoOrbitDirection,
             camera_view_mode: cameraViewMode,
             earth_view_focus_distance_pc: earthViewFocusDistance,
+            earth_view_return_camera_state: serializableEarthViewReturnCameraState(),
           },
           camera: {
             position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
@@ -5406,11 +7190,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           drawers: {
             tools_open: Boolean(toolsShellEl && toolsShellEl.dataset.open === "true"),
             controls_open: Boolean(controlsShellEl && controlsShellEl.dataset.open === "true"),
+            sky_open: Boolean(skyControlsShellEl && skyControlsShellEl.dataset.open === "true"),
           },
           legend_open: legendPanelOpen,
           legend_panel_state: captureLegendPanelState(),
           legend_panel_user_sized: legendPanelUserSized,
           legend_sections_open: safeJsonClone(legendSectionOpenState, { traces: true, volumes: true }),
+          sky_layers: serializableSkyLayers(),
+          active_sky_layer_key: activeSkyLayerKey || "",
           zen_mode_enabled: zenModeEnabled,
           widgets: {
             sky: captureWidgetState("sky"),
@@ -5460,8 +7247,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return `${title}-${frameLabel}.html`;
       }
 
-      function buildExportHtml(exportSceneSpec) {
-        const currentHtml = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
+      async function buildExportHtml(exportSceneSpec) {
+        const currentHtml = removeExistingSceneSpecPayloadHtml(
+          "<!DOCTYPE html>\\n" + document.documentElement.outerHTML
+        );
         const startMarker = "/*__SCENE_SPEC_START__*/";
         const endMarker = "/*__SCENE_SPEC_END__*/";
         const startIndex = currentHtml.indexOf(startMarker);
@@ -5469,11 +7258,56 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex) {
           throw new Error("Could not locate scene export markers in the current figure HTML.");
         }
-        return (
+        const payloadSceneSpec = sceneSpecForRawExport(exportSceneSpec);
+        const sceneJsonText = JSON.stringify(payloadSceneSpec);
+        let payloadMetadata = sceneSpecPayloadMetadataForJsonText(sceneJsonText);
+        let sceneSpecMarkerText = sceneSpecMarkerWrappedJsonText(sceneJsonText);
+        let payloadHtml = "";
+        if (shouldCompressExportSceneSpec(sceneJsonText)) {
+          try {
+            const compressedPayload = await gzipBase64EncodeText(sceneJsonText);
+            if (compressedPayload) {
+              const payloadId = sceneSpecPayloadElementId();
+              payloadMetadata = sceneSpecPayloadMetadataForCompressedJsonText(
+                sceneJsonText,
+                compressedPayload.compressedSizeBytes,
+                compressedPayload.embeddedBase64SizeBytes
+              );
+              sceneSpecMarkerText = sceneSpecMarkerWrappedCompressedPayload(payloadId);
+              payloadHtml = sceneSpecPayloadScriptHtml(payloadId, compressedPayload.encoded);
+            } else {
+              console.warn(
+                "oviz Save State could not compress the scene payload because this browser does not support CompressionStream('gzip'). Exporting raw scene JSON."
+              );
+            }
+          } catch (err) {
+            console.warn(
+              "oviz Save State could not compress the scene payload. Exporting raw scene JSON.",
+              err
+            );
+          }
+        }
+        let exportHtml = (
           currentHtml.slice(0, startIndex)
-          + sceneSpecMarkerWrappedJson(exportSceneSpec)
+          + sceneSpecMarkerText
           + currentHtml.slice(endIndex + endMarker.length)
         );
+        exportHtml = insertSceneSpecPayloadHtml(exportHtml, payloadHtml);
+        const metadataStartMarker = "/*__SCENE_SPEC_METADATA_START__*/";
+        const metadataEndMarker = "/*__SCENE_SPEC_METADATA_END__*/";
+        const metadataStartIndex = exportHtml.indexOf(metadataStartMarker);
+        const metadataEndIndex = exportHtml.indexOf(metadataEndMarker);
+        if (
+          metadataStartIndex >= 0
+          && metadataEndIndex > metadataStartIndex
+        ) {
+          exportHtml = (
+            exportHtml.slice(0, metadataStartIndex)
+            + sceneSpecMetadataMarkerWrappedJson(payloadMetadata)
+            + exportHtml.slice(metadataEndIndex + metadataEndMarker.length)
+          );
+        }
+        return exportHtml;
       }
 
       async function saveSceneStateToHtml() {
@@ -5481,7 +7315,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         exportSceneSpec.initial_state = captureRuntimeState();
         exportSceneSpec.width = Math.max(root.clientWidth || sceneSpec.width || 900, 1);
         exportSceneSpec.height = Math.max(root.clientHeight || sceneSpec.height || 700, 1);
-        const htmlText = buildExportHtml(exportSceneSpec);
+        const htmlText = await buildExportHtml(exportSceneSpec);
         const suggestedName = defaultExportFilename();
 
         if (typeof window.showSaveFilePicker === "function") {
@@ -5745,16 +7579,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function selectionToolbarText(selections, focusSelection) {
         const activeSelections = uniqueSelections(selections);
-        const clickHint = `Click select: ${clickSelectionEnabled ? "on" : "off"}`;
         const focusLabel = selectionKeyFor(focusSelection);
         const volumeHint = lassoVolumeSelectionEnabled
           ? (hasActiveLassoSelectionMask() ? "Volume lasso: on" : "Volume lasso: armed")
           : "Volume lasso: off";
+        const filterHint = lassoSelectionFilterActive()
+          ? "Selection filter: on (C toggles, Cmd/Ctrl+Z undoes)"
+          : (hasActiveLassoSelectionMask() ? "Selection filter: off (C toggles)" : "Selection filter: none");
         if (!activeSelections.length && !focusLabel) {
-          return `Shift+drag or use Lasso to select clusters on the current frame.\n${volumeHint}\n${clickHint}`;
+          return `Shift+drag or use Lasso to select clusters on the current frame.\n${volumeHint}\n${filterHint}`;
         }
         if (!activeSelections.length && focusLabel) {
-          return `Focused: ${focusLabel}\n${volumeHint}\n${clickHint}`;
+          return `Focused: ${focusLabel}\n${volumeHint}\n${filterHint}`;
         }
         const labels = activeSelections
           .map((selection) => selectionKeyFor(selection))
@@ -5762,7 +7598,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const preview = labels.slice(0, 4).join(", ");
         const suffix = labels.length > 4 ? ` +${labels.length - 4} more` : "";
         const focusText = focusLabel ? `\nFocused: ${focusLabel}` : "";
-        return `${labels.length} selected\n${preview}${suffix}${focusText}\n${volumeHint}\n${clickHint}`;
+        return `${labels.length} selected\n${preview}${suffix}${focusText}\n${volumeHint}\n${filterHint}`;
       }
 
       function skyReadoutText(selections, catalogPayload, mode = "overview", volumeOverlay = null) {
@@ -5832,9 +7668,1395 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
 __SKY_RUNTIME_JS__
 
-      function buildAladinSrcdoc(selections, catalogPayload, mode = "overview", volumeOverlay = null) {
+      preloadNativeHipsStartupTiles();
+      if (typeof skyDomeUsesNativeHips === "function" && skyDomeUsesNativeHips()) {
+        initializeSkyDomeFromSceneSpec();
+        await waitForNativeHipsStartup();
+      }
+
+      function validSkyDomeImageDataUrl(value) {
+        return typeof value === "string" && value.startsWith("data:image/");
+      }
+
+      function skyDomeHasLocalSources() {
+        return skyDomeSourceOptions.length > 0;
+      }
+
+      function skyDomeSourceDataUrl(source) {
+        if (!source || typeof source !== "object") {
+          return "";
+        }
+        const candidates = [
+          source.data_url,
+          source.dataUrl,
+          source.image_data_url,
+          source.imageDataUrl,
+          source.image,
+          source.src,
+          source.url,
+        ];
+        for (const candidate of candidates) {
+          const dataUrl = String(candidate || "");
+          if (validSkyDomeImageDataUrl(dataUrl)) {
+            return dataUrl;
+          }
+        }
+        return "";
+      }
+
+      function skyDomeFaceDataUrl(face) {
+        if (!face || typeof face !== "object") {
+          return "";
+        }
+        const candidates = [face.data_url, face.dataUrl, face.image_data_url, face.imageDataUrl, face.src, face.url];
+        for (const candidate of candidates) {
+          const dataUrl = String(candidate || "");
+          if (validSkyDomeImageDataUrl(dataUrl)) {
+            return dataUrl;
+          }
+        }
+        return "";
+      }
+
+      function skyDomeSourceFaces(source) {
+        const faceKeys = ["px", "nx", "py", "ny", "pz", "nz"];
+        const rawFaces = source && typeof source === "object" ? source.faces : null;
+        if (Array.isArray(rawFaces)) {
+          const faces = rawFaces
+            .map((face) => ({
+              key: String((face && (face.key || face.face || face.name)) || "").toLowerCase(),
+              dataUrl: skyDomeFaceDataUrl(face),
+            }))
+            .filter((face) => faceKeys.includes(face.key) && validSkyDomeImageDataUrl(face.dataUrl));
+          return faceKeys.every((key) => faces.some((face) => face.key === key)) ? faces : [];
+        }
+        if (rawFaces && typeof rawFaces === "object") {
+          const faces = faceKeys
+            .map((key) => {
+              const value = rawFaces[key];
+              const face = value && typeof value === "object" ? value : { data_url: value };
+              return { key, dataUrl: skyDomeFaceDataUrl(face) };
+            })
+            .filter((face) => validSkyDomeImageDataUrl(face.dataUrl));
+          return faces.length === faceKeys.length ? faces : [];
+        }
+        return [];
+      }
+
+      function skyDomeSourceLabel(source, fallbackKey, index) {
+        const candidates = [source.label, source.name, source.title, source.survey, fallbackKey];
+        for (const candidate of candidates) {
+          const label = String(candidate || "").trim();
+          if (label) {
+            return label;
+          }
+        }
+        return `Sky image ${index + 1}`;
+      }
+
+      function addSkyDomeRawSource(rawSources, source, keyHint) {
+        if (!source || typeof source !== "object") {
+          return;
+        }
+        const key = String(source.key || source.id || source.name || keyHint || "").trim();
+        rawSources.push(Object.assign({}, source, key ? { key } : {}));
+      }
+
+      function rawSkyDomeSources(spec) {
+        const rawSources = [];
+        if (!spec || typeof spec !== "object") {
+          return rawSources;
+        }
+        if (Array.isArray(spec.sources)) {
+          spec.sources.forEach((source, index) => addSkyDomeRawSource(rawSources, source, `source-${index + 1}`));
+        } else if (spec.sources && typeof spec.sources === "object") {
+          Object.entries(spec.sources).forEach(([key, source]) => {
+            addSkyDomeRawSource(rawSources, source, key);
+          });
+        }
+        if (Array.isArray(spec.local_sources)) {
+          spec.local_sources.forEach((source, index) => addSkyDomeRawSource(rawSources, source, `local-${index + 1}`));
+        }
+        if (spec.source && typeof spec.source === "object") {
+          addSkyDomeRawSource(rawSources, spec.source, "source");
+        }
+        if (skyDomeSourceDataUrl(spec)) {
+          addSkyDomeRawSource(rawSources, spec, spec.source_key || spec.default_source_key || spec.source || "default");
+        }
+        return rawSources;
+      }
+
+      function normalizeSkyDomeSourceOptions(spec) {
+        const options = [];
+        const seenKeys = new Set();
+        rawSkyDomeSources(spec).forEach((source, index) => {
+          const faces = skyDomeSourceFaces(source);
+          const dataUrl = skyDomeSourceDataUrl(source);
+          if (!dataUrl) {
+            return;
+          }
+          const baseKey = String(source.key || source.id || source.name || source.label || `source-${index + 1}`).trim()
+            || `source-${index + 1}`;
+          let key = baseKey;
+          let suffix = 2;
+          while (seenKeys.has(key)) {
+            key = `${baseKey}-${suffix}`;
+            suffix += 1;
+          }
+          seenKeys.add(key);
+          options.push({
+            key,
+            label: skyDomeSourceLabel(source, key, index),
+            projection: String(source.projection || source.projection_name || spec.projection || "CAR"),
+            survey: String(source.survey || source.label || source.name || key),
+            dataUrl,
+            faces,
+            source,
+          });
+        });
+        return options;
+      }
+
+      function skyDomePreferredSourceKeyCandidates(includeSavedState = true) {
+        const candidates = [];
+        const savedGlobalControls = initialState && initialState.global_controls;
+        if (
+          includeSavedState
+          && savedGlobalControls
+          && typeof savedGlobalControls === "object"
+          && typeof savedGlobalControls.sky_dome_source_key === "string"
+        ) {
+          candidates.push(savedGlobalControls.sky_dome_source_key);
+        }
+        [
+          skyDomeSpec.source_key,
+          skyDomeSpec.selected_source_key,
+          skyDomeSpec.default_source_key,
+          skyDomeSpec.main_source_key,
+          skyDomeSpec.active_source_key,
+          skyDomeSpec.chosen_source_key,
+          typeof skyDomeSpec.source === "string" ? skyDomeSpec.source : "",
+        ].forEach((value) => {
+          if (value !== undefined && value !== null) {
+            candidates.push(value);
+          }
+        });
+        return candidates.map((value) => String(value || "").trim()).filter(Boolean);
+      }
+
+      function defaultSkyDomeSourceKey(options = {}) {
+        if (!skyDomeSourceOptions.length) {
+          return "";
+        }
+        for (const key of skyDomePreferredSourceKeyCandidates(options.includeSavedState !== false)) {
+          if (skyDomeSourceOptionByKey.has(key)) {
+            return key;
+          }
+        }
+        const flagged = skyDomeSourceOptions.find((option) => {
+          const source = option.source || {};
+          return Boolean(source.selected || source.default || source.main || source.active || source.chosen);
+        });
+        return flagged ? flagged.key : skyDomeSourceOptions[0].key;
+      }
+
+      function syncSkyDomeSourceSelector() {
+        if (!skyDomeSourceFieldEl || !skyDomeSourceSelectEl) {
+          syncSkyPanelSourceSelector();
+          return;
+        }
+        if (!skyDomeHasLocalSources()) {
+          skyDomeSourceFieldEl.hidden = true;
+          skyDomeSourceSelectEl.innerHTML = "";
+          syncSkyPanelSourceSelector();
+          return;
+        }
+        skyDomeSourceFieldEl.hidden = false;
+        if (skyDomeSourceSelectEl.options.length !== skyDomeSourceOptions.length) {
+          skyDomeSourceSelectEl.innerHTML = "";
+          skyDomeSourceOptions.forEach((source) => {
+            const option = document.createElement("option");
+            option.value = source.key;
+            option.textContent = source.label;
+            skyDomeSourceSelectEl.appendChild(option);
+          });
+        }
+        skyDomeSourceSelectEl.value = activeSkyDomeSourceKey || defaultSkyDomeSourceKey();
+        syncSkyPanelSourceSelector();
+      }
+
+      function setSkyDomeSourceByKey(sourceKey, options = {}) {
+        const key = String(sourceKey || defaultSkyDomeSourceKey(options) || "");
+        const source = skyDomeSourceOptionByKey.get(key) || skyDomeSourceOptions[0] || null;
+        if (!source) {
+          skyDomeLocalSourceActive = false;
+          syncSkyDomeSourceSelector();
+          return false;
+        }
+        if (!options.force && skyDomeLocalSourceActive && activeSkyDomeSourceKey === source.key && skyDomeMesh) {
+          syncSkyDomeSourceSelector();
+          return true;
+        }
+        activeSkyDomeSourceKey = source.key;
+        skyDomeLocalSourceActive = true;
+        if (root && root.dataset) {
+          root.dataset.skyDomeSource = source.key;
+        }
+        syncSkyDomeSourceSelector();
+        setSkyDomeTextureFromDataUrl(source.dataUrl, source.survey, source.projection);
+        if (typeof updateSkyPanel === "function") {
+          updateSkyPanel();
+        }
+        return true;
+      }
+
+      function applyInitialSkyDomeSource() {
+        syncSkyDomeSourceSelector();
+        if (skyDomeHasLocalSources()) {
+          setSkyDomeSourceByKey(activeSkyDomeSourceKey || defaultSkyDomeSourceKey(), { force: true });
+        } else {
+          initializeSkyDomeFromSceneSpec();
+        }
+      }
+
+      function resetSkyDomeSourceSelection() {
+        if (skyDomeHasLocalSources()) {
+          setSkyDomeSourceByKey(defaultSkyDomeSourceKey({ includeSavedState: false }), { force: true, includeSavedState: false });
+        }
+      }
+
+      function activeSkyDomeSourceOption() {
+        return (
+          skyDomeSourceOptionByKey.get(activeSkyDomeSourceKey)
+          || skyDomeSourceOptionByKey.get(defaultSkyDomeSourceKey())
+          || skyDomeSourceOptions[0]
+          || null
+        );
+      }
+
+      function syncSkyPanelSourceSelector() {
+        if (!skyImageSelectEl) {
+          return;
+        }
+        if (!skyDomeHasLocalSources()) {
+          skyImageSelectEl.innerHTML = "";
+          skyImageSelectEl.disabled = true;
+          return;
+        }
+        skyImageSelectEl.disabled = false;
+        if (skyImageSelectEl.options.length !== skyDomeSourceOptions.length) {
+          skyImageSelectEl.innerHTML = "";
+          skyDomeSourceOptions.forEach((source) => {
+            const option = document.createElement("option");
+            option.value = source.key;
+            option.textContent = source.label;
+            skyImageSelectEl.appendChild(option);
+          });
+        }
+        skyImageSelectEl.value = (activeSkyDomeSourceKey || defaultSkyDomeSourceKey());
+      }
+
+      function cleanSkyLayerSurvey(value) {
+        return String(value || "").trim();
+      }
+
+      function normalizeSkyLayerKey(value) {
+        return cleanSkyLayerSurvey(value).replace(/\s+/g, " ");
+      }
+
+      function readSkyPresetField(value, fieldNames) {
+        const fields = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
+        for (const field of fields) {
+          if (!field) {
+            continue;
+          }
+          if (value && Object.prototype.hasOwnProperty.call(value, field)) {
+            const direct = cleanSkyLayerSurvey(value[field]);
+            if (direct) {
+              return direct;
+            }
+          }
+          const metadata = value && (value.meta || value.metadata || value.properties || value.hips);
+          if (metadata && Object.prototype.hasOwnProperty.call(metadata, field)) {
+            const nested = cleanSkyLayerSurvey(metadata[field]);
+            if (nested) {
+              return nested;
+            }
+          }
+        }
+        return "";
+      }
+
+      function normalizeSkyLayerPreset(rawPreset, index = 0) {
+        if (typeof rawPreset === "string") {
+          const survey = cleanSkyLayerSurvey(rawPreset);
+          return survey ? {
+            key: survey,
+            label: survey,
+            survey,
+            color: "#8fbfff",
+          } : null;
+        }
+        if (!rawPreset || typeof rawPreset !== "object") {
+          return null;
+        }
+        const survey = (
+          readSkyPresetField(rawPreset, ["survey", "id", "ID", "obs_id", "creator_did", "hips_service_url", "url"])
+          || cleanSkyLayerSurvey(rawPreset.toString && rawPreset.toString !== Object.prototype.toString ? rawPreset.toString() : "")
+        );
+        if (!survey || survey === "[object Object]") {
+          return null;
+        }
+        const label = (
+          readSkyPresetField(rawPreset, ["label", "name", "shortName", "short_name", "obs_title", "title", "description"])
+          || survey
+        );
+        return {
+          key: normalizeSkyLayerKey(readSkyPresetField(rawPreset, ["key"]) || survey) || survey,
+          label,
+          survey,
+          color: readSkyPresetField(rawPreset, ["color"]) || fallbackSkyLayerPresetOptions[index % fallbackSkyLayerPresetOptions.length].color || "#8fbfff",
+        };
+      }
+
+      function buildSkyLayerPresetBySurvey(presets) {
+        const presetMap = new Map();
+        (Array.isArray(presets) ? presets : []).forEach((rawPreset, index) => {
+          const preset = normalizeSkyLayerPreset(rawPreset, index);
+          if (preset && preset.survey) {
+            presetMap.set(String(preset.survey), preset);
+          }
+        });
+        return presetMap;
+      }
+
+      function mergeSkyLayerPresetOptions(primaryPresets, secondaryPresets) {
+        const seen = new Set();
+        const merged = [];
+        [primaryPresets, secondaryPresets].forEach((presetList) => {
+          (Array.isArray(presetList) ? presetList : []).forEach((rawPreset, index) => {
+            const preset = normalizeSkyLayerPreset(rawPreset, index);
+            if (!preset || !preset.survey || seen.has(preset.survey)) {
+              return;
+            }
+            seen.add(preset.survey);
+            merged.push(preset);
+          });
+        });
+        return merged;
+      }
+
+      function setAladinDefaultSkyLayerPresets(rawPresets) {
+        const mergedPresets = mergeSkyLayerPresetOptions(rawPresets, fallbackSkyLayerPresetOptions);
+        if (!mergedPresets.length) {
+          return;
+        }
+        const currentValue = skyLayerPresetSelectEl ? skyLayerPresetSelectEl.value : "";
+        skyLayerPresetOptions = mergedPresets;
+        skyLayerPresetBySurvey = buildSkyLayerPresetBySurvey(skyLayerPresetOptions);
+        if (skyLayerPresetSelectEl) {
+          skyLayerPresetSelectEl.innerHTML = "";
+          syncSkyLayerControls();
+          if (currentValue && skyLayerPresetBySurvey.has(currentValue)) {
+            skyLayerPresetSelectEl.value = currentValue;
+          }
+        } else {
+          syncSkyLayerControls();
+        }
+      }
+
+      function skyLayerHipsRegistryUrl() {
+        const params = new URLSearchParams();
+        params.set("dataproduct_type", "image");
+        params.set("fmt", "json");
+        params.set("get", "record");
+        params.set("MAXREC", "5000");
+        params.set("fields", [
+          "ID",
+          "obs_id",
+          "obs_title",
+          "obs_regime",
+          "hips_service_url",
+          "hips_frame",
+          "hips_tile_format",
+          "hips_order",
+        ].join(","));
+        return `https://alasky.cds.unistra.fr/MocServer/query?${params.toString()}`;
+      }
+
+      function normalizeSkyLayerHipsRegistryRecord(rawRecord, index = 0) {
+        const preset = normalizeSkyLayerPreset(rawRecord, index);
+        if (!preset || !preset.survey) {
+          return null;
+        }
+        const regime = readSkyPresetField(rawRecord, ["obs_regime", "regime"]);
+        const frame = readSkyPresetField(rawRecord, ["hips_frame", "frame"]);
+        const tileFormat = readSkyPresetField(rawRecord, ["hips_tile_format", "tile_format"]);
+        const title = cleanSkyLayerSurvey(preset.label || preset.survey);
+        return {
+          ...preset,
+          label: title,
+          searchText: [
+            preset.survey,
+            title,
+            regime,
+            frame,
+            tileFormat,
+          ].filter(Boolean).join(" ").toLowerCase(),
+        };
+      }
+
+      function setSkyLayerHipsRegistry(rawRecords) {
+        skyLayerHipsRegistry = (Array.isArray(rawRecords) ? rawRecords : [])
+          .map((record, index) => normalizeSkyLayerHipsRegistryRecord(record, index))
+          .filter(Boolean);
+        skyLayerHipsRegistryBySurvey = buildSkyLayerPresetBySurvey(skyLayerHipsRegistry);
+        skyLayerHipsRegistryLoaded = skyLayerHipsRegistry.length > 0;
+        skyLayerHipsRegistryError = "";
+      }
+
+      function fetchSkyLayerHipsRegistry() {
+        if (skyLayerHipsRegistryLoaded) {
+          return Promise.resolve(skyLayerHipsRegistry);
+        }
+        if (skyLayerHipsRegistryPromise) {
+          return skyLayerHipsRegistryPromise;
+        }
+        if (skyLayerHipsRegistryFetchAttempted && skyLayerHipsRegistryError) {
+          return Promise.resolve(skyLayerHipsRegistry);
+        }
+        if (typeof fetch !== "function") {
+          skyLayerHipsRegistryError = "This browser cannot query the CDS HiPS registry.";
+          return Promise.resolve(skyLayerHipsRegistry);
+        }
+        skyLayerHipsRegistryFetchAttempted = true;
+        skyLayerHipsRegistryPromise = fetch(skyLayerHipsRegistryUrl(), { mode: "cors" })
+          .then((response) => {
+            if (!response || !response.ok) {
+              throw new Error(`CDS HiPS registry request failed (${response ? response.status : "network"})`);
+            }
+            return response.json();
+          })
+          .then((records) => {
+            setSkyLayerHipsRegistry(records);
+            return skyLayerHipsRegistry;
+          })
+          .catch((error) => {
+            skyLayerHipsRegistryError = error && error.message ? error.message : String(error || "Unable to load the CDS HiPS registry.");
+            return skyLayerHipsRegistry;
+          })
+          .finally(() => {
+            skyLayerHipsRegistryPromise = null;
+          });
+        return skyLayerHipsRegistryPromise;
+      }
+
+      function skyLayerSearchCandidatesForQuery(query) {
+        const cleanQuery = cleanSkyLayerSurvey(query).toLowerCase();
+        const tokens = cleanQuery.split(/\s+/).filter(Boolean);
+        const seen = new Set();
+        const candidates = [];
+        [skyLayerPresetOptions, skyLayerHipsRegistry].forEach((presetList) => {
+          (Array.isArray(presetList) ? presetList : []).forEach((rawPreset, index) => {
+            const preset = normalizeSkyLayerPreset(rawPreset, index);
+            if (!preset || !preset.survey || seen.has(preset.survey)) {
+              return;
+            }
+            if (rawPreset && rawPreset.searchText) {
+              preset.searchText = String(rawPreset.searchText);
+            }
+            seen.add(preset.survey);
+            candidates.push(preset);
+          });
+        });
+        if (!tokens.length) {
+          return skyLayerPresetOptions.slice(0, 24);
+        }
+        return candidates
+          .map((preset, index) => {
+            const searchText = String(
+              preset.searchText
+              || [preset.label, preset.survey, preset.key].filter(Boolean).join(" ")
+            ).toLowerCase();
+            const matches = tokens.every((token) => searchText.includes(token));
+            if (!matches) {
+              return null;
+            }
+            const survey = String(preset.survey || "").toLowerCase();
+            const label = String(preset.label || "").toLowerCase();
+            let score = 0;
+            if (survey === cleanQuery || label === cleanQuery) {
+              score -= 50;
+            } else if (survey.startsWith(cleanQuery) || label.startsWith(cleanQuery)) {
+              score -= 25;
+            } else if (survey.includes(`/${cleanQuery}`) || label.includes(cleanQuery)) {
+              score -= 10;
+            }
+            if (skyLayerPresetBySurvey.has(preset.survey)) {
+              score -= 5;
+            }
+            return { preset, score: score + index * 0.001 };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.score - b.score)
+          .slice(0, 36)
+          .map((entry) => entry.preset);
+      }
+
+      function updateSkyLayerSearchOptions(query = "") {
+        if (!skyLayerSearchDatalistEl) {
+          return;
+        }
+        const candidates = skyLayerSearchCandidatesForQuery(query);
+        const nextSignature = candidates
+          .map((preset) => `${preset.survey}|${preset.label || ""}`)
+          .join("\\n");
+        if (nextSignature === skyLayerSearchRenderSignature) {
+          return;
+        }
+        skyLayerSearchRenderSignature = nextSignature;
+        skyLayerSearchDatalistEl.innerHTML = "";
+        candidates.forEach((preset) => {
+          const option = document.createElement("option");
+          option.value = preset.survey;
+          option.label = preset.label && preset.label !== preset.survey
+            ? `${preset.label} (${preset.survey})`
+            : preset.survey;
+          option.textContent = option.label;
+          skyLayerSearchDatalistEl.appendChild(option);
+        });
+      }
+
+      function scheduleSkyLayerSearchOptionsUpdate(query = "") {
+        if (skyLayerSearchUpdateTimer) {
+          window.clearTimeout(skyLayerSearchUpdateTimer);
+          skyLayerSearchUpdateTimer = 0;
+        }
+        skyLayerSearchUpdateTimer = window.setTimeout(() => {
+          skyLayerSearchUpdateTimer = 0;
+          updateSkyLayerSearchOptions(query);
+        }, 140);
+      }
+
+      function handleSkyLayerSearchInput() {
+        const query = skyLayerCustomInputEl ? skyLayerCustomInputEl.value : "";
+        scheduleSkyLayerSearchOptionsUpdate(query);
+        if (skyLayerHipsRegistryLoaded || skyLayerHipsRegistryPromise || skyLayerHipsRegistryError) {
+          return;
+        }
+        fetchSkyLayerHipsRegistry().then(() => {
+          const currentQuery = skyLayerCustomInputEl ? skyLayerCustomInputEl.value : query;
+          scheduleSkyLayerSearchOptionsUpdate(currentQuery);
+        });
+      }
+
+      function skyLayerPresetForSurvey(survey) {
+        const cleanSurvey = cleanSkyLayerSurvey(survey);
+        return skyLayerPresetBySurvey.get(cleanSurvey) || skyLayerHipsRegistryBySurvey.get(cleanSurvey) || null;
+      }
+
+      function defaultSkyLayerSurvey() {
+        return (
+          cleanSkyLayerSurvey(skyDomeSpec.survey)
+          || cleanSkyLayerSurvey(skyDomeSpec.hips_survey)
+          || cleanSkyLayerSurvey(skySpec.survey)
+          || "P/DSS2/color"
+        );
+      }
+
+      function clampSkyLayerOpacity(value, fallback = skyDomeDefaultOpacity) {
+        const numeric = Number(value);
+        return Math.min(Math.max(Number.isFinite(numeric) ? numeric : Number(fallback), 0.0), 1.0);
+      }
+
+      function normalizeSkyLayerStretch(value) {
+        const normalized = String(value || "").trim().toLowerCase();
+        if (normalized === "log" || normalized === "log10" || normalized === "logarithmic") {
+          return "log";
+        }
+        if (normalized === "asinh" || normalized === "arcsinh") {
+          return "asinh";
+        }
+        return "linear";
+      }
+
+      function normalizeSkyLayerColormap(value) {
+        const normalized = String(value || "").trim().toLowerCase();
+        if (normalized === "gray" || normalized === "grey") {
+          return "grayscale";
+        }
+        return skyLayerColormapOptions.some((option) => option.value === normalized)
+          ? normalized
+          : "native";
+      }
+
+      function skyLayerCutValue(value) {
+        if (value === "" || value === null || value === undefined) {
+          return "";
+        }
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : "";
+      }
+
+      function skyLayerCutInputValue(value) {
+        const cutValue = skyLayerCutValue(value);
+        return cutValue === "" ? "" : String(cutValue);
+      }
+
+      function skyLayerFromSurvey(survey, options = {}) {
+        const cleanSurvey = cleanSkyLayerSurvey(survey) || defaultSkyLayerSurvey();
+        const preset = skyLayerPresetForSurvey(cleanSurvey);
+        const key = normalizeSkyLayerKey(options.key || cleanSurvey);
+        return {
+          key,
+          label: cleanSkyLayerSurvey(options.label) || (preset ? preset.label : cleanSurvey),
+          survey: cleanSurvey,
+          color: cleanSkyLayerSurvey(options.color) || (preset ? preset.color : "#8fbfff"),
+          opacity: clampSkyLayerOpacity(options.opacity, skyDomeDefaultOpacity),
+          visible: options.visible === undefined ? true : Boolean(options.visible),
+          stretch: normalizeSkyLayerStretch(options.stretch),
+          colormap: normalizeSkyLayerColormap(options.colormap),
+          cutMin: skyLayerCutValue(options.cutMin ?? options.cut_min),
+          cutMax: skyLayerCutValue(options.cutMax ?? options.cut_max),
+        };
+      }
+
+      function normalizeSkyLayer(rawLayer) {
+        if (typeof rawLayer === "string") {
+          return skyLayerFromSurvey(rawLayer);
+        }
+        if (!rawLayer || typeof rawLayer !== "object") {
+          return null;
+        }
+        const survey = (
+          rawLayer.survey
+          || rawLayer.hips_survey
+          || rawLayer.id
+          || rawLayer.key
+          || rawLayer.name
+          || ""
+        );
+        if (!cleanSkyLayerSurvey(survey)) {
+          return null;
+        }
+        return skyLayerFromSurvey(survey, rawLayer);
+      }
+
+      function uniqueSkyLayers(layers) {
+        const seen = new Set();
+        const unique = [];
+        (Array.isArray(layers) ? layers : []).forEach((rawLayer) => {
+          const layer = normalizeSkyLayer(rawLayer);
+          if (!layer || !layer.key || seen.has(layer.key)) {
+            return;
+          }
+          seen.add(layer.key);
+          unique.push(layer);
+        });
+        return unique;
+      }
+
+      function savedSkyLayers() {
+        const savedGlobalControls = initialState && initialState.global_controls;
+        const candidates = [
+          initialState.sky_layers,
+          savedGlobalControls && savedGlobalControls.sky_layers,
+          skyDomeSpec.sky_layers,
+          skyDomeSpec.layers,
+        ];
+        for (const candidate of candidates) {
+          if (Array.isArray(candidate) && candidate.length) {
+            return uniqueSkyLayers(candidate);
+          }
+        }
+        return [];
+      }
+
+      function savedActiveSkyLayerKey() {
+        const savedGlobalControls = initialState && initialState.global_controls;
+        return normalizeSkyLayerKey(
+          initialState.active_sky_layer_key
+          || (savedGlobalControls && savedGlobalControls.active_sky_layer_key)
+          || skyDomeSpec.active_sky_layer_key
+          || skyDomeSpec.active_layer_key
+          || ""
+        );
+      }
+
+      function ensureInitialSkyLayers() {
+        if (skyLayerStateInitialized) {
+          return;
+        }
+        skyLayerStateInitialized = true;
+        skyLayerState = savedSkyLayers();
+        if (!skyLayerState.length && skyDomeControlsAvailable()) {
+          skyLayerState = [skyLayerFromSurvey(defaultSkyLayerSurvey(), {
+            opacity: skyDomeDefaultOpacity,
+            visible: skyDomeDefaultEnabled,
+          })];
+        }
+        const savedActiveKey = savedActiveSkyLayerKey();
+        activeSkyLayerKey = (
+          savedActiveKey && skyLayerState.some((layer) => layer.key === savedActiveKey)
+            ? savedActiveKey
+            : (skyLayerState[0] ? skyLayerState[0].key : "")
+        );
+      }
+
+      function activeSkyLayer() {
+        ensureInitialSkyLayers();
+        return skyLayerState.find((layer) => layer.key === activeSkyLayerKey) || skyLayerState[0] || null;
+      }
+
+      function visibleSkyLayers() {
+        ensureInitialSkyLayers();
+        return skyLayerState.filter((layer) => (
+          layer
+          && layer.visible !== false
+          && clampSkyLayerOpacity(layer.opacity, skyDomeDefaultOpacity) > 0.0
+        ));
+      }
+
+      function serializableSkyLayers() {
+        ensureInitialSkyLayers();
+        return skyLayerState.map((layer) => ({
+          key: layer.key,
+          label: layer.label,
+          survey: layer.survey,
+          color: layer.color,
+          opacity: clampSkyLayerOpacity(layer.opacity, skyDomeDefaultOpacity),
+          visible: layer.visible !== false,
+          stretch: normalizeSkyLayerStretch(layer.stretch),
+          colormap: normalizeSkyLayerColormap(layer.colormap),
+          cut_min: skyLayerCutValue(layer.cutMin),
+          cut_max: skyLayerCutValue(layer.cutMax),
+        }));
+      }
+
+      function postSkyLayerStateToAladin() {
+        if (!skyDomeFrameEl || !skyDomeFrameEl.contentWindow) {
+          return;
+        }
+        try {
+          skyDomeFrameEl.contentWindow.postMessage({
+            type: "oviz-sky-layer-state",
+            layers: serializableSkyLayers(),
+            activeKey: activeSkyLayerKey || "",
+          }, "*");
+        } catch (_err) {
+        }
+      }
+
+      function skyLayerActiveIndex() {
+        ensureInitialSkyLayers();
+        return skyLayerState.findIndex((layer) => layer.key === activeSkyLayerKey);
+      }
+
+      function renderSkyLayerList() {
+        if (!skyLayerListEl) {
+          return;
+        }
+        ensureInitialSkyLayers();
+        skyLayerListEl.innerHTML = "";
+        skyLayerListEl.hidden = false;
+        if (!skyLayerState.length) {
+          const emptyEl = document.createElement("div");
+          emptyEl.className = "oviz-three-sky-layer-order";
+          emptyEl.textContent = "No sky layers";
+          skyLayerListEl.appendChild(emptyEl);
+          return;
+        }
+        skyLayerState.forEach((layer, index) => {
+          const row = document.createElement("details");
+          row.className = "oviz-three-sky-layer-row";
+          row.dataset.active = layer.key === activeSkyLayerKey ? "true" : "false";
+          row.open = layer.key === activeSkyLayerKey || skyLayerState.length <= 2;
+          const summaryEl = document.createElement("summary");
+          summaryEl.className = "oviz-three-sky-layer-summary";
+          const nameEl = document.createElement("div");
+          nameEl.className = "oviz-three-sky-layer-name";
+          const layerName = String(layer.label || layer.survey || layer.key);
+          nameEl.textContent = layerName;
+          nameEl.title = String(layer.survey || layer.key || "");
+          const orderEl = document.createElement("div");
+          orderEl.className = "oviz-three-sky-layer-order";
+          orderEl.textContent = index === 0 ? "Top" : (index === skyLayerState.length - 1 ? "Base" : `Layer ${index + 1}`);
+          summaryEl.appendChild(nameEl);
+          summaryEl.appendChild(orderEl);
+          row.appendChild(summaryEl);
+
+          const bodyEl = document.createElement("div");
+          bodyEl.className = "oviz-three-sky-layer-body";
+
+          const opacityLabel = document.createElement("label");
+          const opacityTextEl = document.createElement("span");
+          opacityTextEl.textContent = `Opacity (${clampSkyLayerOpacity(layer.opacity, skyDomeDefaultOpacity).toFixed(2)})`;
+          const opacityInput = document.createElement("input");
+          opacityInput.type = "range";
+          opacityInput.className = "oviz-three-sky-layer-opacity";
+          opacityInput.min = "0";
+          opacityInput.max = "1";
+          opacityInput.step = "0.01";
+          opacityInput.value = String(clampSkyLayerOpacity(layer.opacity, skyDomeDefaultOpacity));
+          opacityInput.addEventListener("input", () => {
+            activeSkyLayerKey = layer.key;
+            layer.opacity = clampSkyLayerOpacity(opacityInput.value, skyDomeDefaultOpacity);
+            layer.visible = layer.opacity > 0.0;
+            opacityTextEl.textContent = `Opacity (${layer.opacity.toFixed(2)})`;
+            applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });
+          });
+          opacityInput.addEventListener("change", () => {
+            activeSkyLayerKey = layer.key;
+            syncSkyLayerControls();
+          });
+          opacityLabel.appendChild(opacityTextEl);
+          opacityLabel.appendChild(opacityInput);
+          bodyEl.appendChild(opacityLabel);
+
+          const stretchGridEl = document.createElement("div");
+          stretchGridEl.className = "oviz-three-sky-layer-grid";
+          const stretchLabel = document.createElement("label");
+          stretchLabel.appendChild(document.createTextNode("Stretch"));
+          const stretchSelect = document.createElement("select");
+          stretchSelect.className = "oviz-three-sky-layer-stretch";
+          skyLayerStretchOptions.forEach((optionDef) => {
+            const option = document.createElement("option");
+            option.value = optionDef.value;
+            option.textContent = optionDef.label;
+            stretchSelect.appendChild(option);
+          });
+          stretchSelect.value = normalizeSkyLayerStretch(layer.stretch);
+          stretchSelect.addEventListener("change", () => {
+            activeSkyLayerKey = layer.key;
+            layer.stretch = normalizeSkyLayerStretch(stretchSelect.value);
+            applySkyLayerState({ forceTiles: false, renderLegend: false });
+          });
+          stretchLabel.appendChild(stretchSelect);
+          stretchGridEl.appendChild(stretchLabel);
+
+          const colormapLabel = document.createElement("label");
+          colormapLabel.appendChild(document.createTextNode("Colormap"));
+          const colormapSelect = document.createElement("select");
+          colormapSelect.className = "oviz-three-sky-layer-colormap";
+          skyLayerColormapOptions.forEach((optionDef) => {
+            const option = document.createElement("option");
+            option.value = optionDef.value;
+            option.textContent = optionDef.label;
+            colormapSelect.appendChild(option);
+          });
+          colormapSelect.value = normalizeSkyLayerColormap(layer.colormap);
+          colormapSelect.addEventListener("change", () => {
+            activeSkyLayerKey = layer.key;
+            layer.colormap = normalizeSkyLayerColormap(colormapSelect.value);
+            applySkyLayerState({ forceTiles: false, renderLegend: false });
+          });
+          colormapLabel.appendChild(colormapSelect);
+          stretchGridEl.appendChild(colormapLabel);
+          bodyEl.appendChild(stretchGridEl);
+
+          const cutGridEl = document.createElement("div");
+          cutGridEl.className = "oviz-three-sky-layer-grid";
+          const minLabel = document.createElement("label");
+          minLabel.appendChild(document.createTextNode("Min"));
+          const minInput = document.createElement("input");
+          minInput.type = "number";
+          minInput.className = "oviz-three-sky-layer-cut-min";
+          minInput.step = "any";
+          minInput.placeholder = "auto";
+          minInput.value = skyLayerCutInputValue(layer.cutMin);
+          minInput.addEventListener("change", () => {
+            activeSkyLayerKey = layer.key;
+            layer.cutMin = skyLayerCutValue(minInput.value);
+            applySkyLayerState({ forceTiles: false, renderLegend: false });
+          });
+          minLabel.appendChild(minInput);
+          cutGridEl.appendChild(minLabel);
+          const maxLabel = document.createElement("label");
+          maxLabel.appendChild(document.createTextNode("Max"));
+          const maxInput = document.createElement("input");
+          maxInput.type = "number";
+          maxInput.className = "oviz-three-sky-layer-cut-max";
+          maxInput.step = "any";
+          maxInput.placeholder = "auto";
+          maxInput.value = skyLayerCutInputValue(layer.cutMax);
+          maxInput.addEventListener("change", () => {
+            activeSkyLayerKey = layer.key;
+            layer.cutMax = skyLayerCutValue(maxInput.value);
+            applySkyLayerState({ forceTiles: false, renderLegend: false });
+          });
+          maxLabel.appendChild(maxInput);
+          cutGridEl.appendChild(maxLabel);
+          bodyEl.appendChild(cutGridEl);
+
+          const actionEl = document.createElement("div");
+          actionEl.className = "oviz-three-sky-layer-actions";
+          const upButton = document.createElement("button");
+          upButton.type = "button";
+          upButton.textContent = "↑";
+          upButton.title = "Move image up";
+          upButton.setAttribute("aria-label", "Move sky image up");
+          upButton.disabled = index === 0;
+          upButton.addEventListener("click", () => {
+            activeSkyLayerKey = layer.key;
+            moveActiveSkyLayer(-1);
+            focusViewer();
+          });
+          const downButton = document.createElement("button");
+          downButton.type = "button";
+          downButton.textContent = "↓";
+          downButton.title = "Move image down";
+          downButton.setAttribute("aria-label", "Move sky image down");
+          downButton.disabled = index >= skyLayerState.length - 1;
+          downButton.addEventListener("click", () => {
+            activeSkyLayerKey = layer.key;
+            moveActiveSkyLayer(1);
+            focusViewer();
+          });
+          const removeButton = document.createElement("button");
+          removeButton.type = "button";
+          removeButton.textContent = "Remove";
+          removeButton.title = "Remove image";
+          removeButton.setAttribute("aria-label", `Remove ${layerName}`);
+          removeButton.addEventListener("click", () => {
+            activeSkyLayerKey = layer.key;
+            removeActiveSkyLayer();
+            focusViewer();
+          });
+          actionEl.appendChild(upButton);
+          actionEl.appendChild(downButton);
+          actionEl.appendChild(removeButton);
+          bodyEl.appendChild(actionEl);
+          row.appendChild(bodyEl);
+          skyLayerListEl.appendChild(row);
+        });
+      }
+
+      function syncSkyLayerControls() {
+        ensureInitialSkyLayers();
+        if (skyLayerPresetSelectEl && !skyLayerPresetSelectEl.options.length) {
+          skyLayerPresetOptions.forEach((preset) => {
+            const option = document.createElement("option");
+            option.value = preset.survey;
+            option.textContent = preset.label;
+            skyLayerPresetSelectEl.appendChild(option);
+          });
+        }
+        renderSkyLayerList();
+      }
+
+      function applySkyLayerState(options = {}) {
+        ensureInitialSkyLayers();
+        const visibleLayers = visibleSkyLayers();
+        const topLayer = visibleLayers[0] || null;
+        const baseLayer = visibleLayers[visibleLayers.length - 1] || null;
+        if (!activeSkyLayerKey && skyLayerState.length) {
+          activeSkyLayerKey = skyLayerState[0].key;
+        }
+        if (baseLayer) {
+          skyDomeSpec.enabled = true;
+          skyDomeSpec.opacity = 1.0;
+          skyDomeSpec.survey = baseLayer.survey;
+          skySpec.survey = baseLayer.survey;
+          skyDomeSurvey = String((topLayer && (topLayer.label || topLayer.survey)) || baseLayer.label || baseLayer.survey || "Sky");
+        } else {
+          skyDomeSpec.enabled = false;
+          skyDomeSpec.opacity = 0.0;
+        }
+        if (options.syncControls !== false) {
+          syncSkyLayerControls();
+        }
+        postSkyLayerStateToAladin();
+        if (options.update !== false && typeof updateSkyDomeFromControls === "function") {
+          updateSkyDomeFromControls({
+            forceTiles: options.forceTiles !== false,
+            syncControls: options.syncControls !== false,
+          });
+        }
+        if (options.renderLegend !== false && typeof renderLegend === "function") {
+          renderLegend();
+        }
+      }
+
+      function addOrActivateSkyLayer(survey) {
+        ensureInitialSkyLayers();
+        const layer = skyLayerFromSurvey(survey || defaultSkyLayerSurvey(), {
+          opacity: skyDomeDefaultOpacity,
+          visible: true,
+        });
+        const existing = skyLayerState.find((candidate) => candidate.key === layer.key);
+        if (existing) {
+          existing.visible = true;
+          activeSkyLayerKey = existing.key;
+        } else {
+          skyLayerState.unshift(layer);
+          activeSkyLayerKey = layer.key;
+        }
+        applySkyLayerState({ forceTiles: true });
+      }
+
+      function removeActiveSkyLayer() {
+        ensureInitialSkyLayers();
+        if (!activeSkyLayerKey) {
+          return;
+        }
+        const index = skyLayerState.findIndex((layer) => layer.key === activeSkyLayerKey);
+        if (index < 0) {
+          return;
+        }
+        skyLayerState.splice(index, 1);
+        const nextLayer = skyLayerState[Math.min(index, Math.max(skyLayerState.length - 1, 0))] || null;
+        activeSkyLayerKey = nextLayer ? nextLayer.key : "";
+        applySkyLayerState({ forceTiles: true });
+      }
+
+      function moveActiveSkyLayer(offset) {
+        ensureInitialSkyLayers();
+        const index = skyLayerActiveIndex();
+        if (index < 0) {
+          return;
+        }
+        const targetIndex = Math.min(Math.max(index + Math.round(Number(offset) || 0), 0), skyLayerState.length - 1);
+        if (targetIndex === index) {
+          syncSkyLayerControls();
+          return;
+        }
+        const layer = skyLayerState[index];
+        skyLayerState.splice(index, 1);
+        skyLayerState.splice(targetIndex, 0, layer);
+        activeSkyLayerKey = layer.key;
+        applySkyLayerState({ forceTiles: true });
+      }
+
+      function skyPanelProjectionName(source) {
+        const projection = String((source && source.projection) || (skyDomeSpec && skyDomeSpec.projection) || "CAR").trim().toUpperCase();
+        if (projection === "MOL" || projection === "MOLLWEIDE") {
+          return "MOL";
+        }
+        return "CAR";
+      }
+
+      function skyWrap01(value) {
+        return value - Math.floor(value);
+      }
+
+      function skyPanelSolveMollweideTheta(latRad) {
+        if (Math.abs(Math.abs(latRad) - (0.5 * Math.PI)) < 0.0001) {
+          return Math.sign(latRad) * 0.5 * Math.PI;
+        }
+        let theta = latRad;
+        for (let index = 0; index < 8; index += 1) {
+          const f = (2.0 * theta) + Math.sin(2.0 * theta) - (Math.PI * Math.sin(latRad));
+          const fp = Math.max(2.0 + (2.0 * Math.cos(2.0 * theta)), 0.0001);
+          theta -= f / fp;
+        }
+        return theta;
+      }
+
+      function skyPanelUvForLonLat(lDeg, bDeg, projectionName) {
+        const lon = wrapLongitudeDeltaDeg(Number(lDeg)) * Math.PI / 180.0;
+        const lat = Math.min(Math.max(Number(bDeg), -90.0), 90.0) * Math.PI / 180.0;
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+          return null;
+        }
+        if (skyPanelProjectionName({ projection: projectionName }) === "MOL") {
+          const rootTwo = Math.SQRT2;
+          const theta = skyPanelSolveMollweideTheta(lat);
+          const x = (2.0 * rootTwo / Math.PI) * lon * Math.cos(theta);
+          const y = rootTwo * Math.sin(theta);
+          return {
+            u: 0.5 - (x / (4.0 * rootTwo)),
+            v: 0.5 - (y / (2.0 * rootTwo)),
+          };
+        }
+        return {
+          u: skyWrap01(0.5 - (normalizeSkyLongitude(lDeg) / 360.0)),
+          v: Math.min(Math.max(0.5 - (Number(bDeg) / 180.0), 0.0), 1.0),
+        };
+      }
+
+      function skyPanelLonLatForPoint(point) {
+        const lDeg = Number(point && point.l);
+        const bDeg = Number(point && point.b);
+        if (Number.isFinite(lDeg) && Number.isFinite(bDeg)) {
+          return { l: normalizeSkyLongitude(lDeg), b: bDeg };
+        }
+        const raDeg = Number(point && point.ra);
+        const decDeg = Number(point && point.dec);
+        if (Number.isFinite(raDeg) && Number.isFinite(decDeg)) {
+          return galacticDegFromIcrsDeg(raDeg, decDeg);
+        }
+        return null;
+      }
+
+      function skyPanelLoadImage(source) {
+        if (!source || !source.dataUrl) {
+          return Promise.reject(new Error("No embedded sky image is available."));
+        }
+        const cacheKey = source.key;
+        const cached = skyPanelImageCache.get(cacheKey);
+        if (cached) {
+          return cached;
+        }
+        const pending = new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error("The embedded sky image could not be decoded."));
+          image.src = source.dataUrl;
+        });
+        skyPanelImageCache.set(cacheKey, pending);
+        return pending;
+      }
+
+      function resizeSkyPanelCanvas() {
+        if (!skyCanvasEl) {
+          return null;
+        }
+        const rect = skyCanvasEl.getBoundingClientRect();
+        const width = Math.max(1, Math.floor(rect.width || 1));
+        const height = Math.max(1, Math.floor(rect.height || 1));
+        const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2);
+        const pixelWidth = Math.max(1, Math.floor(width * dpr));
+        const pixelHeight = Math.max(1, Math.floor(height * dpr));
+        if (skyCanvasEl.width !== pixelWidth || skyCanvasEl.height !== pixelHeight) {
+          skyCanvasEl.width = pixelWidth;
+          skyCanvasEl.height = pixelHeight;
+        }
+        const ctx = skyCanvasEl.getContext("2d");
+        if (!ctx) {
+          return null;
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return { ctx, width, height, dpr };
+      }
+
+      function skyPanelFitImageRect(width, height, image) {
+        const imageWidth = Math.max(1, Number(image.naturalWidth || image.width || 1));
+        const imageHeight = Math.max(1, Number(image.naturalHeight || image.height || 1));
+        const scale = Math.min(width / imageWidth, height / imageHeight);
+        const drawWidth = imageWidth * scale;
+        const drawHeight = imageHeight * scale;
+        return {
+          x: (width - drawWidth) * 0.5,
+          y: (height - drawHeight) * 0.5,
+          width: drawWidth,
+          height: drawHeight,
+          imageWidth,
+          imageHeight,
+        };
+      }
+
+      function skyPanelDrawWrappedImage(ctx, image, srcX, srcY, srcW, srcH, dstX, dstY, dstW, dstH) {
+        const imageWidth = Math.max(1, Number(image.naturalWidth || image.width || 1));
+        const sourceY = Math.min(Math.max(srcY, 0), Math.max(0, image.height - srcH));
+        let remaining = Math.min(srcW, imageWidth);
+        let currentSrcX = ((srcX % imageWidth) + imageWidth) % imageWidth;
+        let drawnSourceW = 0.0;
+        while (remaining > 0.01) {
+          const sliceW = Math.min(remaining, imageWidth - currentSrcX);
+          const sliceDstX = dstX + (drawnSourceW / srcW) * dstW;
+          const sliceDstW = (sliceW / srcW) * dstW;
+          ctx.drawImage(image, currentSrcX, sourceY, sliceW, srcH, sliceDstX, dstY, sliceDstW, dstH);
+          remaining -= sliceW;
+          drawnSourceW += sliceW;
+          currentSrcX = 0;
+        }
+      }
+
+      function skyPanelCanvasPointForLonLat(lDeg, bDeg, drawState) {
+        const uv = skyPanelUvForLonLat(lDeg, bDeg, drawState.projection);
+        if (!uv || uv.u < -0.05 || uv.u > 1.05 || uv.v < -0.05 || uv.v > 1.05) {
+          return null;
+        }
+        if (drawState.mode === "click") {
+          const imageX = uv.u * drawState.imageWidth;
+          const imageY = uv.v * drawState.imageHeight;
+          let relX = imageX - drawState.srcX;
+          const halfImageWidth = drawState.imageWidth * 0.5;
+          if (relX < -halfImageWidth) {
+            relX += drawState.imageWidth;
+          } else if (relX > halfImageWidth) {
+            relX -= drawState.imageWidth;
+          }
+          const relY = imageY - drawState.srcY;
+          return {
+            x: (relX / drawState.srcW) * drawState.width,
+            y: (relY / drawState.srcH) * drawState.height,
+          };
+        }
+        return {
+          x: drawState.rect.x + (uv.u * drawState.rect.width),
+          y: drawState.rect.y + (uv.v * drawState.rect.height),
+        };
+      }
+
+      function drawSkyPanelCatalog(ctx, payload, drawState, mode) {
+        const catalogs = Array.isArray(payload) ? payload : [];
+        catalogs.forEach((catalog) => {
+          const points = Array.isArray(catalog.points) ? catalog.points : [];
+          const color = String(catalog.color || theme.footprint || "#6ec5ff");
+          points.forEach((point) => {
+            const lonLat = skyPanelLonLatForPoint(point);
+            if (!lonLat) {
+              return;
+            }
+            const canvasPoint = skyPanelCanvasPointForLonLat(lonLat.l, lonLat.b, drawState);
+            if (!canvasPoint) {
+              return;
+            }
+            if (
+              canvasPoint.x < -10
+              || canvasPoint.x > drawState.width + 10
+              || canvasPoint.y < -10
+              || canvasPoint.y > drawState.height + 10
+            ) {
+              return;
+            }
+            ctx.save();
+            ctx.globalAlpha = 0.92;
+            ctx.fillStyle = color;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.86)";
+            ctx.lineWidth = mode === "click" ? 1.6 : 1.0;
+            ctx.beginPath();
+            ctx.arc(canvasPoint.x, canvasPoint.y, mode === "click" ? 4.2 : 2.8, 0, Math.PI * 2.0);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          });
+        });
+      }
+
+      function drawSkyPanelSelectionBeams(ctx, selections, drawState, focus) {
+        const radiusDeg = Math.max(Number(skySpec.radius_deg || 1.0), 0.01);
+        uniqueSelections(selections).forEach((selection) => {
+          const lonLat = {
+            l: Number(selection.l_deg),
+            b: Number(selection.b_deg),
+          };
+          if (!Number.isFinite(lonLat.l) || !Number.isFinite(lonLat.b)) {
+            return;
+          }
+          const canvasPoint = skyPanelCanvasPointForLonLat(lonLat.l, lonLat.b, drawState);
+          if (!canvasPoint) {
+            return;
+          }
+          const fovDeg = focus && Number.isFinite(Number(focus.fovDeg)) ? Number(focus.fovDeg) : 360.0;
+          const beamRadius = drawState.mode === "click"
+            ? Math.max(7, Math.min(drawState.width, drawState.height) * radiusDeg / Math.max(fovDeg, 0.01))
+            : Math.max(3, drawState.rect.width * radiusDeg / 360.0);
+          ctx.save();
+          ctx.strokeStyle = String(theme.footprint || "#6ec5ff");
+          ctx.lineWidth = 1.5;
+          ctx.globalAlpha = 0.92;
+          ctx.beginPath();
+          ctx.arc(canvasPoint.x, canvasPoint.y, beamRadius, 0, Math.PI * 2.0);
+          ctx.stroke();
+          ctx.restore();
+        });
+      }
+
+      function renderLocalSkyPanel(selections, catalogPayload, mode = "overview", volumeOverlay = null) {
+        syncSkyPanelSourceSelector();
+        const canvasState = resizeSkyPanelCanvas();
+        if (!canvasState) {
+          return;
+        }
+        const { ctx, width, height } = canvasState;
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, width, height);
+        const source = activeSkyDomeSourceOption();
+        if (skyReadoutEl) {
+          skyReadoutEl.textContent = skyReadoutText(selections, catalogPayload, mode, volumeOverlay).split("\\n")[0] || "";
+        }
+        if (!source) {
+          if (skyStatusEl) {
+            skyStatusEl.textContent = "No embedded sky image";
+          }
+          return;
+        }
+        if (skyStatusEl) {
+          skyStatusEl.textContent = "Loading " + source.label;
+        }
+        const renderSerial = ++skyPanelRenderSerial;
+        skyPanelLoadImage(source)
+          .then((image) => {
+            if (renderSerial !== skyPanelRenderSerial) {
+              return;
+            }
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, width, height);
+            const projection = skyPanelProjectionName(source);
+            const imageWidth = Math.max(1, Number(image.naturalWidth || image.width || 1));
+            const imageHeight = Math.max(1, Number(image.naturalHeight || image.height || 1));
+            const focus = mode === "click" ? skyFocusFromPayload(uniqueSelections(selections), catalogPayload) : null;
+            let drawState = {
+              mode: "overview",
+              projection,
+              width,
+              height,
+              rect: skyPanelFitImageRect(width, height, image),
+              imageWidth,
+              imageHeight,
+            };
+            if (focus) {
+              const galacticFocus = galacticDegFromIcrsDeg(Number(focus.ra), Number(focus.dec));
+              const uv = galacticFocus ? skyPanelUvForLonLat(galacticFocus.l, galacticFocus.b, projection) : null;
+              if (uv) {
+                const aspect = width / Math.max(height, 1);
+                const fovDeg = Math.min(Math.max(Number(focus.fovDeg) || 12.0, 1.0), 120.0);
+                let srcW = Math.max(32, imageWidth * fovDeg / 360.0);
+                let srcH = Math.max(32, imageHeight * fovDeg / 180.0);
+                if (srcW / Math.max(srcH, 1) < aspect) {
+                  srcW = srcH * aspect;
+                } else {
+                  srcH = srcW / aspect;
+                }
+                srcW = Math.min(srcW, imageWidth);
+                srcH = Math.min(srcH, imageHeight);
+                const srcX = (uv.u * imageWidth) - (srcW * 0.5);
+                const srcY = Math.min(Math.max((uv.v * imageHeight) - (srcH * 0.5), 0), Math.max(0, imageHeight - srcH));
+                skyPanelDrawWrappedImage(ctx, image, srcX, srcY, srcW, srcH, 0, 0, width, height);
+                drawState = {
+                  mode: "click",
+                  projection,
+                  width,
+                  height,
+                  imageWidth,
+                  imageHeight,
+                  srcX,
+                  srcY,
+                  srcW,
+                  srcH,
+                  rect: { x: 0, y: 0, width, height },
+                };
+              } else {
+                ctx.drawImage(image, drawState.rect.x, drawState.rect.y, drawState.rect.width, drawState.rect.height);
+              }
+            } else {
+              ctx.drawImage(image, drawState.rect.x, drawState.rect.y, drawState.rect.width, drawState.rect.height);
+            }
+            drawSkyPanelCatalog(ctx, catalogPayload, drawState, mode);
+            drawSkyPanelSelectionBeams(ctx, selections, drawState, focus);
+            if (skyStatusEl) {
+              const projectionLabel = projection === "MOL" ? "Mollweide" : "plate carree";
+              skyStatusEl.textContent = `${source.label} | ${projectionLabel} | embedded`;
+            }
+          })
+          .catch((err) => {
+            if (renderSerial !== skyPanelRenderSerial) {
+              return;
+            }
+            if (skyStatusEl) {
+              skyStatusEl.textContent = err && err.message ? err.message : String(err || "Sky image unavailable");
+            }
+          });
+      }
+
+      function buildAladinSrcdoc(selections, catalogPayload, mode = "overview", volumeOverlay = null, captureOnly = false) {
         const activeSelections = uniqueSelections(selections);
         const requestedMode = mode === "click" ? "click" : "overview";
+        const captureOnlyMode = Boolean(captureOnly);
         const focus = requestedMode === "click" ? skyFocusFromPayload(activeSelections, catalogPayload) : null;
         const actualMode = requestedMode === "click" && focus ? "click" : "overview";
         const bg = String(theme.panel_solid || theme.paper_bgcolor || "#121212");
@@ -5848,6 +9070,24 @@ __SKY_RUNTIME_JS__
         );
         const payloadJson = JSON.stringify(catalogPayload || []);
         const volumeOverlayJson = JSON.stringify(volumeOverlay || null);
+        const captureOnlyJson = JSON.stringify(captureOnlyMode);
+        const skyDomeCaptureEnabledJson = JSON.stringify(captureOnlyMode && Boolean(skyDomeSpec && skyDomeSpec.enabled));
+        const skyDomeBackgroundOnlyJson = JSON.stringify(
+          captureOnlyMode
+          && skyDomeUsesAladinBackground()
+        );
+        const skyDomeCaptureWidth = Math.max(512, Math.min(8192, Math.round(Number(skyDomeSpec.capture_width_px) || 4096)));
+        const skyDomeCaptureHeight = Math.max(256, Math.min(4096, Math.round(Number(skyDomeSpec.capture_height_px) || 2048)));
+        const skyDomeProjectionJson = JSON.stringify(String((skyDomeSpec && skyDomeSpec.projection) || "MOL").toUpperCase());
+        const skyDomeCaptureFormatJson = JSON.stringify(
+          String((skyDomeSpec && skyDomeSpec.capture_format) || "image/jpeg") === "image/png"
+            ? "image/png"
+            : "image/jpeg"
+        );
+        const skyDomeCaptureQuality = Math.min(
+          Math.max(Number((skyDomeSpec && skyDomeSpec.capture_quality) || 0.94), 0.1),
+          1.0
+        );
         const beamCentersJson = JSON.stringify((actualMode === "click" ? activeSelections : [])
           .map((selection) => ({
             ra: Number(selection.ra_deg),
@@ -5872,11 +9112,24 @@ __SKY_RUNTIME_JS__
     <style>
       html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: ${bg}; color: ${txt}; overflow: hidden; }
       #oviz-wrap { position: relative; width: 100%; height: 100%; }
-      #aladin-lite-div { width: 100%; height: 100%; }
+      #aladin-lite-div {
+        width: 100%;
+        height: 100%;
+      }
       .aladin-stack-box {
         max-height: min(56vh, 420px) !important;
         overflow-y: auto !important;
         overscroll-behavior: contain;
+      }
+      .aladin-logo,
+      .aladin-logo-container,
+      .aladin-location,
+      .aladin-coordinates,
+      .aladin-fov,
+      .aladin-status-bar,
+      .aladin-frameChoice,
+      .aladin-projectionChoice {
+        display: none !important;
       }
       #oviz-status {
         position: absolute;
@@ -5901,11 +9154,26 @@ __SKY_RUNTIME_JS__
         const viewMode = ${modeJson};
         const payload = ${payloadJson};
         const volumeOverlay = ${volumeOverlayJson};
+        const skyDomeCaptureOnly = ${captureOnlyJson};
+        const skyDomeCaptureEnabled = ${skyDomeCaptureEnabledJson};
+        const skyDomeBackgroundOnly = ${skyDomeBackgroundOnlyJson};
+        const skyDomeProjection = ${skyDomeProjectionJson};
+        const skyDomeCaptureWidth = ${skyDomeCaptureWidth};
+        const skyDomeCaptureHeight = ${skyDomeCaptureHeight};
+        const skyDomeCaptureFormat = ${skyDomeCaptureFormatJson};
+        const skyDomeCaptureQuality = ${skyDomeCaptureQuality};
         const beamCenters = ${beamCentersJson};
         const statusEl = document.getElementById("oviz-status");
         const catalogs = [];
         const markerCanvasCache = new Map();
         let hoveredClusterKey = "";
+        let aladinInstance = null;
+        let pendingSkyBackgroundView = null;
+        let skyBackgroundViewAnimationFrame = 0;
+        let lastAppliedSkyBackgroundSignature = "";
+        let activeImageSurvey = ${survey};
+        let activeSkyLayerStackSignature = "";
+        const managedSkyOverlayLayerNames = new Set();
         function normalizeClusterKey(value) {
           return String(value || "")
             .trim()
@@ -5961,6 +9229,398 @@ __SKY_RUNTIME_JS__
             clusterKey: clusterKey || null,
           }, "*");
         }
+        function postSkyDomeSnapshot(status, dataUrl, message, projectionOverride) {
+          if (!window.parent || window.parent === window || !skyDomeCaptureEnabled || viewMode !== "overview") {
+            return;
+          }
+          window.parent.postMessage({
+            type: "oviz-aladin-sky-snapshot",
+            status: String(status || ""),
+            survey: ${survey},
+            mode: viewMode,
+            projection: String(projectionOverride || skyDomeProjection || "MOL"),
+            dataUrl: dataUrl || null,
+            message: message ? String(message) : "",
+          }, "*");
+        }
+        function validImageDataUrl(value) {
+          return (
+            typeof value === "string"
+            && value.startsWith("data:image/")
+            && value.length > 1000
+          );
+        }
+        function scheduleSkyDomeSnapshot(aladin, delayMs) {
+          if (!skyDomeCaptureEnabled || !aladin || typeof aladin.getViewDataURL !== "function") {
+            return;
+          }
+          window.setTimeout(() => captureSkyDomeSnapshot(aladin), Math.max(Number(delayMs) || 0, 0));
+        }
+        function captureSkyDomeSnapshot(aladin) {
+          if (skyDomeBackgroundOnly || !skyDomeCaptureEnabled || !aladin || typeof aladin.getViewDataURL !== "function") {
+            return;
+          }
+          const delaysMs = [1200, 2800, 5200, 9000];
+          let attemptIndex = 0;
+          const retryOrFail = (message) => {
+            if (attemptIndex < delaysMs.length) {
+              const delayMs = delaysMs[attemptIndex];
+              attemptIndex += 1;
+              window.setTimeout(tryCapture, delayMs);
+            } else {
+              postSkyDomeSnapshot("unavailable", null, message);
+            }
+          };
+          const tryCapture = () => {
+            try {
+              const result = aladin.getViewDataURL({
+                width: skyDomeCaptureWidth,
+                height: skyDomeCaptureHeight,
+                format: skyDomeCaptureFormat,
+                quality: skyDomeCaptureQuality,
+                logo: false,
+              });
+              Promise.resolve(result)
+                .then((dataUrl) => {
+                  if (validImageDataUrl(dataUrl)) {
+                    postSkyDomeSnapshot("ready", dataUrl, "", skyDomeProjection);
+                  } else {
+                    retryOrFail("Aladin sky capture returned an empty image.");
+                  }
+                })
+                .catch((err) => {
+                  retryOrFail(err && err.message ? err.message : String(err));
+                });
+            } catch (err) {
+              retryOrFail(err && err.message ? err.message : String(err));
+            }
+          };
+          retryOrFail("Aladin sky capture did not become available.");
+        }
+        function postSkyBackgroundReady() {
+          if (!window.parent || window.parent === window || !skyDomeBackgroundOnly) {
+            return;
+          }
+          window.parent.postMessage({
+            type: "oviz-aladin-sky-background-ready",
+            survey: ${survey},
+          }, "*");
+        }
+        function aladinFavoriteValue(favorite, fieldNames) {
+          const fields = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
+          for (const field of fields) {
+            if (!field) {
+              continue;
+            }
+            if (favorite && Object.prototype.hasOwnProperty.call(favorite, field) && favorite[field] != null) {
+              const value = String(favorite[field]).trim();
+              if (value) {
+                return value;
+              }
+            }
+            const metadata = favorite && (favorite.meta || favorite.metadata || favorite.properties || favorite.hips);
+            if (metadata && Object.prototype.hasOwnProperty.call(metadata, field) && metadata[field] != null) {
+              const value = String(metadata[field]).trim();
+              if (value) {
+                return value;
+              }
+            }
+          }
+          return "";
+        }
+        function normalizeAladinFavorite(favorite) {
+          if (typeof favorite === "string") {
+            const survey = favorite.trim();
+            return survey ? { survey, label: survey } : null;
+          }
+          if (!favorite || typeof favorite !== "object") {
+            return null;
+          }
+          const survey = aladinFavoriteValue(favorite, ["survey", "id", "ID", "obs_id", "creator_did", "hips_service_url", "url"]);
+          if (!survey) {
+            return null;
+          }
+          const label = aladinFavoriteValue(favorite, ["label", "name", "shortName", "short_name", "obs_title", "title", "description"]) || survey;
+          return {
+            key: survey,
+            label,
+            survey,
+            frame: aladinFavoriteValue(favorite, ["hips_frame", "hips_frame_name", "frame"]),
+            order: aladinFavoriteValue(favorite, ["hips_order", "order"]),
+            format: aladinFavoriteValue(favorite, ["hips_tile_format", "format"]),
+          };
+        }
+        function postAladinHipsFavorites() {
+          if (!window.parent || window.parent === window || !aladinInstance) {
+            return;
+          }
+          const rawFavorites = Array.isArray(aladinInstance.hipsFavorites) ? aladinInstance.hipsFavorites : [];
+          const favorites = rawFavorites
+            .map((favorite) => normalizeAladinFavorite(favorite))
+            .filter((favorite) => favorite && favorite.survey);
+          if (!favorites.length) {
+            return;
+          }
+          window.parent.postMessage({
+            type: "oviz-aladin-hips-favorites",
+            favorites,
+          }, "*");
+        }
+        function applySkyBackgroundViewNow(data) {
+          if (!skyDomeBackgroundOnly || !aladinInstance || !data || typeof data !== "object") {
+            return;
+          }
+          const ra = Number(data.ra);
+          const dec = Number(data.dec);
+          const lDeg = Number(data.l);
+          const bDeg = Number(data.b);
+          const fovDeg = Number(data.fovDeg);
+          const signature = [
+            Number.isFinite(lDeg) ? lDeg.toFixed(5) : "",
+            Number.isFinite(bDeg) ? bDeg.toFixed(5) : "",
+            Number.isFinite(ra) ? ra.toFixed(5) : "",
+            Number.isFinite(dec) ? dec.toFixed(5) : "",
+            Number.isFinite(fovDeg) ? fovDeg.toFixed(3) : "",
+          ].join("|");
+          if (signature === lastAppliedSkyBackgroundSignature) {
+            return;
+          }
+          lastAppliedSkyBackgroundSignature = signature;
+          if (typeof aladinInstance.stopAnimation === "function") {
+            aladinInstance.stopAnimation();
+          }
+          if (Number.isFinite(fovDeg) && fovDeg > 0.0 && typeof aladinInstance.setFoV === "function") {
+            aladinInstance.setFoV(Math.min(Math.max(fovDeg, 0.05), 179.0));
+          }
+          if (Number.isFinite(lDeg) && Number.isFinite(bDeg) && typeof aladinInstance.gotoPosition === "function") {
+            aladinInstance.gotoPosition(lDeg, bDeg);
+          } else if (Number.isFinite(ra) && Number.isFinite(dec) && typeof aladinInstance.gotoRaDec === "function") {
+            aladinInstance.gotoRaDec(ra, dec);
+          }
+        }
+        function skyLayerNameFor(layer) {
+          return "oviz-" + String((layer && layer.key) || (layer && layer.survey) || "layer")
+            .replace(/[^a-zA-Z0-9_-]+/g, "-")
+            .slice(0, 80);
+        }
+        function normalizeSkyLayerStretch(value) {
+          const normalized = String(value || "").trim().toLowerCase();
+          if (normalized === "log" || normalized === "log10" || normalized === "logarithmic") {
+            return "log";
+          }
+          if (normalized === "asinh" || normalized === "arcsinh") {
+            return "asinh";
+          }
+          return "linear";
+        }
+        function normalizeSkyLayerColormap(value) {
+          const normalized = String(value || "").trim().toLowerCase();
+          return normalized && normalized !== "native" ? normalized : "";
+        }
+        function numericSkyLayerCut(value) {
+          if (value === "" || value === null || value === undefined) {
+            return null;
+          }
+          const numeric = Number(value);
+          return Number.isFinite(numeric) ? numeric : null;
+        }
+        function removeManagedSkyOverlays() {
+          if (!aladinInstance) {
+            managedSkyOverlayLayerNames.clear();
+            return;
+          }
+          managedSkyOverlayLayerNames.forEach((layerName) => {
+            try {
+              if (typeof aladinInstance.removeImageLayer === "function") {
+                aladinInstance.removeImageLayer(layerName);
+              } else if (typeof aladinInstance.removeOverlayImageLayer === "function") {
+                aladinInstance.removeOverlayImageLayer(layerName);
+              }
+            } catch (_err) {
+            }
+          });
+          managedSkyOverlayLayerNames.clear();
+        }
+        function imageLayerForName(layerName, isBase) {
+          if (!aladinInstance) {
+            return null;
+          }
+          try {
+            if (isBase && typeof aladinInstance.getBaseImageLayer === "function") {
+              return aladinInstance.getBaseImageLayer();
+            }
+            if (typeof aladinInstance.getOverlayImageLayer === "function") {
+              return aladinInstance.getOverlayImageLayer(layerName);
+            }
+            if (typeof aladinInstance.getImageLayer === "function") {
+              return aladinInstance.getImageLayer(layerName);
+            }
+          } catch (_err) {
+          }
+          return null;
+        }
+        function applySkyImageLayerOptions(layerName, layer, isBase) {
+          const imageLayer = imageLayerForName(layerName, isBase);
+          if (!imageLayer) {
+            return;
+          }
+          const opacity = Math.min(Math.max(Number(layer && layer.opacity), 0.0), 1.0);
+          const visibleOpacity = layer && layer.visible === false ? 0.0 : opacity;
+          if (typeof imageLayer.setOpacity === "function") {
+            imageLayer.setOpacity(visibleOpacity);
+          } else if (typeof imageLayer.setAlpha === "function") {
+            imageLayer.setAlpha(visibleOpacity);
+          } else if ("opacity" in imageLayer) {
+            imageLayer.opacity = visibleOpacity;
+          }
+          const stretch = normalizeSkyLayerStretch(layer && layer.stretch);
+          const colormap = normalizeSkyLayerColormap(layer && layer.colormap);
+          if (colormap && typeof imageLayer.setColormap === "function") {
+            try {
+              imageLayer.setColormap(colormap, { stretch });
+            } catch (_err) {
+            }
+          } else if (typeof imageLayer.setStretch === "function") {
+            try {
+              imageLayer.setStretch(stretch);
+            } catch (_err) {
+            }
+          }
+          const cutMin = numericSkyLayerCut(layer && (layer.cut_min ?? layer.cutMin));
+          const cutMax = numericSkyLayerCut(layer && (layer.cut_max ?? layer.cutMax));
+          if (cutMin !== null && cutMax !== null && cutMax > cutMin && typeof imageLayer.setCuts === "function") {
+            try {
+              imageLayer.setCuts(cutMin, cutMax);
+            } catch (_err) {
+            }
+          }
+        }
+        function setBaseSkyImageLayer(survey) {
+          if (!aladinInstance || !survey) {
+            return;
+          }
+          try {
+            if (typeof aladinInstance.setImageSurvey === "function") {
+              aladinInstance.setImageSurvey(survey);
+            } else if (typeof aladinInstance.setBaseImageLayer === "function") {
+              aladinInstance.setBaseImageLayer(survey);
+            }
+            activeImageSurvey = survey;
+          } catch (_err) {
+            if (typeof aladinInstance.setImageSurvey === "function") {
+              try {
+                aladinInstance.setImageSurvey(survey);
+                activeImageSurvey = survey;
+              } catch (__err) {
+              }
+            }
+          }
+        }
+        function skyImageSurveyObject(survey) {
+          if (!aladinInstance || !survey) {
+            return null;
+          }
+          try {
+            if (typeof aladinInstance.newImageSurvey === "function") {
+              return aladinInstance.newImageSurvey(survey);
+            }
+          } catch (_err) {
+          }
+          return survey;
+        }
+        function setOverlaySkyImageLayer(layerName, survey, layer, expectedSignature) {
+          if (!aladinInstance || !survey || !layerName) {
+            return;
+          }
+          const attachOverlay = (overlaySurvey) => {
+            if (!overlaySurvey || (expectedSignature && activeSkyLayerStackSignature !== expectedSignature)) {
+              return;
+            }
+            try {
+              if (typeof aladinInstance.setOverlayImageLayer === "function") {
+                aladinInstance.setOverlayImageLayer(overlaySurvey, layerName);
+                managedSkyOverlayLayerNames.add(layerName);
+                applySkyImageLayerOptions(layerName, layer, false);
+              }
+            } catch (_err) {
+            }
+          };
+          const overlaySurvey = skyImageSurveyObject(survey);
+          if (overlaySurvey && typeof overlaySurvey.then === "function") {
+            overlaySurvey.then(attachOverlay).catch(() => {});
+            return;
+          }
+          attachOverlay(overlaySurvey);
+        }
+        function applySkyLayerState(data) {
+          if (!data || typeof data !== "object") {
+            return;
+          }
+          const layers = (Array.isArray(data.layers) ? data.layers : [])
+            .filter((layer) => layer && String(layer.survey || layer.key || "").trim());
+          const visibleLayers = layers.filter((layer) => (
+            layer.visible !== false
+            && Math.min(Math.max(Number(layer.opacity), 0.0), 1.0) > 0.0
+          ));
+          const aladinEl = document.getElementById("aladin-lite-div");
+          if (!visibleLayers.length) {
+            if (aladinEl) {
+              aladinEl.style.opacity = "0";
+            }
+            removeManagedSkyOverlays();
+            return;
+          }
+          if (aladinEl) {
+            aladinEl.style.opacity = "1";
+          }
+          const stackSignature = visibleLayers
+            .map((layer) => String(layer.key || layer.survey) + ":" + String(layer.survey || layer.key))
+            .join("|");
+          const baseLayer = visibleLayers[visibleLayers.length - 1];
+          const baseSurvey = String(baseLayer.survey || baseLayer.key || "").trim();
+          if (stackSignature !== activeSkyLayerStackSignature) {
+            activeSkyLayerStackSignature = stackSignature;
+            removeManagedSkyOverlays();
+            setBaseSkyImageLayer(baseSurvey);
+            for (let index = visibleLayers.length - 2; index >= 0; index -= 1) {
+              const layer = visibleLayers[index];
+              setOverlaySkyImageLayer(
+                skyLayerNameFor(layer),
+                String(layer.survey || layer.key || "").trim(),
+                layer,
+                stackSignature
+              );
+            }
+          } else if (baseSurvey && baseSurvey !== activeImageSurvey) {
+            setBaseSkyImageLayer(baseSurvey);
+          }
+          applySkyImageLayerOptions("base", baseLayer, true);
+          for (let index = visibleLayers.length - 2; index >= 0; index -= 1) {
+            const layer = visibleLayers[index];
+            applySkyImageLayerOptions(skyLayerNameFor(layer), layer, false);
+          }
+        }
+        function scheduleSkyBackgroundView(data) {
+          pendingSkyBackgroundView = data;
+          if (skyBackgroundViewAnimationFrame) {
+            return;
+          }
+          const scheduleFrame = typeof window.requestAnimationFrame === "function"
+            ? (callback) => window.requestAnimationFrame(callback)
+            : (callback) => window.setTimeout(callback, 0);
+          skyBackgroundViewAnimationFrame = scheduleFrame(() => {
+            skyBackgroundViewAnimationFrame = 0;
+            const latestView = pendingSkyBackgroundView;
+            pendingSkyBackgroundView = null;
+            applySkyBackgroundViewNow(latestView);
+            if (window.parent && window.parent !== window && latestView && latestView.seq != null) {
+              window.parent.postMessage({
+                type: "oviz-aladin-sky-background-view-applied",
+                seq: latestView.seq,
+              }, "*");
+            }
+          });
+        }
         function setHoveredClusterKey(clusterKey, emitToParent) {
           const nextKey = normalizeClusterKey(clusterKey);
           if (nextKey === hoveredClusterKey) {
@@ -5988,15 +9648,24 @@ __SKY_RUNTIME_JS__
             target: ${target},
             cooFrame: ${cooFrame},
             expandLayersControl: false,
-            showReticle: viewMode === "click",
-            showLayersControl: true,
-            showGotoControl: true,
-            showFrame: true
+            showReticle: viewMode === "click" && !skyDomeCaptureOnly,
+            showLayersControl: !skyDomeCaptureOnly,
+            showGotoControl: !skyDomeCaptureOnly,
+            showFrame: !skyDomeCaptureOnly,
+            showCooGrid: false,
+            showCooGridControl: false,
+            showProjectionControl: !skyDomeCaptureOnly,
+            showZoomControl: !skyDomeCaptureOnly,
+            showFullscreenControl: !skyDomeCaptureOnly,
+            showShareControl: false,
+            showContextMenu: false
           };
           if (viewMode !== "click") {
-            aladinOptions.projection = "MOL";
+            aladinOptions.projection = skyDomeBackgroundOnly ? "TAN" : "MOL";
           }
           const aladin = A.aladin("#aladin-lite-div", aladinOptions);
+          aladinInstance = aladin;
+          postAladinHipsFavorites();
           if (aladin && typeof aladin.setImageSurvey === "function") {
             aladin.setImageSurvey(${survey});
           }
@@ -6004,10 +9673,10 @@ __SKY_RUNTIME_JS__
             aladin.gotoRaDec(${ra.toFixed(8)}, ${dec.toFixed(8)});
           }
           if (viewMode !== "click" && aladin && typeof aladin.setProjection === "function") {
-            aladin.setProjection("MOL");
+            aladin.setProjection(skyDomeBackgroundOnly ? "TAN" : "MOL");
           }
           if (viewMode !== "click" && aladin && typeof aladin.setFoV === "function") {
-            aladin.setFoV(360.0);
+            aladin.setFoV(skyDomeBackgroundOnly ? 90.0 : 360.0);
           }
           if (viewMode === "click") {
             const beam = A.graphicOverlay({ color: ${beamColor}, lineWidth: 2, opacity: 0.95 });
@@ -6073,12 +9742,24 @@ __SKY_RUNTIME_JS__
               return;
             }
             if (data.type !== "oviz-parent-hover-cluster") {
+              if (data.type === "oviz-sky-background-view") {
+                scheduleSkyBackgroundView(data);
+              }
+              if (data.type === "oviz-sky-layer-state") {
+                applySkyLayerState(data);
+              }
               return;
             }
             setHoveredClusterKey(data.clusterKey, false);
           });
           if (statusEl) {
             statusEl.style.display = "none";
+          }
+          if (skyDomeBackgroundOnly && viewMode === "overview") {
+            postSkyBackgroundReady();
+          } else if (skyDomeCaptureEnabled && viewMode === "overview") {
+            scheduleSkyDomeSnapshot(aladin, 1400);
+            scheduleSkyDomeSnapshot(aladin, 5200);
           }
         }).catch((err) => {
           fail("Aladin initialization error: " + (err && err.message ? err.message : String(err)));
@@ -6087,6 +9768,44 @@ __SKY_RUNTIME_JS__
     <\/script>
   </body>
 </html>`;
+      }
+
+      function updateSkyDomeCaptureFrame() {
+        if (!skySpec.enabled || !skyDomeIsEnabled() || !skyDomeFrameEl) {
+          return;
+        }
+        if (skyDomeUsesNativeHips() || skyDomeUsesHips2Fits()) {
+          skyDomeFrameEl.removeAttribute("srcdoc");
+          skyDomeFrameEl.style.width = "1px";
+          skyDomeFrameEl.style.height = "1px";
+          skyDomeCaptureFrameSignature = skyDomeUsesHips2Fits() ? "hips2fits" : "native-hips";
+          return;
+        }
+        const signature = JSON.stringify({
+          survey: skySpec.survey || "",
+          mode: skyDomeUsesAladinBackground() ? "aladin-background" : "snapshot",
+          projection: skyDomeSpec.projection || "MOL",
+          width: skyDomeSpec.capture_width_px || null,
+          height: skyDomeSpec.capture_height_px || null,
+          format: skyDomeSpec.capture_format || null,
+          quality: skyDomeSpec.capture_quality || null,
+        });
+        if (skyDomeCaptureFrameSignature === signature) {
+          return;
+        }
+        skyDomeBackgroundFrameReady = false;
+        skyDomeBackgroundViewSignature = "";
+        if (skyDomeUsesAladinBackground()) {
+          skyDomeFrameEl.style.width = "100%";
+          skyDomeFrameEl.style.height = "100%";
+        } else {
+          const captureWidth = Math.max(512, Math.min(8192, Math.round(Number(skyDomeSpec.capture_width_px) || 4096)));
+          const captureHeight = Math.max(256, Math.min(4096, Math.round(Number(skyDomeSpec.capture_height_px) || 2048)));
+          skyDomeFrameEl.style.width = `${captureWidth}px`;
+          skyDomeFrameEl.style.height = `${captureHeight}px`;
+        }
+        skyDomeFrameEl.srcdoc = buildAladinSrcdoc([], [], "overview", null, true);
+        skyDomeCaptureFrameSignature = signature;
       }
 
       function updateSkyPanel() {
@@ -6106,24 +9825,30 @@ __SKY_RUNTIME_JS__
       }
 
       function updateSelectionUI() {
-        if (!clearSelectionButtonEl || !clickSelectToggleEl || !volumeLassoToggleEl) {
+        if (!clearSelectionButtonEl || !volumeLassoToggleEl) {
           return;
+        }
+        if (clickSelectToggleEl) {
+          clickSelectToggleEl.checked = false;
+          clickSelectToggleEl.disabled = true;
         }
         if (minimalModeEnabled) {
           clearSelectionButtonEl.disabled = true;
-          clickSelectToggleEl.checked = false;
-          clickSelectToggleEl.disabled = true;
           volumeLassoToggleEl.checked = false;
           volumeLassoToggleEl.disabled = true;
           return;
         }
         clearSelectionButtonEl.disabled = currentSelections.length === 0 && !currentSelection && !hasActiveLassoSelectionMask();
-        clickSelectToggleEl.checked = clickSelectionEnabled;
         volumeLassoToggleEl.checked = lassoVolumeSelectionEnabled;
       }
 
       function onWindowMessage(event) {
-        if (!skySpec.enabled || !skyFrameEl || event.source !== skyFrameEl.contentWindow) {
+        if (!skySpec.enabled) {
+          return;
+        }
+        const fromSkyPanel = Boolean(skyFrameEl && event.source === skyFrameEl.contentWindow);
+        const fromSkyDomeCapture = Boolean(skyDomeFrameEl && event.source === skyDomeFrameEl.contentWindow);
+        if (!fromSkyPanel && !fromSkyDomeCapture) {
           return;
         }
         const data = event && event.data;
@@ -6131,7 +9856,46 @@ __SKY_RUNTIME_JS__
           return;
         }
         if (data.type === "oviz-sky-hover-cluster") {
+          if (fromSkyDomeCapture) {
+            return;
+          }
           setSkyHoveredClusterKey(data.clusterKey);
+        } else if (data.type === "oviz-aladin-sky-background-view-applied") {
+          if (!fromSkyDomeCapture) {
+            return;
+          }
+          markSkyDomeBackgroundViewApplied(data.seq);
+        } else if (data.type === "oviz-aladin-sky-background-ready") {
+          if (!fromSkyDomeCapture) {
+            return;
+          }
+          if (String(skyDomeSpec && skyDomeSpec.source || "").toLowerCase() !== "aladin") {
+            return;
+          }
+          skyDomeBackgroundFrameReady = true;
+          skyDomeSurvey = skyDomeLocalSourceName(data.survey || (skySpec && skySpec.survey) || "aladin");
+          setSkyDomeSnapshotStatus("loaded", "");
+          postSkyLayerStateToAladin();
+          updateSkyDomeBackgroundFrame(
+            (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()
+          );
+        } else if (data.type === "oviz-aladin-hips-favorites") {
+          if (!fromSkyDomeCapture) {
+            return;
+          }
+          setAladinDefaultSkyLayerPresets(data.favorites);
+        } else if (data.type === "oviz-aladin-sky-snapshot") {
+          if (String(skyDomeSpec && skyDomeSpec.source || "").toLowerCase() !== "aladin") {
+            return;
+          }
+          if (data.status === "ready" && data.dataUrl) {
+            setSkyDomeTextureFromDataUrl(String(data.dataUrl), data.survey, data.projection);
+          } else {
+            setSkyDomeSnapshotStatus(
+              String(data.status || "unavailable"),
+              data.message ? String(data.message) : ""
+            );
+          }
         }
       }
 
@@ -6420,6 +10184,74 @@ __SKY_RUNTIME_JS__
         return num.toPrecision(3);
       }
 
+      function formatVolumeInputNumber(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return "";
+        }
+        const abs = Math.abs(num);
+        const text = (abs > 0.0 && abs < 1e-4) || abs >= 1e6
+          ? num.toExponential(8)
+          : num.toPrecision(10);
+        return text
+          .replace(/(\.\d*?[1-9])0+(e|$)/, "$1$2")
+          .replace(/\.0+(e|$)/, "$1")
+          .replace(/\.(e|$)/, "$1");
+      }
+
+      function volumeDataRangeForLayer(layer) {
+        const dataRange = layer && Array.isArray(layer.data_range) ? layer.data_range : [0.0, 1.0];
+        const dataMin = Number(dataRange[0]);
+        const dataMax = Number(dataRange[1]);
+        if (!Number.isFinite(dataMin) || !Number.isFinite(dataMax) || !(dataMax > dataMin)) {
+          return null;
+        }
+        return { min: dataMin, max: dataMax, span: dataMax - dataMin };
+      }
+
+      function volumeWindowStepForLayer(layer) {
+        const dataRange = volumeDataRangeForLayer(layer);
+        if (!dataRange || !(dataRange.span > 0.0)) {
+          return "any";
+        }
+        const rawStep = dataRange.span / 500.0;
+        const magnitude = Math.pow(10.0, Math.floor(Math.log10(rawStep)));
+        const normalized = rawStep / magnitude;
+        const niceMultiplier = normalized <= 1.0 ? 1.0 : (normalized <= 2.0 ? 2.0 : (normalized <= 5.0 ? 5.0 : 10.0));
+        return formatVolumeInputNumber(niceMultiplier * magnitude);
+      }
+
+      function syncVolumeWindowInput(inputEl, value, layer) {
+        if (!inputEl) {
+          return;
+        }
+        const dataRange = volumeDataRangeForLayer(layer);
+        const stepValue = volumeWindowStepForLayer(layer);
+        inputEl.step = stepValue;
+        if (dataRange) {
+          const numericStep = Number(stepValue);
+          if (Number.isFinite(numericStep) && numericStep > 0.0) {
+            inputEl.min = formatVolumeInputNumber(Math.floor(dataRange.min / numericStep) * numericStep);
+            inputEl.max = formatVolumeInputNumber(Math.ceil(dataRange.max / numericStep) * numericStep);
+          } else {
+            inputEl.min = formatVolumeInputNumber(dataRange.min);
+            inputEl.max = formatVolumeInputNumber(dataRange.max);
+          }
+        } else {
+          inputEl.removeAttribute("min");
+          inputEl.removeAttribute("max");
+        }
+        inputEl.value = formatVolumeInputNumber(value);
+      }
+
+      function finiteNumberInputValue(inputEl) {
+        if (!inputEl || String(inputEl.value || "").trim() === "") {
+          return null;
+        }
+        const value = Number(inputEl.value);
+        return Number.isFinite(value) ? value : null;
+      }
+
       function selectedVolumeLayer() {
         if (!activeVolumeKey) {
           return null;
@@ -6459,9 +10291,9 @@ __SKY_RUNTIME_JS__
           }
         }
         state.opacity = Math.min(Math.max(Number(state.opacity), 0.0), 1.0);
-        state.steps = Math.round(Math.min(Math.max(Number(state.steps), 24.0), 768.0) / 8.0) * 8.0;
+        state.steps = Math.round(Math.min(Math.max(Number(state.steps), 24.0), 768.0));
         if (!Number.isFinite(state.steps) || state.steps < 24) {
-          state.steps = Number((layer.default_controls || {}).steps || 192);
+          state.steps = Number((layer.default_controls || {}).steps || 100);
         }
         state.alphaCoef = Math.min(Math.max(Number(state.alphaCoef), 1.0), 200.0);
         if (!Number.isFinite(state.alphaCoef)) {
@@ -6708,11 +10540,23 @@ __SKY_RUNTIME_JS__
         return { low, high };
       }
 
+      function volumeLayerTimeMyr(layer) {
+        if (!layer) {
+          return null;
+        }
+        const rawTime = layer.time_myr;
+        if (rawTime === null || rawTime === undefined || rawTime === "" || rawTime === false) {
+          return null;
+        }
+        const timeValue = Number(rawTime);
+        return Number.isFinite(timeValue) ? timeValue : null;
+      }
+
       function volumeSupportsShowAllTimes(layer) {
         return Boolean(
           layer
           && layer.supports_show_all_times
-          && !Number.isFinite(Number(layer.time_myr))
+          && volumeLayerTimeMyr(layer) === null
         );
       }
 
@@ -6721,8 +10565,8 @@ __SKY_RUNTIME_JS__
           return false;
         }
         const frameTime = frame ? Number(frame.time) : 0.0;
-        const layerTime = Number(layer.time_myr);
-        if (Number.isFinite(layerTime)) {
+        const layerTime = volumeLayerTimeMyr(layer);
+        if (layerTime !== null) {
           return approximatelyZero(frameTime - layerTime);
         }
         if (state.showAllTimes && volumeSupportsShowAllTimes(layer)) {
@@ -6956,8 +10800,8 @@ __SKY_RUNTIME_JS__
         });
         volumeStretchEl.value = String(state.stretch);
 
-        volumeVMinEl.value = formatVolumeNumber(state.vmin);
-        volumeVMaxEl.value = formatVolumeNumber(state.vmax);
+        syncVolumeWindowInput(volumeVMinEl, state.vmin, controlLayer);
+        syncVolumeWindowInput(volumeVMaxEl, state.vmax, controlLayer);
         volumeOpacityEl.value = String(state.opacity);
         volumeAlphaEl.value = String(state.alphaCoef);
         volumeStepsEl.value = String(state.steps);
@@ -7103,111 +10947,69 @@ __SKY_RUNTIME_JS__
         return material;
       }
 
-      function starGlowTextureFor(kind = "realistic") {
-        const cacheKey = String(kind || "realistic");
+      function smoothstep(edge0, edge1, value) {
+        const width = Math.max(Number(edge1) - Number(edge0), 1e-9);
+        const t = clampRange((Number(value) - Number(edge0)) / width, 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
+      }
+
+      function writeStarPsfTexture(canvasEl, alphaForSample) {
+        const ctx = canvasEl.getContext("2d");
+        const width = canvasEl.width;
+        const height = canvasEl.height;
+        const cx = (width - 1) * 0.5;
+        const cy = (height - 1) * 0.5;
+        const maxRadius = Math.max(Math.min(width, height) * 0.5, 1.0);
+        const imageData = ctx.createImageData(width, height);
+        const data = imageData.data;
+        for (let y = 0; y < height; y += 1) {
+          const dy = (y - cy) / maxRadius;
+          for (let x = 0; x < width; x += 1) {
+            const dx = (x - cx) / maxRadius;
+            const radius = Math.sqrt(dx * dx + dy * dy);
+            const edgeTaper = 1.0 - smoothstep(0.78, 1.0, radius);
+            const angle = Math.atan2(dy, dx);
+            const alpha = clampRange(Number(alphaForSample(radius, dx, dy, angle)) * edgeTaper, 0.0, 1.0);
+            const idx = (y * width + x) * 4;
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = Math.round(alpha * 255.0);
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      function makeSpriteTextureFromCanvas(canvasEl) {
+        const texture = new THREE.CanvasTexture(canvasEl);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.generateMipmaps = true;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.needsUpdate = true;
+        return texture;
+      }
+
+      function starGlowTextureFor(kind = "halo") {
+        const cacheKey = String(kind || "halo");
         if (starGlowTextureCache.has(cacheKey)) {
           return starGlowTextureCache.get(cacheKey);
         }
 
         const canvasEl = document.createElement("canvas");
-        canvasEl.width = 256;
-        canvasEl.height = 256;
-        const ctx = canvasEl.getContext("2d");
-        const cx = canvasEl.width * 0.5;
-        const cy = canvasEl.height * 0.5;
-        const size = canvasEl.width;
-        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+        canvasEl.width = 1024;
+        canvasEl.height = 1024;
 
-        if (cacheKey === "bloom") {
-          const outerBloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.50);
-          outerBloom.addColorStop(0.0, "rgba(255,255,255,0.38)");
-          outerBloom.addColorStop(0.08, "rgba(255,255,255,0.26)");
-          outerBloom.addColorStop(0.24, "rgba(255,255,255,0.12)");
-          outerBloom.addColorStop(0.58, "rgba(255,255,255,0.035)");
-          outerBloom.addColorStop(1.0, "rgba(255,255,255,0.0)");
-          ctx.fillStyle = outerBloom;
-          ctx.beginPath();
-          ctx.arc(cx, cy, size * 0.50, 0, Math.PI * 2.0);
-          ctx.fill();
-        } else {
-          const outerHalo = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.50);
-          outerHalo.addColorStop(0.0, "rgba(255,255,255,0.92)");
-          outerHalo.addColorStop(0.06, "rgba(255,255,255,0.84)");
-          outerHalo.addColorStop(0.16, "rgba(255,255,255,0.50)");
-          outerHalo.addColorStop(0.38, "rgba(255,255,255,0.18)");
-          outerHalo.addColorStop(0.70, "rgba(255,255,255,0.05)");
-          outerHalo.addColorStop(1.0, "rgba(255,255,255,0.0)");
-          ctx.fillStyle = outerHalo;
-          ctx.beginPath();
-          ctx.arc(cx, cy, size * 0.50, 0, Math.PI * 2.0);
-          ctx.fill();
+        writeStarPsfTexture(canvasEl, (radius) => {
+          const airyCore = 0.82 * Math.exp(-0.5 * (radius / 0.024) ** 2.0);
+          const seeingHalo = 0.30 * ((1.0 + (radius / 0.060) ** 2.0) ** -2.25);
+          const aureole = 0.050 * ((1.0 + (radius / 0.20) ** 2.0) ** -2.50);
+          const chromaticRim = 0.055 * Math.exp(-0.5 * ((radius - 0.22) / 0.11) ** 2.0);
+          return airyCore + seeingHalo + aureole + chromaticRim;
+        });
 
-          const innerHalo = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.24);
-          innerHalo.addColorStop(0.0, "rgba(255,255,255,0.95)");
-          innerHalo.addColorStop(0.10, "rgba(255,255,255,0.90)");
-          innerHalo.addColorStop(0.26, "rgba(255,255,255,0.62)");
-          innerHalo.addColorStop(0.54, "rgba(255,255,255,0.14)");
-          innerHalo.addColorStop(1.0, "rgba(255,255,255,0.0)");
-          ctx.fillStyle = innerHalo;
-          ctx.beginPath();
-          ctx.arc(cx, cy, size * 0.24, 0, Math.PI * 2.0);
-          ctx.fill();
-        }
-
-        const texture = new THREE.CanvasTexture(canvasEl);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.generateMipmaps = false;
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.needsUpdate = true;
+        const texture = makeSpriteTextureFromCanvas(canvasEl);
         starGlowTextureCache.set(cacheKey, texture);
-        return texture;
-      }
-
-      function starCoreTextureFor(kind = "stellar_core") {
-        const cacheKey = String(kind || "stellar_core");
-        if (starCoreTextureCache.has(cacheKey)) {
-          return starCoreTextureCache.get(cacheKey);
-        }
-
-        const canvasEl = document.createElement("canvas");
-        canvasEl.width = 256;
-        canvasEl.height = 256;
-        const ctx = canvasEl.getContext("2d");
-        const cx = canvasEl.width * 0.5;
-        const cy = canvasEl.height * 0.5;
-        const size = canvasEl.width;
-        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-
-        const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.22);
-        core.addColorStop(0.0, "rgba(255,255,255,1.0)");
-        core.addColorStop(0.08, "rgba(255,255,255,1.0)");
-        core.addColorStop(0.18, "rgba(255,255,255,0.95)");
-        core.addColorStop(0.38, "rgba(255,255,255,0.56)");
-        core.addColorStop(0.72, "rgba(255,255,255,0.05)");
-        core.addColorStop(1.0, "rgba(255,255,255,0.0)");
-        ctx.fillStyle = core;
-        ctx.beginPath();
-        ctx.arc(cx, cy, size * 0.22, 0, Math.PI * 2.0);
-        ctx.fill();
-
-        const bloom = ctx.createRadialGradient(cx, cy, size * 0.02, cx, cy, size * 0.34);
-        bloom.addColorStop(0.0, "rgba(255,255,255,0.45)");
-        bloom.addColorStop(0.16, "rgba(255,255,255,0.28)");
-        bloom.addColorStop(0.52, "rgba(255,255,255,0.07)");
-        bloom.addColorStop(1.0, "rgba(255,255,255,0.0)");
-        ctx.fillStyle = bloom;
-        ctx.beginPath();
-        ctx.arc(cx, cy, size * 0.34, 0, Math.PI * 2.0);
-        ctx.fill();
-
-        const texture = new THREE.CanvasTexture(canvasEl);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.generateMipmaps = false;
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.needsUpdate = true;
-        starCoreTextureCache.set(cacheKey, texture);
         return texture;
       }
 
@@ -7223,44 +11025,48 @@ __SKY_RUNTIME_JS__
           opacity: opacity ?? 0.0,
           depthWrite: false,
           depthTest: true,
-          blending: THREE.AdditiveBlending,
+          alphaTest: 0.0015,
+          sizeAttenuation: true,
+          blending: THREE.NormalBlending,
         });
         material.userData = { cached: true, glow: true };
         starGlowMaterialCache.set(cacheKey, material);
         return material;
       }
 
-      function starBloomMaterialFor(color, opacity) {
-        const cacheKey = [color ?? "#ffffff", Number(opacity ?? 0.0).toFixed(4)].join("|");
-        if (starBloomMaterialCache.has(cacheKey)) {
-          return starBloomMaterialCache.get(cacheKey);
+      function starCoreTextureFor(kind = "stellar_core") {
+        const cacheKey = String(kind || "stellar_core");
+        if (starCoreTextureCache.has(cacheKey)) {
+          return starCoreTextureCache.get(cacheKey);
         }
-        const material = new THREE.SpriteMaterial({
-          map: starGlowTextureFor("bloom"),
-          color: color ?? "#ffffff",
-          transparent: true,
-          opacity: opacity ?? 0.0,
-          depthWrite: false,
-          depthTest: true,
-          blending: THREE.AdditiveBlending,
+
+        const canvasEl = document.createElement("canvas");
+        canvasEl.width = 1024;
+        canvasEl.height = 1024;
+        writeStarPsfTexture(canvasEl, (radius) => {
+          const saturatedCore = 1.00 * Math.exp(-0.5 * (radius / 0.020) ** 2.0);
+          const seeingDisk = 0.28 * ((1.0 + (radius / 0.052) ** 2.0) ** -2.65);
+          return saturatedCore + seeingDisk;
         });
-        material.userData = { cached: true, glow: true, bloom: true };
-        starBloomMaterialCache.set(cacheKey, material);
-        return material;
+
+        const texture = makeSpriteTextureFromCanvas(canvasEl);
+        starCoreTextureCache.set(cacheKey, texture);
+        return texture;
       }
 
       function starCoreMaterialFor(color, opacity) {
-        const cacheKey = [Number(opacity ?? 0.0).toFixed(4)].join("|");
+        const cacheKey = [color ?? "#ffffff", Number(opacity ?? 0.0).toFixed(4)].join("|");
         if (starCoreMaterialCache.has(cacheKey)) {
           return starCoreMaterialCache.get(cacheKey);
         }
         const material = new THREE.SpriteMaterial({
           map: starCoreTextureFor("stellar_core"),
-          color: "#ffffff",
+          color: color ?? "#ffffff",
           transparent: true,
           opacity: opacity ?? 0.0,
           depthWrite: false,
           depthTest: true,
+          sizeAttenuation: true,
           blending: THREE.AdditiveBlending,
         });
         material.userData = { cached: true, glow: true, core: true };
@@ -7268,59 +11074,19 @@ __SKY_RUNTIME_JS__
         return material;
       }
 
-      function worldUnitsPerScreenPixelAt(position) {
-        const point = position instanceof THREE.Vector3
-          ? position
-          : new THREE.Vector3(
-            Number(position && position.x) || 0.0,
-            Number(position && position.y) || 0.0,
-            Number(position && position.z) || 0.0
-          );
-        const distance = Math.max(camera.position.distanceTo(point), 1e-3);
-        const viewportHeight = Math.max(renderer.domElement.clientHeight || root.clientHeight || 1, 1);
-        return (2.0 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5)) / viewportHeight;
-      }
-
-      function apparentPixelSpanForPoint(basePointScale, position) {
-        const worldPerPixel = Math.max(worldUnitsPerScreenPixelAt(position), 1e-6);
-        return Math.max(Number(basePointScale) || 0.0, 0.0) / worldPerPixel;
-      }
-
-      function screenPixelsToWorldScale(pixelSpan, position) {
-        return Math.max(Number(pixelSpan) || 0.0, 0.0) * Math.max(worldUnitsPerScreenPixelAt(position), 1e-6);
-      }
-
-      // Optical point-spread functions are set primarily by the imaging system
-      // (diffraction / seeing / detector sampling), not by the source's 3D distance.
-      // So keep a persistent screen-space halo floor and only let apparent size gently
-      // broaden the core and wings as a source becomes more resolved on screen.
+      // Keep the colored halo compact; the saturated core still clips to white.
       function glowScaleForPoint(basePointScale, position, glowStrength) {
         const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
-        const apparentPixels = apparentPixelSpanForPoint(basePointScale, position);
-        const targetPixels = (7.0 + 4.5 * strength)
-          + Math.min(apparentPixels * (0.32 + 0.05 * strength), 6.0 + 2.0 * strength);
-        const clampedPixels = clampRange(targetPixels, 7.0 + 4.5 * strength, 18.0 + 8.0 * strength);
-        return screenPixelsToWorldScale(clampedPixels, position);
+        return Math.max(Number(basePointScale) || 0.0, 0.0) * (3.15 + 0.70 * strength);
       }
 
       function starCoreScaleForPoint(basePointScale, position, glowStrength) {
         const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
-        const apparentPixels = apparentPixelSpanForPoint(basePointScale, position);
-        const targetPixels = Math.max(
-          3.0 + 1.0 * strength,
-          apparentPixels * (0.72 + 0.04 * strength)
-        );
-        const clampedPixels = clampRange(targetPixels, 3.0 + 0.8 * strength, 18.0 + 2.0 * strength);
-        return screenPixelsToWorldScale(clampedPixels, position);
+        return Math.max(Number(basePointScale) || 0.0, 0.0) * (2.65 + 0.18 * strength);
       }
 
-      function starBloomScaleForPoint(basePointScale, position, glowStrength) {
-        const strength = Math.max(Number(glowStrength) || 0.0, 0.0);
-        const apparentPixels = apparentPixelSpanForPoint(basePointScale, position);
-        const targetPixels = (14.0 + 8.0 * strength)
-          + Math.min(apparentPixels * (0.48 + 0.08 * strength), 12.0 + 5.0 * strength);
-        const clampedPixels = clampRange(targetPixels, 14.0 + 8.0 * strength, 34.0 + 14.0 * strength);
-        return screenPixelsToWorldScale(clampedPixels, position);
+      function nonGlowMarkerScaleForPoint(basePointScale, position) {
+        return Math.max(Number(basePointScale) || 0.0, 0.0) * 0.36;
       }
 
       function registerCameraResponsivePointSprite(sprite, scaleKind, position, pointScaleValue, selectionKey) {
@@ -7350,9 +11116,6 @@ __SKY_RUNTIME_JS__
         if (!entry || !entry.sprite) {
           return 0.0;
         }
-        if (entry.scaleKind === "bloom") {
-          return starBloomScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
-        }
         if (entry.scaleKind === "glow") {
           return glowScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
         }
@@ -7360,6 +11123,19 @@ __SKY_RUNTIME_JS__
           return starCoreScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
         }
         return Math.max(Number(entry.pointScale) || 0.0, 0.0);
+      }
+
+      function cameraResponsivePointHoverMultiplier(entry) {
+        if (!entry || !entry.selectionKey) {
+          return 1.0;
+        }
+        if (entry.scaleKind === "glow") {
+          return 1.08;
+        }
+        if (entry.scaleKind === "core") {
+          return 1.22;
+        }
+        return 1.45;
       }
 
       function updateCameraResponsivePointSprites() {
@@ -7377,7 +11153,7 @@ __SKY_RUNTIME_JS__
             entry.sprite.userData.baseScale = baseScale;
           }
           const isActive = entry.selectionKey && activeKeys.has(entry.selectionKey);
-          const scale = baseScale * (isActive ? 1.45 : 1.0);
+          const scale = baseScale * (isActive ? cameraResponsivePointHoverMultiplier(entry) : 1.0);
           entry.sprite.scale.set(scale, scale, 1.0);
         });
       }
@@ -7418,7 +11194,10 @@ __SKY_RUNTIME_JS__
           const hideBelow = Math.max(Number(entry.hideBelowScaleBarPc) || 0.0, 0.0);
           const fadeStart = Math.max(Number(entry.fadeStartScaleBarPc) || hideBelow, hideBelow);
           let fadeFactor = 1.0;
-          if (hideBelow > 0.0 && Number.isFinite(currentScaleBarLengthPc)) {
+          if (cameraViewMode === "earth") {
+            fadeFactor = 0.0;
+          }
+          if (cameraViewMode !== "earth" && hideBelow > 0.0 && Number.isFinite(currentScaleBarLengthPc)) {
             if (currentScaleBarLengthPc <= hideBelow) {
               fadeFactor = 0.0;
             } else if (fadeStart > hideBelow && currentScaleBarLengthPc < fadeStart) {
@@ -8538,6 +12317,36 @@ __SKY_RUNTIME_JS__
         };
       }
 
+      function pointHoverText(point, trace, tooltipColor = "") {
+        const motion = point && typeof point.motion === "object" ? point.motion : null;
+        const selection = point && typeof point.selection === "object" ? point.selection : null;
+        const rawName = String(
+          (selection && selection.cluster_name)
+          || (motion && motion.key)
+          || (trace && trace.name)
+          || "Point"
+        ).trim();
+        const label = rawName.replace(/_/g, " ") || "Point";
+        const titleColor = tooltipColor || (selection && selection.cluster_color) || (point && point.color) || "#ffffff";
+        const parts = [`<b style="color:${escapeHtml(titleColor)};">${escapeHtml(label)}</b>`];
+        const ageNowMyr = Number((selection && selection.age_now_myr) ?? (motion && motion.age_now_myr));
+        if (Number.isFinite(ageNowMyr)) {
+          parts.push(`${ageNowMyr.toFixed(1).replace(/\.0$/, "")} Myr`);
+        }
+        const nStars = Number((point && point.n_stars) ?? (selection && selection.n_stars));
+        if (Number.isFinite(nStars) && nStars >= 0.0) {
+          const roundedStars = Math.round(nStars);
+          parts.push(`${roundedStars.toLocaleString()} ${roundedStars === 1 ? "star" : "stars"}`);
+        }
+        const xValue = Number(point && point.x);
+        const yValue = Number(point && point.y);
+        const zValue = Number(point && point.z);
+        if (Number.isFinite(xValue) && Number.isFinite(yValue) && Number.isFinite(zValue)) {
+          parts.push(`(${Math.round(xValue)}, ${Math.round(yValue)}, ${Math.round(zValue)}) pc`);
+        }
+        return parts.join("<br>");
+      }
+
       function starSizeStatsForTrace(trace) {
         if (!trace || !Array.isArray(trace.points)) {
           return { hasValues: false, median: 1.0 };
@@ -8604,7 +12413,7 @@ __SKY_RUNTIME_JS__
             return;
           }
           let opacityMultiplier = 1.0;
-          const pointKey = normalizedSelectionKeyFor(point.selection);
+          const pointKey = clusterFilterSelectionKeyForPoint(point) || normalizedSelectionKeyFor(point.selection);
           const focusedTraceKey = dendrogramFocusTraceKey();
           const dendrogramActiveKeys = activeDendrogramSelectionKeys();
           if (focusedTraceKey) {
@@ -8614,8 +12423,10 @@ __SKY_RUNTIME_JS__
               opacityMultiplier *= dendrogramActiveKeys.has(pointKey) ? 1.0 : 0.24;
             }
           }
-          if (selectedClusterKeys.size && pointKey) {
-            opacityMultiplier *= selectedClusterKeys.has(pointKey) ? 1.0 : 0.16;
+          if (lassoSelectionFilterActive()) {
+            if (!pointKey || !selectedClusterKeys.has(pointKey)) {
+              return;
+            }
           }
           const baseOpacity = Number(pointState.opacity ?? point.opacity ?? 1.0);
           const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * traceVisibilityMultiplier * opacityMultiplier * globalPointOpacityScale));
@@ -8628,31 +12439,11 @@ __SKY_RUNTIME_JS__
             pointState.size * sizeScaleFactor * starsFactor * globalPointSizeScale * pointScale,
             scaleFloor
           );
-          const selectionKey = normalizedSelectionKeyFor(point.selection);
+          const selectionKey = clusterFilterSelectionKeyForPoint(point) || normalizedSelectionKeyFor(point.selection);
           const pointPosition = new THREE.Vector3(point.x, point.y, point.z);
           const glowStrength = Math.max(globalPointGlowStrength, 0.0);
-          let interactionSprite = null;
           if (glowStrength > 0.02) {
-            const bloomOpacity = clampRange(effectiveOpacity * (0.08 + 0.16 * glowStrength), 0.0, 0.82);
-            const bloomSprite = new THREE.Sprite(starBloomMaterialFor(traceColor || point.color, bloomOpacity));
-            const bloomScale = starBloomScaleForPoint(
-              scale,
-              pointPosition,
-              glowStrength
-            );
-            bloomSprite.position.copy(pointPosition);
-            bloomSprite.scale.set(bloomScale, bloomScale, 1.0);
-            bloomSprite.renderOrder = -3;
-            bloomSprite.userData = {
-              selection: point.selection || null,
-              selectionKey,
-              baseScale: bloomScale,
-              isBloom: true,
-            };
-            group.add(bloomSprite);
-            registerCameraResponsivePointSprite(bloomSprite, "bloom", pointPosition, scale, selectionKey);
-
-            const glowOpacity = clampRange(effectiveOpacity * (0.24 + 0.30 * glowStrength), 0.0, 0.98);
+            const glowOpacity = clampRange(effectiveOpacity * (0.34 + 0.18 * glowStrength), 0.0, 0.78);
             const glowSprite = new THREE.Sprite(starGlowMaterialFor(traceColor || point.color, glowOpacity));
             const glowScale = glowScaleForPoint(
               scale,
@@ -8671,7 +12462,7 @@ __SKY_RUNTIME_JS__
             group.add(glowSprite);
             registerCameraResponsivePointSprite(glowSprite, "glow", pointPosition, scale, selectionKey);
 
-            const coreOpacity = clampRange(effectiveOpacity * (0.88 + 0.36 * glowStrength), 0.0, 1.0);
+            const coreOpacity = clampRange(effectiveOpacity * (1.00 + 0.24 * glowStrength), 0.0, 1.0);
             const coreSprite = new THREE.Sprite(starCoreMaterialFor("#ffffff", coreOpacity));
             const coreScale = starCoreScaleForPoint(
               scale,
@@ -8681,30 +12472,33 @@ __SKY_RUNTIME_JS__
             coreSprite.position.copy(pointPosition);
             coreSprite.scale.set(coreScale, coreScale, 1.0);
             coreSprite.userData = {
-              hovertext: point.hovertext || trace.name || "",
+              hovertext: pointHoverText(point, trace, traceColor || point.color),
               selection: point.selection || null,
               selectionKey,
+              tooltipColor: traceColor || point.color || "#ffffff",
               baseScale: coreScale,
+              pickWorldScale: nonGlowMarkerScaleForPoint(scale, pointPosition),
               isGlowCore: true,
             };
             group.add(coreSprite);
             hoverTargets.push(coreSprite);
-            interactionSprite = coreSprite;
             registerCameraResponsivePointSprite(coreSprite, "core", pointPosition, scale, selectionKey);
           } else {
             const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, traceColor || point.color, effectiveOpacity));
+            const markerScale = nonGlowMarkerScaleForPoint(scale, pointPosition);
             sprite.position.copy(pointPosition);
-            sprite.scale.set(scale, scale, scale);
+            sprite.scale.set(markerScale, markerScale, 1.0);
             sprite.userData = {
-              hovertext: point.hovertext || trace.name || "",
+              hovertext: pointHoverText(point, trace, traceColor || point.color),
               selection: point.selection || null,
               selectionKey,
-              baseScale: scale,
+              tooltipColor: traceColor || point.color || "#ffffff",
+              baseScale: markerScale,
+              pickWorldScale: markerScale,
             };
             group.add(sprite);
             hoverTargets.push(sprite);
-            interactionSprite = sprite;
-            registerCameraResponsivePointSprite(sprite, "marker", pointPosition, scale, selectionKey);
+            registerCameraResponsivePointSprite(sprite, "marker", pointPosition, markerScale, selectionKey);
           }
         });
         parent.add(group);
@@ -9039,15 +12833,15 @@ __SKY_RUNTIME_JS__
       }
 
       function traceVisible(trace) {
-        const actionState = actionTraceVisibilityState(trace);
-        if (actionState) {
-          return Boolean(actionState.visible);
-        }
-        if (isGalacticReferenceTrace(trace) && !galacticReferenceVisible) {
+        if (isGalacticReferenceTrace(trace) && (!galacticReferenceVisible || cameraViewMode === "earth")) {
           return false;
         }
         if (isNearbyRegionLabelTrace(trace) && !nearbyRegionLabelsVisible) {
           return false;
+        }
+        const actionState = actionTraceVisibilityState(trace);
+        if (actionState) {
+          return Boolean(actionState.visible);
         }
         const defaults = groupDefaults(currentGroup);
         const mode = defaults[trace.key];
@@ -9235,7 +13029,7 @@ __SKY_RUNTIME_JS__
         visibleInput.type = "checkbox";
         visibleToggle.appendChild(visibleInput);
         const visibleText = document.createElement("span");
-        visibleText.textContent = Number.isFinite(Number(layer.time_myr)) ? "Show volume series" : "Show volume";
+        visibleText.textContent = volumeLayerTimeMyr(layer) !== null ? "Show volume series" : "Show volume";
         visibleToggle.appendChild(visibleText);
         controls.appendChild(visibleToggle);
 
@@ -9278,12 +13072,10 @@ __SKY_RUNTIME_JS__
 
         const vminInput = document.createElement("input");
         vminInput.type = "number";
-        vminInput.step = "any";
         const vminField = createLegendField("vmin", vminInput);
 
         const vmaxInput = document.createElement("input");
         vmaxInput.type = "number";
-        vmaxInput.step = "any";
         const vmaxField = createLegendField("vmax", vmaxInput);
 
         const valueRow = createLegendControlRow();
@@ -9311,7 +13103,7 @@ __SKY_RUNTIME_JS__
         samplesInput.type = "range";
         samplesInput.min = "24";
         samplesInput.max = "768";
-        samplesInput.step = "8";
+        samplesInput.step = "1";
         const samplesField = createLegendField("Samples", samplesInput);
         controls.appendChild(samplesField.field);
 
@@ -9329,8 +13121,8 @@ __SKY_RUNTIME_JS__
             }
             colormapSelect.value = String(state.colormap);
             stretchSelect.value = String(state.stretch);
-            vminInput.value = formatVolumeNumber(state.vmin);
-            vmaxInput.value = formatVolumeNumber(state.vmax);
+            syncVolumeWindowInput(vminInput, state.vmin, summaryLayer);
+            syncVolumeWindowInput(vmaxInput, state.vmax, summaryLayer);
             opacityInput.value = String(state.opacity);
             alphaInput.value = String(state.alphaCoef);
             samplesInput.value = String(state.steps);
@@ -9354,6 +13146,13 @@ __SKY_RUNTIME_JS__
 
         visibleInput.addEventListener("change", () => {
           state.visible = Boolean(visibleInput.checked);
+          legendState[String(item.key || stateKey)] = state.visible;
+          legendState[stateKey] = state.visible;
+          const entryEl = toggleButton.closest ? toggleButton.closest(".oviz-three-legend-entry") : null;
+          if (entryEl) {
+            entryEl.dataset.active = state.visible ? "true" : "false";
+          }
+          toggleButton.dataset.active = state.visible ? "true" : "false";
           refreshVolumeControls(false);
           updateVolumeFromLegend(false);
         });
@@ -9374,15 +13173,33 @@ __SKY_RUNTIME_JS__
           refreshVolumeControls(false);
           updateVolumeFromLegend(false);
         });
-        vminInput.addEventListener("change", () => {
-          state.vmin = Number(vminInput.value);
-          refreshVolumeControls(true);
+        function updateVolumeWindowFromLegendInput(inputEl, key, options = {}) {
+          const value = finiteNumberInputValue(inputEl);
+          if (value === null) {
+            return;
+          }
+          state[key] = value;
+          if (options.syncInputs) {
+            refreshVolumeControls(true);
+          } else {
+            const summaryLayer = frameVolumeLayerForStateKey(stateKey) || layer;
+            clampVolumeStateForLayer(summaryLayer, state);
+            summary.textContent = volumeSummaryTextFor(summaryLayer, state);
+            toggleButton.style.color = volumeLegendColorForLayer(summaryLayer);
+          }
           updateVolumeFromLegend(false);
+        }
+        vminInput.addEventListener("input", () => {
+          updateVolumeWindowFromLegendInput(vminInput, "vmin", { syncInputs: false });
+        });
+        vminInput.addEventListener("change", () => {
+          updateVolumeWindowFromLegendInput(vminInput, "vmin", { syncInputs: true });
+        });
+        vmaxInput.addEventListener("input", () => {
+          updateVolumeWindowFromLegendInput(vmaxInput, "vmax", { syncInputs: false });
         });
         vmaxInput.addEventListener("change", () => {
-          state.vmax = Number(vmaxInput.value);
-          refreshVolumeControls(true);
-          updateVolumeFromLegend(false);
+          updateVolumeWindowFromLegendInput(vmaxInput, "vmax", { syncInputs: true });
         });
         opacityInput.addEventListener("input", () => {
           state.opacity = Number(opacityInput.value);
@@ -9520,34 +13337,26 @@ __ACTION_RUNTIME_JS__
       }
 
       function onPointerMove(event) {
+        if (skyViewDragState) {
+          hideClusterInfoTooltip();
+          return;
+        }
         if (selectionBoxPointerState || manualLabelPointerState) {
-          tooltipEl.style.display = "none";
+          hideClusterInfoTooltip();
           return;
         }
         if (lassoState) {
           onLassoPointerMove(event);
           return;
         }
-        const rect = canvas.getBoundingClientRect();
-        pointer.x = ((event.clientX - rect.left) / rect.width) * 2.0 - 1.0;
-        pointer.y = -((event.clientY - rect.top) / rect.height) * 2.0 + 1.0;
-        raycaster.setFromCamera(pointer, camera);
-        const hits = raycaster.intersectObjects(hoverTargets, false);
-        const hitObject = hits.length ? hits[0].object : null;
-        const hoveredSelection = hitObject && hitObject.userData ? hitObject.userData.selection : null;
-        setLocalHoveredClusterKey(hoveredSelection ? normalizedSelectionKeyFor(hoveredSelection) : "");
-        if (!hitObject || !hitObject.userData.hovertext) {
-          tooltipEl.style.display = "none";
-          return;
-        }
-        tooltipEl.style.display = "block";
-        tooltipEl.innerHTML = hitObject.userData.hovertext;
-        tooltipEl.style.left = `${event.clientX - rect.left + 14}px`;
-        tooltipEl.style.top = `${event.clientY - rect.top + 14}px`;
+        const hitObject = pickSprite(event, { clusterOnly: true });
+        const hoveredSelectionKey = hitObject && hitObject.userData
+          ? normalizeMemberKey(hitObject.userData.selectionKey || normalizedSelectionKeyFor(hitObject.userData.selection))
+          : "";
+        setLocalHoveredClusterKey(hoveredSelectionKey);
       }
 
       function onPointerLeave() {
-        tooltipEl.style.display = "none";
         setLocalHoveredClusterKey("");
       }
 
@@ -9555,6 +13364,7 @@ __ACTION_RUNTIME_JS__
         renderActionBar();
         setToolsDrawerOpen(Boolean(toolsShellEl && toolsShellEl.dataset.open === "true"));
         setControlsDrawerOpen(Boolean(controlsShellEl && controlsShellEl.dataset.open === "true"));
+        setSkyControlsDrawerOpen(Boolean(skyControlsShellEl && skyControlsShellEl.dataset.open === "true"));
         setLegendPanelOpen(legendPanelOpen);
         applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
         groupSelectEl.innerHTML = "";
@@ -9565,8 +13375,8 @@ __ACTION_RUNTIME_JS__
           option.textContent = groupName;
           groupSelectEl.appendChild(option);
         });
-        groupSelectEl.value = currentGroup;
-        groupSelectEl.style.display = groups.length > 1 ? "block" : "none";
+        renderLegendGroupDropdown(groups);
+        syncLegendGroupChooser({ centerActive: true, smooth: false });
         if (focusGroupSelectEl) {
           focusGroupSelectEl.innerHTML = "";
           const focusNoneOption = document.createElement("option");
@@ -9582,13 +13392,7 @@ __ACTION_RUNTIME_JS__
         }
         renderWidgetMenu();
         groupSelectEl.addEventListener("change", () => {
-          if (!actionInterruptsMuted()) {
-            interruptActionRun("legend", { disableOrbit: false });
-          }
-          currentGroup = groupSelectEl.value;
-          resetLegendState(currentGroup);
-          renderLegend();
-          renderFrame(currentFrameIndex);
+          setLegendGroup(groupSelectEl.value, { centerActive: true, smooth: true });
         });
         if (legendPanelEl) {
           legendPanelEl.addEventListener("pointerdown", (event) => {
@@ -9599,6 +13403,7 @@ __ACTION_RUNTIME_JS__
             if (
               target.closest(".oviz-three-legend-entry")
               || target.closest(".oviz-three-legend-section-toggle")
+              || target.closest(".oviz-three-group-dropdown")
               || target.closest(".oviz-three-group-select")
             ) {
               interruptActionRun("legend", { disableOrbit: false });
@@ -9606,6 +13411,9 @@ __ACTION_RUNTIME_JS__
           });
         }
         renderSceneControls();
+        ensureInitialSkyLayers();
+        applySkyLayerState({ update: false, renderLegend: false });
+        applyInitialSkyDomeSource();
         if (widgetSelectEl) {
           widgetSelectEl.addEventListener("change", () => {
             const widgetKey = String(widgetSelectEl.value || "");
@@ -9621,9 +13429,19 @@ __ACTION_RUNTIME_JS__
             focusViewer();
           });
         }
-        if (resetViewButtonEl) {
-          resetViewButtonEl.addEventListener("click", () => {
-            resetCameraAndSelections();
+        if (resetCameraViewButtonEl) {
+          resetCameraViewButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("camera", { disableOrbit: true });
+            }
+            resetCameraView();
+            renderSceneControls();
+            focusViewer();
+          });
+        }
+        if (resetSelectionButtonEl) {
+          resetSelectionButtonEl.addEventListener("click", () => {
+            resetSelectionState();
             focusViewer();
           });
         }
@@ -9724,6 +13542,11 @@ __ACTION_RUNTIME_JS__
             setControlsDrawerOpen(controlsShellEl.dataset.open !== "true");
           });
         }
+        if (skyControlsToggleEl && skyControlsShellEl) {
+          skyControlsToggleEl.addEventListener("click", () => {
+            setSkyControlsDrawerOpen(skyControlsShellEl.dataset.open !== "true");
+          });
+        }
         if (keyHelpButtonEl && keyHelpEl) {
           keyHelpButtonEl.addEventListener("click", () => {
             const nextOpen = keyHelpEl.dataset.open !== "true";
@@ -9743,10 +13566,8 @@ __ACTION_RUNTIME_JS__
           clearSelectionButtonEl.addEventListener("click", clearClusterSelections);
         }
         if (clickSelectToggleEl) {
-          clickSelectToggleEl.addEventListener("change", () => {
-            clickSelectionEnabled = Boolean(clickSelectToggleEl.checked);
-            updateSelectionUI();
-          });
+          clickSelectToggleEl.checked = false;
+          clickSelectToggleEl.disabled = true;
         }
         if (volumeLassoToggleEl) {
           volumeLassoToggleEl.addEventListener("change", () => {
@@ -9764,6 +13585,95 @@ __ACTION_RUNTIME_JS__
         if (themeSelectEl) {
           themeSelectEl.addEventListener("change", () => {
             applyThemePreset(themeSelectEl.value);
+          });
+        }
+        if (skyDomeSourceSelectEl) {
+          skyDomeSourceSelectEl.addEventListener("change", () => {
+            setSkyDomeSourceByKey(skyDomeSourceSelectEl.value, { force: true });
+            updateSkyPanel();
+            updateSkyDomeFromControls({ forceTiles: true });
+            focusViewer();
+          });
+        }
+        if (skyLayerAddButtonEl) {
+          skyLayerAddButtonEl.addEventListener("click", () => {
+            const customSurvey = skyLayerCustomInputEl ? cleanSkyLayerSurvey(skyLayerCustomInputEl.value) : "";
+            const presetSurvey = skyLayerPresetSelectEl ? cleanSkyLayerSurvey(skyLayerPresetSelectEl.value) : "";
+            addOrActivateSkyLayer(customSurvey || presetSurvey || defaultSkyLayerSurvey());
+            if (skyLayerCustomInputEl) {
+              skyLayerCustomInputEl.value = "";
+            }
+            focusViewer();
+          });
+        }
+        if (skyLayerCustomInputEl) {
+          skyLayerCustomInputEl.addEventListener("focus", () => {
+            handleSkyLayerSearchInput();
+          });
+          skyLayerCustomInputEl.addEventListener("input", () => {
+            handleSkyLayerSearchInput();
+          });
+          skyLayerCustomInputEl.addEventListener("change", () => {
+            updateSkyLayerSearchOptions(skyLayerCustomInputEl.value);
+          });
+          skyLayerCustomInputEl.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter") {
+              return;
+            }
+            event.preventDefault();
+            if (skyLayerAddButtonEl) {
+              skyLayerAddButtonEl.click();
+            }
+          });
+        }
+        if (skyDomeVisibleToggleEl) {
+          skyDomeVisibleToggleEl.addEventListener("change", () => {
+            skyDomeSpec.enabled = Boolean(skyDomeVisibleToggleEl.checked);
+            updateSkyDomeFromControls({ forceTiles: true });
+            focusViewer();
+          });
+        }
+        if (skyDomeForceVisibleToggleEl) {
+          skyDomeForceVisibleToggleEl.addEventListener("change", () => {
+            skyDomeForceVisible = Boolean(skyDomeForceVisibleToggleEl.checked);
+            updateSkyDomeFromControls({ forceTiles: true });
+            focusViewer();
+          });
+        }
+        if (skyDomeOpacityEl) {
+          skyDomeOpacityEl.addEventListener("input", () => {
+            const opacity = Math.min(Math.max(Number(skyDomeOpacityEl.value), 0.0), 1.0);
+            const layer = activeSkyLayer();
+            if (layer) {
+              layer.opacity = opacity;
+              layer.visible = opacity > 0.0;
+              activeSkyLayerKey = layer.key;
+              applySkyLayerState({ forceTiles: false, syncControls: false });
+              return;
+            }
+            skyDomeSpec.opacity = opacity;
+            updateSkyDomeFromControls({ syncControls: false });
+          });
+          skyDomeOpacityEl.addEventListener("change", () => {
+            syncSkyDomeControls();
+          });
+        }
+        if (skyDomeBrightnessEl) {
+          skyDomeBrightnessEl.addEventListener("input", () => {
+            skyDomeSpec.hips_brightness = Math.min(Math.max(Number(skyDomeBrightnessEl.value), 0.1), 8.0);
+            updateSkyDomeFromControls();
+          });
+        }
+        if (skyDomeContrastEl) {
+          skyDomeContrastEl.addEventListener("input", () => {
+            skyDomeSpec.hips_contrast = Math.min(Math.max(Number(skyDomeContrastEl.value), 0.1), 4.0);
+            updateSkyDomeFromControls();
+          });
+        }
+        if (skyDomeGammaEl) {
+          skyDomeGammaEl.addEventListener("input", () => {
+            skyDomeSpec.hips_gamma = Math.min(Math.max(Number(skyDomeGammaEl.value), 0.2), 4.0);
+            updateSkyDomeFromControls();
           });
         }
         if (scrollSpeedEl) {
@@ -9902,7 +13812,17 @@ __ACTION_RUNTIME_JS__
             if (!actionInterruptsMuted()) {
               interruptActionRun("camera", { disableOrbit: true });
             }
-            viewFromEarth();
+            toggleEarthView();
+            focusViewer();
+          });
+        }
+        if (earthViewToggleButtonEl) {
+          earthViewToggleButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("camera", { disableOrbit: true });
+            }
+            toggleEarthView();
+            focusViewer();
           });
         }
         orbitCameraButtons.forEach((buttonEl) => {
@@ -9929,7 +13849,7 @@ __ACTION_RUNTIME_JS__
             globalScrollSpeed = 1.0;
             globalPointSizeScale = 1.0;
             globalPointOpacityScale = 1.0;
-            globalPointGlowStrength = 0.85;
+            globalPointGlowStrength = 0.60;
             sizePointsByStarsEnabled = false;
             fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
             fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
@@ -9937,9 +13857,17 @@ __ACTION_RUNTIME_JS__
             axesVisible = Boolean(sceneSpec.show_axes);
             galacticReferenceVisible = true;
             nearbyRegionLabelsVisible = true;
+            skyDomeSpec.enabled = skyDomeDefaultEnabled;
+            skyDomeForceVisible = skyDomeDefaultForceVisible;
+            skyDomeSpec.opacity = skyDomeDefaultOpacity;
+            skyDomeSpec.hips_brightness = skyDomeDefaultHipsBrightness;
+            skyDomeSpec.hips_contrast = skyDomeDefaultHipsContrast;
+            skyDomeSpec.hips_gamma = skyDomeDefaultHipsGamma;
+            resetSkyDomeSourceSelection();
             setCameraAutoOrbitEnabled(false);
             cameraViewMode = "free";
             earthViewFocusDistance = null;
+            earthViewReturnCameraState = null;
             camera.fov = Number(initialCameraState.fov);
             if (typeof applyActionCameraViewOffset === "function") {
               applyActionCameraViewOffset(initialCameraState.viewOffset);
@@ -9948,6 +13876,7 @@ __ACTION_RUNTIME_JS__
             applyCameraViewMode();
             applyThemePreset(activeThemeKey, { rerender: false });
             renderSceneControls();
+            updateSkyDomeFromControls({ forceTiles: true });
             buildAxes();
             renderLegend();
             updateSkyPanel();
@@ -9965,6 +13894,12 @@ __ACTION_RUNTIME_JS__
         }
         handleManualCameraInteractionStart();
         focusViewer();
+        canvasPointerDownInfo = event.button === 0
+          ? { x: Number(event.clientX), y: Number(event.clientY), button: event.button }
+          : null;
+        if (startSkyViewCameraDrag(event)) {
+          return;
+        }
         if (startSelectionBoxInteraction(event)) {
           return;
         }
@@ -9975,6 +13910,9 @@ __ACTION_RUNTIME_JS__
       }
 
       function onWindowPointerMove(event) {
+        if (updateSkyViewCameraDrag(event)) {
+          return;
+        }
         if (updateSelectionBoxInteraction(event)) {
           return;
         }
@@ -9993,11 +13931,17 @@ __ACTION_RUNTIME_JS__
       function onWindowPointerDown(event) {
         const target = event.target;
         if (target) {
+          if (target !== canvas && tooltipEl && !tooltipEl.contains(target)) {
+            hideClusterInfoTooltip();
+          }
           if (toolsShellEl && toolsShellEl.dataset.open === "true" && !toolsShellEl.contains(target)) {
             setToolsDrawerOpen(false);
           }
           if (controlsShellEl && controlsShellEl.dataset.open === "true" && !controlsShellEl.contains(target)) {
             setControlsDrawerOpen(false);
+          }
+          if (skyControlsShellEl && skyControlsShellEl.dataset.open === "true" && !skyControlsShellEl.contains(target)) {
+            setSkyControlsDrawerOpen(false);
           }
         }
         if (!activeLegendEditorKey || !target) {
@@ -10011,6 +13955,9 @@ __ACTION_RUNTIME_JS__
       }
 
       function onWindowPointerEnd(event) {
+        if (finishSkyViewCameraDrag(event)) {
+          return;
+        }
         if (finishSelectionBoxInteraction(event)) {
           return;
         }
@@ -10059,9 +14006,16 @@ __ACTION_RUNTIME_JS__
         updateAnimatedFramePlayback(now);
         updateKeyboardMotion(deltaSeconds);
         updateGalacticSimpleDefaultOrbit(deltaSeconds);
-        controls.update();
+        if (controls.enabled) {
+          controls.update();
+        } else if (cameraViewMode === "earth" && !cameraTransitionAnimationFrame && !skyViewDragState) {
+          lockEarthViewCameraToTarget();
+        }
         updateCameraResponsivePointSprites();
+        updateClusterInfoTooltipPosition();
         updateScaleBar();
+        updateSkyDome(now);
+        updateSkyDomeBackgroundFrame(now);
         updateCameraResponsiveImagePlanes();
         updateScreenStableTextSprites();
         renderAgeKdeWidget();
@@ -10072,6 +14026,7 @@ __ACTION_RUNTIME_JS__
       buildAxes();
       initControls();
       initSkyPanel();
+      updateSkyDomeCaptureFrame();
       initBoxMetricsPanel();
       initAgeKdePanel();
       initClusterFilterPanel();
@@ -10089,7 +14044,7 @@ __ACTION_RUNTIME_JS__
       window.setTimeout(() => focusViewer(), 0);
       animate();
 
-      canvas.addEventListener("pointerdown", onCanvasPointerDown);
+      canvas.addEventListener("pointerdown", onCanvasPointerDown, { capture: true });
       canvas.addEventListener("pointerenter", focusViewer);
       canvas.addEventListener("pointermove", onPointerMove);
       canvas.addEventListener("pointerleave", onPointerLeave);
@@ -10120,14 +14075,31 @@ __ACTION_RUNTIME_JS__
 class ThreeJSFigure:
     """Minimal HTML-backed figure wrapper for standalone three.js exports."""
 
-    def __init__(self, scene_spec: dict[str, Any]):
+    def __init__(
+        self,
+        scene_spec: dict[str, Any],
+        *,
+        compress_scene_spec: bool | str | None = "auto",
+        scene_spec_compression_threshold_bytes: int | None = None,
+    ):
         self.scene_spec = scene_spec
         self._root_id = f"oviz-three-{uuid.uuid4().hex}"
+        self.compress_scene_spec = compress_scene_spec
+        self.scene_spec_compression_threshold_bytes = (
+            DEFAULT_SCENE_SPEC_COMPRESSION_THRESHOLD_BYTES
+            if scene_spec_compression_threshold_bytes is None
+            else int(scene_spec_compression_threshold_bytes)
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return self.scene_spec
 
-    def to_html(self) -> str:
+    def to_html(
+        self,
+        *,
+        compress_scene_spec: bool | str | None = None,
+        scene_spec_compression_threshold_bytes: int | None = None,
+    ) -> str:
         return render_threejs_html(
             self.scene_spec,
             root_id=self._root_id,
@@ -10143,6 +14115,16 @@ class ThreeJSFigure:
             sky_runtime_js=THREEJS_SKY_RUNTIME_JS,
             viewer_runtime_js=THREEJS_VIEWER_RUNTIME_JS,
             action_runtime_js=THREEJS_ACTION_RUNTIME_JS,
+            compress_scene_spec=(
+                self.compress_scene_spec
+                if compress_scene_spec is None
+                else compress_scene_spec
+            ),
+            scene_spec_compression_threshold_bytes=(
+                self.scene_spec_compression_threshold_bytes
+                if scene_spec_compression_threshold_bytes is None
+                else scene_spec_compression_threshold_bytes
+            ),
         )
 
     def _data_url(self) -> str:
@@ -10154,8 +14136,19 @@ class ThreeJSFigure:
     def _repr_html_(self) -> str:
         return self._iframe_html()
 
-    def write_html(self, file: str | Path, **_: Any) -> None:
-        Path(file).write_text(self.to_html(), encoding="utf-8")
+    def write_html(self, file: str | Path, **kwargs: Any) -> None:
+        compress_scene_spec = kwargs.pop("compress_scene_spec", None)
+        scene_spec_compression_threshold_bytes = kwargs.pop(
+            "scene_spec_compression_threshold_bytes",
+            kwargs.pop("compress_scene_spec_threshold_bytes", None),
+        )
+        Path(file).write_text(
+            self.to_html(
+                compress_scene_spec=compress_scene_spec,
+                scene_spec_compression_threshold_bytes=scene_spec_compression_threshold_bytes,
+            ),
+            encoding="utf-8",
+        )
 
     def show(self) -> str | None:
         try:

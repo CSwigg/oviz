@@ -75,7 +75,7 @@ THREEJS_ACTION_RUNTIME_JS = """
       }
 
       function traceVisibleForGroupState(trace, groupName, stateOverride) {
-        if (isGalacticReferenceTrace(trace) && !galacticReferenceVisible) {
+        if (isGalacticReferenceTrace(trace) && (!galacticReferenceVisible || cameraViewMode === "earth")) {
           return false;
         }
         if (isNearbyRegionLabelTrace(trace) && !nearbyRegionLabelsVisible) {
@@ -237,6 +237,7 @@ THREEJS_ACTION_RUNTIME_JS = """
         if (groupSelectEl) {
           groupSelectEl.value = currentGroup;
         }
+        syncLegendGroupChooser();
         renderLegend();
         const nextDurationMs = Math.max(Number(durationMs) || 0, 0);
         if (nextDurationMs <= 0 || nextStateMatchesCurrent) {
@@ -383,6 +384,7 @@ THREEJS_ACTION_RUNTIME_JS = """
           if (groupSelectEl) {
             groupSelectEl.value = currentGroup;
           }
+          syncLegendGroupChooser();
         }
         renderLegend();
         renderFrame(currentFrameIndex);

@@ -150,7 +150,8 @@ THREEJS_WIDGET_CONTENT_RUNTIME_JS = """
           }
         }
         selectedClusterKeys = nextSelectedKeys;
-        currentSelectionMode = currentSelection ? "click" : ((currentSelections.length || hasActiveLassoSelectionMask()) ? "lasso" : "none");
+        currentSelection = null;
+        currentSelectionMode = (currentSelections.length || hasActiveLassoSelectionMask()) ? "lasso" : "none";
         if (!clusterFilterPassesSelectionKey(localHoveredClusterKey)) {
           setLocalHoveredClusterKey("");
         }

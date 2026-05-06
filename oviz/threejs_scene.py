@@ -58,6 +58,348 @@ def _galactic_simple_config(plot, *, file_to_data_url, coerce_float):
     }
 
 
+def _galaxy_image_config(plot, *, file_to_data_url, coerce_float):
+    initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
+    image_enabled = initial_state.get("galaxy_image")
+    image_path = initial_state.get("galaxy_image_path")
+    if image_enabled is None:
+        image_enabled = bool(image_path)
+    if not image_enabled or not image_path:
+        return {"enabled": False}
+
+    image_data_url = file_to_data_url(image_path)
+    if not image_data_url:
+        return {"enabled": False}
+
+    return {
+        "enabled": True,
+        "key": "galaxy-image-overlay",
+        "image_data_url": image_data_url,
+        "size_pc": float(coerce_float(initial_state.get("galaxy_image_size_pc"), 40000.0)),
+        "opacity": float(
+            np.clip(coerce_float(initial_state.get("galaxy_image_opacity"), 0.6), 0.0, 1.0)
+        ),
+        "hide_below_scale_bar_pc": float(
+            coerce_float(initial_state.get("galaxy_image_hide_below_scale_bar_pc"), 200.0)
+        ),
+        "fade_start_scale_bar_pc": float(
+            coerce_float(initial_state.get("galaxy_image_fade_start_scale_bar_pc"), 350.0)
+        ),
+        "only_at_t0": bool(initial_state.get("galaxy_image_only_at_t0", True)),
+    }
+
+
+def _image_plane_spec(config, *, coerce_float):
+    return {
+        "key": str(config.get("key") or "galaxy-image-overlay"),
+        "image_data_url": config.get("image_data_url"),
+        "width_pc": float(coerce_float(config.get("size_pc"), 40000.0)),
+        "height_pc": float(coerce_float(config.get("size_pc"), 40000.0)),
+        "render_order": -20,
+        "hide_below_scale_bar_pc": float(
+            coerce_float(config.get("hide_below_scale_bar_pc"), 400.0)
+        ),
+        "fade_start_scale_bar_pc": float(
+            coerce_float(config.get("fade_start_scale_bar_pc"), 1000.0)
+        ),
+    }
+
+
+def _sky_dome_value(raw_config, initial_state, key, default=None):
+    if key in raw_config:
+        return raw_config.get(key)
+    return initial_state.get(f"sky_dome_{key}", default)
+
+
+def _sky_dome_config(plot, *, file_to_data_url, coerce_float):
+    initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
+    raw_config = initial_state.get("sky_dome") if isinstance(initial_state.get("sky_dome"), dict) else {}
+
+    image_data_url = _sky_dome_value(raw_config, initial_state, "image_data_url")
+    image_path = _sky_dome_value(raw_config, initial_state, "image_path")
+    if not image_data_url and image_path:
+        image_data_url = file_to_data_url(image_path)
+
+    enabled = _sky_dome_value(raw_config, initial_state, "enabled")
+    if enabled is None:
+        enabled = bool(image_data_url)
+    if not bool(enabled):
+        return {"enabled": False}
+
+    projection_metadata = _sky_dome_value(raw_config, initial_state, "projection_metadata", {})
+    if isinstance(projection_metadata, dict):
+        projection_metadata = copy.deepcopy(projection_metadata)
+    else:
+        projection_metadata = {}
+
+    projection = str(
+        _sky_dome_value(raw_config, initial_state, "projection", "MOL")
+        or "MOL"
+    )
+    background_mode = (
+        _sky_dome_value(raw_config, initial_state, "background_mode")
+        or _sky_dome_value(raw_config, initial_state, "mode")
+        or _sky_dome_value(raw_config, initial_state, "render_mode")
+    )
+    source_value = _sky_dome_value(raw_config, initial_state, "source")
+    if source_value:
+        source = str(source_value)
+    elif image_data_url:
+        source = "local_image"
+    elif str(background_mode or "").strip().lower() in {"native_hips", "native-hips", "hips"}:
+        source = "hips"
+    elif str(background_mode or "").strip().lower() in {"hips2fits", "hips-2-fits"}:
+        source = "hips2fits"
+    else:
+        source = "aladin"
+
+    spec = {
+        "enabled": True,
+        "source": source,
+        "projection": projection,
+        "projection_metadata": projection_metadata,
+        "force_visible": bool(_sky_dome_value(raw_config, initial_state, "force_visible", False)),
+        "radius_pc": float(coerce_float(_sky_dome_value(raw_config, initial_state, "radius_pc"), 40000.0)),
+        "opacity": float(
+            np.clip(coerce_float(_sky_dome_value(raw_config, initial_state, "opacity"), 0.55), 0.0, 1.0)
+        ),
+        "flip_x": bool(_sky_dome_value(raw_config, initial_state, "flip_x", False)),
+        "flip_y": bool(_sky_dome_value(raw_config, initial_state, "flip_y", False)),
+        "full_opacity_scale_bar_pc": float(
+            coerce_float(
+                _sky_dome_value(raw_config, initial_state, "full_opacity_scale_bar_pc"),
+                120.0,
+            )
+        ),
+        "fade_out_scale_bar_pc": float(
+            coerce_float(
+                _sky_dome_value(raw_config, initial_state, "fade_out_scale_bar_pc"),
+                360.0,
+            )
+        ),
+    }
+    if background_mode:
+        spec["background_mode"] = str(background_mode)
+    if image_data_url:
+        spec["image_data_url"] = str(image_data_url)
+    elif str(source).strip().lower() in {"hips2fits", "hips-2-fits"}:
+        hips_survey = _sky_dome_value(raw_config, initial_state, "hips_survey")
+        hips_frame = _sky_dome_value(raw_config, initial_state, "hips_frame", "galactic")
+        if hips_survey:
+            spec["hips_survey"] = str(hips_survey)
+        spec["hips_frame"] = str(hips_frame or "galactic")
+        spec["hips2fits_service_url"] = str(
+            _sky_dome_value(
+                raw_config,
+                initial_state,
+                "hips2fits_service_url",
+                "https://alasky.cds.unistra.fr/hips-image-services/hips2fits",
+            )
+            or "https://alasky.cds.unistra.fr/hips-image-services/hips2fits"
+        )
+        spec["hips2fits_width"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_width"), 8192),
+                1024,
+                12000,
+            )
+        )
+        spec["hips2fits_height"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_height"), 4096),
+                512,
+                6000,
+            )
+        )
+        spec["hips2fits_projection"] = str(
+            _sky_dome_value(raw_config, initial_state, "hips2fits_projection", "CAR")
+            or "CAR"
+        )
+        spec["hips2fits_coordsys"] = str(
+            _sky_dome_value(raw_config, initial_state, "hips2fits_coordsys", "galactic")
+            or "galactic"
+        )
+        spec["hips2fits_format"] = str(
+            _sky_dome_value(raw_config, initial_state, "hips2fits_format", "jpg")
+            or "jpg"
+        ).lstrip(".").lower()
+        spec["hips2fits_preview_width"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_preview_width"), 2048),
+                512,
+                12000,
+            )
+        )
+        spec["hips2fits_preview_height"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_preview_height"), 512),
+                256,
+                6000,
+            )
+        )
+        spec["hips2fits_medium_width"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_medium_width"), 4096),
+                512,
+                12000,
+            )
+        )
+        spec["hips2fits_medium_height"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_medium_height"), 2048),
+                256,
+                6000,
+            )
+        )
+        spec["hips2fits_center_frame"] = str(
+            _sky_dome_value(raw_config, initial_state, "hips2fits_center_frame", "galactic")
+            or "galactic"
+        )
+        spec["hips2fits_l_deg"] = float(
+            coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_l_deg"), 0.0)
+        )
+        spec["hips2fits_b_deg"] = float(
+            coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_b_deg"), 0.0)
+        )
+        spec["hips2fits_ra_deg"] = float(
+            coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_ra_deg"), 0.0)
+        )
+        spec["hips2fits_dec_deg"] = float(
+            coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_dec_deg"), 0.0)
+        )
+        spec["hips2fits_fov_deg"] = float(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips2fits_fov_deg"), 360.0),
+                1.0,
+                360.0,
+            )
+        )
+    elif str(source).strip().lower() in {"hips", "native_hips", "native-hips"}:
+        hips_base_url = _sky_dome_value(raw_config, initial_state, "hips_base_url")
+        hips_survey = _sky_dome_value(raw_config, initial_state, "hips_survey")
+        hips_frame = _sky_dome_value(raw_config, initial_state, "hips_frame", "icrs")
+        if hips_base_url:
+            spec["hips_base_url"] = str(hips_base_url).rstrip("/")
+        if hips_survey:
+            spec["hips_survey"] = str(hips_survey)
+        spec["hips_frame"] = str(hips_frame or "icrs")
+        spec["hips_tile_format"] = str(
+            _sky_dome_value(raw_config, initial_state, "hips_tile_format", "jpg")
+            or "jpg"
+        ).lstrip(".").lower()
+        spec["hips_allsky_order"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_allsky_order"), 3),
+                0,
+                6,
+            )
+        )
+        spec["hips_tile_order"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_tile_order"), 4),
+                0,
+                9,
+            )
+        )
+        spec["hips_tile_subdivisions"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_tile_subdivisions"), 16),
+                2,
+                64,
+            )
+        )
+        spec["hips_allsky_tile_subdivisions"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_allsky_tile_subdivisions"), 16),
+                3,
+                64,
+            )
+        )
+        spec["hips_max_active_tiles"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_max_active_tiles"), 160),
+                12,
+                512,
+            )
+        )
+        spec["hips_max_concurrent_tile_loads"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_max_concurrent_tile_loads"), 8),
+                1,
+                32,
+            )
+        )
+        spec["hips_startup_preload_tiles"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_startup_preload_tiles"), 96),
+                0,
+                256,
+            )
+        )
+        spec["hips_startup_wait_ms"] = float(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_startup_wait_ms"), 900.0),
+                0.0,
+                3000.0,
+            )
+        )
+        spec["hips_brightness"] = float(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_brightness"), 2.4),
+                0.1,
+                8.0,
+            )
+        )
+        spec["hips_contrast"] = float(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_contrast"), 1.25),
+                0.1,
+                4.0,
+            )
+        )
+        spec["hips_gamma"] = float(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_gamma"), 1.35),
+                0.2,
+                4.0,
+            )
+        )
+        spec["hips_update_interval_ms"] = float(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "hips_update_interval_ms"), 250.0),
+                50.0,
+                2000.0,
+            )
+        )
+    else:
+        spec["capture_width_px"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "capture_width_px"), 4096),
+                512,
+                8192,
+            )
+        )
+        spec["capture_height_px"] = int(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "capture_height_px"), 2048),
+                256,
+                4096,
+            )
+        )
+        spec["capture_format"] = str(
+            _sky_dome_value(raw_config, initial_state, "capture_format", "image/jpeg")
+            or "image/jpeg"
+        )
+        spec["capture_quality"] = float(
+            np.clip(
+                coerce_float(_sky_dome_value(raw_config, initial_state, "capture_quality"), 0.94),
+                0.1,
+                1.0,
+            )
+        )
+    return spec
+
+
 def _timeline_enabled(plot, frame_specs) -> bool:
     if len(frame_specs) <= 1:
         return False
@@ -71,6 +413,41 @@ def _timeline_enabled(plot, frame_specs) -> bool:
         return False
 
     return any(bool(getattr(cluster, "has_time_varying_geometry", True)) for cluster in clusters)
+
+
+def _compact_motion_payload(motion):
+    if not isinstance(motion, dict):
+        return None
+
+    compact = {}
+    key = str(motion.get("key") or "").strip()
+    if key:
+        compact["key"] = key
+    for numeric_key in ("age_now_myr", "time_myr"):
+        value = motion.get(numeric_key)
+        try:
+            numeric_value = float(value)
+        except Exception:
+            continue
+        if np.isfinite(numeric_value):
+            compact[numeric_key] = numeric_value
+    return compact or None
+
+
+def _compact_threejs_frame_payloads(frame_specs):
+    """Trim repeated per-frame point metadata while preserving t=0 selection data."""
+    for frame_spec in frame_specs:
+        keep_selection = np.isclose(float(frame_spec.get("time", np.nan)), 0.0, atol=1e-9)
+        for trace in frame_spec.get("traces", []) or []:
+            for point in trace.get("points", []) or []:
+                if not keep_selection:
+                    point.pop("selection", None)
+                    point.pop("hovertext", None)
+                compact_motion = _compact_motion_payload(point.get("motion"))
+                if compact_motion is None:
+                    point.pop("motion", None)
+                else:
+                    point["motion"] = compact_motion
 
 
 def build_threejs_scene_spec(
@@ -90,6 +467,15 @@ def build_threejs_scene_spec(
         plot,
         file_to_data_url=file_to_data_url,
         coerce_float=coerce_float,
+    )
+    galaxy_image = (
+        {"enabled": False}
+        if galactic_simple.get("enabled")
+        else _galaxy_image_config(
+            plot,
+            file_to_data_url=file_to_data_url,
+            coerce_float=coerce_float,
+        )
     )
     if galactic_simple.get("enabled") and frames:
         galactic_simple = copy.deepcopy(galactic_simple)
@@ -253,6 +639,7 @@ def build_threejs_scene_spec(
                     fallback_center=center,
                     volume_layers=volume_layers,
                     galactic_simple_config=galactic_simple,
+                    galaxy_image_config=galaxy_image,
                 ),
             }
         )
@@ -269,11 +656,22 @@ def build_threejs_scene_spec(
     default_sky_catalog = {}
     if getattr(plot, "enable_sky_panel", False) and frame_specs:
         default_sky_catalog = catalog_from_frame_spec(frame_specs[initial_frame_index])
+    sky_dome = _sky_dome_config(
+        plot,
+        file_to_data_url=file_to_data_url,
+        coerce_float=coerce_float,
+    )
+
+    normalized_initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
+    compact_payload = bool(normalized_initial_state.get("compact_payload_enabled"))
 
     if minimal_mode:
         default_sky_catalog = {}
     else:
         annotate_point_motion_ranges(frame_specs)
+
+    if compact_payload:
+        _compact_threejs_frame_payloads(frame_specs)
 
     title_cfg = layout_json.get("title", {})
     if isinstance(title_cfg, dict):
@@ -282,12 +680,16 @@ def build_threejs_scene_spec(
         title_text = str(title_cfg)
 
     compact_layout = {"scene": copy.deepcopy(scene_layout)}
-    normalized_initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
     initial_state = {
         "click_selection_enabled": False,
+        "lasso_volume_selection_enabled": True,
+        "lasso_selection_filter_enabled": True,
         "current_group": default_group,
         **copy.deepcopy(normalized_initial_state),
     }
+    initial_state["click_selection_enabled"] = False
+    if "lasso_selection_filter_enabled" not in initial_state:
+        initial_state["lasso_selection_filter_enabled"] = True
     if minimal_mode:
         for state_key in (
             "current_selection",
@@ -311,6 +713,7 @@ def build_threejs_scene_spec(
             initial_state.pop(state_key, None)
         initial_state["click_selection_enabled"] = False
         initial_state["lasso_volume_selection_enabled"] = False
+        initial_state["lasso_selection_filter_enabled"] = True
         initial_state["lasso_armed"] = False
 
     legend_payload = []
@@ -357,21 +760,9 @@ def build_threejs_scene_spec(
 
     image_planes = []
     if galactic_simple.get("enabled") and galactic_simple.get("image_data_url"):
-        image_planes.append(
-            {
-                "key": str(galactic_simple.get("key") or "galactic-plane-overlay"),
-                "image_data_url": galactic_simple.get("image_data_url"),
-                "width_pc": float(coerce_float(galactic_simple.get("size_pc"), 40000.0)),
-                "height_pc": float(coerce_float(galactic_simple.get("size_pc"), 40000.0)),
-                "render_order": -20,
-                "hide_below_scale_bar_pc": float(
-                    coerce_float(galactic_simple.get("hide_below_scale_bar_pc"), 400.0)
-                ),
-                "fade_start_scale_bar_pc": float(
-                    coerce_float(galactic_simple.get("fade_start_scale_bar_pc"), 1000.0)
-                ),
-            }
-        )
+        image_planes.append(_image_plane_spec(galactic_simple, coerce_float=coerce_float))
+    if galaxy_image.get("enabled") and galaxy_image.get("image_data_url"):
+        image_planes.append(_image_plane_spec(galaxy_image, coerce_float=coerce_float))
 
     return {
         "renderer": "threejs",
@@ -422,6 +813,7 @@ def build_threejs_scene_spec(
             if minimal_mode
             else plot._build_threejs_sky_panel_spec(default_sky_catalog)
         ),
+        "sky_dome": {"enabled": False} if minimal_mode else sky_dome,
         "selection_box": (
             {"enabled": False}
             if minimal_mode
