@@ -674,7 +674,10 @@ THREEJS_WIDGET_CONTENT_RUNTIME_JS = """
         const finiteRate = rate.mean.filter((value) => Number.isFinite(value));
         const finiteRateHi = rate.hi.filter((value) => Number.isFinite(value));
         const rateMax = Math.max(0.5, ...finiteRate, ...finiteRateHi, 0.0);
-        drawPanelAxes(rateRect, 0.0, rateMax * 1.08, "Mean ccSN Volume Density in Box (Myr^-1 kpc^-3)", false, false);
+        const rateTitle = selectionBoxMetricsCache.densityKind === "surface"
+          ? "Mean ccSN Surface Density in Tracked Footprint (Myr^-1 kpc^-2)"
+          : "Mean ccSN Volume Density in Box (Myr^-1 kpc^-3)";
+        drawPanelAxes(rateRect, 0.0, rateMax * 1.08, rateTitle, false, false);
 
         if (Array.isArray(rate.centers) && rate.centers.length && Array.isArray(rate.mean) && rate.mean.length === rate.centers.length) {
           const fillStarted = [];

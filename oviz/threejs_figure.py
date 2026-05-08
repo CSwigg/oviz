@@ -4457,6 +4457,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const selectionBoxMetricsSpec = selectionBoxSpec.metrics || { enabled: false };
       const selectionBoxTransformSpec = selectionBoxSpec.transform || {};
       const selectionBoxReferenceOrbitSpec = selectionBoxTransformSpec.reference_orbit || {};
+      const selectionBoxTrackingSpec = selectionBoxSpec.tracking || { enabled: false };
+      const selectionBoxClusterTrackSpec = selectionBoxSpec.cluster_tracks || { enabled: false };
       const selectionBoxDefaultBandSpec = (() => {
         const explicitDefault = Array.isArray(selectionBoxMetricsSpec.twopcf_default_band_pc)
           ? selectionBoxMetricsSpec.twopcf_default_band_pc
@@ -4489,6 +4491,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       ]);
       const selectionBoxMetricTimeCenters = buildSelectionBoxMetricTimeCenters();
       const selectionBoxMetricEvents = normalizeSelectionBoxMetricEvents(selectionBoxMetricsSpec.events || {});
+      const selectionBoxClusterTracks = normalizeSelectionBoxClusterTracks(selectionBoxClusterTrackSpec);
       const selectionBoxRandomCatalogSize = Math.max(
         32,
         Math.round(Number(selectionBoxMetricsSpec.random_catalog_size) || 256)
@@ -4544,7 +4547,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let pendingSliderFrameIndex = null;
       let sliderScrubRenderHandle = null;
       let skyPanelMode = "hidden";
-      let boxMetricsPanelMode = "hidden";
+      let boxMetricsPanelMode = ["normal", "fullscreen", "hidden"].includes(String(selectionBoxSpec.default_panel_mode || ""))
+        ? String(selectionBoxSpec.default_panel_mode)
+        : "hidden";
       let ageKdePanelMode = "hidden";
       let clusterFilterPanelMode = "hidden";
       let dendrogramPanelMode = "hidden";
@@ -5659,6 +5664,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function normalizeSelectionBoxMetricEvents(eventSpec) {
         const rawTimes = Array.isArray(eventSpec.time_of_death_myr) ? eventSpec.time_of_death_myr : [];
+        const rawClusterNames = Array.isArray(eventSpec.cluster_name) ? eventSpec.cluster_name : [];
         const rawX = Array.isArray(eventSpec.x_pc) ? eventSpec.x_pc : [];
         const rawY = Array.isArray(eventSpec.y_pc) ? eventSpec.y_pc : [];
         const rawZ = Array.isArray(eventSpec.z_pc) ? eventSpec.z_pc : [];
@@ -5686,7 +5692,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (lookback < -1e-9 || lookback > lookbackMax + 1e-9) {
             continue;
           }
-          rows.push({ lookback, x, y, z, sampleId });
+          const clusterName = rawClusterNames.length > index ? String(rawClusterNames[index] || "") : "";
+          rows.push({ lookback, x, y, z, sampleId, clusterName, clusterKey: normalizeMemberKey(clusterName) });
           sampleIdSet.add(sampleId);
         }
         rows.sort((a, b) => a.lookback - b.lookback);
@@ -5698,6 +5705,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const z = new Float32Array(rows.length);
         const sampleIds = new Int32Array(rows.length);
         const sampleIndex = new Int32Array(rows.length);
+        const clusterName = new Array(rows.length);
+        const clusterKey = new Array(rows.length);
         rows.forEach((row, index) => {
           lookback[index] = row.lookback;
           x[index] = row.x;
@@ -5705,6 +5714,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           z[index] = row.z;
           sampleIds[index] = row.sampleId;
           sampleIndex[index] = sampleIndexById.get(row.sampleId);
+          clusterName[index] = row.clusterName;
+          clusterKey[index] = row.clusterKey;
         });
         return {
           count: rows.length,
@@ -5714,7 +5725,70 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           z,
           sampleIds,
           sampleIndex,
+          clusterName,
+          clusterKey,
           sampleValues,
+        };
+      }
+
+      function normalizeSelectionBoxClusterTracks(trackSpec) {
+        const rawFrames = Array.isArray(trackSpec.frames) ? trackSpec.frames : [];
+        const frames = rawFrames.map((frameSpec) => {
+          const names = Array.isArray(frameSpec.name) ? frameSpec.name.map((value) => String(value || "")) : [];
+          const xs = Array.isArray(frameSpec.x_pc) ? frameSpec.x_pc : [];
+          const ys = Array.isArray(frameSpec.y_pc) ? frameSpec.y_pc : [];
+          const zs = Array.isArray(frameSpec.z_pc) ? frameSpec.z_pc : [];
+          const xLocalRaw = Array.isArray(frameSpec.x_local_pc) ? frameSpec.x_local_pc : [];
+          const yLocalRaw = Array.isArray(frameSpec.y_local_pc) ? frameSpec.y_local_pc : [];
+          const zLocalRaw = Array.isArray(frameSpec.z_local_pc) ? frameSpec.z_local_pc : [];
+          const limit = Math.min(names.length, xs.length, ys.length, zs.length);
+          const frame = {
+            timeMyr: Number(frameSpec.time_myr),
+            names: [],
+            keys: [],
+            x: [],
+            y: [],
+            z: [],
+            xLocal: [],
+            yLocal: [],
+            zLocal: [],
+          };
+          if (!Number.isFinite(frame.timeMyr)) {
+            return null;
+          }
+          for (let index = 0; index < limit; index += 1) {
+            const x = Number(xs[index]);
+            const y = Number(ys[index]);
+            const z = Number(zs[index]);
+            const name = names[index];
+            const key = normalizeMemberKey(name);
+            if (!key || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+              continue;
+            }
+            frame.names.push(name);
+            frame.keys.push(key);
+            frame.x.push(x);
+            frame.y.push(y);
+            frame.z.push(z);
+            frame.xLocal.push(Number.isFinite(Number(xLocalRaw[index])) ? Number(xLocalRaw[index]) : NaN);
+            frame.yLocal.push(Number.isFinite(Number(yLocalRaw[index])) ? Number(yLocalRaw[index]) : NaN);
+            frame.zLocal.push(Number.isFinite(Number(zLocalRaw[index])) ? Number(zLocalRaw[index]) : NaN);
+          }
+          return frame.keys.length ? frame : null;
+        }).filter(Boolean).sort((a, b) => a.timeMyr - b.timeMyr);
+        let presentFrame = frames[0] || null;
+        let bestDelta = Infinity;
+        frames.forEach((frame) => {
+          const delta = Math.abs(Number(frame.timeMyr) || 0.0);
+          if (delta < bestDelta) {
+            bestDelta = delta;
+            presentFrame = frame;
+          }
+        });
+        return {
+          enabled: Boolean(trackSpec.enabled && frames.length && presentFrame),
+          frames,
+          presentFrame,
         };
       }
 
@@ -5958,7 +6032,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         };
       }
 
-      function selectionBoxDisplayStateAtTime(timeMyr) {
+      function selectionBoxCoRotatingDisplayStateAtTime(timeMyr) {
         if (!selectionBoxSpec.enabled) {
           return null;
         }
@@ -6000,7 +6074,224 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           cornersDisplay,
           segments,
           angle,
+          bounds: null,
+          areaKpc2: (2.0 * halfWidthPc * 2.0 * halfWidthPc) / 1.0e6,
+          volumeKpc3: Math.pow((2.0 * halfWidthPc) / 1000.0, 3),
+          selectedClusterCount: null,
+          footprintKind: "co_rotating_cube",
         };
+      }
+
+      function selectionBoxUsesTrackedFootprint() {
+        return Boolean(selectionBoxTrackingSpec.enabled && selectionBoxClusterTracks.enabled);
+      }
+
+      function selectionBoxClusterFrameAtTime(timeMyr) {
+        const frames = selectionBoxClusterTracks.frames || [];
+        if (!frames.length) {
+          return null;
+        }
+        const targetTime = Number(timeMyr) || 0.0;
+        let bestFrame = frames[0];
+        let bestDelta = Math.abs(Number(bestFrame.timeMyr) - targetTime);
+        for (let index = 1; index < frames.length; index += 1) {
+          const frame = frames[index];
+          const delta = Math.abs(Number(frame.timeMyr) - targetTime);
+          if (delta < bestDelta) {
+            bestDelta = delta;
+            bestFrame = frame;
+          }
+        }
+        return bestFrame;
+      }
+
+      function selectionBoxSeedClusterKeySet() {
+        const selected = new Set();
+        if (!selectionBoxUsesTrackedFootprint()) {
+          return selected;
+        }
+        const presentFrame = selectionBoxClusterTracks.presentFrame;
+        if (!presentFrame || !presentFrame.keys || !presentFrame.keys.length) {
+          return selected;
+        }
+        const centerLocal = selectionBoxState.center || { x: 0.0, y: 0.0, z: 0.0 };
+        const halfWidthPc = clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc);
+        for (let index = 0; index < presentFrame.keys.length; index += 1) {
+          let localPoint = {
+            x: Number(presentFrame.xLocal && presentFrame.xLocal[index]),
+            y: Number(presentFrame.yLocal && presentFrame.yLocal[index]),
+            z: Number(presentFrame.zLocal && presentFrame.zLocal[index]),
+          };
+          if (![localPoint.x, localPoint.y, localPoint.z].every(Number.isFinite)) {
+            localPoint = selectionBoxDisplayToRotatingLocal(
+              {
+                x: presentFrame.x[index],
+                y: presentFrame.y[index],
+                z: presentFrame.z[index],
+              },
+              0.0
+            );
+          }
+          if (
+            Math.abs(localPoint.x - centerLocal.x) <= halfWidthPc
+            && Math.abs(localPoint.y - centerLocal.y) <= halfWidthPc
+            && Math.abs(localPoint.z - centerLocal.z) <= halfWidthPc
+          ) {
+            selected.add(presentFrame.keys[index]);
+          }
+        }
+        return selected;
+      }
+
+      function selectionBoxQuantile(values, fraction) {
+        const finite = values
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value))
+          .sort((a, b) => a - b);
+        if (!finite.length) {
+          return NaN;
+        }
+        return percentileSorted(finite, fraction);
+      }
+
+      function selectionBoxQuantileBounds(values, qLow, qHigh, minSpanPc) {
+        let lo = selectionBoxQuantile(values, qLow);
+        let hi = selectionBoxQuantile(values, qHigh);
+        if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+          return [NaN, NaN];
+        }
+        if (hi < lo) {
+          const tmp = hi;
+          hi = lo;
+          lo = tmp;
+        }
+        const span = hi - lo;
+        if (!(span >= minSpanPc)) {
+          const center = 0.5 * (lo + hi);
+          const half = 0.5 * Math.max(Number(minSpanPc) || 1.0, 1.0);
+          lo = center - half;
+          hi = center + half;
+        }
+        return [lo, hi];
+      }
+
+      function selectionBoxStateFromAxisBounds(timeMyr, bounds, selectedClusterCount, footprintKind) {
+        const x0 = Number(bounds.x[0]);
+        const x1 = Number(bounds.x[1]);
+        const y0 = Number(bounds.y[0]);
+        const y1 = Number(bounds.y[1]);
+        const z0 = Number(bounds.z[0]);
+        const z1 = Number(bounds.z[1]);
+        const cornersDisplay = [
+          new THREE.Vector3(x0, y0, z0),
+          new THREE.Vector3(x1, y0, z0),
+          new THREE.Vector3(x1, y1, z0),
+          new THREE.Vector3(x0, y1, z0),
+          new THREE.Vector3(x0, y0, z1),
+          new THREE.Vector3(x1, y0, z1),
+          new THREE.Vector3(x1, y1, z1),
+          new THREE.Vector3(x0, y1, z1),
+        ];
+        const edgePairs = [
+          [0, 1], [1, 2], [2, 3], [3, 0],
+          [4, 5], [5, 6], [6, 7], [7, 4],
+          [0, 4], [1, 5], [2, 6], [3, 7],
+        ];
+        const segments = edgePairs.map(([startIndex, endIndex]) => {
+          const start = cornersDisplay[startIndex];
+          const end = cornersDisplay[endIndex];
+          return [start.x, start.y, start.z, end.x, end.y, end.z];
+        });
+        const areaKpc2 = Math.max((x1 - x0) * (y1 - y0) / 1.0e6, 1.0e-9);
+        const volumeKpc3 = Math.max((x1 - x0) * (y1 - y0) * (z1 - z0) / 1.0e9, 1.0e-9);
+        return {
+          timeMyr: Number(timeMyr) || 0.0,
+          centerLocal: selectionBoxState.center || { x: 0.0, y: 0.0, z: 0.0 },
+          halfWidthPc: clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc),
+          centerDisplay: new THREE.Vector3(0.5 * (x0 + x1), 0.5 * (y0 + y1), 0.5 * (z0 + z1)),
+          cornersDisplay,
+          segments,
+          angle: 0.0,
+          bounds: {
+            x: [x0, x1],
+            y: [y0, y1],
+            z: [z0, z1],
+          },
+          areaKpc2,
+          volumeKpc3,
+          selectedClusterCount,
+          footprintKind,
+        };
+      }
+
+      function selectionBoxTrackedDisplayStateAtTime(timeMyr, selectedKeys = null) {
+        const seedKeys = selectedKeys || selectionBoxSeedClusterKeySet();
+        const seedState = selectionBoxCoRotatingDisplayStateAtTime(0.0);
+        if (!seedState) {
+          return null;
+        }
+        seedState.selectedClusterCount = seedKeys.size;
+        seedState.footprintKind = "present_day_seed_cube";
+        if (approximatelyZero(Number(timeMyr) || 0.0)) {
+          return seedState;
+        }
+        if (seedKeys.size < 2) {
+          return seedState;
+        }
+        const frame = selectionBoxClusterFrameAtTime(timeMyr);
+        if (!frame) {
+          return seedState;
+        }
+        const xs = [];
+        const ys = [];
+        const zs = [];
+        for (let index = 0; index < frame.keys.length; index += 1) {
+          if (!seedKeys.has(frame.keys[index])) {
+            continue;
+          }
+          xs.push(frame.x[index]);
+          ys.push(frame.y[index]);
+          zs.push(frame.z[index]);
+        }
+        if (xs.length < 2) {
+          return seedState;
+        }
+        const qLow = clampRange(Number(selectionBoxTrackingSpec.q_low) || 0.05, 0.0, 1.0);
+        const qHigh = clampRange(Number(selectionBoxTrackingSpec.q_high) || 0.95, qLow, 1.0);
+        const seedSidePc = 2.0 * clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc);
+        const baseMinSpan = Math.max(Number(selectionBoxTrackingSpec.min_span_pc) || 1.0, 1.0);
+        const minXYSpan = Math.max(seedSidePc, baseMinSpan);
+        const minZSpan = Math.max(
+          seedSidePc * (Number(selectionBoxTrackingSpec.min_z_span_fraction_of_seed_side) || 0.25),
+          baseMinSpan
+        );
+        const xBounds = selectionBoxQuantileBounds(xs, qLow, qHigh, minXYSpan);
+        const yBounds = selectionBoxQuantileBounds(ys, qLow, qHigh, minXYSpan);
+        const zBounds = selectionBoxQuantileBounds(zs, qLow, qHigh, minZSpan);
+        if (![...xBounds, ...yBounds, ...zBounds].every(Number.isFinite)) {
+          return seedState;
+        }
+        return selectionBoxStateFromAxisBounds(
+          timeMyr,
+          { x: xBounds, y: yBounds, z: zBounds },
+          seedKeys.size,
+          "tracked_seed_cluster_quantile_footprint"
+        );
+      }
+
+      function selectionBoxDisplayStateAtTime(timeMyr) {
+        if (selectionBoxUsesTrackedFootprint()) {
+          return selectionBoxTrackedDisplayStateAtTime(timeMyr);
+        }
+        return selectionBoxCoRotatingDisplayStateAtTime(timeMyr);
+      }
+
+      function selectionBoxCanEditAtTime(timeMyr) {
+        if (!selectionBoxUsesTrackedFootprint()) {
+          return true;
+        }
+        const editTime = Number(selectionBoxTrackingSpec.edit_time_myr);
+        return Math.abs((Number(timeMyr) || 0.0) - (Number.isFinite(editTime) ? editTime : 0.0)) <= 1.0e-9;
       }
 
       function selectionBoxSummaryText(cache, isPending = false) {
@@ -6014,8 +6305,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const center = state.centerLocal || { x: 0.0, y: 0.0, z: 0.0 };
         const sideKpc = (2.0 * (Number(state.halfWidthPc) || 0.0)) / 1000.0;
         const volumeKpc3 = Number(state.volumeKpc3) > 0.0 ? Number(state.volumeKpc3) : Math.pow(sideKpc, 3);
+        const isSurfaceDensity = state.densityKind === "surface";
         const frame = currentFrame();
         const currentLookback = Math.abs(Number(frame && frame.time) || 0.0);
+        const liveFootprintState = isSurfaceDensity && selectionBoxUsesTrackedFootprint()
+          ? selectionBoxTrackedDisplayStateAtTime(Number(frame && frame.time) || 0.0)
+          : null;
+        const areaKpc2 = Number(liveFootprintState && liveFootprintState.areaKpc2) > 0.0
+          ? Number(liveFootprintState.areaKpc2)
+          : (Number(state.areaKpc2) > 0.0 ? Number(state.areaKpc2) : sideKpc * sideKpc);
         let currentRateText = "";
         let currentClusteringText = "";
         if (state.rate && Array.isArray(state.rate.centers) && Array.isArray(state.rate.mean) && state.rate.centers.length) {
@@ -6030,7 +6328,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           });
           const rateValue = Number(state.rate.mean[bestIndex]);
           if (Number.isFinite(rateValue)) {
-            currentRateText = `\\nCurrent-frame mean ccSN density: ${rateValue.toFixed(2)} Myr^-1 kpc^-3`;
+            currentRateText = isSurfaceDensity
+              ? `\\nCurrent-frame mean ccSN surface density: ${rateValue.toFixed(2)} Myr^-1 kpc^-2`
+              : `\\nCurrent-frame mean ccSN volume density: ${rateValue.toFixed(2)} Myr^-1 kpc^-3`;
           }
         }
         if (
@@ -6054,10 +6354,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           }
         }
         const pendingText = isPending ? "\\nUpdating metrics..." : "";
-        return [
+        const lines = [
           `Center (pc): (${formatTick(center.x)}, ${formatTick(center.y)}, ${formatTick(center.z)})`,
-          `Half-width: ${formatTick(state.halfWidthPc)} pc | Volume: ${volumeKpc3.toFixed(2)} kpc^3 | Events: ${formatCompactNumber(state.selectedEventCount || 0)}`,
-        ].join("\\n") + currentRateText + currentClusteringText + pendingText;
+          isSurfaceDensity
+            ? `Seed half-width: ${formatTick(state.halfWidthPc)} pc | Seed clusters: ${formatCompactNumber(state.seedClusterCount || 0)} | Events: ${formatCompactNumber(state.selectedEventCount || 0)}`
+            : `Half-width: ${formatTick(state.halfWidthPc)} pc | Volume: ${volumeKpc3.toFixed(2)} kpc^3 | Events: ${formatCompactNumber(state.selectedEventCount || 0)}`,
+        ];
+        if (isSurfaceDensity) {
+          lines.push(`Current footprint area: ${areaKpc2.toFixed(2)} kpc^2`);
+        }
+        return lines.join("\\n") + currentRateText + currentClusteringText + pendingText;
       }
 
       function selectionBoxRayHitFromEvent(event) {
@@ -6096,6 +6402,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
         const frame = currentFrame();
         const timeMyr = Number(frame && frame.time) || 0.0;
+        if (!selectionBoxCanEditAtTime(timeMyr)) {
+          return false;
+        }
         const displayState = selectionBoxDisplayStateAtTime(timeMyr);
         if (!displayState) {
           return false;
@@ -6407,12 +6716,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function computeSelectionBoxMetrics() {
         const halfWidthPc = clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc);
         const sideKpc = (2.0 * halfWidthPc) / 1000.0;
-        const volumeKpc3 = Math.max(Math.pow(sideKpc, 3), 1e-6);
+        const seedAreaKpc2 = Math.max(sideKpc * sideKpc, 1e-6);
+        const seedVolumeKpc3 = Math.max(Math.pow(sideKpc, 3), 1e-6);
         const centerLocal = {
           x: Number(selectionBoxState.center.x) || 0.0,
           y: Number(selectionBoxState.center.y) || 0.0,
           z: Number(selectionBoxState.center.z) || 0.0,
         };
+        const trackedFootprint = selectionBoxUsesTrackedFootprint();
+        const selectedClusterKeys = trackedFootprint ? selectionBoxSeedClusterKeySet() : null;
+        const currentFrameTime = Number(currentFrame() && currentFrame().time) || 0.0;
+        const currentFootprint = trackedFootprint
+          ? selectionBoxTrackedDisplayStateAtTime(currentFrameTime, selectedClusterKeys)
+          : selectionBoxCoRotatingDisplayStateAtTime(currentFrameTime);
         const source = selectionBoxMetricEvents;
         const relLookback = [];
         const relX = [];
@@ -6420,21 +6736,32 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const relZ = [];
         const relSampleIndex = [];
         for (let index = 0; index < source.count; index += 1) {
-          const dx = source.x[index] - centerLocal.x;
-          const dy = source.y[index] - centerLocal.y;
-          const dz = source.z[index] - centerLocal.z;
-          if (
-            Math.abs(dx) > halfWidthPc
-            || Math.abs(dy) > halfWidthPc
-            || Math.abs(dz) > halfWidthPc
-          ) {
-            continue;
+          if (trackedFootprint) {
+            if (!selectedClusterKeys || !selectedClusterKeys.has(source.clusterKey[index])) {
+              continue;
+            }
+            relLookback.push(source.lookback[index]);
+            relX.push(source.x[index]);
+            relY.push(source.y[index]);
+            relZ.push(source.z[index]);
+            relSampleIndex.push(source.sampleIndex[index]);
+          } else {
+            const dx = source.x[index] - centerLocal.x;
+            const dy = source.y[index] - centerLocal.y;
+            const dz = source.z[index] - centerLocal.z;
+            if (
+              Math.abs(dx) > halfWidthPc
+              || Math.abs(dy) > halfWidthPc
+              || Math.abs(dz) > halfWidthPc
+            ) {
+              continue;
+            }
+            relLookback.push(source.lookback[index]);
+            relX.push(dx);
+            relY.push(dy);
+            relZ.push(dz);
+            relSampleIndex.push(source.sampleIndex[index]);
           }
-          relLookback.push(source.lookback[index]);
-          relX.push(dx);
-          relY.push(dy);
-          relZ.push(dz);
-          relSampleIndex.push(source.sampleIndex[index]);
         }
 
         const nCenters = selectionBoxMetricTimeCenters.length;
@@ -6485,6 +6812,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           const minTime = Math.max(0.0, centerTime - halfWindowMyr);
           const maxTime = Math.min(lookbackMax, centerTime + halfWindowMyr);
           const effectiveWindowMyr = Math.max(maxTime - minTime, 1e-6);
+          const footprintAtCenter = trackedFootprint
+            ? selectionBoxTrackedDisplayStateAtTime(-centerTime, selectedClusterKeys)
+            : null;
+          const normalization = trackedFootprint
+            ? Math.max(Number(footprintAtCenter && footprintAtCenter.areaKpc2) || seedAreaKpc2, 1e-6)
+            : seedVolumeKpc3;
           let rateSum = 0.0;
           clusteringScratch.length = 0;
 
@@ -6506,7 +6839,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             rightIndices[sampleIndex] = rightIndex;
 
             const nEvents = Math.max(0, rightIndex - leftIndex);
-            const rateValue = nEvents / (effectiveWindowMyr * volumeKpc3);
+            const rateValue = nEvents / (effectiveWindowMyr * normalization);
             rateCountsBySample[sampleIndex][centerIndex] = rateValue;
             rateScratch[sampleIndex] = rateValue;
             rateSum += rateValue;
@@ -6524,9 +6857,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             if (!(Number.isFinite(dataMedian) && dataMedian > 0.0)) {
               continue;
             }
-            const xRange = selectionBoxAxisBoundsWithFloor(sample.x, leftIndex, rightIndex, minAxisSpanPc);
-            const yRange = selectionBoxAxisBoundsWithFloor(sample.y, leftIndex, rightIndex, minAxisSpanPc);
-            const zRange = selectionBoxAxisBoundsWithFloor(sample.z, leftIndex, rightIndex, minAxisSpanPc);
+            const footprintBounds = footprintAtCenter && footprintAtCenter.bounds;
+            const xRange = trackedFootprint && footprintBounds
+              ? footprintBounds.x
+              : selectionBoxAxisBoundsWithFloor(sample.x, leftIndex, rightIndex, minAxisSpanPc);
+            const yRange = trackedFootprint && footprintBounds
+              ? footprintBounds.y
+              : selectionBoxAxisBoundsWithFloor(sample.y, leftIndex, rightIndex, minAxisSpanPc);
+            const zRange = trackedFootprint && footprintBounds
+              ? footprintBounds.z
+              : selectionBoxAxisBoundsWithFloor(sample.z, leftIndex, rightIndex, minAxisSpanPc);
             const randMedian = selectionBoxRandomMedianNearestNeighborDistance(
               nEvents,
               xRange,
@@ -6556,7 +6896,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return {
           centerLocal,
           halfWidthPc,
-          volumeKpc3,
+          volumeKpc3: trackedFootprint
+            ? Number(currentFootprint && currentFootprint.volumeKpc3) || seedVolumeKpc3
+            : seedVolumeKpc3,
+          areaKpc2: trackedFootprint
+            ? Number(currentFootprint && currentFootprint.areaKpc2) || seedAreaKpc2
+            : null,
+          densityKind: trackedFootprint ? "surface" : "volume",
+          seedClusterCount: trackedFootprint && selectedClusterKeys ? selectedClusterKeys.size : null,
+          footprintKind: currentFootprint ? currentFootprint.footprintKind : null,
           selectedEventCount: relLookback.length,
           rate: {
             centers: selectionBoxMetricTimeCenters.slice(),
@@ -12222,6 +12570,10 @@ __SKY_RUNTIME_JS__
         }, frameLineMaterials);
         if (line) {
           group.add(line);
+        }
+
+        if (!selectionBoxCanEditAtTime(timeMyr)) {
+          return group;
         }
 
         const cubeSidePc = 2.0 * displayState.halfWidthPc;

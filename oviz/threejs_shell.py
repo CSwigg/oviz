@@ -184,7 +184,7 @@ THREEJS_SHELL_HTML = """
       </div>
       <div class="oviz-three-box-panel oviz-three-widget-panel" data-widget-key="box_metrics" data-mode="hidden">
         <div class="oviz-three-box-drag oviz-three-widget-drag">
-          <span class="oviz-three-widget-title">Box Metrics</span>
+          <span class="oviz-three-widget-title">Tracked Footprint Metrics</span>
           <div class="oviz-three-widget-window-controls">
             <button class="oviz-three-box-hide oviz-three-window-button oviz-three-window-button-min" type="button" title="Hide box metrics panel" aria-label="Hide box metrics panel"></button>
             <button class="oviz-three-box-full oviz-three-window-button oviz-three-window-button-max" type="button" title="Toggle fullscreen box metrics panel" aria-label="Toggle fullscreen box metrics panel"></button>
@@ -204,7 +204,7 @@ THREEJS_SHELL_HTML = """
           <div class="oviz-three-box-shell">
             <canvas class="oviz-three-box-canvas"></canvas>
           </div>
-          <div class="oviz-three-box-hint">Drag cube faces to move the co-rotating box in local X/Y. Drag a corner handle to resize it. The lower panel shows nearest-neighbor clustering enhancement relative to matched random catalogs.</div>
+          <div class="oviz-three-box-hint">At t=0, drag the seed cube to move it in local X/Y and drag a corner handle to resize it. Earlier frames show the tracked footprint of the selected seed clusters. The lower panel shows nearest-neighbor clustering enhancement relative to matched random catalogs.</div>
         </div>
         <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="nw"></div>
         <div class="oviz-three-box-resize oviz-three-widget-resize" data-dir="ne"></div>
