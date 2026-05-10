@@ -16,6 +16,20 @@ def _lite_mode_enabled(plot) -> bool:
     )
 
 
+def _round_scene_floats(value, precision: int):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (float, np.floating)):
+        if np.isfinite(value):
+            return float(round(float(value), precision))
+        return value
+    if isinstance(value, list):
+        return [_round_scene_floats(item, precision) for item in value]
+    if isinstance(value, dict):
+        return {key: _round_scene_floats(item, precision) for key, item in value.items()}
+    return value
+
+
 def _galactic_simple_config(plot, *, file_to_data_url, coerce_float):
     initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
     if not bool(
@@ -549,6 +563,7 @@ def build_threejs_scene_spec(
                     "default_color": trace_spec.get("legend_color"),
                     "default_opacity": float(trace_spec.get("default_opacity", 1.0)),
                     "default_point_size": trace_spec.get("default_point_size"),
+                    "color_by": copy.deepcopy(trace_spec.get("color_by")),
                 }
             )
 
@@ -728,6 +743,11 @@ def build_threejs_scene_spec(
             if isinstance(saved_global_controls.get("fade_in_and_out_enabled"), bool)
             else bool(getattr(plot, "fade_in_and_out", False))
         ),
+        "fade_opacity_by_birth_time_default": (
+            bool(saved_global_controls.get("fade_opacity_by_birth_time_enabled"))
+            if isinstance(saved_global_controls.get("fade_opacity_by_birth_time_enabled"), bool)
+            else False
+        ),
     }
     if not minimal_mode:
         animation_spec["focus_trace_key_default"] = (
@@ -755,7 +775,7 @@ def build_threejs_scene_spec(
     if galaxy_image.get("enabled") and galaxy_image.get("image_data_url"):
         image_planes.append(_image_plane_spec(galaxy_image, coerce_float=coerce_float))
 
-    return {
+    scene_spec = {
         "renderer": "threejs",
         "export_profile": "lite" if minimal_mode else "full",
         "timeline": {
@@ -834,3 +854,8 @@ def build_threejs_scene_spec(
         "initial_state": initial_state,
         "note": "" if minimal_mode else plot._threejs_note_text(),
     }
+    float_precision = initial_state.get("scene_float_precision")
+    if float_precision is not None:
+        precision = int(np.clip(coerce_float(float_precision, 4), 0, 10))
+        scene_spec = _round_scene_floats(scene_spec, precision)
+    return scene_spec

@@ -94,12 +94,94 @@ THREEJS_SCENE_RUNTIME_JS = """
         return 0.0;
       }
 
+      function startPngAtlasVolumeDecode(layer, cacheKey, onDecoded) {
+        if (volumeScalarDataPendingCache.has(cacheKey)) {
+          return;
+        }
+        const shape = layer.shape || {};
+        const nx = Math.max(1, Math.round(Number(shape.x) || 0));
+        const ny = Math.max(1, Math.round(Number(shape.y) || 0));
+        const nz = Math.max(1, Math.round(Number(shape.z) || 0));
+        const tiles = layer.data_atlas_tiles || {};
+        const tileCols = Math.max(1, Math.round(Number(tiles.x) || Math.ceil(Math.sqrt(nz))));
+        const tileRows = Math.max(1, Math.round(Number(tiles.y) || Math.ceil(nz / tileCols)));
+        const pending = new Promise((resolve) => {
+          const image = new Image();
+          image.onload = () => {
+            const atlasWidth = Math.max(1, Number(image.naturalWidth || image.width || 0));
+            const atlasHeight = Math.max(1, Number(image.naturalHeight || image.height || 0));
+            const canvasEl = document.createElement("canvas");
+            canvasEl.width = atlasWidth;
+            canvasEl.height = atlasHeight;
+            const ctx = canvasEl.getContext("2d");
+            if (!ctx) {
+              volumeScalarDataPendingCache.delete(cacheKey);
+              resolve(null);
+              return;
+            }
+            ctx.drawImage(image, 0, 0, atlasWidth, atlasHeight);
+            const imageData = ctx.getImageData(0, 0, atlasWidth, atlasHeight);
+            const rgba = imageData.data || [];
+            const values = new Uint8Array(nx * ny * nz);
+            for (let zIndex = 0; zIndex < nz; zIndex += 1) {
+              const tileRow = Math.floor(zIndex / tileCols);
+              const tileCol = zIndex % tileCols;
+              if (tileRow >= tileRows) {
+                break;
+              }
+              const xOffset = tileCol * nx;
+              const yOffset = tileRow * ny;
+              for (let yIndex = 0; yIndex < ny; yIndex += 1) {
+                for (let xIndex = 0; xIndex < nx; xIndex += 1) {
+                  const atlasIndex = (((yOffset + yIndex) * atlasWidth) + (xOffset + xIndex)) * 4;
+                  const voxelIndex = (zIndex * ny * nx) + (yIndex * nx) + xIndex;
+                  values[voxelIndex] = Number(rgba[atlasIndex] || 0);
+                }
+              }
+            }
+            volumeScalarDataCache.set(cacheKey, values);
+            volumeScalarDataPendingCache.delete(cacheKey);
+            if (typeof onDecoded === "function") {
+              onDecoded(values);
+            }
+            resolve(values);
+          };
+          image.onerror = () => {
+            volumeScalarDataPendingCache.delete(cacheKey);
+            resolve(null);
+          };
+          image.src = `data:image/png;base64,${String(layer.data_b64 || "")}`;
+        });
+        volumeScalarDataPendingCache.set(cacheKey, pending);
+      }
+
       function volumeScalarArrayFor(layer) {
         const layerKey = String(layer.key);
         if (volumeScalarDataCache.has(layerKey)) {
           return volumeScalarDataCache.get(layerKey);
         }
         const encoding = String(layer.data_encoding || "uint16_le");
+        if (encoding === "png_atlas_uint8") {
+          const shape = layer.shape || {};
+          const nx = Math.max(1, Math.round(Number(shape.x) || 0));
+          const ny = Math.max(1, Math.round(Number(shape.y) || 0));
+          const nz = Math.max(1, Math.round(Number(shape.z) || 0));
+          const placeholder = new Uint8Array(nx * ny * nz);
+          volumeScalarDataCache.set(layerKey, placeholder);
+          startPngAtlasVolumeDecode(layer, layerKey, (values) => {
+            const volumeTexture = volumeTextureCache.get(layerKey);
+            if (volumeTexture && volumeTexture.texture && values) {
+              const image = volumeTexture.texture.image || {};
+              image.data = values;
+              image.width = volumeTexture.nx;
+              image.height = volumeTexture.ny;
+              image.depth = volumeTexture.nz;
+              volumeTexture.texture.image = image;
+              volumeTexture.texture.needsUpdate = true;
+            }
+          });
+          return placeholder;
+        }
         let data = null;
         if (encoding === "uint16_le") {
           data = base64ToUint16Array(layer.data_b64 || "");
@@ -1007,7 +1089,9 @@ THREEJS_SCENE_RUNTIME_JS = """
         if (!frame) {
           return;
         }
-        currentZoomAnchorPoint = trackedZoomAnchorPointForFrame(frame);
+        if (zoomAnchorTracksFrame !== false) {
+          currentZoomAnchorPoint = trackedZoomAnchorPointForFrame(frame);
+        }
         if (galacticSimpleOrbitTargetTrackingActive && currentZoomAnchorPoint instanceof THREE.Vector3) {
           const orbitTargetDelta = currentZoomAnchorPoint.clone().sub(controls.target);
           if (orbitTargetDelta.lengthSq() > 1e-12) {
@@ -1045,7 +1129,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           }
         });
 
-        if (currentSelectionMode === "click" && currentSelection && approximatelyZero(displayedTimeMyr)) {
+        if (currentSelectionMode === "click" && currentSelection) {
           const footprint = buildSelectionFootprint(currentSelection, frameLineMaterials);
           if (footprint) {
             plotGroup.add(footprint);

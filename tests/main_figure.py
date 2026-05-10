@@ -18,12 +18,23 @@ NOTEBOOK_PATH = HOME_DIR / "Desktop" / "astro_research" / "radcliffe" / "oviz_no
 SUPERNOVAE_ROOT = HOME_DIR / "Desktop" / "astro_research" / "supernovae_map"
 SUPERNOVAE_CATALOG_PATH = SUPERNOVAE_ROOT / "paper" / "solar_encounter_catalog_current.csv.gz"
 MCCALLUM_NE_GRID_PATH = HOME_DIR / "Downloads" / "ne_grid.fits"
+ONEILL_LOCAL_BUBBLE_PATH = HOME_DIR / "Downloads" / "ONeill2024_LocalBubble_Shell_xyz.fits"
+GAO_IVS_PEAKS_PATH = HOME_DIR / "Downloads" / "peaks_meanmap_xyz.csv"
+GAO_IVS_BOUNDARY_IN_PATH = HOME_DIR / "Downloads" / "npix128boundary_mean_sigma10.csv"
+GAO_IVS_BOUNDARY_OUT_PATH = HOME_DIR / "Downloads" / "npix128boundaryout_mean_sigma10.csv"
 MIST_PARSEC_AGES_PATH = (
     SUPERNOVAE_ROOT
     / "outputs"
     / "map"
     / "mist_parsec_local1kpc_sfh_compare_200myr"
     / "matched_local1kpc_age_le_200_mist_parsec_clusters.csv"
+)
+CHRONOS_PARSEC_CLUSTER_RESULTS_PATH = (
+    SUPERNOVAE_ROOT
+    / "outputs"
+    / "chronos"
+    / "dual_model_refit_with_masses"
+    / "cluster_results.csv"
 )
 DESKTOP_ROOT = HOME_DIR / "Desktop"
 DEFAULT_OUTPUT_HTML = Path(__file__).resolve().with_suffix(".html")
@@ -36,9 +47,13 @@ WEBSITE_OUTPUT_HTML = (
     / "main_figure.html"
 )
 GALACTIC_PLANE_IMAGE_PATH = HOME_DIR / "Downloads" / "Top-down_view_of_the_Milky_Way.jpg"
-MAIN_FIGURE_DUST_MAX_RESOLUTION = 640
-MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 640
-MAIN_FIGURE_DUST_SAMPLES = 100
+MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS = (-400.0, 400.0)
+MAIN_FIGURE_DUST_MAX_RESOLUTION = 512
+MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 512
+MAIN_FIGURE_DUST_SAMPLES = 200
+MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION = 512
+MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP = 512
+MAIN_FIGURE_MCCALLUM_SAMPLES = 200
 
 
 def _sanitize_notebook_cell_source(source: str) -> str:
@@ -119,6 +134,43 @@ def patch_edenhofer_volume_integer_setting(
         )
     if replaced != 1:
         raise RuntimeError(f"Could not update the Edenhofer dust {setting_name}.")
+
+    return source[:block_match.start(1)] + updated_block + source[block_match.end(1):]
+
+
+def patch_edenhofer_volume_clip_bounds(source: str, z_bounds: tuple[float, float]) -> str:
+    edenhofer_block_pattern = (
+        r'(?ms)(edenhofer_volume\s*=\s*\{.*?'
+        r'"name"\s*:\s*"Edenhofer\+2024 Dust".*?'
+        r'^\s*\})'
+    )
+    block_match = re.search(edenhofer_block_pattern, source)
+    if not block_match:
+        raise RuntimeError("Could not find the Edenhofer dust volume block.")
+
+    block = block_match.group(1)
+    clip_text = f'"clip_bounds": {{"z": [{float(z_bounds[0])}, {float(z_bounds[1])}]}},'
+    updated_block, replaced = re.subn(
+        r'(?m)^(\s*)"clip_bounds"\s*:\s*\{.*?\}\s*,\s*$',
+        rf"\1{clip_text}",
+        block,
+        count=1,
+    )
+    if replaced == 0:
+        insert_pattern = r'(?m)^(\s*)"hdu"\s*:\s*["\'][^"\']+["\']\s*,\s*$'
+
+        def insert_clip_bounds(match):
+            indent = match.group(1)
+            return f"{match.group(0)}\n{indent}{clip_text}"
+
+        updated_block, replaced = re.subn(
+            insert_pattern,
+            insert_clip_bounds,
+            block,
+            count=1,
+        )
+    if replaced != 1:
+        raise RuntimeError("Could not update the Edenhofer dust clip_bounds.")
 
     return source[:block_match.start(1)] + updated_block + source[block_match.end(1):]
 
@@ -418,10 +470,11 @@ def _build_mccallum_ne_volumes_for_main_figure():
             "name": "McCallum+2025 Electron Density",
             "path": str(MCCALLUM_NE_GRID_PATH),
             "hdu": "PRIMARY",
-            "max_resolution": 384,
-            "max_resolution_cap": 384,
+            "clip_bounds": {{"z": [{float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[0])}, {float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[1])}]}},
+            "max_resolution": {int(MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION)},
+            "max_resolution_cap": {int(MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP)},
             "opacity": 0.12,
-            "samples": 100,
+            "samples": {int(MAIN_FIGURE_MCCALLUM_SAMPLES)},
             "alpha_coef": 200,
             "gradient_step": 0.006,
             "stretch": "log10",
@@ -438,6 +491,262 @@ def _build_mccallum_ne_volumes_for_main_figure():
 
 
 mccallum_ne_volumes = _build_mccallum_ne_volumes_for_main_figure()
+""".strip()
+
+
+def build_local_shell_volume_source_block() -> str:
+    return f"""
+import os
+from pathlib import Path as _OvizPath
+
+import numpy as _oviz_np
+import pandas as _oviz_pd
+from matplotlib.colors import LinearSegmentedColormap as _OvizLinearSegmentedColormap
+
+ONEILL_LOCAL_BUBBLE_PATH = _OvizPath(
+    os.environ.get("OVIZ_ONEILL_LOCAL_BUBBLE_FITS", {str(ONEILL_LOCAL_BUBBLE_PATH)!r})
+).expanduser()
+GAO_IVS_PEAKS_PATH = _OvizPath(
+    os.environ.get("OVIZ_GAO_IVS_PEAKS_CSV", {str(GAO_IVS_PEAKS_PATH)!r})
+).expanduser()
+GAO_IVS_BOUNDARY_IN_PATH = _OvizPath(
+    os.environ.get("OVIZ_GAO_IVS_BOUNDARY_IN_CSV", {str(GAO_IVS_BOUNDARY_IN_PATH)!r})
+).expanduser()
+GAO_IVS_BOUNDARY_OUT_PATH = _OvizPath(
+    os.environ.get("OVIZ_GAO_IVS_BOUNDARY_OUT_CSV", {str(GAO_IVS_BOUNDARY_OUT_PATH)!r})
+).expanduser()
+
+_DODGER_BLUE_VOLUME_CMAP = _OvizLinearSegmentedColormap.from_list(
+    "dodger_blue",
+    [
+        (0.0, (0.0, 0.0, 0.0, 0.0)),
+        (0.18, (0.1176470588, 0.5647058824, 1.0, 0.18)),
+        (1.0, (0.1176470588, 0.5647058824, 1.0, 1.0)),
+    ],
+)
+
+
+def _build_gao_ivs_volume_data(grid_size=192):
+    required_paths = [
+        GAO_IVS_PEAKS_PATH,
+        GAO_IVS_BOUNDARY_IN_PATH,
+        GAO_IVS_BOUNDARY_OUT_PATH,
+    ]
+    missing_paths = [path for path in required_paths if not path.exists()]
+    if missing_paths:
+        print(
+            "Skipping Gao+2024 IVS volume; missing model table(s): "
+            + ", ".join(str(path) for path in missing_paths)
+        )
+        return None
+
+    peaks = _oviz_pd.read_csv(
+        GAO_IVS_PEAKS_PATH,
+        usecols=["index", "x[pc]", "y[pc]", "z[pc]", "nH[cm-3]"],
+    )
+    boundary_in = _oviz_pd.read_csv(
+        GAO_IVS_BOUNDARY_IN_PATH,
+        usecols=["index", "x[pc]", "y[pc]", "z[pc]"],
+    )
+    boundary_out = _oviz_pd.read_csv(
+        GAO_IVS_BOUNDARY_OUT_PATH,
+        usecols=["index", "x[pc]", "y[pc]", "z[pc]"],
+    )
+
+    peaks["index"] = peaks["index"].astype(int)
+    boundary_in["index"] = boundary_in["index"].astype(int)
+    boundary_out["index"] = boundary_out["index"].astype(int)
+    shell = (
+        boundary_in.rename(
+            columns={{"x[pc]": "xin", "y[pc]": "yin", "z[pc]": "zin"}}
+        )
+        .merge(
+            boundary_out.rename(
+                columns={{"x[pc]": "xout", "y[pc]": "yout", "z[pc]": "zout"}}
+            ),
+            on="index",
+            how="inner",
+            validate="1:1",
+        )
+        .merge(
+            peaks.rename(
+                columns={{"x[pc]": "xpeak", "y[pc]": "ypeak", "z[pc]": "zpeak"}}
+            )[["index", "xpeak", "ypeak", "zpeak", "nH[cm-3]"]],
+            on="index",
+            how="left",
+            validate="1:1",
+        )
+    )
+    if shell.empty:
+        print("Skipping Gao+2024 IVS volume; no matched boundary/peak rows.")
+        return None
+
+    for col in ["xin", "yin", "zin", "xout", "yout", "zout", "xpeak", "ypeak", "zpeak", "nH[cm-3]"]:
+        shell[col] = _oviz_pd.to_numeric(shell[col], errors="coerce")
+    shell = shell.dropna(subset=["xin", "yin", "zin", "xout", "yout", "zout"])
+    if shell.empty:
+        print("Skipping Gao+2024 IVS volume; no finite boundary coordinates.")
+        return None
+
+    fractions = _oviz_np.linspace(0.0, 1.0, 11, dtype=_oviz_np.float32)
+    xin = shell["xin"].to_numpy(dtype=_oviz_np.float32)
+    yin = shell["yin"].to_numpy(dtype=_oviz_np.float32)
+    zin = shell["zin"].to_numpy(dtype=_oviz_np.float32)
+    xout = shell["xout"].to_numpy(dtype=_oviz_np.float32)
+    yout = shell["yout"].to_numpy(dtype=_oviz_np.float32)
+    zout = shell["zout"].to_numpy(dtype=_oviz_np.float32)
+    x_boundary = (xin[:, None] + (xout - xin)[:, None] * fractions[None, :]).ravel()
+    y_boundary = (yin[:, None] + (yout - yin)[:, None] * fractions[None, :]).ravel()
+    z_boundary = (zin[:, None] + (zout - zin)[:, None] * fractions[None, :]).ravel()
+
+    density = shell["nH[cm-3]"].to_numpy(dtype=_oviz_np.float32)
+    if _oviz_np.isfinite(density).any():
+        density = _oviz_np.nan_to_num(density, nan=float(_oviz_np.nanmedian(density)), posinf=0.0, neginf=0.0)
+        base_weights = _oviz_np.log1p(_oviz_np.clip(density, 0.0, None))
+        boundary_weights = 0.65 * _oviz_np.repeat(base_weights, len(fractions))
+    else:
+        base_weights = None
+        boundary_weights = None
+
+    xpeak = shell["xpeak"].to_numpy(dtype=_oviz_np.float32)
+    ypeak = shell["ypeak"].to_numpy(dtype=_oviz_np.float32)
+    zpeak = shell["zpeak"].to_numpy(dtype=_oviz_np.float32)
+    peak_mask = _oviz_np.isfinite(xpeak) & _oviz_np.isfinite(ypeak) & _oviz_np.isfinite(zpeak)
+    if peak_mask.any():
+        x_points = _oviz_np.concatenate([x_boundary, xpeak[peak_mask]])
+        y_points = _oviz_np.concatenate([y_boundary, ypeak[peak_mask]])
+        z_points = _oviz_np.concatenate([z_boundary, zpeak[peak_mask]])
+        if base_weights is None:
+            weights = None
+        else:
+            weights = _oviz_np.concatenate([boundary_weights, 2.5 * base_weights[peak_mask]])
+    else:
+        x_points = x_boundary
+        y_points = y_boundary
+        z_points = z_boundary
+        weights = boundary_weights
+
+    margin_pc = 18.0
+    x_bounds = [float(_oviz_np.nanmin(x_points) - margin_pc), float(_oviz_np.nanmax(x_points) + margin_pc)]
+    y_bounds = [float(_oviz_np.nanmin(y_points) - margin_pc), float(_oviz_np.nanmax(y_points) + margin_pc)]
+    z_bounds = [float(_oviz_np.nanmin(z_points) - margin_pc), float(_oviz_np.nanmax(z_points) + margin_pc)]
+    x_edges = _oviz_np.linspace(x_bounds[0], x_bounds[1], int(grid_size) + 1, dtype=_oviz_np.float32)
+    y_edges = _oviz_np.linspace(y_bounds[0], y_bounds[1], int(grid_size) + 1, dtype=_oviz_np.float32)
+    z_edges = _oviz_np.linspace(z_bounds[0], z_bounds[1], int(grid_size) + 1, dtype=_oviz_np.float32)
+
+    cube_zyx, _ = _oviz_np.histogramdd(
+        _oviz_np.column_stack((z_points, y_points, x_points)),
+        bins=(z_edges, y_edges, x_edges),
+        weights=weights,
+    )
+    cube_zyx = cube_zyx.astype(_oviz_np.float32, copy=False)
+
+    try:
+        from scipy.ndimage import gaussian_filter as _oviz_gaussian_filter
+    except ImportError:
+        _oviz_gaussian_filter = None
+    if _oviz_gaussian_filter is not None:
+        cube_zyx = _oviz_gaussian_filter(
+            cube_zyx,
+            sigma=0.55,
+            mode="constant",
+        ).astype(_oviz_np.float32, copy=False)
+    # Compress the dynamic range before compact uint8 embedding so faint IVS
+    # filaments survive instead of being quantized away by the densest voxels.
+    cube_zyx = _oviz_np.log1p(_oviz_np.clip(cube_zyx, 0.0, None)).astype(
+        _oviz_np.float32,
+        copy=False,
+    )
+
+    positive = cube_zyx[cube_zyx > 0]
+    if not positive.size:
+        print("Skipping Gao+2024 IVS volume; voxelization produced an empty cube.")
+        return None
+
+    return {{
+        "data": cube_zyx,
+        "bounds": {{
+            "x": x_bounds,
+            "y": y_bounds,
+            "z": z_bounds,
+        }},
+    }}
+
+
+def _build_local_shell_volumes_for_main_figure():
+    volumes = []
+
+    if ONEILL_LOCAL_BUBBLE_PATH.exists():
+        volumes.append(
+            {{
+                "key": "oneill-local-bubble-shell",
+                "state_key": "oneill-local-bubble-shell",
+                "state_name": "O'Neill+2024 Local Bubble",
+                "name": "O'Neill+2024 Local Bubble Shell",
+                "path": str(ONEILL_LOCAL_BUBBLE_PATH),
+                "hdu": "SHELL",
+                "time_myr": 0.0,
+                "max_resolution": 128,
+                "max_resolution_cap": 128,
+                "sky_overlay_max_resolution": 128,
+                "opacity": 0.22,
+                "samples": 120,
+                "alpha_coef": 105,
+                "gradient_step": 0.006,
+                "stretch": "asinh",
+                "default_vmin_quantile": 0.86,
+                "default_vmax_quantile": 0.999,
+                "colormap": _DODGER_BLUE_VOLUME_CMAP,
+                "unit_label": "shell density",
+                "visible": False,
+                "only_at_t0": True,
+                "supports_show_all_times": False,
+                "show_all_times": False,
+            }}
+        )
+    else:
+        print(f"Skipping O'Neill+2024 Local Bubble volume; missing FITS cube: {{ONEILL_LOCAL_BUBBLE_PATH}}")
+
+    ivs_volume_data = _build_gao_ivs_volume_data(grid_size=192)
+    if ivs_volume_data is not None:
+        volumes.append(
+            {{
+                "key": "gao-ivs-shell",
+                "state_key": "gao-ivs-shell",
+                "state_name": "Gao+2024 IRAS Vela Shell",
+                "name": "Gao+2024 IRAS Vela Shell",
+                "time_myr": 0.0,
+                "data": ivs_volume_data["data"],
+                "bounds": ivs_volume_data["bounds"],
+                "apply_center_offset": True,
+                "opacity": 0.26,
+                "samples": 192,
+                "alpha_coef": 125,
+                "gradient_step": 0.006,
+                "stretch": "asinh",
+                "default_vmin_quantile": 0.45,
+                "default_vmax_quantile": 0.995,
+                "colormap": _DODGER_BLUE_VOLUME_CMAP,
+                "unit_label": "weighted shell density",
+                "visible": False,
+                "only_at_t0": True,
+                "supports_show_all_times": False,
+                "show_all_times": False,
+            }}
+        )
+
+    return volumes
+
+
+local_shell_volumes = _build_local_shell_volumes_for_main_figure()
+optional_static_volume_state = {{
+    str(_volume.get("state_key") or _volume.get("key")): {{"visible": False}}
+    for _volume in [*mccallum_ne_volumes, *local_shell_volumes]
+}}
+optional_static_legend_state = {{
+    _state_key: False
+    for _state_key in optional_static_volume_state
+}}
 """.strip()
 
 
@@ -471,6 +780,78 @@ print(
 """.strip()
 
 
+def build_parsec_cluster_sample_source_block() -> str:
+    return f"""
+chronos_parsec_ages = pd.read_csv(
+    {str(CHRONOS_PARSEC_CLUSTER_RESULTS_PATH)!r},
+    usecols=[
+        'name',
+        'parsec_age_lo',
+        'parsec_age_mode',
+        'parsec_age_hi',
+        'parsec_mass_cluster_imf_corrected',
+        'parsec_status',
+    ],
+)
+chronos_parsec_ages = chronos_parsec_ages.rename(
+    columns={{
+        'parsec_age_lo': 'chronos_parsec_age_lo_myr',
+        'parsec_age_mode': 'chronos_parsec_age_myr',
+        'parsec_age_hi': 'chronos_parsec_age_hi_myr',
+        'parsec_mass_cluster_imf_corrected': 'chronos_parsec_initial_mass_msun',
+    }}
+)
+for _parsec_col in [
+    'chronos_parsec_age_lo_myr',
+    'chronos_parsec_age_myr',
+    'chronos_parsec_age_hi_myr',
+    'chronos_parsec_initial_mass_msun',
+]:
+    chronos_parsec_ages[_parsec_col] = pd.to_numeric(
+        chronos_parsec_ages[_parsec_col],
+        errors='coerce',
+    )
+chronos_parsec_ages = chronos_parsec_ages.loc[
+    chronos_parsec_ages['parsec_status'].eq('success')
+    & chronos_parsec_ages['chronos_parsec_age_myr'].notnull()
+].copy()
+df_hunt_parsec_full = df_hunt_full.merge(
+    chronos_parsec_ages,
+    on='name',
+    how='left',
+    validate='m:1',
+)
+df_hunt_parsec_sample = df_hunt_parsec_full.loc[
+    (df_hunt_parsec_full['U_err'] < 10) &
+    (df_hunt_parsec_full['V_err'] < 10) &
+    (df_hunt_parsec_full['W_err'] < 10) &
+    (df_hunt_parsec_full['U'].notnull()) &
+    (df_hunt_parsec_full['V'].notnull()) &
+    (df_hunt_parsec_full['W'].notnull()) &
+    (df_hunt_parsec_full['x'].notnull()) &
+    (df_hunt_parsec_full['y'].notnull()) &
+    (df_hunt_parsec_full['z'].notnull()) &
+    (df_hunt_parsec_full['chronos_parsec_age_myr'].notnull()) &
+    (df_hunt_parsec_full['n_rvs_2026'] >= 3) &
+    (df_hunt_parsec_full['class_50'] > 0.5) &
+    (df_hunt_parsec_full['cst'] > 5)
+].copy()
+df_hunt_parsec_sample['age_myr'] = df_hunt_parsec_sample['chronos_parsec_age_myr']
+df_hunt_parsec_sample['age_source'] = 'PARSEC'
+df_hunt_60_parsec = df_hunt_parsec_sample.loc[
+    df_hunt_parsec_sample['age_myr'] < 60
+].copy()
+df_hunt_young_parsec = df_hunt_parsec_sample.loc[
+    df_hunt_parsec_sample['age_myr'] < 15
+].copy()
+print(
+    'Using PARSEC ages from {str(CHRONOS_PARSEC_CLUSTER_RESULTS_PATH)} for displayed cluster samples: '
+    f"{{len(df_hunt_60_parsec)}} clusters <60 Myr, {{len(df_hunt_young_parsec)}} clusters <15 Myr. "
+    'No x/y/z distance restrictions were applied to these displayed samples.'
+)
+""".strip()
+
+
 def patch_script_source(
     source: str,
     output_html: Path,
@@ -494,6 +875,35 @@ def patch_script_source(
         )
         if replaced_mist_ages != 1:
             raise RuntimeError("Could not inject MIST cluster ages into converted notebook script.")
+
+    if "df_hunt_60_parsec" not in source:
+        parsec_cluster_block = build_parsec_cluster_sample_source_block()
+        source, inserted_parsec_clusters = re.subn(
+            r"(?m)^(df_hunt_old\s*=\s*df_hunt_good\.loc\[df_hunt_good\['age_myr'\]\.between\(30,\s*60\)\]\s*)$",
+            r"\1\n\n" + parsec_cluster_block,
+            source,
+            count=1,
+        )
+        if inserted_parsec_clusters != 1:
+            raise RuntimeError("Could not inject PARSEC cluster samples into converted notebook script.")
+
+        source, replaced_young_parsec_sample = re.subn(
+            r"young_trace\s*=\s*Trace\(df_hunt_young,",
+            "young_trace = Trace(df_hunt_young_parsec,",
+            source,
+            count=1,
+        )
+        if replaced_young_parsec_sample != 1:
+            raise RuntimeError("Could not point the <15 Myr cluster trace at the PARSEC sample.")
+
+        source, replaced_full_parsec_sample = re.subn(
+            r"full_sample_trace\s*=\s*Trace\(df_hunt_60,",
+            "full_sample_trace = Trace(df_hunt_60_parsec,",
+            source,
+            count=1,
+        )
+        if replaced_full_parsec_sample != 1:
+            raise RuntimeError("Could not point the <60 Myr cluster trace at the PARSEC sample.")
 
     if galactic_simple:
         source, replaced_time_grid = re.subn(
@@ -520,6 +930,10 @@ def patch_script_source(
         source,
         "samples",
         MAIN_FIGURE_DUST_SAMPLES,
+    )
+    source = patch_edenhofer_volume_clip_bounds(
+        source,
+        MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS,
     )
 
     output_html_str = str(output_html)
@@ -548,9 +962,10 @@ def patch_script_source(
             "'current_group': 'Clusters'",
             "'click_selection_enabled': False",
             f"'compact_payload_enabled': {bool(compact_payload)!r}",
+            "'scene_float_precision': 2",
             "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
-            "'legend_state': ({'volume-0': False, **({'mccallum-ne': False} if mccallum_ne_volumes else {}), 'supernova-density': True} if supernova_volumes else {'volume-0': True, **({'mccallum-ne': False} if mccallum_ne_volumes else {})})",
-            "'volume_state_by_key': ({'volume-0': {'visible': False}, **({'mccallum-ne': {'visible': False}} if mccallum_ne_volumes else {}), 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}, **({'mccallum-ne': {'visible': False}} if mccallum_ne_volumes else {})})",
+            "'legend_state': ({'volume-0': False, **optional_static_legend_state, 'supernova-density': True} if supernova_volumes else {'volume-0': True, **optional_static_legend_state})",
+            "'volume_state_by_key': ({'volume-0': {'visible': False}, **optional_static_volume_state, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}, **optional_static_volume_state})",
             "'galaxy_image': True",
             f"'galaxy_image_path': {str(GALACTIC_PLANE_IMAGE_PATH)!r}",
             "'galaxy_image_size_pc': 40000.0",
@@ -734,9 +1149,20 @@ trace_groupings = {
         if inserted_ne != 1:
             raise RuntimeError("Could not inject McCallum electron-density volume helper block.")
 
+    if "local_shell_volumes = _build_local_shell_volumes_for_main_figure()" not in source:
+        local_shell_block = build_local_shell_volume_source_block()
+        source, inserted_local_shell = re.subn(
+            r"(?m)^(mccallum_ne_volumes\s*=\s*_build_mccallum_ne_volumes_for_main_figure\(\)\s*)$",
+            r"\1\n\n" + local_shell_block,
+            source,
+            count=1,
+        )
+        if inserted_local_shell != 1:
+            raise RuntimeError("Could not inject local shell volume helper block.")
+
     source, replaced_supernova_volumes = re.subn(
         r"volumes\s*=\s*\[\s*edenhofer_volume\s*,\s*mccallum_ne\s*\]",
-        "volumes=[edenhofer_volume, *mccallum_ne_volumes, *supernova_volumes]",
+        "volumes=[edenhofer_volume, *mccallum_ne_volumes, *local_shell_volumes, *supernova_volumes]",
         source,
         count=1,
     )

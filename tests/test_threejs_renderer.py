@@ -187,7 +187,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("font-size: 13px;", tooltip_css)
         self.assertIn("const anchor = spriteScreenPoint(hitObject)", html)
         self.assertIn("tooltipEl.style.borderColor = tooltipColor;", html)
-        self.assertIn("tooltipColor: traceColor || point.color || \"#ffffff\"", html)
+        self.assertIn("tooltipColor: pointColor || \"#ffffff\"", html)
         self.assertIn("const horizontalOffset = 16;", html)
         self.assertIn("updateClusterInfoTooltipPosition();", html)
         point_hover_body = html.split("function pointHoverText(point, trace, tooltipColor = \"\") {", 1)[1].split("function starSizeStatsForTrace", 1)[0]
@@ -224,10 +224,13 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Star glow", html)
         self.assertIn("let globalPointGlowStrength = 0.60;", html)
         self.assertIn("const pointScaleBaseline = Math.max(Number(sceneSpec.point_size_baseline_scale) || (4.0 / 3.0), 0.01);", html)
-        self.assertIn("const pointScale = (Math.max(sceneSpec.max_span || 1, 1) / 2600.0) * pointScaleBaseline;", html)
+        self.assertIn("const pointScaleReferenceSpan = Math.max(", html)
+        self.assertIn("Number(sceneSpec.point_size_reference_span_pc) || Math.max(sceneSpec.max_span || 1, 1),", html)
+        self.assertIn("const pointScale = (pointScaleReferenceSpan / 2600.0) * pointScaleBaseline;", html)
         self.assertIn("function starCoreMaterialFor", html)
         self.assertIn("function starCoreScaleForPoint", html)
         self.assertIn("function nonGlowMarkerScaleForPoint", html)
+
         self.assertIn("* 0.36", html)
         self.assertNotIn("function starBloomMaterialFor", html)
         self.assertNotIn("function starBloomScaleForPoint", html)
@@ -259,6 +262,15 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('"has_n_stars"', html)
         self.assertIn("Fade time (Myr)", html)
         self.assertIn("Fade in and out", html)
+        self.assertIn("Fade opacity by birth time", html)
+        self.assertIn("birthOpacityFadePointSize", html)
+        self.assertIn("size: baseSize * birthFadeFactor", html)
+        self.assertIn("function traceReferencePoints(trace)", html)
+        self.assertIn("trace.focus_points", html)
+        self.assertIn("referenceFrameKey: motionKeyForPoint(point)", html)
+        self.assertIn("if (target.referenceFrameKey)", html)
+        self.assertIn("function niceAxisTickStep", html)
+        self.assertIn("function buildCleanDynamicAxes", html)
         self.assertIn("Cluster Filter", html)
         self.assertIn("Dendrogram", html)
         self.assertIn("Parameter", html)
@@ -271,6 +283,11 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Shift + W / A / S / D", html)
         self.assertIn("Toggle between 3D View and Sky View.", html)
         self.assertIn("In Sky View, toggle the sky background image on or off.", html)
+        self.assertIn("Hide or show all legend items in the current group.", html)
+        self.assertIn("function toggleAllLegendItems()", html)
+        self.assertIn("keyboardLegendVisibilitySnapshotByGroup.set(snapshotKey, visibleSnapshot)", html)
+        self.assertIn("visibleSnapshot[itemKey] === true", html)
+        self.assertIn('if (lowerKey === "t") {', html)
         self.assertIn(">View: 3D<", html)
         self.assertIn("Current view: 3D. Click or press V to enter Sky view.", html)
         self.assertIn("oviz-three-earth-view-toggle", html)
@@ -278,6 +295,11 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("oviz-three-scale-bar", html)
         self.assertIn("oviz-three-save-state", html)
         self.assertIn('canvas.addEventListener("dblclick", onCanvasDoubleClick);', html)
+        self.assertIn("function setZoomAnchorToCameraTarget()", html)
+        self.assertIn("function updateZoomAnchorFromControlsPan()", html)
+        self.assertIn("zoomAnchorTracksFrame = false;", html)
+        self.assertIn("target.fallbackPlane", html)
+        self.assertIn("resetCameraView();", html)
         self.assertIn('if (cameraViewMode === "earth") {\n          event.preventDefault();\n          return;\n        }', html)
         self.assertIn('window.addEventListener("keydown", onKeyDown);', html)
         self.assertIn('window.addEventListener("keyup", onKeyUp);', html)
@@ -290,11 +312,14 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(viz.fig_dict["camera_up"], {"x": 0.0, "y": 0.0, "z": 1.0})
         self.assertEqual(viz.fig_dict["animation"]["fade_in_time_default"], 5.0)
         self.assertFalse(viz.fig_dict["animation"]["fade_in_and_out_default"])
+        self.assertFalse(viz.fig_dict["animation"]["fade_opacity_by_birth_time_default"])
         self.assertTrue(viz.fig_dict["cluster_filter"]["enabled"])
         self.assertEqual(viz.fig_dict["cluster_filter"]["default_parameter_key"], "age_now_myr")
         self.assertTrue(viz.fig_dict["dendrogram"]["enabled"])
         cluster_legend = next(item for item in viz.fig_dict["legend"]["items"] if item["name"] == "Cluster A")
         self.assertEqual(cluster_legend["color"], "#00ffff")
+        self.assertEqual(cluster_legend["color_by"]["mode"], "age")
+        self.assertEqual(cluster_legend["color_by"]["default_color_mode"], "fixed")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             out_file = Path(tmp_dir) / "threejs_scene.html"
@@ -303,6 +328,39 @@ class ThreeJSRendererTests(unittest.TestCase):
             html_text = out_file.read_text()
             self.assertIn("oviz-three-legend-panel", html_text)
             self.assertNotIn("Three.js modules are loaded from a CDN", html_text)
+
+    def test_threejs_trace_colormap_exports_age_controls(self):
+        collection = _FakeCollection(show_tracks=False)
+        collection.cluster.colormap = "Turbo"
+        collection.cluster.cmin = 0.0
+        collection.cluster.cmax = 20.0
+        viz = Animate3D(collection, figure_theme="dark")
+        fig = viz.make_plot(time=np.array([0.0, -1.0]), renderer="threejs", show=False)
+
+        legend_item = next(
+            item
+            for item in fig.scene_spec["legend"]["items"]
+            if item["name"] == "Cluster A"
+        )
+        self.assertEqual(legend_item["color_by"]["mode"], "age")
+        self.assertEqual(legend_item["color_by"]["label"], "Age (Myr)")
+        self.assertEqual(legend_item["color_by"]["cmin"], 0.0)
+        self.assertEqual(legend_item["color_by"]["cmax"], 20.0)
+        self.assertEqual(legend_item["color_by"]["default_color_mode"], "by_value")
+        self.assertGreaterEqual(len(legend_item["color_by"]["colormap_options"]), 3)
+
+        frame_trace = next(
+            trace
+            for trace in fig.scene_spec["frames"][fig.scene_spec["initial_frame_index"]]["traces"]
+            if trace["name"] == "Cluster A"
+        )
+        self.assertEqual(frame_trace["points"][0]["color_scalar"], 12.0)
+
+        html = fig.to_html()
+        self.assertIn("Color mode", html)
+        self.assertIn("By ${String(colorBy.label || \"value\")}", html)
+        self.assertIn("function pointColorForTrace(point, trace, traceState)", html)
+        self.assertIn("traceColorFromColormap(colorBy, traceState.colormap", html)
 
     def test_threejs_html_can_force_compressed_scene_spec_payload(self):
         scene_spec = {
@@ -1143,6 +1201,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("exitStartDirection", html)
         self.assertNotIn("opacityMultiplier *= selectedClusterKeys.has(pointKey) ? 1.0 : 0.16;", html)
         self.assertIn("endDistance: exitTargetDistance", html)
+        self.assertNotIn('if (cameraViewMode === "earth") {\n          return false;\n        }\n        if (isGalacticReferenceTrace(trace)', html)
         self.assertIn("(!galacticReferenceVisible || cameraViewMode === \"earth\")", html)
         self.assertIn("lockDirection: preserveDirection", html)
         self.assertIn("oviz-three-sky-layer-preset-select", html)
@@ -1183,6 +1242,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("aladinInstance.setOverlayImageLayer(overlaySurvey, layerName)", html)
         self.assertIn("aladinInstance.setImageSurvey(survey)", html)
         self.assertIn("applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });", html)
+        self.assertIn("function candidateIsVisible(candidate)", html)
+        self.assertIn("function setCandidateVisible(candidate, visible)", html)
+        self.assertIn("updateActiveVolumeRuntime();", html)
         self.assertIn("function skyDomeFrameVisualFilterCss", html)
         self.assertNotIn("Show sky dome", html)
         self.assertNotIn("Keep sky visible", html)
@@ -1601,6 +1663,100 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('vmaxInput.addEventListener("input"', html)
         self.assertNotIn('vminInput.step = "any"', html)
         self.assertNotIn('vmaxInput.step = "any"', html)
+
+    def test_threejs_renderer_volume_clip_bounds_crop_source_cube(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cube_path = Path(tmp_dir) / "clipped_dust_cube.fits"
+            cube = np.arange(5 * 5 * 5, dtype=np.float32).reshape(5, 5, 5)
+
+            image_hdu = fits.ImageHDU(cube, name="MEAN")
+            for axis_number, axis_name in enumerate(("X", "Y", "Z"), start=1):
+                image_hdu.header[f"CTYPE{axis_number}"] = axis_name
+                image_hdu.header[f"CUNIT{axis_number}"] = "pc"
+                image_hdu.header[f"CRVAL{axis_number}"] = -4.0
+                image_hdu.header[f"CRPIX{axis_number}"] = 1.0
+                image_hdu.header[f"CDELT{axis_number}"] = 2.0
+            fits.HDUList([fits.PrimaryHDU(), image_hdu]).writeto(cube_path)
+
+            fig = viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                volumes=[{
+                    "path": str(cube_path),
+                    "name": "Clipped Dust Cube",
+                    "hdu": "MEAN",
+                    "clip_bounds": {
+                        "x": [-1.0, 3.0],
+                        "y": [-1.0, 3.0],
+                        "z": [-1.0, 3.0],
+                    },
+                    "max_resolution": 8,
+                }],
+            )
+
+        layer = fig.scene_spec["volumes"]["layers"][0]
+
+        self.assertEqual(layer["shape"], {"x": 2, "y": 2, "z": 2})
+        self.assertEqual(layer["source_shape"], {"x": 2, "y": 2, "z": 2})
+        self.assertEqual(layer["original_source_shape"], {"x": 5, "y": 5, "z": 5})
+        self.assertEqual(layer["bounds"]["x"], [-1.0, 3.0])
+        self.assertEqual(layer["bounds"]["y"], [-1.0, 3.0])
+        self.assertEqual(layer["bounds"]["z"], [-1.0, 3.0])
+
+    def test_threejs_renderer_can_encode_primary_volume_as_png_atlas(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cube_path = Path(tmp_dir) / "atlas_dust_cube.fits"
+            cube = np.linspace(0.0, 1.0, 3 * 4 * 5, dtype=np.float32).reshape(3, 4, 5)
+            fits.HDUList([
+                fits.PrimaryHDU(),
+                fits.ImageHDU(cube, name="MEAN"),
+            ]).writeto(cube_path)
+
+            fig = viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                volumes=[{
+                    "path": str(cube_path),
+                    "name": "Atlas Dust Cube",
+                    "hdu": "MEAN",
+                    "max_resolution": 8,
+                    "data_encoding": "png_atlas_uint8",
+                }],
+            )
+
+        layer = fig.scene_spec["volumes"]["layers"][0]
+        html = fig.to_html()
+
+        self.assertEqual(layer["data_encoding"], "png_atlas_uint8")
+        self.assertTrue(layer["data_b64"])
+        self.assertEqual(layer["data_atlas_tiles"], {"x": 2, "y": 2})
+        self.assertIn("startPngAtlasVolumeDecode", html)
+        self.assertIn("volumeTexture.texture.needsUpdate = true", html)
+
+    def test_threejs_scene_float_precision_rounds_exported_coordinates(self):
+        collection = _FakeCollection()
+        collection.cluster.df_int.loc[:, "x"] = [1.234567, -9.876543]
+        collection.cluster.df_int.loc[:, "y"] = [2.345678, -8.765432]
+        collection.cluster.df_int.loc[:, "z"] = [3.456789, -7.654321]
+        viz = Animate3D(collection, figure_theme="dark")
+
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            threejs_initial_state={"scene_float_precision": 2},
+        )
+
+        point = fig.scene_spec["frames"][fig.scene_spec["initial_frame_index"]]["traces"][0]["points"][0]
+        self.assertEqual(point["x"], 1.23)
+        self.assertEqual(point["y"], 2.35)
+        self.assertEqual(point["z"], 3.46)
 
     def test_threejs_renderer_volume_defaults_to_100_samples(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")

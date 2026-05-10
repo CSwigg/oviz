@@ -679,7 +679,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         const nextLassoSelectionMask = captureLassoSelectionMask(polygon);
         const selected = [];
         hoverTargets.forEach((sprite) => {
-          const selection = sprite && sprite.userData ? sprite.userData.selection : null;
+          const selection = selectionForSprite(sprite);
           if (!selection) {
             return;
           }
@@ -805,6 +805,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             worldPoint,
             selection: hitObject.userData ? (hitObject.userData.selection || null) : null,
             selectionKey: hitObject.userData ? normalizeMemberKey(hitObject.userData.selectionKey || "") : "",
+            referenceFrameKey: hitObject.userData ? normalizeMemberKey(hitObject.userData.referenceFrameKey || "") : "",
             manualLabelId: hitObject.userData ? String(hitObject.userData.manualLabelId || "") : "",
           };
         }
@@ -823,6 +824,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
               worldPoint: hit.point.clone(),
               selection: null,
               selectionKey: "",
+              referenceFrameKey: "",
               manualLabelId: "",
             };
           }
@@ -841,7 +843,9 @@ THREEJS_INTERACTION_RUNTIME_JS = """
               worldPoint: planePoint,
               selection: null,
               selectionKey: "",
+              referenceFrameKey: "",
               manualLabelId: "",
+              fallbackPlane: true,
             };
           }
         }
@@ -860,6 +864,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
         controls.target.add(delta);
         camera.position.add(delta);
+        setZoomAnchorToCameraTarget();
         applyCameraViewMode();
         controls.update();
         updateScaleBar();
@@ -1009,14 +1014,16 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           return;
         }
         const target = doubleClickTargetFromEvent(event);
-        if (!target || !target.worldPoint) {
+        if (!target || !target.worldPoint || target.fallbackPlane) {
+          resetCameraView();
+          event.preventDefault();
           return;
         }
         if (target.manualLabelId) {
           return;
         }
-        if (target.selectionKey) {
-          focusSelectionKey = target.selectionKey;
+        if (target.referenceFrameKey) {
+          focusSelectionKey = target.referenceFrameKey;
           renderFrame(currentFrameIndex);
           recenterCameraTarget(new THREE.Vector3(0.0, 0.0, 0.0));
         } else {

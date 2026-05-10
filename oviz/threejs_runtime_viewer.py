@@ -2,6 +2,8 @@ from __future__ import annotations
 
 
 THREEJS_VIEWER_RUNTIME_JS = """
+      let keyboardLegendVisibilitySnapshotByGroup = new Map();
+
       function clamp01(value) {
         return Math.min(Math.max(Number(value), 0.0), 1.0);
       }
@@ -348,6 +350,9 @@ THREEJS_VIEWER_RUNTIME_JS = """
 
       function applyCameraViewMode() {
         const isEarthView = cameraViewMode === "earth";
+        if (typeof axisGroup !== "undefined" && axisGroup) {
+          axisGroup.visible = !isEarthView && axesVisible;
+        }
         controls.enabled = !isEarthView;
         controls.enableRotate = !isEarthView;
         controls.enableZoom = !isEarthView;
@@ -475,6 +480,8 @@ THREEJS_VIEWER_RUNTIME_JS = """
         earthViewFocusDistance = null;
         earthViewReturnCameraState = null;
         galacticSimpleOrbitTargetTrackingActive = false;
+        zoomAnchorTracksFrame = true;
+        currentZoomAnchorPoint = trackedZoomAnchorPointForFrame(currentFrame()) || (initialZoomAnchorPoint ? initialZoomAnchorPoint.clone() : null);
         camera.position.copy(initialCameraState.position);
         controls.target.copy(initialCameraState.target);
         camera.up.copy(initialCameraState.up);
@@ -1167,6 +1174,8 @@ THREEJS_VIEWER_RUNTIME_JS = """
         earthViewFocusDistance = focusDistance;
         applyGlobalControlState();
         applyCameraViewMode();
+        buildAxes();
+        renderFrame(currentFrameIndex);
         animateCameraTransition(
           targetPosition,
           earthPoint,
@@ -1179,6 +1188,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
             renderFrame(currentFrameIndex);
             applyGlobalControlState();
             applyCameraViewMode();
+            buildAxes();
             controls.update();
             renderSceneControls();
             updateScaleBar();
@@ -1253,6 +1263,8 @@ THREEJS_VIEWER_RUNTIME_JS = """
               setSkyDomeViewOpacityScale(0.0, { force: true });
               applyGlobalControlState();
               applyCameraViewMode();
+              buildAxes();
+              renderFrame(currentFrameIndex);
               controls.update();
               renderSceneControls();
               updateScaleBar();
@@ -1506,6 +1518,9 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (fadeInOutToggleEl) {
           fadeInOutToggleEl.checked = fadeInAndOutEnabled;
         }
+        if (fadeOpacityByBirthToggleEl) {
+          fadeOpacityByBirthToggleEl.checked = fadeOpacityByBirthTimeEnabled;
+        }
         if (axesVisibleToggleEl) {
           axesVisibleToggleEl.checked = axesVisible;
         }
@@ -1588,6 +1603,74 @@ THREEJS_VIEWER_RUNTIME_JS = """
         });
       }
 
+      function legendItemVisibleForKeyboard(item) {
+        const itemKey = String(item && item.key || "");
+        const layer = volumeLayerForKey(itemKey);
+        if (layer) {
+          const stateKey = volumeStateKeyForLayer(layer);
+          const state = stateKey ? volumeStateByKey[stateKey] : null;
+          return Boolean(state && state.visible !== false && legendState[itemKey] !== false && legendState[stateKey] !== false);
+        }
+        return legendState[itemKey] !== false;
+      }
+
+      function setLegendItemVisibleForKeyboard(item, visible) {
+        const itemKey = String(item && item.key || "");
+        const nextVisible = Boolean(visible);
+        const layer = volumeLayerForKey(itemKey);
+        if (layer) {
+          const stateKey = volumeStateKeyForLayer(layer);
+          const state = stateKey ? volumeStateByKey[stateKey] : null;
+          if (state) {
+            state.visible = nextVisible;
+            legendState[itemKey] = nextVisible;
+            legendState[stateKey] = nextVisible;
+            if (nextVisible) {
+              activeVolumeKey = String(stateKey);
+            }
+          }
+          return;
+        }
+        legendState[itemKey] = nextVisible;
+      }
+
+      function toggleAllLegendItems() {
+        if (minimalModeEnabled) {
+          return false;
+        }
+        const items = keyboardLegendItems();
+        if (!items.length) {
+          return false;
+        }
+        const anyVisible = items.some((item) => legendItemVisibleForKeyboard(item));
+        const snapshotKey = String(currentGroup || defaultGroup || "default");
+        if (anyVisible) {
+          const visibleSnapshot = {};
+          items.forEach((item) => {
+            const itemKey = String(item && item.key || "");
+            if (itemKey && legendItemVisibleForKeyboard(item)) {
+              visibleSnapshot[itemKey] = true;
+            }
+            setLegendItemVisibleForKeyboard(item, false);
+          });
+          keyboardLegendVisibilitySnapshotByGroup.set(snapshotKey, visibleSnapshot);
+        } else {
+          const visibleSnapshot = keyboardLegendVisibilitySnapshotByGroup.get(snapshotKey);
+          items.forEach((item) => {
+            const itemKey = String(item && item.key || "");
+            const restoreVisible = visibleSnapshot && Object.keys(visibleSnapshot).length
+              ? visibleSnapshot[itemKey] === true
+              : true;
+            setLegendItemVisibleForKeyboard(item, restoreVisible);
+          });
+          keyboardLegendVisibilitySnapshotByGroup.delete(snapshotKey);
+        }
+        renderLegend();
+        updateActiveVolumeRuntime();
+        renderFrame(currentFrameIndex);
+        return true;
+      }
+
       function toggleLegendItemByIndex(index, solo = false) {
         if (minimalModeEnabled) {
           return false;
@@ -1598,13 +1681,14 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         if (solo) {
           items.forEach((item, itemIndex) => {
-            legendState[item.key] = itemIndex === index;
+            setLegendItemVisibleForKeyboard(item, itemIndex === index);
           });
         } else {
           const item = items[index];
-          legendState[item.key] = !legendState[item.key];
+          setLegendItemVisibleForKeyboard(item, !legendItemVisibleForKeyboard(item));
         }
         renderLegend();
+        updateActiveVolumeRuntime();
         renderFrame(currentFrameIndex);
         return true;
       }
@@ -1661,6 +1745,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         camera.position.add(delta);
         controls.target.add(delta);
         controls.update();
+        setZoomAnchorToCameraTarget();
         updateScaleBar();
       }
 
@@ -1866,7 +1951,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
           || key === "ArrowLeft"
           || key === "ArrowRight"
           || /^[1-9]$/.test(key)
-          || ["l", "c", "v", "b", "o"].includes(lowerKey);
+          || ["l", "c", "v", "b", "o", "t"].includes(lowerKey);
 
         if (interruptsAction && !actionInterruptsMuted()) {
           interruptActionRun("keyboard", { disableOrbit: true });
@@ -1888,7 +1973,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
           return;
         }
 
-        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "b" || lowerKey === "o" || key === "?" || (key === "/" && event.shiftKey))) {
+        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "b" || lowerKey === "o" || lowerKey === "t" || key === "?" || (key === "/" && event.shiftKey))) {
           event.preventDefault();
           return;
         }
@@ -1966,6 +2051,12 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         if (lowerKey === "b") {
           if (toggleSkyBackgroundHidden()) {
+            event.preventDefault();
+          }
+          return;
+        }
+        if (lowerKey === "t") {
+          if (toggleAllLegendItems()) {
             event.preventDefault();
           }
           return;

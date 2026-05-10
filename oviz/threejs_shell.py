@@ -67,6 +67,8 @@ THREEJS_SHELL_HTML = """
           <div>Play or pause the animation.</div>
           <div class="oviz-three-key-help-keys">L / C</div>
           <div>Toggle lasso mode or hide/show the active selection effect.</div>
+          <div class="oviz-three-key-help-keys">T</div>
+          <div>Hide or show all legend items in the current group.</div>
           <div class="oviz-three-key-help-keys">Cmd/Ctrl + Z</div>
           <div>Undo the last selection change.</div>
           <div class="oviz-three-key-help-keys">V</div>

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 from pathlib import Path
@@ -31,6 +32,15 @@ TAURUS_TRACE_NAME = "Taurus/Sigma Bulk Clusters"
 TAURUS_STARS_TRACE_NAME = "Taurus/Sigma Stars (t=0)"
 TAURUS_LABEL_TRACE_NAME = "Taurus/Sigma Labels (t=0)"
 TAURUS_STAR_COLOR = "#56ff96"
+TAURUS_STAR_COLORMAP = "Turbo"
+HERSCHEL_SPIRE_SKY_SURVEY = "ESAVO/P/HERSCHEL/SPIRE-color"
+SCENE_LIMIT_PC = 500.0
+MAIN_FIGURE_POINT_SIZE_REFERENCE_SPAN_PC = 20000.0
+SCENE_BOUNDS = {
+    "x": (-SCENE_LIMIT_PC, SCENE_LIMIT_PC),
+    "y": (-SCENE_LIMIT_PC, SCENE_LIMIT_PC),
+    "z": (-SCENE_LIMIT_PC, SCENE_LIMIT_PC),
+}
 
 FAMILY_DEFS = (
     ("alphaPer", "Alpha Persei Family", "violet"),
@@ -120,6 +130,123 @@ def coerce_numeric_columns(df, columns):
         if column in df.columns:
             df[column] = pd.to_numeric(df[column], errors="coerce")
     return df
+
+
+def clip_dataframe_to_scene_bounds(df):
+    mask = True
+    for axis, (lower, upper) in SCENE_BOUNDS.items():
+        if axis not in df.columns:
+            continue
+        mask = mask & df[axis].between(lower, upper)
+    return df.loc[mask].copy()
+
+
+def point_inside_scene_bounds(point):
+    try:
+        return all(
+            SCENE_BOUNDS[axis][0] <= float(point[axis]) <= SCENE_BOUNDS[axis][1]
+            for axis in ("x", "y", "z")
+        )
+    except Exception:
+        return False
+
+
+def segment_inside_scene_bounds(segment):
+    if not isinstance(segment, (list, tuple)) or len(segment) < 6:
+        return False
+    try:
+        start = {"x": float(segment[0]), "y": float(segment[1]), "z": float(segment[2])}
+        end = {"x": float(segment[3]), "y": float(segment[4]), "z": float(segment[5])}
+    except Exception:
+        return False
+    return point_inside_scene_bounds(start) and point_inside_scene_bounds(end)
+
+
+def reduced_focus_point(point):
+    try:
+        x = float(point["x"])
+        y = float(point["y"])
+        z = float(point["z"])
+    except Exception:
+        return None
+    if not all(math.isfinite(value) for value in (x, y, z)):
+        return None
+
+    focus_point = {"x": x, "y": y, "z": z}
+    motion = point.get("motion") if isinstance(point, dict) else None
+    if isinstance(motion, dict):
+        motion_key = str(motion.get("key", "")).strip()
+        focus_motion = {}
+        if motion_key:
+            focus_motion["key"] = motion_key
+        for key in ("time_myr", "age_now_myr"):
+            value = motion.get(key)
+            try:
+                numeric = float(value)
+            except Exception:
+                continue
+            if math.isfinite(numeric):
+                focus_motion[key] = numeric
+        if focus_motion:
+            focus_point["motion"] = focus_motion
+
+    selection = point.get("selection") if isinstance(point, dict) else None
+    if isinstance(selection, dict):
+        focus_selection = {}
+        for key in ("cluster_name", "trace_name"):
+            value = str(selection.get(key, "")).strip()
+            if value:
+                focus_selection[key] = value
+        for key in ("x0", "y0", "z0", "ra_deg", "dec_deg", "age_now_myr"):
+            value = selection.get(key)
+            try:
+                numeric = float(value)
+            except Exception:
+                continue
+            if math.isfinite(numeric):
+                focus_selection[key] = numeric
+        if focus_selection:
+            focus_point["selection"] = focus_selection
+
+    return focus_point
+
+
+def clip_scene_spec_to_scene_bounds(scene_spec):
+    scene_spec["ranges"] = {axis: list(bounds) for axis, bounds in SCENE_BOUNDS.items()}
+    scene_spec["center"] = {"x": 0.0, "y": 0.0, "z": 0.0}
+    scene_spec["max_span"] = 2.0 * SCENE_LIMIT_PC
+    layout_scene = scene_spec.setdefault("layout", {}).setdefault("scene", {})
+    for axis_name, axis in (("xaxis", "x"), ("yaxis", "y"), ("zaxis", "z")):
+        axis_layout = layout_scene.setdefault(axis_name, {})
+        axis_layout["range"] = list(SCENE_BOUNDS[axis])
+        axis_layout["visible"] = True
+    layout_scene["aspectratio"] = {"x": 1, "y": 1, "z": 1}
+
+    for axis, axis_spec in (scene_spec.get("axes") or {}).items():
+        axis_spec["range"] = list(SCENE_BOUNDS.get(axis, (-SCENE_LIMIT_PC, SCENE_LIMIT_PC)))
+        axis_spec["visible"] = True
+
+    for frame in scene_spec.get("frames", []) or []:
+        for trace in frame.get("traces", []) or []:
+            if trace.get("points"):
+                trace["focus_points"] = [
+                    focus_point
+                    for focus_point in (
+                        reduced_focus_point(point) for point in trace["points"]
+                    )
+                    if focus_point is not None
+                ]
+                trace["points"] = [
+                    point for point in trace["points"] if point_inside_scene_bounds(point)
+                ]
+            if trace.get("labels"):
+                trace["labels"] = [
+                    label for label in trace["labels"] if point_inside_scene_bounds(label)
+                ]
+            if trace.get("segments"):
+                trace["segments"] = [
+                    segment for segment in trace["segments"] if segment_inside_scene_bounds(segment)
+                ]
 
 
 def load_cluster_context():
@@ -260,7 +387,7 @@ def load_taurus_star_sample(csv_path: Path):
     csv_path = require_existing_path(csv_path, "Taurus/Sigma CSV")
     taurus = pd.read_csv(csv_path).rename(columns={"X": "x", "Y": "y", "Z": "z"})
     taurus = coerce_numeric_columns(taurus, ["x", "y", "z", "age_myr"])
-    taurus = taurus.replace([np.inf, -np.inf], np.nan).dropna(subset=["x", "y", "z"]).copy()
+    taurus = taurus.replace([np.inf, -np.inf], np.nan).dropna(subset=["x", "y", "z", "age_myr"]).copy()
     if "name" not in taurus.columns:
         taurus["name"] = "Taurus/Sigma"
     taurus["name"] = taurus["name"].fillna("Taurus/Sigma").astype(str)
@@ -305,7 +432,12 @@ def build_taurus_star_customdata(taurus_stars):
 
 
 def build_taurus_static_traces(taurus_bulk, taurus_stars):
+    import numpy as np
     import plotly.graph_objects as go
+
+    star_ages = taurus_stars["age_myr"].to_numpy(dtype=float)
+    age_cmin = float(np.nanmin(star_ages))
+    age_cmax = float(np.nanmax(star_ages))
 
     star_trace = go.Scatter3d(
         x=taurus_stars["x"].to_numpy(dtype=float),
@@ -314,7 +446,10 @@ def build_taurus_static_traces(taurus_bulk, taurus_stars):
         mode="markers",
         marker=dict(
             size=0.35,
-            color=TAURUS_STAR_COLOR,
+            color=star_ages,
+            colorscale=TAURUS_STAR_COLORMAP,
+            cmin=age_cmin,
+            cmax=age_cmax,
             opacity=0.75,
             symbol="circle",
             line=dict(width=0),
@@ -322,7 +457,13 @@ def build_taurus_static_traces(taurus_bulk, taurus_stars):
         customdata=build_taurus_star_customdata(taurus_stars),
         name=TAURUS_STARS_TRACE_NAME,
         hoverinfo="skip",
-        meta={"trace_kind": "stars", "static": True},
+        meta={
+            "trace_kind": "stars",
+            "static": True,
+            "color_by": "age",
+            "color_label": "Age (Myr)",
+            "colormap": TAURUS_STAR_COLORMAP,
+        },
     )
 
     label_trace = go.Scatter3d(
@@ -364,29 +505,37 @@ def default_trace_off(scene_spec: dict, trace_name: str) -> None:
 
 
 def main_style_initial_state(*, compact_payload: bool, taurus_center: dict[str, float]):
-    camera_target = {
+    zoom_anchor = {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0,
     }
+    main_figure_camera_target = {
+        "x": 3000.0,
+        "y": 0.0,
+        "z": 0.0,
+    }
+    main_figure_camera_position = {
+        "x": 3700.0,
+        "y": -6550.0,
+        "z": 4700.0,
+    }
+    camera_target = dict(zoom_anchor)
+    zoom_in_factor = 5.0
     camera_position = {
-        "x": camera_target["x"] + 280.0,
-        "y": camera_target["y"] - 470.0,
-        "z": camera_target["z"] + 280.0,
+        axis: camera_target[axis]
+        + (main_figure_camera_position[axis] - main_figure_camera_target[axis]) / zoom_in_factor
+        for axis in ("x", "y", "z")
     }
     return {
-        "current_group": "Taurus Sigma",
+        "current_group": "Taurus + Context",
         "click_selection_enabled": False,
         "compact_payload_enabled": bool(compact_payload),
+        "clean_box_axes": True,
         "active_volume_key": "volume-0",
         "legend_state": {"volume-0": True},
         "volume_state_by_key": {"volume-0": {"visible": True}},
-        "galaxy_image": True,
-        "galaxy_image_path": str(GALACTIC_PLANE_IMAGE_PATH),
-        "galaxy_image_size_pc": 40000.0,
-        "galaxy_image_opacity": 0.35,
-        "galaxy_image_hide_below_scale_bar_pc": 420.0,
-        "galaxy_image_fade_start_scale_bar_pc": 700.0,
+        "galaxy_image": False,
         "sky_dome_enabled": True,
         "sky_dome_background_mode": "live_aladin",
         "sky_dome_source": "aladin",
@@ -402,22 +551,22 @@ def main_style_initial_state(*, compact_payload: bool, taurus_center: dict[str, 
         "sky_dome_fade_out_scale_bar_pc": 360.0,
         "sky_layers": [
             {
-                "key": "P/Mellinger/color",
-                "label": "Mellinger Color",
-                "survey": "P/Mellinger/color",
+                "key": HERSCHEL_SPIRE_SKY_SURVEY,
+                "label": "Herschel SPIRE Color",
+                "survey": HERSCHEL_SPIRE_SKY_SURVEY,
                 "opacity": 1.0,
-                "visible": False,
+                "visible": True,
             },
             {
                 "key": "P/PLANCK/R2/HFI/color",
                 "label": "Planck Dust Emission Color",
                 "survey": "P/PLANCK/R2/HFI/color",
-                "opacity": 1.0,
+                "opacity": 0.65,
                 "visible": True,
             },
         ],
-        "active_sky_layer_key": "P/PLANCK/R2/HFI/color",
-        "initial_zoom_anchor": camera_target,
+        "active_sky_layer_key": HERSCHEL_SPIRE_SKY_SURVEY,
+        "initial_zoom_anchor": zoom_anchor,
         "camera": {
             "position": camera_position,
             "target": camera_target,
@@ -449,6 +598,14 @@ def render_figure(input_csv: Path, output_html: Path, *, compact_payload: bool =
     df_hunt_60, df_hunt_young, family_frames = load_cluster_context()
     taurus = load_taurus_bulk_clusters(input_csv)
     taurus_stars = load_taurus_star_sample(input_csv)
+    df_hunt_60 = clip_dataframe_to_scene_bounds(df_hunt_60)
+    df_hunt_young = clip_dataframe_to_scene_bounds(df_hunt_young)
+    family_frames = [
+        (label, clip_dataframe_to_scene_bounds(frame), color)
+        for label, frame, color in family_frames
+    ]
+    taurus = clip_dataframe_to_scene_bounds(taurus)
+    taurus_stars = clip_dataframe_to_scene_bounds(taurus_stars)
     taurus_center = {
         "x": float(np.nanmedian(taurus["x"].to_numpy(dtype=float))),
         "y": float(np.nanmedian(taurus["y"].to_numpy(dtype=float))),
@@ -539,17 +696,41 @@ def render_figure(input_csv: Path, output_html: Path, *, compact_payload: bool =
 
     plot_3d = Animate3D(
         data_collection=traces,
-        xyz_widths=(2000, 2000, 400),
+        xyz_ranges=(
+            SCENE_BOUNDS["x"],
+            SCENE_BOUNDS["y"],
+            SCENE_BOUNDS["z"],
+        ),
         figure_theme="dark",
         trace_grouping_dict=trace_groupings,
     )
+    for axis_name, axis_title in (
+        ("xaxis", "x (pc)"),
+        ("yaxis", "y (pc)"),
+        ("zaxis", "z (pc)"),
+    ):
+        axis_layout = plot_3d.figure_layout_dict["scene"][axis_name]
+        axis_layout.update(
+            title=axis_title,
+            visible=True,
+            showline=True,
+            showgrid=False,
+            zeroline=False,
+            linecolor="#777777",
+            linewidth=1.0,
+            tickfont={"size": 14, "color": "#777777", "family": "Helvetica"},
+            title_font={"size": 18, "color": "#777777", "family": "Helvetica"},
+            dtick=200,
+            nticks=6,
+        )
 
     edenhofer_volume = {
         "name": "Edenhofer+2024 Dust",
         "path": str(require_existing_path(EDENHOFER_FITS_PATH, "Edenhofer FITS map")),
         "hdu": "MEAN",
-        "max_resolution": 640,
-        "max_resolution_cap": 640,
+        "clip_bounds": {axis: list(bounds) for axis, bounds in SCENE_BOUNDS.items()},
+        "max_resolution": 512,
+        "max_resolution_cap": 512,
         "opacity": 1.0,
         "samples": 200,
         "alpha_coef": 200,
@@ -573,10 +754,10 @@ def render_figure(input_csv: Path, output_html: Path, *, compact_payload: bool =
         show_age_kde_inset=True,
         age_kde_bandwidth_myr=2,
         include_spiral_arms=False,
-        galactic_mode=True,
+        galactic_mode=False,
         show_galactic_guides=False,
         camera_zoom_factor=5,
-        show_gc_line=True,
+        show_gc_line=False,
         show_milky_way_model=False,
         renderer="threejs",
         enable_sky_panel=True,
@@ -586,6 +767,8 @@ def render_figure(input_csv: Path, output_html: Path, *, compact_payload: bool =
             taurus_center=taurus_center,
         ),
     )
+    clip_scene_spec_to_scene_bounds(figure.scene_spec)
+    figure.scene_spec["point_size_reference_span_pc"] = MAIN_FIGURE_POINT_SIZE_REFERENCE_SPAN_PC
     default_trace_off(figure.scene_spec, TAURUS_LABEL_TRACE_NAME)
     figure.write_html(str(output_html))
     return output_html

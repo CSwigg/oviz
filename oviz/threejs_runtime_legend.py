@@ -388,18 +388,51 @@ THREEJS_LEGEND_RUNTIME_JS = """
               renderLegend();
               renderFrame(currentFrameIndex);
             });
-            if (!minimalModeEnabled && !itemVolumeLayer) {
+            if (!minimalModeEnabled) {
               toggleButton.addEventListener("dblclick", () => {
-                const traceItems = items.filter((candidate) => !volumeLayerForKey(candidate.key));
-                const onlyThisVisible = traceItems.every((candidate) => {
+                function candidateIsVisible(candidate) {
                   const candidateKey = String(candidate.key);
-                  return legendState[candidateKey] === (candidateKey === itemKey);
-                });
-                traceItems.forEach((candidate) => {
+                  const candidateLayer = volumeLayerForKey(candidateKey);
+                  if (candidateLayer) {
+                    const candidateStateKey = volumeStateKeyForLayer(candidateLayer);
+                    const candidateState = candidateStateKey ? volumeStateByKey[candidateStateKey] : null;
+                    return Boolean(
+                      candidateState
+                      && candidateState.visible !== false
+                      && legendState[candidateKey] !== false
+                      && legendState[candidateStateKey] !== false
+                    );
+                  }
+                  return legendState[candidateKey] !== false;
+                }
+
+                function setCandidateVisible(candidate, visible) {
                   const candidateKey = String(candidate.key);
-                  legendState[candidateKey] = onlyThisVisible ? true : candidateKey === itemKey;
+                  const nextVisible = Boolean(visible);
+                  const candidateLayer = volumeLayerForKey(candidateKey);
+                  if (candidateLayer) {
+                    const candidateStateKey = volumeStateKeyForLayer(candidateLayer);
+                    const candidateState = candidateStateKey ? volumeStateByKey[candidateStateKey] : null;
+                    if (candidateState) {
+                      candidateState.visible = nextVisible;
+                      legendState[candidateKey] = nextVisible;
+                      legendState[candidateStateKey] = nextVisible;
+                      if (nextVisible) {
+                        activeVolumeKey = String(candidateStateKey);
+                      }
+                    }
+                    return;
+                  }
+                  legendState[candidateKey] = nextVisible;
+                }
+
+                const onlyThisVisible = items.every((candidate) => {
+                  const candidateKey = String(candidate.key);
+                  return candidateIsVisible(candidate) === (candidateKey === itemKey);
                 });
+                items.forEach((candidate) => setCandidateVisible(candidate, onlyThisVisible ? true : String(candidate.key) === itemKey));
                 renderLegend();
+                updateActiveVolumeRuntime();
                 renderFrame(currentFrameIndex);
               });
             }

@@ -112,6 +112,7 @@ DEFAULT_THREEJS_VOLUME_COLORMAPS = (
     'gist_heat',
     'Greys',
 )
+DEFAULT_THREEJS_TRACE_COLORMAP = 'turbo'
 DEFAULT_THREEJS_VOLUME_SAMPLE_STEPS = 100
 DEFAULT_THREEJS_VOLUME_MAX_RESOLUTION_CAP = 512
 
@@ -1578,6 +1579,17 @@ class Animate3D:
             else:
                 n_star_values = np.full(len(df_t), np.nan, dtype=float)
 
+            trace_meta = {
+                'trace_kind': 'cluster',
+                'size_by_n_stars': bool(getattr(cluster_group, 'size_by_n_stars', False)),
+            }
+            if cluster_group.colormap:
+                trace_meta.update({
+                    'color_by': 'age',
+                    'color_label': 'Age (Myr)',
+                    'colormap': str(cluster_group.colormap),
+                })
+
             scatter_list.append(
                 go.Scatter3d(
                     x=df_t[x_col].values,
@@ -1598,10 +1610,7 @@ class Animate3D:
                         trace_colors,
                         n_star_values,
                     )),
-                    meta={
-                        'trace_kind': 'cluster',
-                        'size_by_n_stars': bool(getattr(cluster_group, 'size_by_n_stars', False)),
-                    },
+                    meta=trace_meta,
                     hovertext=hovertext,
                     hoverinfo='text',  # This removes default x, y, z
                     hovertemplate='%{hovertext}<extra></extra>',  # This ensures only custom hovertext is shown
@@ -2553,6 +2562,11 @@ class Animate3D:
                     spec['default_opacity'] = float(np.median(point_opacities))
                 if legend_color is None:
                     legend_color = points[0].get('color')
+                color_by = _threejs_trace_color_by_spec(trace_json, points)
+                if color_by is not None:
+                    spec['color_by'] = color_by
+                    if color_by.get('default_color_mode') == 'by_value':
+                        legend_color = color_by.get('legend_color') or legend_color
 
         if 'text' in mode:
             labels = _labels_from_trace(trace_json)
@@ -2721,30 +2735,32 @@ def _resolve_marker_color_values(marker, length, default_opacity=1.0):
         css, alpha = _color_to_css_and_opacity('#808080', default_opacity)
         return [css] * length, [alpha] * length
 
+    numeric_values = _marker_numeric_color_values(marker, length)
+    if numeric_values is not None:
+        colorscale = marker.get('colorscale', 'Viridis')
+        cmin = _coerce_float(marker.get('cmin'), np.nan)
+        cmax = _coerce_float(marker.get('cmax'), np.nan)
+        finite_mask = np.isfinite(numeric_values)
+        if not np.isfinite(cmin):
+            cmin = float(np.nanmin(numeric_values[finite_mask])) if np.any(finite_mask) else 0.0
+        if not np.isfinite(cmax):
+            cmax = float(np.nanmax(numeric_values[finite_mask])) if np.any(finite_mask) else 1.0
+        scaled = np.zeros_like(numeric_values, dtype=float)
+        if not np.isclose(cmax, cmin, atol=1e-12):
+            scaled[finite_mask] = np.clip((numeric_values[finite_mask] - cmin) / (cmax - cmin), 0.0, 1.0)
+        css_values = ['#808080'] * length
+        alpha_values = [float(default_opacity)] * length
+        if np.any(finite_mask):
+            finite_indices = np.flatnonzero(finite_mask)
+            sampled = pc.sample_colorscale(colorscale, scaled[finite_mask].tolist(), colortype='rgb')
+            for point_idx, item in zip(finite_indices, sampled):
+                css, alpha = _color_to_css_and_opacity(item, default_opacity)
+                css_values[int(point_idx)] = css
+                alpha_values[int(point_idx)] = alpha
+        return css_values, alpha_values
+
     if _is_sequence_value(color_value):
         color_values = list(np.asarray(color_value, dtype=object).tolist())
-        if color_values and all(_looks_numeric(val) for val in color_values):
-            colorscale = marker.get('colorscale', 'Viridis')
-            cmin = _coerce_float(marker.get('cmin'), np.nan)
-            cmax = _coerce_float(marker.get('cmax'), np.nan)
-            numeric = np.asarray([float(val) for val in color_values], dtype=float)
-            if not np.isfinite(cmin):
-                cmin = float(np.nanmin(numeric)) if numeric.size else 0.0
-            if not np.isfinite(cmax):
-                cmax = float(np.nanmax(numeric)) if numeric.size else 1.0
-            if np.isclose(cmax, cmin, atol=1e-12):
-                scaled = np.zeros_like(numeric)
-            else:
-                scaled = np.clip((numeric - cmin) / (cmax - cmin), 0.0, 1.0)
-            sampled = pc.sample_colorscale(colorscale, scaled.tolist(), colortype='rgb')
-            css_values = []
-            alpha_values = []
-            for item in sampled:
-                css, alpha = _color_to_css_and_opacity(item, default_opacity)
-                css_values.append(css)
-                alpha_values.append(alpha)
-            return css_values, alpha_values
-
         expanded = _expand_value(color_values, length, '#808080')
         css_values = []
         alpha_values = []
@@ -2763,6 +2779,96 @@ def _looks_numeric(value):
         return np.isfinite(float(value))
     except Exception:
         return False
+
+
+def _marker_numeric_color_values(marker, length):
+    color_value = marker.get('color') if isinstance(marker, dict) else None
+    if color_value is None or length <= 0:
+        return None
+
+    if _is_sequence_value(color_value):
+        values = _as_object_list(color_value)
+        if len(values) not in (1, length):
+            return None
+        expanded = _expand_value(values, length, np.nan)
+    else:
+        expanded = [color_value] * length
+
+    numeric_values = []
+    has_finite = False
+    for value in expanded:
+        if value in (None, ''):
+            numeric_values.append(np.nan)
+            continue
+        try:
+            numeric_value = float(value)
+        except Exception:
+            return None
+        if np.isfinite(numeric_value):
+            has_finite = True
+            numeric_values.append(float(numeric_value))
+        else:
+            numeric_values.append(np.nan)
+
+    if not has_finite:
+        return None
+    return np.asarray(numeric_values, dtype=float)
+
+
+def _threejs_trace_color_by_spec(trace_json, points):
+    marker = trace_json.get('marker', {}) if isinstance(trace_json.get('marker'), dict) else {}
+    trace_meta = trace_json.get('meta') if isinstance(trace_json.get('meta'), dict) else {}
+    marker_color_scalars = _marker_numeric_color_values(marker, len(points))
+    scalar_values = np.asarray([
+        _coerce_float(point.get('color_scalar'), np.nan)
+        for point in points
+    ], dtype=float)
+    finite_mask = np.isfinite(scalar_values)
+    if not np.any(finite_mask):
+        return None
+
+    mode = str(trace_meta.get('color_by') or '').strip().lower()
+    if mode in ('none', 'false', 'off'):
+        return None
+    if not mode:
+        mode = 'age' if any(point.get('color_scalar_kind') == 'age' for point in points) else 'value'
+
+    label = str(trace_meta.get('color_label') or '').strip()
+    if not label:
+        label = 'Age (Myr)' if mode == 'age' else 'Value'
+
+    cmin = _coerce_float(marker.get('cmin'), np.nan)
+    cmax = _coerce_float(marker.get('cmax'), np.nan)
+    if not np.isfinite(cmin):
+        cmin = float(np.nanmin(scalar_values[finite_mask]))
+    if not np.isfinite(cmax):
+        cmax = float(np.nanmax(scalar_values[finite_mask]))
+    if not cmax > cmin:
+        cmax = float(cmin + 1.0)
+
+    selected_colormap = trace_meta.get('colormap') or marker.get('colorscale') or DEFAULT_THREEJS_TRACE_COLORMAP
+    if not isinstance(selected_colormap, str):
+        selected_colormap = DEFAULT_THREEJS_TRACE_COLORMAP
+    try:
+        colormap_options = _build_threejs_volume_colormap_options(selected_colormap)
+    except ValueError:
+        colormap_options = _build_threejs_volume_colormap_options(DEFAULT_THREEJS_TRACE_COLORMAP)
+
+    default_color_mode = str(trace_meta.get('default_color_mode') or '').strip().lower()
+    if default_color_mode not in ('fixed', 'by_value'):
+        default_color_mode = 'by_value' if marker_color_scalars is not None else 'fixed'
+
+    selected_option = colormap_options[0]
+    return {
+        'mode': mode,
+        'label': label,
+        'cmin': float(cmin),
+        'cmax': float(cmax),
+        'colormap': selected_option['name'],
+        'colormap_options': colormap_options,
+        'legend_color': selected_option.get('legend_color'),
+        'default_color_mode': default_color_mode,
+    }
 
 
 def _line_segments_from_trace(trace_json):
@@ -2920,6 +3026,7 @@ def _points_from_trace(
         ]
 
     colors, color_opacity = _resolve_marker_color_values(marker, n_points, default_opacity=1.0)
+    color_scalars = _marker_numeric_color_values(marker, n_points)
     customdata = trace_json.get('customdata')
     custom_rows = None
     if customdata is not None and (include_selection or include_motion or include_n_stars):
@@ -2949,9 +3056,16 @@ def _points_from_trace(
             'color': colors[idx],
             'opacity': float(np.clip(marker_opacity[idx] * color_opacity[idx], 0.0, 1.0)),
         })
+        if color_scalars is not None and np.isfinite(color_scalars[idx]):
+            points[-1]['color_scalar'] = float(color_scalars[idx])
         if include_hovertext:
             points[-1]['hovertext'] = str(hovertext[idx]) if hovertext[idx] is not None else ''
         if custom_rows is not None:
+            if color_scalars is None:
+                age_at_t = _coerce_float(custom_rows[idx][CUSTOMDATA_IDX_AGE_AT_T], np.nan)
+                if np.isfinite(age_at_t):
+                    points[-1]['color_scalar'] = float(age_at_t)
+                    points[-1]['color_scalar_kind'] = 'age'
             selection = _selection_from_customdata_row(custom_rows[idx])
             if selection is not None:
                 selection['trace_name'] = trace_json.get('name')
@@ -3269,6 +3383,31 @@ def _coerce_threejs_volume_bound_offset(bound_offset):
     }
 
 
+def _normalize_threejs_volume_clip_bounds(volume_cfg):
+    clip_cfg = (
+        volume_cfg.get('clip_bounds')
+        or volume_cfg.get('crop_bounds')
+        or volume_cfg.get('data_bounds')
+    )
+    if not isinstance(clip_cfg, dict):
+        return {}
+
+    normalized = {}
+    for axis_name in ('x', 'y', 'z'):
+        raw_bounds = clip_cfg.get(axis_name)
+        if not isinstance(raw_bounds, (list, tuple, np.ndarray)) or len(raw_bounds) != 2:
+            continue
+        try:
+            lower = float(raw_bounds[0])
+            upper = float(raw_bounds[1])
+        except Exception:
+            continue
+        if not np.isfinite(lower) or not np.isfinite(upper) or np.isclose(lower, upper):
+            continue
+        normalized[axis_name] = [float(min(lower, upper)), float(max(lower, upper))]
+    return normalized
+
+
 def _threejs_volume_max_resolution_cap(volume_cfg, data_shape_zyx, *, minimum):
     data_limit = max(int(v) for v in data_shape_zyx)
     requested_cap = volume_cfg.get(
@@ -3493,6 +3632,53 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         hdu = hdu_info['hdu']
         data = hdu_info['cube_data_zyx']
         data_shape_zyx = tuple(int(v) for v in data.shape)
+        original_data_shape_zyx = data_shape_zyx
+        header = hdu.header.copy()
+        axis_numbers_zyx = hdu_info['axis_numbers_zyx']
+        resolved_hdu_label = hdu_info['resolved_hdu']
+
+        x_bounds = _threejs_volume_axis_bounds(header, axis_number=int(axis_numbers_zyx[2]), axis_size=int(data_shape_zyx[2]))
+        y_bounds = _threejs_volume_axis_bounds(header, axis_number=int(axis_numbers_zyx[1]), axis_size=int(data_shape_zyx[1]))
+        z_bounds = _threejs_volume_axis_bounds(header, axis_number=int(axis_numbers_zyx[0]), axis_size=int(data_shape_zyx[0]))
+
+        clip_bounds = _normalize_threejs_volume_clip_bounds(volume_cfg)
+        if clip_bounds:
+            x_slice, x_bounds = _threejs_volume_clip_axis_slice(
+                header,
+                axis_number=int(axis_numbers_zyx[2]),
+                axis_size=int(data_shape_zyx[2]),
+                clip_bounds=clip_bounds.get('x'),
+                center_offset=float(center_offset.get('x', 0.0)),
+                bound_offset=float(bound_offset['x']),
+                apply_center_offset=apply_center_offset,
+                axis_name='x',
+                path=path,
+            )
+            y_slice, y_bounds = _threejs_volume_clip_axis_slice(
+                header,
+                axis_number=int(axis_numbers_zyx[1]),
+                axis_size=int(data_shape_zyx[1]),
+                clip_bounds=clip_bounds.get('y'),
+                center_offset=float(center_offset.get('y', 0.0)),
+                bound_offset=float(bound_offset['y']),
+                apply_center_offset=apply_center_offset,
+                axis_name='y',
+                path=path,
+            )
+            z_slice, z_bounds = _threejs_volume_clip_axis_slice(
+                header,
+                axis_number=int(axis_numbers_zyx[0]),
+                axis_size=int(data_shape_zyx[0]),
+                clip_bounds=clip_bounds.get('z'),
+                center_offset=float(center_offset.get('z', 0.0)),
+                bound_offset=float(bound_offset['z']),
+                apply_center_offset=apply_center_offset,
+                axis_name='z',
+                path=path,
+            )
+            data = data[z_slice, y_slice, x_slice]
+            data_shape_zyx = tuple(int(v) for v in data.shape)
+
         max_resolution_cap = _threejs_volume_max_resolution_cap(volume_cfg, data_shape_zyx, minimum=24)
         max_resolution = int(np.clip(_coerce_float(requested_max_resolution, 96), 24, max_resolution_cap))
         target_shape_zyx = tuple(min(max_resolution, dim) for dim in data_shape_zyx)
@@ -3514,9 +3700,6 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
                 sky_overlay_sampled = sampled
             else:
                 sky_overlay_sampled = _downsample_threejs_volume_with_zoom(data, sky_overlay_shape_zyx)
-        header = hdu.header.copy()
-        axis_numbers_zyx = hdu_info['axis_numbers_zyx']
-        resolved_hdu_label = hdu_info['resolved_hdu']
 
     stats_source = sky_overlay_sampled if sky_overlay_sampled is not None else sampled
     finite_mask = np.isfinite(stats_source)
@@ -3601,16 +3784,23 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
             {'x': tile_cols, 'y': tile_rows},
         )
 
-    data_b64 = _encode_sampled_uint8(sampled)
+    data_encoding_request = str(volume_cfg.get('data_encoding') or '').strip().lower()
+    use_png_atlas = bool(
+        data_encoding_request == 'png_atlas_uint8'
+        or volume_cfg.get('encode_as_png_atlas')
+        or volume_cfg.get('use_png_atlas')
+    )
+    data_atlas_tiles = None
+    if use_png_atlas:
+        data_b64, data_encoding, data_atlas_tiles = _encode_sampled_uint8_png_atlas(sampled)
+    else:
+        data_b64 = _encode_sampled_uint8(sampled)
+        data_encoding = 'uint8'
     sky_overlay_b64 = None
     sky_overlay_encoding = None
     sky_overlay_tiles = None
     if sky_overlay_sampled is not None:
         sky_overlay_b64, sky_overlay_encoding, sky_overlay_tiles = _encode_sampled_uint8_png_atlas(sky_overlay_sampled)
-
-    x_bounds = _threejs_volume_axis_bounds(header, axis_number=int(axis_numbers_zyx[2]), axis_size=int(data_shape_zyx[2]))
-    y_bounds = _threejs_volume_axis_bounds(header, axis_number=int(axis_numbers_zyx[1]), axis_size=int(data_shape_zyx[1]))
-    z_bounds = _threejs_volume_axis_bounds(header, axis_number=int(axis_numbers_zyx[0]), axis_size=int(data_shape_zyx[0]))
 
     opacity_function = _normalize_threejs_volume_opacity_function(volume_cfg.get('opacity_function'))
     colormap_options = _build_threejs_volume_colormap_options(
@@ -3634,7 +3824,8 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         'path': str(path),
         'hdu': str(resolved_hdu_label),
         'data_b64': data_b64,
-        'data_encoding': 'uint8',
+        'data_encoding': data_encoding,
+        'data_atlas_tiles': data_atlas_tiles,
         'shape': {
             'x': int(sampled.shape[2]),
             'y': int(sampled.shape[1]),
@@ -3644,6 +3835,11 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
             'x': int(data_shape_zyx[2]),
             'y': int(data_shape_zyx[1]),
             'z': int(data_shape_zyx[0]),
+        },
+        'original_source_shape': {
+            'x': int(original_data_shape_zyx[2]),
+            'y': int(original_data_shape_zyx[1]),
+            'z': int(original_data_shape_zyx[0]),
         },
         'downsample_step': {
             'x': float(data_shape_zyx[2]) / float(sampled.shape[2]),
@@ -3884,6 +4080,60 @@ def _threejs_volume_axis_bounds(header, axis_number, axis_size):
     lower = min(first_center, last_center) - abs(edge_pad)
     upper = max(first_center, last_center) + abs(edge_pad)
     return float(lower), float(upper)
+
+
+def _threejs_volume_axis_centers(header, axis_number, axis_size):
+    cdelt_key = f'CDELT{axis_number}'
+    crval_key = f'CRVAL{axis_number}'
+    crpix_key = f'CRPIX{axis_number}'
+    if (cdelt_key not in header) or (crval_key not in header) or (crpix_key not in header):
+        return np.arange(int(axis_size), dtype=float)
+
+    delta = float(header.get(cdelt_key, 1.0))
+    crval = float(header.get(crval_key, 0.0))
+    crpix = float(header.get(crpix_key, 1.0))
+    if (not np.isfinite(delta)) or (abs(delta) <= 0.0) or (not np.isfinite(crval)) or (not np.isfinite(crpix)):
+        return np.arange(int(axis_size), dtype=float)
+    pixel_numbers = np.arange(1, int(axis_size) + 1, dtype=float)
+    return crval + ((pixel_numbers - crpix) * delta)
+
+
+def _threejs_volume_clip_axis_slice(
+    header,
+    *,
+    axis_number,
+    axis_size,
+    clip_bounds,
+    center_offset,
+    bound_offset,
+    apply_center_offset,
+    axis_name,
+    path,
+):
+    full_bounds = _threejs_volume_axis_bounds(header, axis_number=axis_number, axis_size=axis_size)
+    if not clip_bounds:
+        return slice(None), full_bounds
+
+    display_lower, display_upper = [float(v) for v in clip_bounds]
+    raw_lower = display_lower - float(bound_offset)
+    raw_upper = display_upper - float(bound_offset)
+    if apply_center_offset:
+        raw_lower += float(center_offset)
+        raw_upper += float(center_offset)
+    raw_lower, raw_upper = min(raw_lower, raw_upper), max(raw_lower, raw_upper)
+
+    centers = _threejs_volume_axis_centers(header, axis_number=axis_number, axis_size=axis_size)
+    mask = (centers >= raw_lower) & (centers <= raw_upper)
+    if not np.any(mask):
+        raise ValueError(
+            f"Volume clip_bounds for axis {axis_name!r} do not overlap FITS cube {path}: "
+            f"{clip_bounds!r}"
+        )
+
+    indices = np.flatnonzero(mask)
+    start = int(indices[0])
+    stop = int(indices[-1]) + 1
+    return slice(start, stop), (float(raw_lower), float(raw_upper))
 
 
 def _normalize_threejs_volume_opacity_function(opacity_function):

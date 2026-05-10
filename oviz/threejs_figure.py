@@ -98,6 +98,10 @@ _THREEJS_TOPBAR_HTML = """
                   <span>Fade in and out</span>
                 </label>
                 <label class="oviz-three-controls-toggle-row">
+                  <input class="oviz-three-fade-opacity-by-birth-toggle" type="checkbox" />
+                  <span>Fade opacity by birth time</span>
+                </label>
+                <label class="oviz-three-controls-toggle-row">
                   <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
                   <span>Size points by n_stars</span>
                 </label>
@@ -4206,6 +4210,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const focusGroupSelectEl = root.querySelector(".oviz-three-focus-group-select");
       const fadeTimeEl = root.querySelector(".oviz-three-fade-time");
       const fadeInOutToggleEl = root.querySelector(".oviz-three-fade-in-out-toggle");
+      const fadeOpacityByBirthToggleEl = root.querySelector(".oviz-three-fade-opacity-by-birth-toggle");
       const axesVisibleToggleEl = root.querySelector(".oviz-three-axes-visible-toggle");
       const galacticReferenceToggleEl = root.querySelector(".oviz-three-galactic-reference-toggle");
       const nearbyRegionLabelsToggleEls = Array.from(root.querySelectorAll(".oviz-three-region-labels-toggle"));
@@ -4499,7 +4504,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       );
       const themePresets = buildThemePresets(baseTheme);
       const pointScaleBaseline = Math.max(Number(sceneSpec.point_size_baseline_scale) || (4.0 / 3.0), 0.01);
-      const pointScale = (Math.max(sceneSpec.max_span || 1, 1) / 2600.0) * pointScaleBaseline;
+      const pointScaleReferenceSpan = Math.max(
+        Number(sceneSpec.point_size_reference_span_pc) || Math.max(sceneSpec.max_span || 1, 1),
+        1
+      );
+      const pointScale = (pointScaleReferenceSpan / 2600.0) * pointScaleBaseline;
       const hoverTargets = [];
       const cameraResponsivePointEntries = [];
       const cameraResponsiveImagePlaneEntries = [];
@@ -4636,12 +4645,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const skyPanelImageCache = new Map();
       let skyPanelRenderSerial = 0;
       let currentZoomAnchorPoint = null;
+      let zoomAnchorTracksFrame = true;
       let galacticSimpleOrbitTargetTrackingActive = false;
       let legendPanelRectState = null;
       let legendPanelUserSized = false;
       let legendSectionOpenState = { traces: true, volumes: true };
       let activeThemeKey = "default";
       let axesVisible = Boolean(sceneSpec.show_axes);
+      const cleanDynamicAxesEnabled = Boolean(
+        initialState.clean_box_axes
+        || initialState.clean_dynamic_axes
+        || initialState.dynamic_axes
+      );
+      let dynamicAxesSignature = "";
       let galacticReferenceVisible = true;
       let nearbyRegionLabelsVisible = true;
       let manualLabels = [];
@@ -4665,6 +4681,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let legendPanelOpen = initialState.legend_open === undefined ? true : Boolean(initialState.legend_open);
       let fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
       let fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
+      let fadeOpacityByBirthTimeEnabled = Boolean(animationSpec.fade_opacity_by_birth_time_default);
       let focusTraceKey = String(animationSpec.focus_trace_key_default || "");
       let focusSelectionKey = "";
       let cameraViewMode = "free";
@@ -4836,14 +4853,52 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       controls.minPolarAngle = 0.02;
       controls.maxPolarAngle = Math.PI - 0.02;
       controls.target.set(sceneSpec.center.x, sceneSpec.center.y, sceneSpec.center.z);
+      let controlsPanReferenceTarget = controls.target.clone();
+      let controlsPanReferencePosition = camera.position.clone();
+      let controlsPanGestureActive = false;
+
+      function setZoomAnchorToCameraTarget() {
+        if (!controls || !controls.target || cameraViewMode !== "free") {
+          return false;
+        }
+        currentZoomAnchorPoint = controls.target.clone();
+        zoomAnchorTracksFrame = false;
+        return true;
+      }
+
+      function updateZoomAnchorFromControlsPan() {
+        if (!controlsPanGestureActive || !controls || !controls.target) {
+          controlsPanReferenceTarget = controls.target.clone();
+          controlsPanReferencePosition = camera.position.clone();
+          return;
+        }
+        const targetDelta = controls.target.clone().sub(controlsPanReferenceTarget);
+        const positionDelta = camera.position.clone().sub(controlsPanReferencePosition);
+        if (targetDelta.lengthSq() > 1e-14) {
+          const residual = positionDelta.clone().sub(targetDelta);
+          const panLike = residual.lengthSq() <= Math.max(targetDelta.lengthSq() * 0.04, 1e-10);
+          if (panLike) {
+            setZoomAnchorToCameraTarget();
+          }
+        }
+        controlsPanReferenceTarget = controls.target.clone();
+        controlsPanReferencePosition = camera.position.clone();
+      }
+
       controls.addEventListener("start", () => {
+        controlsPanGestureActive = true;
+        controlsPanReferenceTarget = controls.target.clone();
+        controlsPanReferencePosition = camera.position.clone();
         handleManualCameraInteractionStart();
         setSkyDomeBackgroundCameraActive(true);
       });
       controls.addEventListener("end", () => {
+        updateZoomAnchorFromControlsPan();
+        controlsPanGestureActive = false;
         setSkyDomeBackgroundCameraActive(false);
       });
       controls.addEventListener("change", () => {
+        updateZoomAnchorFromControlsPan();
         if (!skyDomeUsesAladinBackground()) {
           return;
         }
@@ -4900,6 +4955,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (volumeStateKeySet.has(itemKey)) {
           return;
         }
+        const colorBy = item && typeof item.color_by === "object" ? item.color_by : null;
+        const colorByOptions = colorBy && Array.isArray(colorBy.colormap_options) ? colorBy.colormap_options : [];
         traceStyleStateByKey[itemKey] = {
           color: String(item.default_color || item.color || theme.axis_color || "#ffffff"),
           opacity: Math.min(Math.max(Number(item.default_opacity ?? 1.0), 0.0), 1.0),
@@ -4909,6 +4966,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           hasLabels: Boolean(item.has_labels),
           hasNStars: Boolean(item.has_n_stars),
           sizeByNStarsDefault: Boolean(item.size_by_n_stars_default),
+          colorBy: colorBy,
+          colorMode: colorBy && String(colorBy.default_color_mode || "by_value") === "by_value"
+            ? "by_value"
+            : "fixed",
+          colormap: colorBy
+            ? String(colorBy.colormap || ((colorByOptions[0] || {}).name) || "")
+            : "",
         };
       });
 
@@ -6742,6 +6806,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedGlobalControls.fade_in_and_out_enabled === "boolean") {
             fadeInAndOutEnabled = savedGlobalControls.fade_in_and_out_enabled;
           }
+          if (typeof savedGlobalControls.fade_opacity_by_birth_time_enabled === "boolean") {
+            fadeOpacityByBirthTimeEnabled = savedGlobalControls.fade_opacity_by_birth_time_enabled;
+          }
           if (typeof savedGlobalControls.focus_trace_key === "string") {
             focusTraceKey = String(savedGlobalControls.focus_trace_key);
           }
@@ -6880,6 +6947,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             }
             if (Number.isFinite(Number(state.sizeScale))) {
               target.sizeScale = Math.max(Number(state.sizeScale), 0.05);
+            }
+            if (target.colorBy && typeof state.colorMode === "string" && state.colorMode) {
+              const requestedColorMode = String(state.colorMode);
+              target.colorMode = requestedColorMode === "fixed" ? "fixed" : "by_value";
+            }
+            if (target.colorBy && typeof state.colormap === "string" && state.colormap) {
+              target.colormap = state.colormap;
             }
           });
         }
@@ -7159,6 +7233,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             size_points_by_stars_enabled: sizePointsByStarsEnabled,
             fade_in_time_myr: fadeInTimeMyr,
             fade_in_and_out_enabled: fadeInAndOutEnabled,
+            fade_opacity_by_birth_time_enabled: fadeOpacityByBirthTimeEnabled,
             focus_trace_key: focusTraceKey,
             focus_selection_key: focusSelectionKey,
             axes_visible: axesVisible,
@@ -7403,6 +7478,99 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           unique.push(selection);
         });
         return unique;
+      }
+
+      const selectionMetadataByKey = (() => {
+        const metadata = new Map();
+        (Array.isArray(frameSpecs) ? frameSpecs : []).forEach((frame) => {
+          const traces = frame && Array.isArray(frame.traces) ? frame.traces : [];
+          traces.forEach((trace) => {
+            const points = trace && Array.isArray(trace.points) ? trace.points : [];
+            points.forEach((point) => {
+              const selection = point && typeof point.selection === "object" ? point.selection : null;
+              if (!selection) {
+                return;
+              }
+              const selectionKey = normalizedSelectionKeyFor(selection);
+              if (!selectionKey || metadata.has(selectionKey)) {
+                return;
+              }
+              metadata.set(selectionKey, Object.assign({}, selection));
+            });
+          });
+        });
+        return metadata;
+      })();
+
+      function selectionMetadataForKey(selectionKey) {
+        const key = normalizeMemberKey(selectionKey);
+        if (!key || !selectionMetadataByKey.has(key)) {
+          return null;
+        }
+        return Object.assign({}, selectionMetadataByKey.get(key));
+      }
+
+      function selectionForPoint(point, trace = null) {
+        if (!point || typeof point !== "object") {
+          return null;
+        }
+        if (point.selection && typeof point.selection === "object") {
+          return point.selection;
+        }
+        const selectionKey = clusterFilterSelectionKeyForPoint(point);
+        const resolved = selectionMetadataForKey(selectionKey);
+        if (resolved) {
+          return resolved;
+        }
+
+        const motion = point.motion && typeof point.motion === "object" ? point.motion : null;
+        const clusterName = String((motion && motion.key) || "").trim();
+        if (!clusterName) {
+          return null;
+        }
+        const xValue = Number(point.x);
+        const yValue = Number(point.y);
+        const zValue = Number(point.z);
+        const timeMyr = Number(motion.time_myr);
+        const ageNowMyr = Number(motion.age_now_myr);
+        const selection = {
+          cluster_name: clusterName,
+          trace_name: String((trace && trace.name) || ""),
+          cluster_color: String((point && point.color) || (trace && trace.color) || "#ffffff"),
+        };
+        if (Number.isFinite(xValue)) {
+          selection.x0 = xValue;
+        }
+        if (Number.isFinite(yValue)) {
+          selection.y0 = yValue;
+        }
+        if (Number.isFinite(zValue)) {
+          selection.z0 = zValue;
+        }
+        if (Number.isFinite(ageNowMyr)) {
+          selection.age_now_myr = ageNowMyr;
+        }
+        if (Number.isFinite(ageNowMyr) && Number.isFinite(timeMyr)) {
+          selection.age_at_t_myr = ageNowMyr + timeMyr;
+        }
+        if (Number.isFinite(timeMyr)) {
+          selection.click_time_myr = timeMyr;
+        }
+        const nStars = Number(point.n_stars);
+        if (Number.isFinite(nStars)) {
+          selection.n_stars = nStars;
+        }
+        return selection;
+      }
+
+      function selectionForSprite(sprite) {
+        if (!sprite || !sprite.userData) {
+          return null;
+        }
+        if (sprite.userData.selection && typeof sprite.userData.selection === "object") {
+          return sprite.userData.selection;
+        }
+        return selectionMetadataForKey(sprite.userData.selectionKey || "");
       }
 
       function crossHoverEnabled() {
@@ -10095,6 +10263,66 @@ __SKY_RUNTIME_JS__
         return (option && option.legend_color) || layer.legend_color || theme.text_color || theme.axis_color;
       }
 
+      function traceColorByConfig(source) {
+        const config = source && source.color_by;
+        return config && typeof config === "object" ? config : null;
+      }
+
+      function traceColormapOptionFor(colorBy, colormapName) {
+        const options = (colorBy && Array.isArray(colorBy.colormap_options)) ? colorBy.colormap_options : [];
+        const requested = String(colormapName || "").trim().toLowerCase();
+        for (const option of options) {
+          if (String(option.name || "").trim().toLowerCase() === requested) {
+            return option;
+          }
+        }
+        return options.length ? options[0] : null;
+      }
+
+      function traceColorFromColormap(colorBy, colormapName, value, fallbackColor = "#ffffff") {
+        const scalar = Number(value);
+        if (!colorBy || !Number.isFinite(scalar)) {
+          return fallbackColor;
+        }
+        const option = traceColormapOptionFor(colorBy, colormapName);
+        if (!option) {
+          return fallbackColor;
+        }
+        const bytes = volumeColorBytesForOption(option);
+        if (!bytes || bytes.length < 4) {
+          return fallbackColor;
+        }
+        const cmin = Number(colorBy.cmin);
+        const cmax = Number(colorBy.cmax);
+        const span = Number.isFinite(cmin) && Number.isFinite(cmax) && cmax > cmin
+          ? (cmax - cmin)
+          : 1.0;
+        const scaled = Number.isFinite(cmin)
+          ? clampRange((scalar - cmin) / span, 0.0, 1.0)
+          : clamp01(scalar);
+        const sampleCount = Math.max(1, Math.floor(bytes.length / 4));
+        const sampleIndex = Math.min(sampleCount - 1, Math.max(0, Math.round(scaled * (sampleCount - 1))));
+        const offset = sampleIndex * 4;
+        return `rgb(${Number(bytes[offset] || 0)}, ${Number(bytes[offset + 1] || 0)}, ${Number(bytes[offset + 2] || 0)})`;
+      }
+
+      function traceLegendColorForItem(item, state) {
+        const colorBy = traceColorByConfig(item) || (state && state.colorBy);
+        if (colorBy && state && state.colorMode === "by_value") {
+          const option = traceColormapOptionFor(colorBy, state.colormap);
+          return (option && option.legend_color) || item.default_color || item.color || theme.text_color || theme.axis_color;
+        }
+        return (state && state.color) || item.default_color || item.color || theme.text_color || theme.axis_color;
+      }
+
+      function pointColorForTrace(point, trace, traceState) {
+        const colorBy = traceColorByConfig(trace) || (traceState && traceState.colorBy);
+        if (colorBy && traceState && traceState.colorMode === "by_value") {
+          return traceColorFromColormap(colorBy, traceState.colormap, point && point.color_scalar, point && point.color || "#ffffff");
+        }
+        return (traceState && traceState.color) || (point && point.color) || "#ffffff";
+      }
+
       function legendColorForItem(item) {
         const itemKey = String(item.key);
         const volumeLayer = volumeLayerForKey(itemKey);
@@ -10102,7 +10330,7 @@ __SKY_RUNTIME_JS__
           return volumeLegendColorForLayer(volumeLayer);
         }
         const state = traceStyleStateForKey(itemKey);
-        return (state && state.color) || item.default_color || item.color || theme.text_color || theme.axis_color;
+        return traceLegendColorForItem(item, state);
       }
 
       function volumeSummaryTextFor(layer, state) {
@@ -10344,12 +10572,94 @@ __SKY_RUNTIME_JS__
         return 0.0;
       }
 
+      function startPngAtlasVolumeDecode(layer, cacheKey, onDecoded) {
+        if (volumeScalarDataPendingCache.has(cacheKey)) {
+          return;
+        }
+        const shape = layer.shape || {};
+        const nx = Math.max(1, Math.round(Number(shape.x) || 0));
+        const ny = Math.max(1, Math.round(Number(shape.y) || 0));
+        const nz = Math.max(1, Math.round(Number(shape.z) || 0));
+        const tiles = layer.data_atlas_tiles || {};
+        const tileCols = Math.max(1, Math.round(Number(tiles.x) || Math.ceil(Math.sqrt(nz))));
+        const tileRows = Math.max(1, Math.round(Number(tiles.y) || Math.ceil(nz / tileCols)));
+        const pending = new Promise((resolve) => {
+          const image = new Image();
+          image.onload = () => {
+            const atlasWidth = Math.max(1, Number(image.naturalWidth || image.width || 0));
+            const atlasHeight = Math.max(1, Number(image.naturalHeight || image.height || 0));
+            const canvasEl = document.createElement("canvas");
+            canvasEl.width = atlasWidth;
+            canvasEl.height = atlasHeight;
+            const ctx = canvasEl.getContext("2d");
+            if (!ctx) {
+              volumeScalarDataPendingCache.delete(cacheKey);
+              resolve(null);
+              return;
+            }
+            ctx.drawImage(image, 0, 0, atlasWidth, atlasHeight);
+            const imageData = ctx.getImageData(0, 0, atlasWidth, atlasHeight);
+            const rgba = imageData.data || [];
+            const values = new Uint8Array(nx * ny * nz);
+            for (let zIndex = 0; zIndex < nz; zIndex += 1) {
+              const tileRow = Math.floor(zIndex / tileCols);
+              const tileCol = zIndex % tileCols;
+              if (tileRow >= tileRows) {
+                break;
+              }
+              const xOffset = tileCol * nx;
+              const yOffset = tileRow * ny;
+              for (let yIndex = 0; yIndex < ny; yIndex += 1) {
+                for (let xIndex = 0; xIndex < nx; xIndex += 1) {
+                  const atlasIndex = (((yOffset + yIndex) * atlasWidth) + (xOffset + xIndex)) * 4;
+                  const voxelIndex = (zIndex * ny * nx) + (yIndex * nx) + xIndex;
+                  values[voxelIndex] = Number(rgba[atlasIndex] || 0);
+                }
+              }
+            }
+            volumeScalarDataCache.set(cacheKey, values);
+            volumeScalarDataPendingCache.delete(cacheKey);
+            if (typeof onDecoded === "function") {
+              onDecoded(values);
+            }
+            resolve(values);
+          };
+          image.onerror = () => {
+            volumeScalarDataPendingCache.delete(cacheKey);
+            resolve(null);
+          };
+          image.src = `data:image/png;base64,${String(layer.data_b64 || "")}`;
+        });
+        volumeScalarDataPendingCache.set(cacheKey, pending);
+      }
+
       function volumeScalarArrayFor(layer) {
         const layerKey = String(layer.key);
         if (volumeScalarDataCache.has(layerKey)) {
           return volumeScalarDataCache.get(layerKey);
         }
         const encoding = String(layer.data_encoding || "uint16_le");
+        if (encoding === "png_atlas_uint8") {
+          const shape = layer.shape || {};
+          const nx = Math.max(1, Math.round(Number(shape.x) || 0));
+          const ny = Math.max(1, Math.round(Number(shape.y) || 0));
+          const nz = Math.max(1, Math.round(Number(shape.z) || 0));
+          const placeholder = new Uint8Array(nx * ny * nz);
+          volumeScalarDataCache.set(layerKey, placeholder);
+          startPngAtlasVolumeDecode(layer, layerKey, (values) => {
+            const volumeTexture = volumeTextureCache.get(layerKey);
+            if (volumeTexture && volumeTexture.texture && values) {
+              const image = volumeTexture.texture.image || {};
+              image.data = values;
+              image.width = volumeTexture.nx;
+              image.height = volumeTexture.ny;
+              image.depth = volumeTexture.nz;
+              volumeTexture.texture.image = image;
+              volumeTexture.texture.needsUpdate = true;
+            }
+          });
+          return placeholder;
+        }
         let data = null;
         if (encoding === "uint16_le") {
           data = base64ToUint16Array(layer.data_b64 || "");
@@ -11210,13 +11520,14 @@ __SKY_RUNTIME_JS__
         });
       }
 
-      function textTextureFor(text, color, size, family) {
-        const cacheKey = [text, color ?? "#ffffff", size ?? 12, family ?? "Helvetica"].join("|");
+      function textTextureFor(text, color, size, family, resolutionBoost = 1.0) {
+        const boost = Math.max(Number(resolutionBoost) || 1.0, 1.0);
+        const cacheKey = [text, color ?? "#ffffff", size ?? 12, family ?? "Helvetica", boost.toFixed(2)].join("|");
         if (textTextureCache.has(cacheKey)) {
           return textTextureCache.get(cacheKey);
         }
         const fontSize = Math.max(10, size ?? 12);
-        const resolutionScale = Math.max(2.0, Math.min(window.devicePixelRatio || 1.0, 4.0));
+        const resolutionScale = Math.max(3.0, Math.min((window.devicePixelRatio || 1.0) * boost, 8.0));
         const canvasEl = document.createElement("canvas");
         const ctx = canvasEl.getContext("2d");
         ctx.font = `${fontSize}px ${family ?? "Helvetica"}`;
@@ -11239,6 +11550,9 @@ __SKY_RUNTIME_JS__
         texture.generateMipmaps = false;
         texture.minFilter = THREE.LinearFilter;
         texture.magFilter = THREE.LinearFilter;
+        if (renderer && renderer.capabilities && typeof renderer.capabilities.getMaxAnisotropy === "function") {
+          texture.anisotropy = Math.max(1, renderer.capabilities.getMaxAnisotropy());
+        }
         texture.needsUpdate = true;
         texture.userData = { width: logicalWidth, height: logicalHeight };
         textTextureCache.set(cacheKey, texture);
@@ -11246,7 +11560,13 @@ __SKY_RUNTIME_JS__
       }
 
       function makeTextSprite(text, options = {}) {
-        const texture = textTextureFor(text, options.color, options.size, options.family);
+        const texture = textTextureFor(
+          text,
+          options.color,
+          options.size,
+          options.family,
+          options.textureScale
+        );
         const material = new THREE.SpriteMaterial({
           map: texture,
           transparent: true,
@@ -12265,6 +12585,77 @@ __SKY_RUNTIME_JS__
         return t * t * (3.0 - 2.0 * t);
       }
 
+      let clusterMotionRangeCache = null;
+
+      function motionKeyForPoint(point) {
+        const motion = point && typeof point.motion === "object" ? point.motion : null;
+        return motion ? String(motion.key || "").trim() : "";
+      }
+
+      function motionRangeKeyForTracePoint(trace, point) {
+        const motionKey = motionKeyForPoint(point);
+        if (!motionKey) {
+          return "";
+        }
+        const traceKey = String((trace && (trace.key || trace.name)) || "");
+        return `${traceKey}\n${motionKey}`;
+      }
+
+      function clusterMotionRanges() {
+        if (clusterMotionRangeCache) {
+          return clusterMotionRangeCache;
+        }
+        clusterMotionRangeCache = new Map();
+        (Array.isArray(frameSpecs) ? frameSpecs : []).forEach((frame) => {
+          const traces = frame && Array.isArray(frame.traces) ? frame.traces : [];
+          traces.forEach((trace) => {
+            const points = trace && Array.isArray(trace.points) ? trace.points : [];
+            points.forEach((point) => {
+              const rangeKey = motionRangeKeyForTracePoint(trace, point);
+              if (!rangeKey) {
+                return;
+              }
+              let entry = clusterMotionRangeCache.get(rangeKey);
+              if (!entry) {
+                entry = {
+                  sizeMin: Infinity,
+                  sizeMax: -Infinity,
+                  opacityMin: Infinity,
+                  opacityMax: -Infinity,
+                };
+                clusterMotionRangeCache.set(rangeKey, entry);
+              }
+              const pointSize = Number(point && point.size);
+              const pointOpacity = Number(point && point.opacity);
+              if (Number.isFinite(pointSize)) {
+                entry.sizeMin = Math.min(entry.sizeMin, pointSize);
+                entry.sizeMax = Math.max(entry.sizeMax, pointSize);
+              }
+              if (Number.isFinite(pointOpacity)) {
+                entry.opacityMin = Math.min(entry.opacityMin, pointOpacity);
+                entry.opacityMax = Math.max(entry.opacityMax, pointOpacity);
+              }
+            });
+          });
+        });
+        return clusterMotionRangeCache;
+      }
+
+      function birthOpacityFadePointSize(point, trace) {
+        const rangeKey = motionRangeKeyForTracePoint(trace, point);
+        const range = rangeKey ? clusterMotionRanges().get(rangeKey) : null;
+        const rangeSizeMax = Number(range && range.sizeMax);
+        if (Number.isFinite(rangeSizeMax) && rangeSizeMax > 0.0) {
+          return rangeSizeMax;
+        }
+        const motion = point && typeof point.motion === "object" ? point.motion : null;
+        const motionSizeMax = Number(motion && motion.size_max);
+        if (Number.isFinite(motionSizeMax) && motionSizeMax > 0.0) {
+          return motionSizeMax;
+        }
+        return Number(point && point.size ? point.size : 0.0);
+      }
+
       function fadeVisibilityFactor(timeMyr, ageNowMyr, fadeTimeMyrValue, fadeInOut) {
         const t = Number(timeMyr);
         const ageNow = Number(ageNowMyr);
@@ -12297,23 +12688,31 @@ __SKY_RUNTIME_JS__
         return 0.0;
       }
 
-      function animatedPointState(point) {
+      function animatedPointState(point, trace = null) {
         const motion = point && typeof point.motion === "object" ? point.motion : null;
+        const baseSize = Number(point.size ?? 0.0);
+        const baseOpacity = Number(point.opacity ?? 1.0);
         if (!motion) {
           return {
-            size: Number(point.size ?? 0.0),
-            opacity: Number(point.opacity ?? 1.0),
+            size: baseSize,
+            opacity: baseOpacity,
           };
         }
-        const opacityFactor = fadeVisibilityFactor(
+        const birthFadeFactor = fadeVisibilityFactor(
           motion.time_myr,
           motion.age_now_myr,
           fadeInTimeMyr,
           fadeInAndOutEnabled
         );
+        if (fadeOpacityByBirthTimeEnabled) {
+          return {
+            size: birthOpacityFadePointSize(point, trace),
+            opacity: baseOpacity * birthFadeFactor,
+          };
+        }
         return {
-          size: Number(point.size ?? 0.0),
-          opacity: Number(point.opacity ?? 1.0) * opacityFactor,
+          size: baseSize * birthFadeFactor,
+          opacity: baseOpacity,
         };
       }
 
@@ -12398,7 +12797,6 @@ __SKY_RUNTIME_JS__
         }
         const group = new THREE.Group();
         const traceState = traceStyleStateForKey(trace.key);
-        const traceColor = traceState ? traceState.color : null;
         const traceOpacityMultiplier = traceState
           ? clamp01(traceState.opacity) / Math.max(clamp01(Number(trace.default_opacity ?? 1.0)), 1e-6)
           : 1.0;
@@ -12408,7 +12806,7 @@ __SKY_RUNTIME_JS__
           if (!clusterFilterPassesPoint(point)) {
             return;
           }
-          const pointState = animatedPointState(point);
+          const pointState = animatedPointState(point, trace);
           if (!Number.isFinite(pointState.size) || pointState.size <= 0) {
             return;
           }
@@ -12440,11 +12838,13 @@ __SKY_RUNTIME_JS__
             scaleFloor
           );
           const selectionKey = clusterFilterSelectionKeyForPoint(point) || normalizedSelectionKeyFor(point.selection);
+          const selection = selectionForPoint(point, trace);
           const pointPosition = new THREE.Vector3(point.x, point.y, point.z);
           const glowStrength = Math.max(globalPointGlowStrength, 0.0);
+          const pointColor = pointColorForTrace(point, trace, traceState);
           if (glowStrength > 0.02) {
             const glowOpacity = clampRange(effectiveOpacity * (0.34 + 0.18 * glowStrength), 0.0, 0.78);
-            const glowSprite = new THREE.Sprite(starGlowMaterialFor(traceColor || point.color, glowOpacity));
+            const glowSprite = new THREE.Sprite(starGlowMaterialFor(pointColor, glowOpacity));
             const glowScale = glowScaleForPoint(
               scale,
               pointPosition,
@@ -12454,7 +12854,7 @@ __SKY_RUNTIME_JS__
             glowSprite.scale.set(glowScale, glowScale, 1.0);
             glowSprite.renderOrder = -2;
             glowSprite.userData = {
-              selection: point.selection || null,
+              selection,
               selectionKey,
               baseScale: glowScale,
               isGlow: true,
@@ -12472,10 +12872,11 @@ __SKY_RUNTIME_JS__
             coreSprite.position.copy(pointPosition);
             coreSprite.scale.set(coreScale, coreScale, 1.0);
             coreSprite.userData = {
-              hovertext: pointHoverText(point, trace, traceColor || point.color),
-              selection: point.selection || null,
+              hovertext: pointHoverText(point, trace, pointColor),
+              selection,
               selectionKey,
-              tooltipColor: traceColor || point.color || "#ffffff",
+              referenceFrameKey: motionKeyForPoint(point),
+              tooltipColor: pointColor || "#ffffff",
               baseScale: coreScale,
               pickWorldScale: nonGlowMarkerScaleForPoint(scale, pointPosition),
               isGlowCore: true,
@@ -12484,15 +12885,16 @@ __SKY_RUNTIME_JS__
             hoverTargets.push(coreSprite);
             registerCameraResponsivePointSprite(coreSprite, "core", pointPosition, scale, selectionKey);
           } else {
-            const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, traceColor || point.color, effectiveOpacity));
+            const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, pointColor, effectiveOpacity));
             const markerScale = nonGlowMarkerScaleForPoint(scale, pointPosition);
             sprite.position.copy(pointPosition);
             sprite.scale.set(markerScale, markerScale, 1.0);
             sprite.userData = {
-              hovertext: pointHoverText(point, trace, traceColor || point.color),
-              selection: point.selection || null,
+              hovertext: pointHoverText(point, trace, pointColor),
+              selection,
               selectionKey,
-              tooltipColor: traceColor || point.color || "#ffffff",
+              referenceFrameKey: motionKeyForPoint(point),
+              tooltipColor: pointColor || "#ffffff",
               baseScale: markerScale,
               pickWorldScale: markerScale,
             };
@@ -12720,10 +13122,212 @@ __SKY_RUNTIME_JS__
         return group;
       }
 
+      function niceAxisTickStep(targetStep) {
+        const value = Math.max(Number(targetStep) || 1.0, 1e-6);
+        const power = Math.pow(10.0, Math.floor(Math.log10(value)));
+        const fraction = value / power;
+        let niceFraction = 1.0;
+        if (fraction <= 1.0) {
+          niceFraction = 1.0;
+        } else if (fraction <= 2.0) {
+          niceFraction = 2.0;
+        } else if (fraction <= 5.0) {
+          niceFraction = 5.0;
+        } else {
+          niceFraction = 10.0;
+        }
+        return niceFraction * power;
+      }
+
+      function cleanAxisTickStep(range, axis = null) {
+        const explicitStep = Number(axis && (axis.dtick ?? axis.tickstep ?? axis.tick_step));
+        if (Number.isFinite(explicitStep) && explicitStep > 0.0) {
+          return explicitStep;
+        }
+        const span = Math.max(Math.abs(Number(range[1]) - Number(range[0])), 1.0);
+        return niceAxisTickStep(span / 10.0);
+      }
+
+      function cleanAxisTickValues(range, step) {
+        const lower = Math.min(Number(range[0]), Number(range[1]));
+        const upper = Math.max(Number(range[0]), Number(range[1]));
+        const tickStep = Math.max(Number(step) || 1.0, 1e-6);
+        const epsilon = tickStep * 1e-6;
+        const first = Math.ceil((lower - epsilon) / tickStep) * tickStep;
+        const values = [];
+        for (let value = first; value <= upper + epsilon; value += tickStep) {
+          const cleaned = Math.abs(value) < epsilon ? 0.0 : value;
+          if (cleaned >= lower - epsilon && cleaned <= upper + epsilon) {
+            values.push(cleaned);
+          }
+        }
+        if (lower < 0.0 && upper > 0.0 && !values.some((value) => Math.abs(value) < epsilon)) {
+          values.push(0.0);
+          values.sort((a, b) => a - b);
+        }
+        return values;
+      }
+
+      function cleanAxisTickLabel(value, step) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+          return "";
+        }
+        if (Math.abs(numeric) < Math.max(Number(step) || 1.0, 1.0) * 1e-6) {
+          return "0";
+        }
+        if (Math.abs(step) >= 1.0) {
+          return String(Math.round(numeric));
+        }
+        return numeric.toFixed(1).replace(/\.0$/, "");
+      }
+
+      function axisCrossValue(range) {
+        const lower = Math.min(Number(range[0]), Number(range[1]));
+        const upper = Math.max(Number(range[0]), Number(range[1]));
+        if (lower <= 0.0 && upper >= 0.0) {
+          return 0.0;
+        }
+        return Math.abs(lower) < Math.abs(upper) ? lower : upper;
+      }
+
+      function axisTextSprite(text, options) {
+        const sprite = makeTextSprite(text, options);
+        if (sprite.material) {
+          sprite.material.depthTest = false;
+          sprite.material.needsUpdate = true;
+        }
+        sprite.renderOrder = 30;
+        return sprite;
+      }
+
+      function cleanDynamicAxesSignatureForCurrentView() {
+        if (!cleanDynamicAxesEnabled) {
+          return "";
+        }
+        const xRange = sceneSpec.ranges.x;
+        const yRange = sceneSpec.ranges.y;
+        const zRange = sceneSpec.ranges.z;
+        return [
+          axesVisible ? "1" : "0",
+          cleanAxisTickStep(xRange, axisSpec.x || {}),
+          cleanAxisTickStep(yRange, axisSpec.y || {}),
+          cleanAxisTickStep(zRange, axisSpec.z || {}),
+        ].join("|");
+      }
+
+      function buildCleanDynamicAxes(xAxis, yAxis, zAxis, xRange, yRange, zRange) {
+        const maxSpan = Math.max(Number(sceneSpec.max_span) || 1.0, 1.0);
+        const tickLength = maxSpan * 0.014;
+        const axisColor = xAxis.linecolor ?? theme.axis_color;
+        const axisWidth = Math.max(Number(xAxis.linewidth ?? 1.0), 1.0);
+        const axisOpacity = 0.22;
+        const gridColor = axisColor;
+
+        const x0 = xRange[0];
+        const x1 = xRange[1];
+        const y0 = yRange[0];
+        const y1 = yRange[1];
+        const z0 = zRange[0];
+        const z1 = zRange[1];
+        const boxSegments = [
+          [x0, y0, z0, x1, y0, z0], [x0, y1, z0, x1, y1, z0],
+          [x0, y0, z1, x1, y0, z1], [x0, y1, z1, x1, y1, z1],
+          [x0, y0, z0, x0, y1, z0], [x1, y0, z0, x1, y1, z0],
+          [x0, y0, z1, x0, y1, z1], [x1, y0, z1, x1, y1, z1],
+          [x0, y0, z0, x0, y0, z1], [x1, y0, z0, x1, y0, z1],
+          [x0, y1, z0, x0, y1, z1], [x1, y1, z0, x1, y1, z1],
+        ];
+        const boxLines = makeLineObject({
+          segments: boxSegments,
+          line: { color: gridColor, width: axisWidth, dash: "solid" },
+          opacity: axisOpacity,
+        }, axisLineMaterials);
+        if (boxLines) {
+          axisGroup.add(boxLines);
+        }
+
+        const axisSegments = [
+          [x0, y0, z0, x1, y0, z0],
+          [x0, y0, z0, x0, y1, z0],
+          [x0, y0, z0, x0, y0, z1],
+        ];
+        const axisLines = makeLineObject({
+          segments: axisSegments,
+          line: { color: axisColor, width: axisWidth, dash: "solid" },
+          opacity: axisOpacity,
+        }, axisLineMaterials);
+        if (axisLines) {
+          axisGroup.add(axisLines);
+        }
+
+        [
+          ["x", xAxis, xRange],
+          ["y", yAxis, yRange],
+          ["z", zAxis, zRange],
+        ].forEach(([axisName, axis, range]) => {
+          const step = cleanAxisTickStep(range, axis);
+          const tickSegments = [];
+          cleanAxisTickValues(range, step).forEach((value) => {
+            if (axisName === "x") {
+              tickSegments.push([value, y0, z0, value, y0 - tickLength, z0]);
+            } else if (axisName === "y") {
+              tickSegments.push([x0, value, z0, x0 - tickLength, value, z0]);
+            } else {
+              tickSegments.push([x0, y0, value, x0 - tickLength, y0, value]);
+            }
+
+            const label = axisTextSprite(cleanAxisTickLabel(value, step), {
+              color: (axis.tickfont || {}).color ?? theme.axis_color,
+              size: (axis.tickfont || {}).size || 13,
+              family: (axis.tickfont || {}).family ?? "Helvetica",
+              textureScale: 4.0,
+            });
+            if (axisName === "x") {
+              label.position.set(value, y0 - tickLength * 2.1, z0);
+            } else if (axisName === "y") {
+              label.position.set(x0 - tickLength * 2.25, value, z0);
+            } else {
+              label.position.set(x0 - tickLength * 2.25, y0, value);
+            }
+            axisGroup.add(label);
+          });
+
+          const tickLines = makeLineObject({
+            segments: tickSegments,
+            line: { color: axisColor, width: axisWidth, dash: "solid" },
+            opacity: axisOpacity,
+          }, axisLineMaterials);
+          if (tickLines) {
+            axisGroup.add(tickLines);
+          }
+
+          const titleText = typeof axis.title === "string" ? axis.title : (axis.title || {}).text;
+          if (titleText) {
+            const titleSprite = axisTextSprite(titleText, {
+              color: (axis.title_font || axis.titlefont || {}).color ?? theme.axis_color,
+              size: (axis.title_font || axis.titlefont || {}).size || 17,
+              family: (axis.title_font || axis.titlefont || {}).family ?? "Helvetica",
+              textureScale: 4.0,
+            });
+            if (axisName === "x") {
+              titleSprite.position.set(range[1], y0 - tickLength * 4.2, z0);
+            } else if (axisName === "y") {
+              titleSprite.position.set(x0 - tickLength * 4.3, range[1], z0);
+            } else {
+              titleSprite.position.set(x0 - tickLength * 4.3, y0, range[1]);
+            }
+            axisGroup.add(titleSprite);
+          }
+        });
+      }
+
       function buildAxes() {
         clearGroup(axisGroup);
         axisLineMaterials.length = 0;
-        if (!axesVisible) {
+        axisGroup.visible = axesVisible && cameraViewMode !== "earth";
+        if (!axesVisible || cameraViewMode === "earth") {
+          dynamicAxesSignature = cleanDynamicAxesSignatureForCurrentView();
           return;
         }
 
@@ -12733,6 +13337,13 @@ __SKY_RUNTIME_JS__
         const xRange = sceneSpec.ranges.x;
         const yRange = sceneSpec.ranges.y;
         const zRange = sceneSpec.ranges.z;
+
+        if (cleanDynamicAxesEnabled) {
+          buildCleanDynamicAxes(xAxis, yAxis, zAxis, xRange, yRange, zRange);
+          dynamicAxesSignature = cleanDynamicAxesSignatureForCurrentView();
+          return;
+        }
+
         const tickLength = (sceneSpec.max_span || 1) * 0.02;
         const axisColor = xAxis.linecolor ?? theme.axis_color;
         const axisWidth = xAxis.linewidth ?? 2.0;
@@ -12815,6 +13426,10 @@ __SKY_RUNTIME_JS__
         });
       }
 
+      function updateDynamicAxesForZoom() {
+        return;
+      }
+
       function groupDefaults(groupName) {
         return groupVisibility[groupName] || {};
       }
@@ -12837,6 +13452,9 @@ __SKY_RUNTIME_JS__
           return false;
         }
         if (isNearbyRegionLabelTrace(trace) && !nearbyRegionLabelsVisible) {
+          return false;
+        }
+        if (legendState[trace.key] === false) {
           return false;
         }
         const actionState = actionTraceVisibilityState(trace);
@@ -12885,14 +13503,27 @@ __SKY_RUNTIME_JS__
         return 0.5 * (finiteValues[middle - 1] + finiteValues[middle]);
       }
 
+      function traceVisiblePoints(trace) {
+        return trace && Array.isArray(trace.points) ? trace.points : [];
+      }
+
+      function traceReferencePoints(trace) {
+        if (!trace || typeof trace !== "object") {
+          return [];
+        }
+        const focusPoints = Array.isArray(trace.focus_points) ? trace.focus_points : [];
+        return focusPoints.length ? focusPoints : traceVisiblePoints(trace);
+      }
+
       function focusTrackingOffsetForFrame(frame) {
         const requestedSelectionKey = normalizeMemberKey(focusSelectionKey);
         if (requestedSelectionKey && frame && Array.isArray(frame.traces)) {
           for (const trace of frame.traces) {
-            if (!trace || !Array.isArray(trace.points)) {
+            if (!trace) {
               continue;
             }
-            for (const point of trace.points) {
+            const candidatePoints = traceVisiblePoints(trace).concat(traceReferencePoints(trace));
+            for (const point of candidatePoints) {
               const pointKey = clusterFilterSelectionKeyForPoint(point);
               if (!pointKey || pointKey !== requestedSelectionKey) {
                 continue;
@@ -12911,14 +13542,14 @@ __SKY_RUNTIME_JS__
         if (!requestedKey || !frame || !Array.isArray(frame.traces)) {
           return null;
         }
-        const targetTrace = frame.traces.find((trace) => String(trace.key) === requestedKey && Array.isArray(trace.points) && trace.points.length);
+        const targetTrace = frame.traces.find((trace) => String(trace.key) === requestedKey && traceReferencePoints(trace).length);
         if (!targetTrace) {
           return null;
         }
         const xValues = [];
         const yValues = [];
         const zValues = [];
-        targetTrace.points.forEach((point) => {
+        traceReferencePoints(targetTrace).forEach((point) => {
           const xValue = Number(point.x);
           const yValue = Number(point.y);
           const zValue = Number(point.z);
@@ -12968,11 +13599,85 @@ __SKY_RUNTIME_JS__
         firstRow.appendChild(opacityField.field);
         controls.appendChild(firstRow);
 
+        const colorBy = traceColorByConfig(item) || state.colorBy;
+        let colorModeSelect = null;
+        let colormapSelect = null;
+        let colormapField = null;
+        if (colorBy) {
+          colorModeSelect = document.createElement("select");
+          [
+            { value: "by_value", label: `By ${String(colorBy.label || "value")}` },
+            { value: "fixed", label: "Fixed color" },
+          ].forEach((option) => {
+            const optionEl = document.createElement("option");
+            optionEl.value = option.value;
+            optionEl.textContent = option.label;
+            colorModeSelect.appendChild(optionEl);
+          });
+          const colorModeField = createLegendField("Color mode", colorModeSelect);
+
+          colormapSelect = document.createElement("select");
+          ((colorBy.colormap_options || [])).forEach((option) => {
+            const optionEl = document.createElement("option");
+            optionEl.value = String(option.name);
+            optionEl.textContent = String(option.label || option.name);
+            colormapSelect.appendChild(optionEl);
+          });
+          colormapField = createLegendField("Colormap", colormapSelect);
+
+          const colorByRow = createLegendControlRow();
+          colorByRow.appendChild(colorModeField.field);
+          colorByRow.appendChild(colormapField.field);
+          controls.appendChild(colorByRow);
+        }
+
+        function traceUsesValueColor() {
+          return Boolean(colorBy && state.colorMode === "by_value");
+        }
+
+        function refreshTraceColorControls(syncInputs = true) {
+          const usesValueColor = traceUsesValueColor();
+          if (syncInputs) {
+            colorInput.value = cssColorToHex(state.color, "#ffffff");
+            if (colorModeSelect) {
+              colorModeSelect.value = usesValueColor ? "by_value" : "fixed";
+            }
+            if (colormapSelect) {
+              const option = traceColormapOptionFor(colorBy, state.colormap);
+              colormapSelect.value = String((option && option.name) || state.colormap || "");
+            }
+          }
+          colorInput.disabled = usesValueColor;
+          colorField.label.textContent = usesValueColor ? "Fixed color" : "Color";
+          if (colormapField) {
+            colormapField.field.style.display = usesValueColor ? "" : "none";
+          }
+          toggleButton.style.color = traceLegendColorForItem(item, state);
+        }
+
+        refreshTraceColorControls(true);
+
         colorInput.addEventListener("input", () => {
           state.color = String(colorInput.value);
-          toggleButton.style.color = state.color;
+          refreshTraceColorControls(false);
           renderFrame(currentFrameIndex);
         });
+        if (colorModeSelect) {
+          colorModeSelect.addEventListener("change", () => {
+            state.colorMode = colorModeSelect.value === "fixed" ? "fixed" : "by_value";
+            refreshTraceColorControls(false);
+            renderLegend();
+            renderFrame(currentFrameIndex);
+          });
+        }
+        if (colormapSelect) {
+          colormapSelect.addEventListener("change", () => {
+            state.colormap = String(colormapSelect.value);
+            refreshTraceColorControls(false);
+            renderLegend();
+            renderFrame(currentFrameIndex);
+          });
+        }
         opacityInput.addEventListener("input", () => {
           state.opacity = clamp01(opacityInput.value);
           opacityField.label.textContent = `Opacity (${state.opacity.toFixed(2)})`;
@@ -13746,6 +14451,14 @@ __ACTION_RUNTIME_JS__
             renderFrame(currentFrameIndex);
           });
         }
+        if (fadeOpacityByBirthToggleEl) {
+          fadeOpacityByBirthToggleEl.addEventListener("change", () => {
+            fadeOpacityByBirthTimeEnabled = Boolean(fadeOpacityByBirthToggleEl.checked);
+            applyGlobalControlState();
+            renderSceneControls();
+            renderFrame(currentFrameIndex);
+          });
+        }
         if (axesVisibleToggleEl) {
           axesVisibleToggleEl.addEventListener("change", () => {
             axesVisible = Boolean(axesVisibleToggleEl.checked);
@@ -13853,6 +14566,7 @@ __ACTION_RUNTIME_JS__
             sizePointsByStarsEnabled = false;
             fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
             fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
+            fadeOpacityByBirthTimeEnabled = Boolean(animationSpec.fade_opacity_by_birth_time_default);
             focusTraceKey = String(animationSpec.focus_trace_key_default || "");
             axesVisible = Boolean(sceneSpec.show_axes);
             galacticReferenceVisible = true;
@@ -14014,6 +14728,7 @@ __ACTION_RUNTIME_JS__
         updateCameraResponsivePointSprites();
         updateClusterInfoTooltipPosition();
         updateScaleBar();
+        updateDynamicAxesForZoom();
         updateSkyDome(now);
         updateSkyDomeBackgroundFrame(now);
         updateCameraResponsiveImagePlanes();
