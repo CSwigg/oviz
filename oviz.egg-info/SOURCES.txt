@@ -4,9 +4,12 @@ README.md
 pyproject.toml
 setup.py
 oviz/__init__.py
+oviz/app.py
 oviz/dash_test.py
 oviz/orbit_maker.py
 oviz/point_sizes.py
+oviz/spiral_arms.py
+oviz/threejs_figure.py
 oviz/traces.py
 oviz/viz.py
 oviz.egg-info/PKG-INFO
@@ -19,3 +22,5 @@ oviz/themes/gray.yaml
 oviz/themes/light.yaml
 oviz/themes/solarized_light.yaml
 tests/test_data_traces.py
+tests/test_sky_panel.py
+tests/test_threejs_renderer.py
