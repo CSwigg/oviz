@@ -577,6 +577,30 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Paper 1", html)
         self.assertIn("initialState.lite_mode_enabled", html)
 
+    def test_threejs_renderer_exports_mobile_mode_metadata_and_ui_hooks(self):
+        viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            threejs_initial_state={"mobile_mode_enabled": True},
+        )
+
+        html = fig.to_html()
+
+        self.assertEqual(viz.fig_dict["export_profile"], "mobile")
+        self.assertTrue(viz.fig_dict["mobile"]["enabled"])
+        self.assertTrue(viz.fig_dict["initial_state"]["mobile_mode_enabled"])
+        self.assertFalse(viz.fig_dict["initial_state"].get("minimal_mode_enabled", False))
+        self.assertIn('data-mobile="true"', html)
+        self.assertIn('root.dataset.mobile = mobileModeEnabled ? "true" : "false";', html)
+        self.assertIn("oviz-three-mobile-sky-view", html)
+        self.assertIn("oviz-three-mobile-lasso", html)
+        self.assertIn("oviz-three-mobile-legend", html)
+        self.assertIn("oviz-three-mobile-selection-status", html)
+        self.assertIn('height: 100dvh;', html)
+        self.assertIn('env(safe-area-inset-bottom, 0px)', html)
+
     def test_threejs_renderer_keeps_grouped_family_traces_in_galactic_lite_mode(self):
         viz = Animate3D(
             _FakeFamilyCollection(show_tracks=True),

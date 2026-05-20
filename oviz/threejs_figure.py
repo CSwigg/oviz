@@ -160,6 +160,9 @@ _THREEJS_TOPBAR_HTML = """
             </div>
           </div>
           <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
+          <button class="oviz-three-mobile-sky-view" type="button" title="Switch between 3D and Sky view" aria-pressed="false">Sky</button>
+          <button class="oviz-three-mobile-lasso" type="button" title="Arm lasso selection for touch input" aria-pressed="false">Lasso</button>
+          <button class="oviz-three-mobile-legend" type="button" title="Show or hide the legend" aria-expanded="false">Legend</button>
           <button class="oviz-three-reset-camera-view" type="button" title="Reset the camera to the initial 3D view">Reset Camera</button>
           <button class="oviz-three-reset-selection" type="button" title="Clear the current lasso and cluster selection">Reset Selection</button>
           <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
@@ -223,6 +226,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-save-state:disabled {
         opacity: 0.55;
         cursor: default;
+      }
+      #__ROOT_ID__ .oviz-three-mobile-sky-view,
+      #__ROOT_ID__ .oviz-three-mobile-lasso,
+      #__ROOT_ID__ .oviz-three-mobile-legend,
+      #__ROOT_ID__ .oviz-three-mobile-selection-status {
+        display: none;
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel {
@@ -3923,10 +3932,491 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           bottom: 8px;
         }
       }
+      #__ROOT_ID__[data-mobile="true"] {
+        height: 100vh;
+        height: 100dvh;
+        min-height: 100dvh;
+        overflow: hidden;
+        -webkit-text-size-adjust: 100%;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-canvas {
+        touch-action: none;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-topbar {
+        top: calc(env(safe-area-inset-top, 0px) + 8px);
+        left: calc(env(safe-area-inset-left, 0px) + 8px);
+        right: calc(env(safe-area-inset-right, 0px) + 8px);
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        pointer-events: none;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-topbar-brand,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-title,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-save-state,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-select,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-key-help,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-earth-view-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-action-bar,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-note,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-scale-bar,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-reset-selection,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-selection-row,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-panel {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu {
+        position: static !important;
+        display: flex !important;
+        box-sizing: border-box;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 6px !important;
+        width: min(430px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 8px)) !important;
+        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 8px) !important;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        pointer-events: auto;
+        overflow: visible;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sky-view,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-lasso,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-legend {
+        display: inline-flex !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-shell,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-shell {
+        position: static !important;
+        display: contents;
+        min-height: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        overflow: visible;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sky-view {
+        order: 1;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-lasso {
+        order: 2;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-legend {
+        order: 3;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle {
+        order: 4;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-toggle {
+        order: 5;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-reset-camera-view {
+        order: 6;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-zen-mode {
+        order: 7;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu select,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-toggle {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        height: 44px !important;
+        padding: 0 2px !important;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.90) !important;
+        box-shadow: none !important;
+        text-shadow: 0 0 9px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
+        font: 760 11.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+        white-space: nowrap;
+        touch-action: manipulation;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button[data-active="true"],
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button[aria-pressed="true"],
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-shell[data-open="true"] > .oviz-three-controls-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-shell[data-open="true"] > .oviz-three-sky-controls-toggle {
+        border: 0 !important;
+        background: transparent !important;
+        color: rgba(246, 200, 95, 0.98) !important;
+        box-shadow: inset 0 -2px 0 rgba(246, 200, 95, 0.72) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-sky-view,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-lasso,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-legend,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-controls-shell,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-sky-controls-shell,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-reset-camera-view,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-legend-panel,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-selection-status {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-widget-menu {
+        justify-content: center;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu .oviz-three-controls-drawer,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-drawer {
+        position: fixed !important;
+        box-sizing: border-box;
+        left: calc(env(safe-area-inset-left, 0px) + 10px) !important;
+        right: calc(env(safe-area-inset-right, 0px) + 10px) !important;
+        top: auto !important;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 128px) !important;
+        width: auto !important;
+        max-width: none !important;
+        max-height: min(62dvh, 520px) !important;
+        padding: 14px !important;
+        overflow: auto !important;
+        border: 1px solid rgba(238, 242, 247, 0.12) !important;
+        border-radius: 12px !important;
+        background: rgba(12, 14, 18, 0.92) !important;
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34) !important;
+        backdrop-filter: blur(18px) saturate(128%) !important;
+        -webkit-backdrop-filter: blur(18px) saturate(128%) !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transform: translateY(12px) !important;
+        transition: opacity 0.16s ease, transform 0.16s ease !important;
+        z-index: 12;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-shell[data-open="true"] .oviz-three-controls-drawer,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-shell[data-open="true"] .oviz-three-sky-controls-drawer {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        transform: translateY(0) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-row,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-add-grid {
+        grid-template-columns: 1fr !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-actions {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-key-help-button {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls input,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls select,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls input,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls select {
+        min-height: 38px;
+        font-size: 13px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle-row,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-selection-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-volume-toggle {
+        align-items: center !important;
+        gap: 8px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle-row input[type="checkbox"],
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-selection-toggle input[type="checkbox"],
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-toggle input[type="checkbox"],
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-volume-toggle input[type="checkbox"] {
+        position: relative !important;
+        box-sizing: border-box !important;
+        width: 30px !important;
+        height: 18px !important;
+        min-width: 30px !important;
+        min-height: 18px !important;
+        flex: 0 0 30px !important;
+        margin: 0 !important;
+        border: 1px solid rgba(238, 242, 247, 0.26) !important;
+        border-radius: 999px !important;
+        background: rgba(255, 255, 255, 0.055) !important;
+        accent-color: var(--oviz-instrument-accent) !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle-row input[type="checkbox"]::after,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-selection-toggle input[type="checkbox"]::after,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-toggle input[type="checkbox"]::after,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-volume-toggle input[type="checkbox"]::after {
+        content: "" !important;
+        position: absolute !important;
+        left: 2px !important;
+        top: 2px !important;
+        width: 12px !important;
+        height: 12px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: rgba(238, 242, 247, 0.76) !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.34) !important;
+        transform: translateX(0) !important;
+        transition: background 160ms ease, transform 160ms ease !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle-row input[type="checkbox"]:checked,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-selection-toggle input[type="checkbox"]:checked,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-toggle input[type="checkbox"]:checked,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-volume-toggle input[type="checkbox"]:checked {
+        border-color: rgba(246, 200, 95, 0.60) !important;
+        background: rgba(246, 200, 95, 0.20) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle-row input[type="checkbox"]:checked::after,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-selection-toggle input[type="checkbox"]:checked::after,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-toggle input[type="checkbox"]:checked::after,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-volume-toggle input[type="checkbox"]:checked::after {
+        background: rgba(246, 200, 95, 0.96) !important;
+        transform: translateX(12px) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel {
+        position: fixed !important;
+        box-sizing: border-box;
+        left: calc(env(safe-area-inset-left, 0px) + 10px) !important;
+        right: calc(env(safe-area-inset-right, 0px) + 10px) !important;
+        top: auto !important;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 128px) !important;
+        width: auto !important;
+        height: auto !important;
+        max-height: min(54dvh, 420px) !important;
+        z-index: 12 !important;
+        display: flex !important;
+        flex-direction: column;
+        border: 1px solid rgba(238, 242, 247, 0.12) !important;
+        border-radius: 0 !important;
+        background: rgba(12, 14, 18, 0.92) !important;
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34) !important;
+        backdrop-filter: blur(18px) saturate(128%) !important;
+        -webkit-backdrop-filter: blur(18px) saturate(128%) !important;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(12px);
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        overflow: hidden !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel[data-open="true"] {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel-head {
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        flex: 0 0 auto;
+        min-height: 36px;
+        padding: 0 10px;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.10);
+        cursor: default;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel-title {
+        font: 700 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel-toggle {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 0;
+        color: rgba(238, 242, 247, 0.78);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel-body {
+        display: flex;
+        gap: 6px;
+        min-height: 0;
+        max-height: calc(min(54dvh, 420px) - 37px);
+        padding: 8px 10px !important;
+        overflow: auto !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-section-toggle {
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 24px;
+        padding: 0;
+        color: rgba(238, 242, 247, 0.82);
+        font: 680 10.5px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend {
+        gap: 4px;
+        border-radius: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-entry {
+        padding: 2px 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-row {
+        display: grid !important;
+        grid-template-columns: 16px minmax(0, 1fr) !important;
+        align-items: center !important;
+        gap: 0 2px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-item {
+        grid-column: 2;
+        min-height: 24px !important;
+        padding: 0 !important;
+        font: 650 12.5px/1.16 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        touch-action: manipulation;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-edit {
+        grid-column: 1;
+        justify-self: center;
+        width: 16px !important;
+        height: 20px !important;
+        min-width: 16px !important;
+        min-height: 20px !important;
+        padding: 0 !important;
+        line-height: 20px !important;
+        text-align: center !important;
+        touch-action: manipulation;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-controls {
+        margin-top: 4px !important;
+        padding: 7px 8px !important;
+        border-radius: 0 !important;
+        gap: 7px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-name {
+        max-inline-size: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 92px) !important;
+        overflow-wrap: anywhere !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-resize,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-popover {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-selection-status {
+        position: fixed;
+        left: 50%;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 128px);
+        z-index: 9;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px);
+        padding: 6px 7px 6px 10px;
+        border: 1px solid rgba(246, 200, 95, 0.24);
+        border-radius: 999px;
+        background: rgba(12, 14, 18, 0.84);
+        color: rgba(238, 242, 247, 0.92);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.26);
+        backdrop-filter: blur(14px) saturate(122%);
+        -webkit-backdrop-filter: blur(14px) saturate(122%);
+        transform: translateX(-50%);
+        font: 650 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+        pointer-events: auto;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-selection-status[data-visible="true"] {
+        display: flex;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-selection-clear {
+        min-width: 44px;
+        min-height: 34px;
+        padding: 0 10px;
+        border: 1px solid rgba(238, 242, 247, 0.12);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.94);
+        font: 650 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-footer {
+        left: 50% !important;
+        right: auto !important;
+        box-sizing: border-box;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
+        width: min(430px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px)) !important;
+        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px) !important;
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) 44px 44px max-content minmax(0, 1fr);
+        grid-template-areas:
+          ". back forward time ."
+          "slider slider slider slider slider";
+        align-items: center;
+        gap: 4px 8px;
+        padding: 0 !important;
+        border: 0;
+        border-radius: 0;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        transform: translateX(-50%) !important;
+        z-index: 8;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-play-backward {
+        grid-area: back;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-play-forward {
+        grid-area: forward;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-time-label {
+        grid-area: time;
+        min-width: 0 !important;
+        width: auto;
+        height: 44px;
+        justify-content: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font: 700 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-slider-shell {
+        grid-area: slider;
+        width: 100% !important;
+        max-width: none !important;
+        flex: 1 1 auto !important;
+        height: 34px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-slider-track-wrap {
+        height: 30px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-footer button {
+        width: 44px !important;
+        height: 44px !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        text-shadow: 0 0 9px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
+        touch-action: manipulation;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-slider::-webkit-slider-thumb {
+        width: 24px !important;
+        height: 24px !important;
+        margin-top: -9px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-slider::-moz-range-thumb {
+        width: 24px !important;
+        height: 24px !important;
+      }
+      @media (max-width: 360px) {
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu {
+          gap: 6px 8px;
+        }
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button,
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu select,
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle,
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-toggle {
+          min-width: 42px !important;
+          padding: 0 3px !important;
+          font-size: 11px !important;
+        }
+      }
     </style>
   </head>
   <body>
-    <div id="__ROOT_ID__" tabindex="0" data-zen="false" __ROOT_MINIMAL_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__>
+    <div id="__ROOT_ID__" tabindex="0" data-zen="false" __ROOT_MINIMAL_ATTR__ __ROOT_MOBILE_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__>
       __TOPBAR_HTML__
       <button class="oviz-three-earth-view-toggle" type="button" title="Current view: 3D. Click or press V to enter Sky view." aria-pressed="false" aria-label="Current view: 3D. Switch to Sky View.">View: 3D</button>
       __SHELL_HTML__
@@ -4112,12 +4602,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         || sceneSpec.export_profile === "lite"
         || sceneSpec.export_profile === "minimal"
       );
+      const mobileModeEnabled = Boolean(
+        initialState.mobile_mode_enabled
+        || initialState.mobile_mode
+        || sceneSpec.export_profile === "mobile"
+        || (sceneSpec.mobile && sceneSpec.mobile.enabled)
+      );
       const galacticSimpleSpec = sceneSpec.galactic_simple && typeof sceneSpec.galactic_simple === "object"
         ? sceneSpec.galactic_simple
         : {};
       const galacticSimpleModeEnabled = Boolean(galacticSimpleSpec.enabled);
       const galacticSimpleTracksOrbitTargetToSun = Boolean(galacticSimpleSpec.track_orbit_target_to_sun);
       root.dataset.minimal = minimalModeEnabled ? "true" : "false";
+      root.dataset.mobile = mobileModeEnabled ? "true" : "false";
       root.dataset.galacticSimple = galacticSimpleModeEnabled ? "true" : "false";
       const initialZoomAnchorSpec = initialState.initial_zoom_anchor && typeof initialState.initial_zoom_anchor === "object"
         ? initialState.initial_zoom_anchor
@@ -4127,6 +4624,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const titleEl = root.querySelector(".oviz-three-title");
       const widgetMenuEl = root.querySelector(".oviz-three-widget-menu");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
+      const mobileSkyViewButtonEl = root.querySelector(".oviz-three-mobile-sky-view");
+      const mobileLassoButtonEl = root.querySelector(".oviz-three-mobile-lasso");
+      const mobileLegendButtonEl = root.querySelector(".oviz-three-mobile-legend");
       const resetCameraViewButtonEl = root.querySelector(".oviz-three-reset-camera-view");
       const resetSelectionButtonEl = root.querySelector(".oviz-three-reset-selection");
       const saveStateButtonEl = root.querySelector(".oviz-three-save-state");
@@ -4243,6 +4743,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const volumeSummaryEl = root.querySelector(".oviz-three-volume-summary");
       const lassoOverlayEl = root.querySelector(".oviz-three-lasso-overlay");
       const lassoPolylineEl = root.querySelector(".oviz-three-lasso-overlay polyline");
+      const mobileSelectionStatusEl = root.querySelector(".oviz-three-mobile-selection-status");
+      const mobileSelectionTextEl = root.querySelector(".oviz-three-mobile-selection-text");
+      const mobileSelectionClearButtonEl = root.querySelector(".oviz-three-mobile-selection-clear");
       const skyPanelEl = root.querySelector(".oviz-three-sky-panel");
       const skyFrameEl = root.querySelector(".oviz-three-sky-frame");
       const skyDomeFrameEl = root.querySelector(".oviz-three-sky-dome-frame");
@@ -9996,6 +10499,7 @@ __SKY_RUNTIME_JS__
         if (!clearSelectionButtonEl || !volumeLassoToggleEl) {
           return;
         }
+        const hasSelectionContent = currentSelections.length > 0 || Boolean(currentSelection) || hasActiveLassoSelectionMask();
         if (clickSelectToggleEl) {
           clickSelectToggleEl.checked = false;
           clickSelectToggleEl.disabled = true;
@@ -10006,8 +10510,47 @@ __SKY_RUNTIME_JS__
           volumeLassoToggleEl.disabled = true;
           return;
         }
-        clearSelectionButtonEl.disabled = currentSelections.length === 0 && !currentSelection && !hasActiveLassoSelectionMask();
+        clearSelectionButtonEl.disabled = !hasSelectionContent;
         volumeLassoToggleEl.checked = lassoVolumeSelectionEnabled;
+        if (mobileLassoButtonEl) {
+          mobileLassoButtonEl.dataset.active = lassoArmed ? "true" : "false";
+          mobileLassoButtonEl.setAttribute("aria-pressed", lassoArmed ? "true" : "false");
+          mobileLassoButtonEl.textContent = lassoArmed ? "Armed" : "Lasso";
+          mobileLassoButtonEl.title = lassoArmed ? "Lasso is armed. Drag on the scene to select." : "Arm lasso selection for touch input.";
+        }
+        if (mobileSelectionStatusEl) {
+          mobileSelectionStatusEl.dataset.visible = hasSelectionContent ? "true" : "false";
+        }
+        if (mobileSelectionTextEl) {
+          const selectionCount = currentSelections.length + (currentSelection ? 1 : 0);
+          if (selectionCount > 0) {
+            mobileSelectionTextEl.textContent = `${selectionCount} selected`;
+          } else if (hasActiveLassoSelectionMask()) {
+            mobileSelectionTextEl.textContent = "Selection active";
+          } else {
+            mobileSelectionTextEl.textContent = "No selection";
+          }
+        }
+      }
+
+      function syncMobileStaticUi() {
+        if (!mobileModeEnabled) {
+          return;
+        }
+        if (controlsToggleEl) {
+          controlsToggleEl.textContent = "Controls";
+        }
+        if (skyControlsToggleEl) {
+          skyControlsToggleEl.textContent = "Layers";
+        }
+        if (resetCameraViewButtonEl) {
+          resetCameraViewButtonEl.textContent = "Reset";
+          resetCameraViewButtonEl.title = "Reset camera";
+        }
+        if (resetSelectionButtonEl) {
+          resetSelectionButtonEl.textContent = "Clear";
+          resetSelectionButtonEl.title = "Clear current lasso and cluster selection";
+        }
       }
 
       function onWindowMessage(event) {
@@ -14150,6 +14693,19 @@ __ACTION_RUNTIME_JS__
             focusViewer();
           });
         }
+        if (mobileLassoButtonEl) {
+          mobileLassoButtonEl.addEventListener("click", () => {
+            lassoArmed = !lassoArmed;
+            updateSelectionUI();
+            focusViewer();
+          });
+        }
+        if (mobileSelectionClearButtonEl) {
+          mobileSelectionClearButtonEl.addEventListener("click", () => {
+            resetSelectionState();
+            focusViewer();
+          });
+        }
         if (saveStateButtonEl) {
           saveStateButtonEl.addEventListener("click", async () => {
             saveStateButtonEl.disabled = true;
@@ -14180,6 +14736,21 @@ __ACTION_RUNTIME_JS__
             event.stopPropagation();
           });
           legendPanelToggleEl.addEventListener("click", handleLegendPanelToggle);
+        }
+        if (mobileLegendButtonEl) {
+          mobileLegendButtonEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (mobileModeEnabled) {
+              setControlsDrawerOpen(false);
+              setSkyControlsDrawerOpen(false);
+            }
+            setLegendPanelOpen(!legendPanelOpen);
+            if (activeLegendEditorKey) {
+              renderLegend();
+            }
+            focusViewer();
+          });
         }
         legendPanelEl.addEventListener("click", (event) => {
           const toggleButton = event.target && event.target.closest
@@ -14529,6 +15100,18 @@ __ACTION_RUNTIME_JS__
             focusViewer();
           });
         }
+        if (mobileSkyViewButtonEl) {
+          mobileSkyViewButtonEl.addEventListener("click", () => {
+            if (!actionInterruptsMuted()) {
+              interruptActionRun("camera", { disableOrbit: true });
+            }
+            setControlsDrawerOpen(false);
+            setSkyControlsDrawerOpen(false);
+            setLegendPanelOpen(false);
+            toggleEarthView();
+            focusViewer();
+          });
+        }
         if (earthViewToggleButtonEl) {
           earthViewToggleButtonEl.addEventListener("click", () => {
             if (!actionInterruptsMuted()) {
@@ -14748,6 +15331,7 @@ __ACTION_RUNTIME_JS__
       initDendrogramPanel();
       initVolumeControls();
       await restoreInitialLassoSelectionMask();
+      syncMobileStaticUi();
       renderLegend();
       updateSelectionUI();
       updatePlaybackButtons();

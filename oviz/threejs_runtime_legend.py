@@ -257,6 +257,11 @@ THREEJS_LEGEND_RUNTIME_JS = """
           );
           legendPanelToggleEl.setAttribute("aria-expanded", legendPanelOpen ? "true" : "false");
         }
+        if (mobileLegendButtonEl) {
+          mobileLegendButtonEl.dataset.active = legendPanelOpen ? "true" : "false";
+          mobileLegendButtonEl.setAttribute("aria-expanded", legendPanelOpen ? "true" : "false");
+          mobileLegendButtonEl.title = legendPanelOpen ? "Hide legend" : "Show legend";
+        }
         if (legendPanelEl) {
           const rect = legendPanelRectState || defaultLegendPanelRect();
           applyLegendPanelRect(rect);

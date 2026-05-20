@@ -346,6 +346,14 @@ THREEJS_VIEWER_RUNTIME_JS = """
           viewFromEarthButtonEl.setAttribute("aria-label", buttonAriaLabel);
           viewFromEarthButtonEl.title = buttonTitle;
         }
+        if (mobileSkyViewButtonEl) {
+          mobileSkyViewButtonEl.textContent = isEarthView ? "3D" : "Sky";
+          mobileSkyViewButtonEl.dataset.active = isEarthView ? "true" : "false";
+          mobileSkyViewButtonEl.dataset.viewMode = isEarthView ? "sky" : "3d";
+          mobileSkyViewButtonEl.setAttribute("aria-pressed", isEarthView ? "true" : "false");
+          mobileSkyViewButtonEl.setAttribute("aria-label", buttonAriaLabel);
+          mobileSkyViewButtonEl.title = buttonTitle;
+        }
       }
 
       function applyCameraViewMode() {
@@ -1547,6 +1555,14 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         if (zenModeEnabled) {
           tooltipEl.style.display = "none";
+          if (mobileModeEnabled) {
+            if (typeof setControlsDrawerOpen === "function") {
+              setControlsDrawerOpen(false);
+            }
+            if (typeof setLegendPanelOpen === "function") {
+              setLegendPanelOpen(false);
+            }
+          }
           if (typeof setSkyControlsDrawerOpen === "function") {
             setSkyControlsDrawerOpen(false);
           }

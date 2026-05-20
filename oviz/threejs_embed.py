@@ -148,6 +148,12 @@ def render_threejs_html(
         initial_state.get("minimal_mode_enabled")
         or scene_spec.get("export_profile") in {"minimal", "lite"}
     )
+    mobile_mode = bool(
+        initial_state.get("mobile_mode_enabled")
+        or initial_state.get("mobile_mode")
+        or scene_spec.get("export_profile") == "mobile"
+        or (scene_spec.get("mobile") or {}).get("enabled")
+    )
     galactic_simple = bool((scene_spec.get("galactic_simple") or {}).get("enabled"))
 
     html = html_template.replace("__ROOT_ID__", root_id)
@@ -156,6 +162,10 @@ def render_threejs_html(
     html = html.replace(
         "__ROOT_MINIMAL_ATTR__",
         'data-minimal="true"' if minimal_mode else 'data-minimal="false"',
+    )
+    html = html.replace(
+        "__ROOT_MOBILE_ATTR__",
+        'data-mobile="true"' if mobile_mode else 'data-mobile="false"',
     )
     html = html.replace(
         "__ROOT_GALACTIC_SIMPLE_ATTR__",

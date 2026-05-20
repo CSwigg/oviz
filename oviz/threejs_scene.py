@@ -670,6 +670,7 @@ def build_threejs_scene_spec(
 
     normalized_initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
     compact_payload = bool(normalized_initial_state.get("compact_payload_enabled"))
+    mobile_mode = bool(normalized_initial_state.get("mobile_mode_enabled"))
 
     if minimal_mode:
         default_sky_catalog = {}
@@ -777,7 +778,10 @@ def build_threejs_scene_spec(
 
     scene_spec = {
         "renderer": "threejs",
-        "export_profile": "lite" if minimal_mode else "full",
+        "export_profile": "mobile" if mobile_mode else ("lite" if minimal_mode else "full"),
+        "mobile": {
+            "enabled": mobile_mode,
+        },
         "timeline": {
             "enabled": bool(_timeline_enabled(plot, frame_specs)),
             "frame_count": len(frame_specs),

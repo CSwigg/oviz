@@ -409,8 +409,11 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
         const nextOpen = minimalModeEnabled ? false : Boolean(isOpen);
         controlsShellEl.dataset.open = nextOpen ? "true" : "false";
-        controlsToggleEl.textContent = nextOpen ? "Controls ▾" : "Controls ▸";
+        controlsToggleEl.textContent = mobileModeEnabled ? "Controls" : (nextOpen ? "Controls ▾" : "Controls ▸");
         setDrawerAccessibility(controlsShellEl, controlsToggleEl, ".oviz-three-controls-drawer", nextOpen);
+        if (mobileModeEnabled && nextOpen) {
+          setLegendPanelOpen(false);
+        }
         if (nextOpen && toolsShellEl && toolsShellEl.dataset.open === "true") {
           toolsShellEl.dataset.open = "false";
           if (toolsToggleEl) {
@@ -433,8 +436,11 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
         const nextOpen = minimalModeEnabled ? false : Boolean(isOpen);
         skyControlsShellEl.dataset.open = nextOpen ? "true" : "false";
-        skyControlsToggleEl.textContent = nextOpen ? "Sky ▾" : "Sky ▸";
+        skyControlsToggleEl.textContent = mobileModeEnabled ? "Layers" : (nextOpen ? "Sky ▾" : "Sky ▸");
         setDrawerAccessibility(skyControlsShellEl, skyControlsToggleEl, ".oviz-three-sky-controls-drawer", nextOpen);
+        if (mobileModeEnabled && nextOpen) {
+          setLegendPanelOpen(false);
+        }
         if (nextOpen && toolsShellEl && toolsShellEl.dataset.open === "true") {
           toolsShellEl.dataset.open = "false";
           if (toolsToggleEl) {

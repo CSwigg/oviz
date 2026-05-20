@@ -89,6 +89,10 @@ THREEJS_SHELL_HTML = """
           <polyline points=""></polyline>
         </svg>
       </div>
+      <div class="oviz-three-mobile-selection-status" data-visible="false">
+        <span class="oviz-three-mobile-selection-text">No selection</span>
+        <button class="oviz-three-mobile-selection-clear" type="button" title="Clear current selection">Clear</button>
+      </div>
       <div class="oviz-three-tooltip"></div>
       <div class="oviz-three-scale-bar" data-dragging="false" title="Drag to reposition">
         <div class="oviz-three-scale-label"></div>

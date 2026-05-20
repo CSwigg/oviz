@@ -19,6 +19,9 @@ def normalize_threejs_initial_state(initial_state=None):
     if "lite_mode_enabled" not in state and "minimal_mode_enabled" in state:
         state["lite_mode_enabled"] = bool(state.get("minimal_mode_enabled"))
 
+    if "mobile_mode_enabled" not in state and "mobile_mode" in state:
+        state["mobile_mode_enabled"] = bool(state.get("mobile_mode"))
+
     if "galactic_lite_mode_enabled" not in state and "galactic_simple_mode_enabled" in state:
         state["galactic_lite_mode_enabled"] = bool(state.get("galactic_simple_mode_enabled"))
 

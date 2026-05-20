@@ -18,10 +18,6 @@ NOTEBOOK_PATH = HOME_DIR / "Desktop" / "astro_research" / "radcliffe" / "oviz_no
 SUPERNOVAE_ROOT = HOME_DIR / "Desktop" / "astro_research" / "supernovae_map"
 SUPERNOVAE_CATALOG_PATH = SUPERNOVAE_ROOT / "paper" / "solar_encounter_catalog_current.csv.gz"
 MCCALLUM_NE_GRID_PATH = HOME_DIR / "Downloads" / "ne_grid.fits"
-ONEILL_LOCAL_BUBBLE_PATH = HOME_DIR / "Downloads" / "ONeill2024_LocalBubble_Shell_xyz.fits"
-GAO_IVS_PEAKS_PATH = HOME_DIR / "Downloads" / "peaks_meanmap_xyz.csv"
-GAO_IVS_BOUNDARY_IN_PATH = HOME_DIR / "Downloads" / "npix128boundary_mean_sigma10.csv"
-GAO_IVS_BOUNDARY_OUT_PATH = HOME_DIR / "Downloads" / "npix128boundaryout_mean_sigma10.csv"
 MIST_PARSEC_AGES_PATH = (
     SUPERNOVAE_ROOT
     / "outputs"
@@ -48,6 +44,7 @@ WEBSITE_OUTPUT_HTML = (
 )
 GALACTIC_PLANE_IMAGE_PATH = HOME_DIR / "Downloads" / "Top-down_view_of_the_Milky_Way.jpg"
 MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS = (-400.0, 400.0)
+MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC = (-2000.0, 2000.0)
 MAIN_FIGURE_DUST_MAX_RESOLUTION = 512
 MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 512
 MAIN_FIGURE_DUST_SAMPLES = 200
@@ -495,258 +492,16 @@ mccallum_ne_volumes = _build_mccallum_ne_volumes_for_main_figure()
 
 
 def build_local_shell_volume_source_block() -> str:
-    return f"""
-import os
-from pathlib import Path as _OvizPath
-
-import numpy as _oviz_np
-import pandas as _oviz_pd
-from matplotlib.colors import LinearSegmentedColormap as _OvizLinearSegmentedColormap
-
-ONEILL_LOCAL_BUBBLE_PATH = _OvizPath(
-    os.environ.get("OVIZ_ONEILL_LOCAL_BUBBLE_FITS", {str(ONEILL_LOCAL_BUBBLE_PATH)!r})
-).expanduser()
-GAO_IVS_PEAKS_PATH = _OvizPath(
-    os.environ.get("OVIZ_GAO_IVS_PEAKS_CSV", {str(GAO_IVS_PEAKS_PATH)!r})
-).expanduser()
-GAO_IVS_BOUNDARY_IN_PATH = _OvizPath(
-    os.environ.get("OVIZ_GAO_IVS_BOUNDARY_IN_CSV", {str(GAO_IVS_BOUNDARY_IN_PATH)!r})
-).expanduser()
-GAO_IVS_BOUNDARY_OUT_PATH = _OvizPath(
-    os.environ.get("OVIZ_GAO_IVS_BOUNDARY_OUT_CSV", {str(GAO_IVS_BOUNDARY_OUT_PATH)!r})
-).expanduser()
-
-_DODGER_BLUE_VOLUME_CMAP = _OvizLinearSegmentedColormap.from_list(
-    "dodger_blue",
-    [
-        (0.0, (0.0, 0.0, 0.0, 0.0)),
-        (0.18, (0.1176470588, 0.5647058824, 1.0, 0.18)),
-        (1.0, (0.1176470588, 0.5647058824, 1.0, 1.0)),
-    ],
-)
-
-
-def _build_gao_ivs_volume_data(grid_size=192):
-    required_paths = [
-        GAO_IVS_PEAKS_PATH,
-        GAO_IVS_BOUNDARY_IN_PATH,
-        GAO_IVS_BOUNDARY_OUT_PATH,
-    ]
-    missing_paths = [path for path in required_paths if not path.exists()]
-    if missing_paths:
-        print(
-            "Skipping Gao+2024 IVS volume; missing model table(s): "
-            + ", ".join(str(path) for path in missing_paths)
-        )
-        return None
-
-    peaks = _oviz_pd.read_csv(
-        GAO_IVS_PEAKS_PATH,
-        usecols=["index", "x[pc]", "y[pc]", "z[pc]", "nH[cm-3]"],
-    )
-    boundary_in = _oviz_pd.read_csv(
-        GAO_IVS_BOUNDARY_IN_PATH,
-        usecols=["index", "x[pc]", "y[pc]", "z[pc]"],
-    )
-    boundary_out = _oviz_pd.read_csv(
-        GAO_IVS_BOUNDARY_OUT_PATH,
-        usecols=["index", "x[pc]", "y[pc]", "z[pc]"],
-    )
-
-    peaks["index"] = peaks["index"].astype(int)
-    boundary_in["index"] = boundary_in["index"].astype(int)
-    boundary_out["index"] = boundary_out["index"].astype(int)
-    shell = (
-        boundary_in.rename(
-            columns={{"x[pc]": "xin", "y[pc]": "yin", "z[pc]": "zin"}}
-        )
-        .merge(
-            boundary_out.rename(
-                columns={{"x[pc]": "xout", "y[pc]": "yout", "z[pc]": "zout"}}
-            ),
-            on="index",
-            how="inner",
-            validate="1:1",
-        )
-        .merge(
-            peaks.rename(
-                columns={{"x[pc]": "xpeak", "y[pc]": "ypeak", "z[pc]": "zpeak"}}
-            )[["index", "xpeak", "ypeak", "zpeak", "nH[cm-3]"]],
-            on="index",
-            how="left",
-            validate="1:1",
-        )
-    )
-    if shell.empty:
-        print("Skipping Gao+2024 IVS volume; no matched boundary/peak rows.")
-        return None
-
-    for col in ["xin", "yin", "zin", "xout", "yout", "zout", "xpeak", "ypeak", "zpeak", "nH[cm-3]"]:
-        shell[col] = _oviz_pd.to_numeric(shell[col], errors="coerce")
-    shell = shell.dropna(subset=["xin", "yin", "zin", "xout", "yout", "zout"])
-    if shell.empty:
-        print("Skipping Gao+2024 IVS volume; no finite boundary coordinates.")
-        return None
-
-    fractions = _oviz_np.linspace(0.0, 1.0, 11, dtype=_oviz_np.float32)
-    xin = shell["xin"].to_numpy(dtype=_oviz_np.float32)
-    yin = shell["yin"].to_numpy(dtype=_oviz_np.float32)
-    zin = shell["zin"].to_numpy(dtype=_oviz_np.float32)
-    xout = shell["xout"].to_numpy(dtype=_oviz_np.float32)
-    yout = shell["yout"].to_numpy(dtype=_oviz_np.float32)
-    zout = shell["zout"].to_numpy(dtype=_oviz_np.float32)
-    x_boundary = (xin[:, None] + (xout - xin)[:, None] * fractions[None, :]).ravel()
-    y_boundary = (yin[:, None] + (yout - yin)[:, None] * fractions[None, :]).ravel()
-    z_boundary = (zin[:, None] + (zout - zin)[:, None] * fractions[None, :]).ravel()
-
-    density = shell["nH[cm-3]"].to_numpy(dtype=_oviz_np.float32)
-    if _oviz_np.isfinite(density).any():
-        density = _oviz_np.nan_to_num(density, nan=float(_oviz_np.nanmedian(density)), posinf=0.0, neginf=0.0)
-        base_weights = _oviz_np.log1p(_oviz_np.clip(density, 0.0, None))
-        boundary_weights = 0.65 * _oviz_np.repeat(base_weights, len(fractions))
-    else:
-        base_weights = None
-        boundary_weights = None
-
-    xpeak = shell["xpeak"].to_numpy(dtype=_oviz_np.float32)
-    ypeak = shell["ypeak"].to_numpy(dtype=_oviz_np.float32)
-    zpeak = shell["zpeak"].to_numpy(dtype=_oviz_np.float32)
-    peak_mask = _oviz_np.isfinite(xpeak) & _oviz_np.isfinite(ypeak) & _oviz_np.isfinite(zpeak)
-    if peak_mask.any():
-        x_points = _oviz_np.concatenate([x_boundary, xpeak[peak_mask]])
-        y_points = _oviz_np.concatenate([y_boundary, ypeak[peak_mask]])
-        z_points = _oviz_np.concatenate([z_boundary, zpeak[peak_mask]])
-        if base_weights is None:
-            weights = None
-        else:
-            weights = _oviz_np.concatenate([boundary_weights, 2.5 * base_weights[peak_mask]])
-    else:
-        x_points = x_boundary
-        y_points = y_boundary
-        z_points = z_boundary
-        weights = boundary_weights
-
-    margin_pc = 18.0
-    x_bounds = [float(_oviz_np.nanmin(x_points) - margin_pc), float(_oviz_np.nanmax(x_points) + margin_pc)]
-    y_bounds = [float(_oviz_np.nanmin(y_points) - margin_pc), float(_oviz_np.nanmax(y_points) + margin_pc)]
-    z_bounds = [float(_oviz_np.nanmin(z_points) - margin_pc), float(_oviz_np.nanmax(z_points) + margin_pc)]
-    x_edges = _oviz_np.linspace(x_bounds[0], x_bounds[1], int(grid_size) + 1, dtype=_oviz_np.float32)
-    y_edges = _oviz_np.linspace(y_bounds[0], y_bounds[1], int(grid_size) + 1, dtype=_oviz_np.float32)
-    z_edges = _oviz_np.linspace(z_bounds[0], z_bounds[1], int(grid_size) + 1, dtype=_oviz_np.float32)
-
-    cube_zyx, _ = _oviz_np.histogramdd(
-        _oviz_np.column_stack((z_points, y_points, x_points)),
-        bins=(z_edges, y_edges, x_edges),
-        weights=weights,
-    )
-    cube_zyx = cube_zyx.astype(_oviz_np.float32, copy=False)
-
-    try:
-        from scipy.ndimage import gaussian_filter as _oviz_gaussian_filter
-    except ImportError:
-        _oviz_gaussian_filter = None
-    if _oviz_gaussian_filter is not None:
-        cube_zyx = _oviz_gaussian_filter(
-            cube_zyx,
-            sigma=0.55,
-            mode="constant",
-        ).astype(_oviz_np.float32, copy=False)
-    # Compress the dynamic range before compact uint8 embedding so faint IVS
-    # filaments survive instead of being quantized away by the densest voxels.
-    cube_zyx = _oviz_np.log1p(_oviz_np.clip(cube_zyx, 0.0, None)).astype(
-        _oviz_np.float32,
-        copy=False,
-    )
-
-    positive = cube_zyx[cube_zyx > 0]
-    if not positive.size:
-        print("Skipping Gao+2024 IVS volume; voxelization produced an empty cube.")
-        return None
-
-    return {{
-        "data": cube_zyx,
-        "bounds": {{
-            "x": x_bounds,
-            "y": y_bounds,
-            "z": z_bounds,
-        }},
-    }}
-
-
-def _build_local_shell_volumes_for_main_figure():
-    volumes = []
-
-    if ONEILL_LOCAL_BUBBLE_PATH.exists():
-        volumes.append(
-            {{
-                "key": "oneill-local-bubble-shell",
-                "state_key": "oneill-local-bubble-shell",
-                "state_name": "O'Neill+2024 Local Bubble",
-                "name": "O'Neill+2024 Local Bubble Shell",
-                "path": str(ONEILL_LOCAL_BUBBLE_PATH),
-                "hdu": "SHELL",
-                "time_myr": 0.0,
-                "max_resolution": 128,
-                "max_resolution_cap": 128,
-                "sky_overlay_max_resolution": 128,
-                "opacity": 0.22,
-                "samples": 120,
-                "alpha_coef": 105,
-                "gradient_step": 0.006,
-                "stretch": "asinh",
-                "default_vmin_quantile": 0.86,
-                "default_vmax_quantile": 0.999,
-                "colormap": _DODGER_BLUE_VOLUME_CMAP,
-                "unit_label": "shell density",
-                "visible": False,
-                "only_at_t0": True,
-                "supports_show_all_times": False,
-                "show_all_times": False,
-            }}
-        )
-    else:
-        print(f"Skipping O'Neill+2024 Local Bubble volume; missing FITS cube: {{ONEILL_LOCAL_BUBBLE_PATH}}")
-
-    ivs_volume_data = _build_gao_ivs_volume_data(grid_size=192)
-    if ivs_volume_data is not None:
-        volumes.append(
-            {{
-                "key": "gao-ivs-shell",
-                "state_key": "gao-ivs-shell",
-                "state_name": "Gao+2024 IRAS Vela Shell",
-                "name": "Gao+2024 IRAS Vela Shell",
-                "time_myr": 0.0,
-                "data": ivs_volume_data["data"],
-                "bounds": ivs_volume_data["bounds"],
-                "apply_center_offset": True,
-                "opacity": 0.26,
-                "samples": 192,
-                "alpha_coef": 125,
-                "gradient_step": 0.006,
-                "stretch": "asinh",
-                "default_vmin_quantile": 0.45,
-                "default_vmax_quantile": 0.995,
-                "colormap": _DODGER_BLUE_VOLUME_CMAP,
-                "unit_label": "weighted shell density",
-                "visible": False,
-                "only_at_t0": True,
-                "supports_show_all_times": False,
-                "show_all_times": False,
-            }}
-        )
-
-    return volumes
-
-
-local_shell_volumes = _build_local_shell_volumes_for_main_figure()
-optional_static_volume_state = {{
-    str(_volume.get("state_key") or _volume.get("key")): {{"visible": False}}
-    for _volume in [*mccallum_ne_volumes, *local_shell_volumes]
-}}
-optional_static_legend_state = {{
+    return """
+local_shell_volumes = []
+optional_static_volume_state = {
+    str(_volume.get("state_key") or _volume.get("key")): {"visible": False}
+    for _volume in mccallum_ne_volumes
+}
+optional_static_legend_state = {
     _state_key: False
     for _state_key in optional_static_volume_state
-}}
+}
 """.strip()
 
 
@@ -821,6 +576,8 @@ df_hunt_parsec_full = df_hunt_full.merge(
     how='left',
     validate='m:1',
 )
+main_figure_cluster_xy_min_pc = {MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[0]!r}
+main_figure_cluster_xy_max_pc = {MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[1]!r}
 df_hunt_parsec_sample = df_hunt_parsec_full.loc[
     (df_hunt_parsec_full['U_err'] < 10) &
     (df_hunt_parsec_full['V_err'] < 10) &
@@ -831,6 +588,8 @@ df_hunt_parsec_sample = df_hunt_parsec_full.loc[
     (df_hunt_parsec_full['x'].notnull()) &
     (df_hunt_parsec_full['y'].notnull()) &
     (df_hunt_parsec_full['z'].notnull()) &
+    (df_hunt_parsec_full['x'].between(main_figure_cluster_xy_min_pc, main_figure_cluster_xy_max_pc)) &
+    (df_hunt_parsec_full['y'].between(main_figure_cluster_xy_min_pc, main_figure_cluster_xy_max_pc)) &
     (df_hunt_parsec_full['chronos_parsec_age_myr'].notnull()) &
     (df_hunt_parsec_full['n_rvs_2026'] >= 3) &
     (df_hunt_parsec_full['class_50'] > 0.5) &
@@ -847,7 +606,7 @@ df_hunt_young_parsec = df_hunt_parsec_sample.loc[
 print(
     'Using PARSEC ages from {str(CHRONOS_PARSEC_CLUSTER_RESULTS_PATH)} for displayed cluster samples: '
     f"{{len(df_hunt_60_parsec)}} clusters <60 Myr, {{len(df_hunt_young_parsec)}} clusters <15 Myr. "
-    'No x/y/z distance restrictions were applied to these displayed samples.'
+    f"x/y within [{{main_figure_cluster_xy_min_pc:g}}, {{main_figure_cluster_xy_max_pc:g}}] pc; no z cut applied."
 )
 """.strip()
 
@@ -858,12 +617,33 @@ def patch_script_source(
     theme_key: str | None,
     *,
     minimal_mode: bool = False,
+    mobile_mode: bool = False,
     galactic_simple: bool = False,
     mist_ages: bool = False,
     compact_payload: bool = True,
 ) -> str:
     source = source.replace("/Users/cam", str(HOME_DIR))
     source = source.replace("/Users/cam/Desktop", str(DESKTOP_ROOT))
+
+    source, removed_local_bubble_info = re.subn(
+        r"(?ms)^from astropy\.io import fits\n"
+        r"hdu = fits\.open\(['\"][^'\"]*ONeill2024_LocalBubble_Shell_xyz\.fits['\"]\)\n"
+        r"hdu\.info\(\)\n+",
+        "",
+        source,
+        count=1,
+    )
+    if "ONeill2024_LocalBubble_Shell_xyz.fits" in source and removed_local_bubble_info != 1:
+        raise RuntimeError("Could not remove the unused shell FITS info cell.")
+
+    source, removed_local_bubble_volume = re.subn(
+        r"(?ms)^oneilLB_volume\s*=\s*\{.*?^\}\n+",
+        "",
+        source,
+        count=1,
+    )
+    if "oneilLB_volume" in source and removed_local_bubble_volume != 1:
+        raise RuntimeError("Could not remove the unused shell volume definition.")
 
     if mist_ages:
         mist_block = build_mist_age_source_block()
@@ -993,6 +773,9 @@ def patch_script_source(
         ]
         if minimal_mode:
             initial_state_bits.append("'minimal_mode_enabled': True")
+        if mobile_mode:
+            initial_state_bits.append("'mobile_mode_enabled': True")
+            initial_state_bits.append("'legend_open': False")
         if galactic_simple:
             initial_state_bits.extend([
                 "'galactic_simple_mode_enabled': True",
@@ -1195,6 +978,7 @@ def run_main_figure(
     *,
     theme_key: str | None = None,
     minimal_mode: bool = False,
+    mobile_mode: bool = False,
     galactic_simple: bool = False,
     mist_ages: bool = False,
     compact_payload: bool = True,
@@ -1216,6 +1000,7 @@ def run_main_figure(
         output_html=output_html,
         theme_key=theme_key,
         minimal_mode=minimal_mode,
+        mobile_mode=mobile_mode,
         galactic_simple=galactic_simple,
         mist_ages=mist_ages,
         compact_payload=compact_payload,
@@ -1249,6 +1034,11 @@ def parse_args() -> argparse.Namespace:
         help="Render the figure in minimal presentation mode.",
     )
     parser.add_argument(
+        "--mobile-mode",
+        action="store_true",
+        help="Render the figure with mobile-mode metadata enabled.",
+    )
+    parser.add_argument(
         "--mist-ages",
         action="store_true",
         help="Use the matched MIST isochrone ages instead of the default notebook ages.",
@@ -1272,6 +1062,7 @@ def main() -> None:
         output_html=args.output_html,
         theme_key=args.theme_key,
         minimal_mode=bool(args.minimal_mode),
+        mobile_mode=bool(args.mobile_mode),
         mist_ages=bool(args.mist_ages),
         compact_payload=not bool(args.full_payload),
         website_output_html=None if args.no_website_copy else WEBSITE_OUTPUT_HTML,
