@@ -1174,11 +1174,13 @@ THREEJS_SKY_RUNTIME_JS = """
         root.dataset.skyDomeBackgroundBlocker = String(reason || "");
         if (typeof ovizDebugUpdateSky === "function") {
           const blocker = String(reason || "");
+          const blockerChanged = blocker !== skyDomeBackgroundDebugBlocker;
+          skyDomeBackgroundDebugBlocker = blocker;
           ovizDebugUpdateSky({
             ready: Boolean(skyDomeBackgroundFrameReady),
             hasContentWindow: Boolean(skyDomeFrameEl && skyDomeFrameEl.contentWindow),
             blocker,
-          }, blocker === "visible" ? "" : "sky-background-blocked");
+          }, blockerChanged && blocker !== "visible" ? "sky-background-blocked" : "");
         }
       }
 

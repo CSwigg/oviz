@@ -4793,6 +4793,51 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         ]
       ];
 
+      function ovizStartupNow() {
+        return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+      }
+
+      function ovizStartupRound(value, digits = 1) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+          return null;
+        }
+        const scale = 10 ** Math.max(Math.round(Number(digits) || 0), 0);
+        return Math.round(number * scale) / scale;
+      }
+
+      const ovizStartupStartedAtMs = ovizStartupNow();
+      const ovizStartupTiming = {
+        startedAtMs: ovizStartupRound(ovizStartupStartedAtMs, 1),
+        totalMs: null,
+        dependencyCount: dependencyGroups.length,
+        dependencies: [],
+        payloadChars: null,
+        payloadBytes: null,
+        inflatedBytes: null,
+        phases: {},
+      };
+
+      function ovizStartupRecordPhase(name, startMs, fields = {}) {
+        const now = ovizStartupNow();
+        ovizStartupTiming.phases[String(name || "phase")] = {
+          ...fields,
+          startMs: ovizStartupRound(Number(startMs) - ovizStartupStartedAtMs, 1),
+          endMs: ovizStartupRound(now - ovizStartupStartedAtMs, 1),
+          durationMs: ovizStartupRound(now - Number(startMs), 1),
+        };
+        return now;
+      }
+
+      function ovizStartupMark(name, fields = {}) {
+        const now = ovizStartupNow();
+        ovizStartupTiming.phases[String(name || "mark")] = {
+          ...fields,
+          atMs: ovizStartupRound(now - ovizStartupStartedAtMs, 1),
+        };
+        return now;
+      }
+
       function renderError(root, message) {
         if (!root) {
           return;
@@ -4851,9 +4896,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       try {
         setStartupStatus("Loading browser dependencies...");
+        const dependencyStartMs = ovizStartupNow();
         for (const group of dependencyGroups) {
-          await loadDependencyGroup(group);
+          const groupStartMs = ovizStartupNow();
+          const loadedUrl = await loadDependencyGroup(group);
+          ovizStartupTiming.dependencies.push({
+            index: ovizStartupTiming.dependencies.length,
+            url: loadedUrl,
+            durationMs: ovizStartupRound(ovizStartupNow() - groupStartMs, 1),
+          });
         }
+        ovizStartupRecordPhase("dependencies", dependencyStartMs, {
+          count: ovizStartupTiming.dependencies.length,
+        });
       } catch (err) {
         const root = document.getElementById("__ROOT_ID__");
         renderError(
@@ -4906,6 +4961,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function readOvizSceneSpecPayload(payloadId) {
+        const readStartMs = ovizStartupNow();
         const chunkEls = Array.from(
           document.querySelectorAll('script[type="application/octet-stream"][data-oviz-payload-id]')
         ).filter((payloadEl) => payloadEl.getAttribute("data-oviz-payload-id") === String(payloadId));
@@ -4914,7 +4970,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             Number(a.getAttribute("data-oviz-payload-index") || 0)
             - Number(b.getAttribute("data-oviz-payload-index") || 0)
           ));
-          return chunkEls.map((payloadEl) => payloadEl.textContent || "").join("");
+          const chunkedPayload = chunkEls.map((payloadEl) => payloadEl.textContent || "").join("");
+          ovizStartupTiming.payloadChars = chunkedPayload.length;
+          ovizStartupRecordPhase("payloadRead", readStartMs, {
+            chunks: chunkEls.length,
+            chars: chunkedPayload.length,
+          });
+          return chunkedPayload;
         }
         const payloadEl = document.getElementById(payloadId);
         if (!payloadEl) {
@@ -4924,7 +4986,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           );
           return "";
         }
-        return payloadEl.textContent || "";
+        const payload = payloadEl.textContent || "";
+        ovizStartupTiming.payloadChars = payload.length;
+        ovizStartupRecordPhase("payloadRead", readStartMs, {
+          chunks: 1,
+          chars: payload.length,
+        });
+        return payload;
       }
 
       async function inflateOvizGzipBase64SceneSpec(encoded) {
@@ -4939,14 +5007,31 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
         try {
           setStartupStatus("Decompressing scene payload...");
+          const decodeStartMs = ovizStartupNow();
           const compressedBytes = decodeOvizBase64ToUint8Array(encoded);
+          ovizStartupTiming.payloadBytes = compressedBytes.length;
+          ovizStartupRecordPhase("payloadDecode", decodeStartMs, {
+            bytes: compressedBytes.length,
+          });
+          const inflateStartMs = ovizStartupNow();
           const stream = new Blob([compressedBytes])
             .stream()
             .pipeThrough(new DecompressionStream("gzip"));
           const buffer = await new Response(stream).arrayBuffer();
+          ovizStartupTiming.inflatedBytes = buffer.byteLength;
+          ovizStartupRecordPhase("payloadInflate", inflateStartMs, {
+            bytes: buffer.byteLength,
+          });
           setStartupStatus("Parsing scene payload...");
+          const textStartMs = ovizStartupNow();
           const jsonText = new TextDecoder().decode(buffer);
-          return JSON.parse(jsonText);
+          ovizStartupRecordPhase("payloadTextDecode", textStartMs, {
+            chars: jsonText.length,
+          });
+          const parseStartMs = ovizStartupNow();
+          const parsed = JSON.parse(jsonText);
+          ovizStartupRecordPhase("payloadParse", parseStartMs);
+          return parsed;
         } catch (err) {
           renderError(
             root,
@@ -4963,6 +5048,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return;
       }
       setStartupStatus("Initializing Oviz scene...");
+      const ovizSceneInitializeStartMs = ovizStartupNow();
+      ovizStartupMark("sceneSpecReady");
       attachSceneSpecPayloadMetadata(sceneSpec);
       const initialState = sceneSpec.initial_state || {};
       const minimalModeEnabled = Boolean(
@@ -5013,6 +5100,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         enabled: ovizDebugEnabled,
         rootId: root.id || "",
         events: [],
+        startup: ovizStartupTiming,
         sky: {
           ready: false,
           hasContentWindow: false,
@@ -5078,6 +5166,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
         root.dataset.skyDomeDebugReady = ovizDebugState.sky.ready ? "true" : "false";
+        root.dataset.ovizStartupTotalMs = ovizDebugState.startup && ovizDebugState.startup.totalMs != null
+          ? String(ovizDebugState.startup.totalMs)
+          : "";
         root.dataset.skyDomeDebugBlocker = String(ovizDebugState.sky.blocker || "");
         root.dataset.skyDomeDebugPending = String(ovizDebugState.sky.pending || 0);
         root.dataset.skyApertureDebugOpen = ovizDebugState.aperture.open ? "true" : "false";
@@ -5098,14 +5189,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return ovizDebugPanelEl;
       }
       function ovizDebugPanelText() {
+        const startup = ovizDebugState.startup || {};
         const sky = ovizDebugState.sky;
         const aperture = ovizDebugState.aperture;
+        const phases = startup.phases || {};
+        const startupLine = [
+          `startup total=${startup.totalMs ?? "-"}ms`,
+          `deps=${phases.dependencies && phases.dependencies.durationMs != null ? phases.dependencies.durationMs : "-"}ms`,
+          `inflate=${phases.payloadInflate && phases.payloadInflate.durationMs != null ? phases.payloadInflate.durationMs : "-"}ms`,
+          `parse=${phases.payloadParse && phases.payloadParse.durationMs != null ? phases.payloadParse.durationMs : "-"}ms`,
+          `scene=${phases.sceneInitialize && phases.sceneInitialize.durationMs != null ? phases.sceneInitialize.durationMs : "-"}ms`,
+        ].join(" ");
         const eventLines = ovizDebugState.events.slice(-5).map((entry) => {
           const age = ovizDebugRound(ovizDebugNow() - Number(entry.t || 0), 0);
           return `${age}ms ${entry.event}`;
         });
         return [
           "OVIZ DEBUG",
+          startupLine,
           `sky ready=${sky.ready ? "1" : "0"} blocker=${sky.blocker || "-"} pending=${sky.pending}`,
           `sky seq=${sky.lastAppliedSeq}/${sky.lastSeq} latency=${sky.lastLatencyMs ?? "-"}ms max=${sky.maxLatencyMs || 0}ms`,
           `sky survey=${sky.lastSurvey || "-"}`,
@@ -5780,6 +5881,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let skyDomeBackgroundLastSentAt = 0.0;
       let skyDomeBackgroundMotionHoldUntil = 0.0;
       let skyDomeBackgroundUserCameraActive = false;
+      let skyDomeBackgroundDebugBlocker = "";
       let skyDomeBackgroundViewSequence = 0;
       let skyDomeBackgroundAlignedView = null;
       const skyDomeBackgroundSentViews = new Map();
@@ -16241,6 +16343,10 @@ __ACTION_RUNTIME_JS__
       setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);
       initialActionViewState = captureCurrentActionViewState();
       syncActionButtons();
+      ovizStartupRecordPhase("sceneInitialize", ovizSceneInitializeStartMs);
+      ovizStartupTiming.totalMs = ovizStartupRound(ovizStartupNow() - ovizStartupStartedAtMs, 1);
+      ovizStartupMark("ready");
+      ovizDebugSchedulePanel();
       setStartupStatus("", false);
       window.setTimeout(() => focusViewer(), 0);
       animate();
