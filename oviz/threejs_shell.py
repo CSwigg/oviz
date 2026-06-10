@@ -147,7 +147,7 @@ THREEJS_SHELL_HTML = """
         <div class="oviz-three-sky-aperture-spectrum" role="group" aria-label="Aperture wavelength">
           <div class="oviz-three-sky-aperture-spectrum-top">
             <span class="oviz-three-sky-aperture-spectrum-name"></span>
-            <button class="oviz-three-sky-aperture-promote" type="button" title="Set aperture wavelength as sky background">Set background</button>
+            <button class="oviz-three-sky-aperture-promote" type="button" title="Set aperture wavelength as sky background">Set</button>
           </div>
           <div class="oviz-three-sky-aperture-spectrum-track">
             <input class="oviz-three-sky-aperture-spectrum-slider oviz-three-slider" type="range" min="0" max="1" step="0.001" value="0" aria-label="Aperture wavelength blend" />

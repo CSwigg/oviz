@@ -1360,24 +1360,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         left: var(--oviz-sky-aperture-slider-x);
         top: var(--oviz-sky-aperture-slider-y);
         z-index: 22;
-        width: min(var(--oviz-sky-aperture-slider-width), calc(100% - 48px));
-        min-width: 220px;
-        max-width: 720px;
+        width: min(max(210px, calc(var(--oviz-sky-aperture-slider-width) * 0.72)), calc(100% - 56px));
+        min-width: 210px;
+        max-width: 420px;
         transform:
           translate(-50%, -50%)
-          translateY(10px);
+          translateY(6px);
         transform-origin: 50% 50%;
-        border: 1px solid rgba(255, 255, 255, 0.13);
-        border-radius: 8px;
-        background: rgba(8, 12, 18, 0.80);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 999px;
+        background: rgba(7, 10, 15, 0.50);
         color: rgba(244, 249, 255, 0.95);
-        padding: 9px 12px 12px;
-        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.38);
-        backdrop-filter: blur(12px) saturate(118%);
-        -webkit-backdrop-filter: blur(12px) saturate(118%);
+        padding: 6px 8px 8px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+        backdrop-filter: blur(16px) saturate(128%);
+        -webkit-backdrop-filter: blur(16px) saturate(128%);
         opacity: 0;
         pointer-events: none;
-        transition: opacity 0.18s ease, transform 0.18s ease;
+        transition: opacity 0.18s ease, transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture[data-open="true"] .oviz-three-sky-aperture-spectrum {
         opacity: 1;
@@ -1390,70 +1390,119 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 8px;
+        gap: 8px;
+        min-height: 18px;
+        margin: 0 2px 3px;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-name {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        color: rgba(245, 250, 255, 0.94);
-        font: 650 12px/1.25 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        color: rgba(238, 246, 255, 0.78);
+        font: 650 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-promote {
         flex: 0 0 auto;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        border-radius: 6px;
-        background: rgba(48, 55, 66, 0.88);
-        color: rgba(246, 251, 255, 0.96);
-        font: 650 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        padding: 7px 9px;
+        min-width: 32px;
+        height: 18px;
+        border: 1px solid rgba(158, 211, 255, 0.18);
+        border-radius: 999px;
+        background: rgba(142, 203, 255, 0.10);
+        color: rgba(238, 247, 255, 0.74);
+        font: 700 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        padding: 0 8px;
         cursor: pointer;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-promote:hover,
       #__ROOT_ID__ .oviz-three-sky-aperture-promote:focus-visible {
-        background: rgba(65, 74, 88, 0.96);
+        background: rgba(142, 203, 255, 0.22);
         border-color: rgba(142, 203, 255, 0.42);
+        color: rgba(249, 253, 255, 0.94);
         outline: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-track {
         position: relative;
-        height: 36px;
+        height: 16px;
+        border-radius: 999px;
+        background:
+          linear-gradient(90deg,
+            rgba(142, 191, 255, 0.70),
+            rgba(244, 246, 255, 0.78) 30%,
+            rgba(255, 222, 147, 0.78) 56%,
+            rgba(255, 139, 92, 0.70) 76%,
+            rgba(178, 107, 255, 0.66));
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+          0 0 16px rgba(119, 188, 255, 0.12);
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider {
         position: absolute;
         left: 0;
         right: 0;
-        top: 0;
+        top: -6px;
+        height: 28px;
         width: 100%;
         margin: 0;
         accent-color: #9bd7ff;
+        background: transparent;
+        opacity: 0.92;
         touch-action: none;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-webkit-slider-runnable-track {
+        height: 16px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-webkit-slider-thumb {
+        width: 16px;
+        height: 16px;
+        margin-top: 0;
+        border: 1px solid rgba(255, 255, 255, 0.86);
+        border-radius: 50%;
+        background: rgba(247, 252, 255, 0.96);
+        box-shadow: 0 2px 9px rgba(0, 0, 0, 0.40), 0 0 0 3px rgba(8, 12, 18, 0.22);
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-moz-range-track {
+        height: 16px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.86);
+        border-radius: 50%;
+        background: rgba(247, 252, 255, 0.96);
+        box-shadow: 0 2px 9px rgba(0, 0, 0, 0.40), 0 0 0 3px rgba(8, 12, 18, 0.22);
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-ticks {
         position: absolute;
-        left: 7px;
-        right: 7px;
-        top: 18px;
-        height: 18px;
+        left: 10px;
+        right: 10px;
+        top: 5px;
+        height: 6px;
         pointer-events: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-tick {
         position: absolute;
         top: 0;
         transform: translateX(-50%);
-        color: rgba(227, 236, 245, 0.72);
-        font: 600 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        white-space: nowrap;
+        width: 1px;
+        height: 6px;
+        overflow: hidden;
+        color: transparent;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-tick::before {
         content: "";
         display: block;
         width: 1px;
-        height: 8px;
-        margin: 0 auto 3px;
-        background: currentColor;
+        height: 6px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.28);
       }
       #__ROOT_ID__ .oviz-three-sky-aperture[data-promoting="true"] .oviz-three-sky-aperture-ring {
         pointer-events: none;
