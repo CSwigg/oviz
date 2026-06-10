@@ -1360,24 +1360,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         left: var(--oviz-sky-aperture-slider-x);
         top: var(--oviz-sky-aperture-slider-y);
         z-index: 22;
-        width: min(max(210px, calc(var(--oviz-sky-aperture-slider-width) * 0.72)), calc(100% - 56px));
-        min-width: 210px;
-        max-width: 420px;
+        width: min(max(196px, calc(var(--oviz-sky-aperture-slider-width) * 0.66)), calc(100% - 56px));
+        min-width: 196px;
+        max-width: 360px;
         transform:
           translate(-50%, -50%)
           translateY(6px);
         transform-origin: 50% 50%;
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-radius: 999px;
-        background: rgba(7, 10, 15, 0.50);
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
         color: rgba(244, 249, 255, 0.95);
-        padding: 6px 8px 8px;
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
-        backdrop-filter: blur(16px) saturate(128%);
-        -webkit-backdrop-filter: blur(16px) saturate(128%);
+        padding: 0;
+        box-shadow: none;
+        filter: none;
         opacity: 0;
         pointer-events: none;
-        transition: opacity 0.18s ease, transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+        transition: opacity 0.18s ease, transform 0.18s ease;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture[data-open="true"] .oviz-three-sky-aperture-spectrum {
         opacity: 1;
@@ -1390,58 +1389,61 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
-        min-height: 18px;
-        margin: 0 2px 3px;
+        gap: 6px;
+        min-height: 17px;
+        margin: 0 0 4px;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-name {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        color: rgba(238, 246, 255, 0.78);
-        font: 650 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        padding: 2px 0 3px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        color: rgba(238, 246, 255, 0.82);
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+        font: 600 10px/1.2 Helvetica, Arial, sans-serif;
         letter-spacing: 0;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-promote {
         flex: 0 0 auto;
-        min-width: 32px;
-        height: 18px;
-        border: 1px solid rgba(158, 211, 255, 0.18);
-        border-radius: 999px;
-        background: rgba(142, 203, 255, 0.10);
-        color: rgba(238, 247, 255, 0.74);
-        font: 700 9px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        padding: 0 8px;
+        min-width: 30px;
+        height: 20px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 4px;
+        background: transparent;
+        color: rgba(238, 247, 255, 0.78);
+        font: 600 10px/1 Helvetica, Arial, sans-serif;
+        padding: 0 7px;
         cursor: pointer;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-promote:hover,
       #__ROOT_ID__ .oviz-three-sky-aperture-promote:focus-visible {
-        background: rgba(142, 203, 255, 0.22);
-        border-color: rgba(142, 203, 255, 0.42);
-        color: rgba(249, 253, 255, 0.94);
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.22);
+        color: rgba(249, 253, 255, 0.92);
         outline: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-track {
         position: relative;
-        height: 16px;
-        border-radius: 999px;
+        height: 14px;
+        border-radius: 4px;
         background:
           linear-gradient(90deg,
-            rgba(142, 191, 255, 0.70),
-            rgba(244, 246, 255, 0.78) 30%,
-            rgba(255, 222, 147, 0.78) 56%,
-            rgba(255, 139, 92, 0.70) 76%,
-            rgba(178, 107, 255, 0.66));
+            rgba(135, 183, 245, 0.64),
+            rgba(234, 238, 246, 0.70) 30%,
+            rgba(246, 207, 130, 0.68) 56%,
+            rgba(235, 118, 82, 0.64) 76%,
+            rgba(151, 92, 222, 0.60));
         box-shadow:
-          inset 0 0 0 1px rgba(255, 255, 255, 0.10),
-          0 0 16px rgba(119, 188, 255, 0.12);
+          inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+          0 3px 10px rgba(0, 0, 0, 0.24);
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider {
         position: absolute;
         left: 0;
         right: 0;
-        top: -6px;
+        top: -7px;
         height: 28px;
         width: 100%;
         margin: 0;
@@ -1451,39 +1453,39 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         touch-action: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-webkit-slider-runnable-track {
-        height: 16px;
+        height: 14px;
         border: 0;
-        border-radius: 999px;
+        border-radius: 4px;
         background: transparent;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-webkit-slider-thumb {
-        width: 16px;
-        height: 16px;
-        margin-top: 0;
-        border: 1px solid rgba(255, 255, 255, 0.86);
-        border-radius: 50%;
-        background: rgba(247, 252, 255, 0.96);
-        box-shadow: 0 2px 9px rgba(0, 0, 0, 0.40), 0 0 0 3px rgba(8, 12, 18, 0.22);
+        width: 10px;
+        height: 18px;
+        margin-top: -2px;
+        border: 1px solid rgba(255, 255, 255, 0.72);
+        border-radius: 3px;
+        background: rgba(247, 252, 255, 0.90);
+        box-shadow: 0 2px 7px rgba(0, 0, 0, 0.44);
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-moz-range-track {
-        height: 16px;
+        height: 14px;
         border: 0;
-        border-radius: 999px;
+        border-radius: 4px;
         background: transparent;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-moz-range-thumb {
-        width: 16px;
-        height: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.86);
-        border-radius: 50%;
-        background: rgba(247, 252, 255, 0.96);
-        box-shadow: 0 2px 9px rgba(0, 0, 0, 0.40), 0 0 0 3px rgba(8, 12, 18, 0.22);
+        width: 10px;
+        height: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.72);
+        border-radius: 3px;
+        background: rgba(247, 252, 255, 0.90);
+        box-shadow: 0 2px 7px rgba(0, 0, 0, 0.44);
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-ticks {
         position: absolute;
         left: 10px;
         right: 10px;
-        top: 5px;
+        top: 4px;
         height: 6px;
         pointer-events: none;
       }
