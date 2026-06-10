@@ -942,10 +942,6 @@ THREEJS_VIEWER_RUNTIME_JS = """
         camera.updateMatrixWorld(true);
         updateScaleBar();
         updateCameraResponsiveImagePlanes();
-        updateSkyDomeBackgroundFrame(
-          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
-          { force: true }
-        );
         return true;
       }
 

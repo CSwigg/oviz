@@ -1351,10 +1351,13 @@ THREEJS_SKY_RUNTIME_JS = """
           root.dataset.skyDomeMotion = skyDomeBackgroundUserCameraActive ? "camera-moving" : "settled";
         }
         const forceUpdate = Boolean(options && options.force);
-        if (!forceUpdate && signature === skyDomeBackgroundViewSignature && (now - skyDomeBackgroundLastSentAt) < 500.0) {
+        if (skyDomeBackgroundUserCameraActive && !forceUpdate) {
           return;
         }
-        const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 72.0 : 50.0;
+        if (!forceUpdate && signature === skyDomeBackgroundViewSignature) {
+          return;
+        }
+        const minUpdateIntervalMs = 50.0;
         if (!forceUpdate && (now - skyDomeBackgroundLastSentAt) < minUpdateIntervalMs) {
           return;
         }
@@ -2532,6 +2535,9 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!view) {
           return;
         }
+        if (skyDomeBackgroundUserCameraActive && !options.force) {
+          return;
+        }
         const requestedFrameIndexes = Array.isArray(options.frameIndexes)
           ? options.frameIndexes.map((index) => Math.round(Number(index))).filter((index) => (
             Number.isFinite(index) && index >= 0 && index < skyAperturePresetOptions.length
@@ -2556,7 +2562,7 @@ THREEJS_SKY_RUNTIME_JS = """
           requestedFrameIndexes.join(","),
         ].join("|");
         const now = Number(timestampMs) || 0.0;
-        if (!options.force && signature === skyApertureLastViewSignature && (now - skyApertureLastViewSentAt) < 120.0) {
+        if (!options.force && signature === skyApertureLastViewSignature) {
           return;
         }
         skyApertureLastViewSignature = signature;

@@ -1263,6 +1263,20 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("function zoomEarthViewByWheelDelta(deltaY)", html)
         self.assertIn("function exitEarthView()", html)
         self.assertIn("function toggleEarthView()", html)
+        self.assertIn("setSkyDomeBackgroundCameraActive(true);\n        document.body.style.userSelect", html)
+        self.assertIn("skyViewDragState = null;\n        controls.enabled = cameraViewMode !== \"earth\";\n        setSkyDomeBackgroundCameraActive(false);", html)
+        sky_drag_rotate = html[
+            html.index("function rotateSkyViewCameraByPixels(deltaX, deltaY)")
+            : html.index("function startSkyViewCameraDrag(event)")
+        ]
+        self.assertNotIn(
+            "updateCameraResponsiveImagePlanes();\n"
+            "        updateSkyDomeBackgroundFrame(\n"
+            "          (typeof performance !== \"undefined\" && performance.now) ? performance.now() : Date.now(),\n"
+            "          { force: true }\n"
+            "        );",
+            sky_drag_rotate,
+        )
         self.assertIn("function serializableEarthViewReturnCameraState()", html)
         self.assertIn("function cameraReturnStateFromPlainObject(value)", html)
         self.assertIn("earth_view_return_camera_state: serializableEarthViewReturnCameraState()", html)
@@ -1363,7 +1377,10 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertNotIn("Keep sky visible", html)
         self.assertIn("aladinInstance.stopAnimation()", html)
         self.assertIn("aladinInstance.gotoPosition(lDeg, bDeg)", html)
-        self.assertIn("const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 72.0 : 50.0", html)
+        self.assertIn("if (skyDomeBackgroundUserCameraActive && !forceUpdate) {\n          return;\n        }", html)
+        self.assertIn("if (!forceUpdate && signature === skyDomeBackgroundViewSignature) {\n          return;\n        }", html)
+        self.assertNotIn("signature === skyDomeBackgroundViewSignature && (now - skyDomeBackgroundLastSentAt)", html)
+        self.assertIn("const minUpdateIntervalMs = 50.0", html)
         self.assertIn("updateSkyDomeBackgroundFrame(\n            (typeof performance", html)
 
     def test_threejs_renderer_exposes_opt_in_sky_debug_instrumentation(self):
@@ -1482,6 +1499,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("function updateSkyApertureBlendFrames(options = {})", html)
         self.assertIn("let skyApertureViewPostFrame = 0;", html)
         self.assertIn("function scheduleSkyApertureViewPost(timestampMs = 0.0)", html)
+        self.assertIn("if (skyDomeBackgroundUserCameraActive && !options.force) {\n          return;\n        }", html)
+        self.assertIn("if (!options.force && signature === skyApertureLastViewSignature) {\n          return;\n        }", html)
+        self.assertNotIn("signature === skyApertureLastViewSignature && (now - skyApertureLastViewSentAt)", html)
         self.assertIn("scheduleSkyApertureViewPost(timestampMs);", html)
         self.assertIn("skyApertureBlendForPosition(skyApertureRenderedSpectrumPosition)", html)
         self.assertIn("function renderSkyApertureProjectedSquare(", html)
