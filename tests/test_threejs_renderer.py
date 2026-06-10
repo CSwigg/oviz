@@ -1283,6 +1283,45 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 16.0 : 50.0", html)
         self.assertIn("updateSkyDomeBackgroundFrame(\n            (typeof performance", html)
 
+    def test_threejs_renderer_exposes_opt_in_sky_debug_instrumentation(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=True,
+            sky_survey="P/DSS2/color",
+            threejs_initial_state={
+                "sky_dome_enabled": True,
+                "sky_dome_background_mode": "live_aladin",
+            },
+        )
+
+        html = fig.to_html()
+        self.assertIn("ovizDebug", html)
+        self.assertIn("localStorage", html)
+        self.assertIn("URLSearchParams", html)
+        self.assertIn("window.__OVIZ_DEBUG__", html)
+        self.assertIn('root.dataset.ovizDebug = ovizDebugEnabled ? "true" : "false";', html)
+        self.assertIn("function ovizDebugFlagEnabled", html)
+        self.assertIn("function ovizDebugRecord", html)
+        self.assertIn("function ovizDebugUpdateSky", html)
+        self.assertIn("function ovizDebugUpdateAperture", html)
+        self.assertIn("function ovizDebugTrackSkyViewSent", html)
+        self.assertIn("function ovizDebugTrackApertureViewSent", html)
+        self.assertIn("function ovizDebugScheduleReadyTimeout", html)
+        self.assertIn("events: []", html)
+        self.assertIn("sky: {", html)
+        self.assertIn("aperture: {", html)
+        self.assertIn("sky-background-view-sent", html)
+        self.assertIn("sky-background-view-applied", html)
+        self.assertIn("sky-background-ready-timeout", html)
+        self.assertIn("sky-aperture-frame-ready", html)
+        self.assertIn("sky-aperture-view-sent", html)
+        self.assertIn("sky-aperture-view-applied", html)
+        self.assertIn("sky-aperture-promotion-start", html)
+        self.assertIn("oviz-three-debug-panel", html)
+
     def test_threejs_renderer_exposes_sky_aperture_for_live_aladin_backgrounds(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         fig = viz.make_plot(
@@ -1314,6 +1353,12 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("oviz-three-sky-aperture-quad", html)
         self.assertIn("oviz-three-sky-aperture-spectrum-slider oviz-three-slider", html)
         self.assertIn("oviz-three-sky-aperture-spectrum-tick", html)
+        self.assertIn("skyApertureSpectrumSliderActive = false", html)
+        self.assertIn("const updateSkyApertureSpectrumFromPointer = (event) =>", html)
+        self.assertIn("setSkyApertureSpectrumPosition(fraction * extent)", html)
+        self.assertIn("skyApertureSpectrumSliderEl.addEventListener(\"pointerdown\"", html)
+        self.assertIn("document.activeElement !== skyApertureSpectrumSliderEl", html)
+        self.assertIn("touch-action: none;", html)
         self.assertIn("function skyApertureControlsAvailable()", html)
         self.assertIn("function skyApertureCanPrewarm()", html)
         self.assertIn("cameraViewMode === \"earth\"", html)
@@ -1340,6 +1385,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("function ensureSkyApertureBlendPresetFrames(", html)
         self.assertIn("skyApertureToggleStateSignature", html)
         self.assertIn("function updateSkyApertureBlendFrames()", html)
+        self.assertIn("let skyApertureViewPostFrame = 0;", html)
+        self.assertIn("function scheduleSkyApertureViewPost(timestampMs = 0.0)", html)
+        self.assertIn("scheduleSkyApertureViewPost(timestampMs);", html)
         self.assertIn("function renderSkyApertureProjectedSquare(", html)
         self.assertIn("function skyApertureProjectedSquarePoints(", html)
         self.assertIn("centerDirection: null", html)

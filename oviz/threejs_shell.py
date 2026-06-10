@@ -84,6 +84,7 @@ THREEJS_SHELL_HTML = """
         </div>
       </div>
       <canvas class="oviz-three-canvas" tabindex="0"></canvas>
+      <div class="oviz-three-startup-status" data-visible="true">Loading Oviz...</div>
       <div class="oviz-three-lasso-overlay" data-active="false">
         <svg preserveAspectRatio="none" aria-hidden="true">
           <polyline points=""></polyline>

@@ -78,7 +78,7 @@ WEBSITE_OUTPUT_HTML = (
 GALACTIC_PLANE_IMAGE_PATH = HOME_DIR / "Downloads" / "Top-down_view_of_the_Milky_Way.jpg"
 MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS = (-400.0, 400.0)
 MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC = (-2000.0, 2000.0)
-MAIN_FIGURE_LOOKBACK_MYR = 100
+MAIN_FIGURE_LOOKBACK_MYR = 60
 MAIN_FIGURE_TIMESTEP_MYR = 1
 MAIN_FIGURE_SPIRAL_ARM_TRACE_NAMES = (
     "Spiral Arm: Perseus",
@@ -86,8 +86,8 @@ MAIN_FIGURE_SPIRAL_ARM_TRACE_NAMES = (
     "Spiral Arm: Sagittarius",
     "Spiral Arm: Scutum",
 )
-MAIN_FIGURE_DUST_MAX_RESOLUTION = 512
-MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 512
+MAIN_FIGURE_DUST_MAX_RESOLUTION = 256
+MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 256
 MAIN_FIGURE_DUST_SAMPLES = 200
 MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION = 512
 MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP = 512
@@ -1000,9 +1000,6 @@ df_hunt_chronos_sample = df_hunt_chronos_full.loc[
 ].copy()
 df_hunt_chronos_sample['age_myr'] = df_hunt_chronos_sample['chronos_age_myr']
 df_hunt_chronos_sample['age_source'] = chronos_model_display
-df_hunt_150_chronos = df_hunt_chronos_sample.loc[
-    df_hunt_chronos_sample['age_myr'] < 150
-].copy()
 df_hunt_60_chronos = df_hunt_chronos_sample.loc[
     df_hunt_chronos_sample['age_myr'] < 60
 ].copy()
@@ -1011,7 +1008,6 @@ df_hunt_young_chronos = df_hunt_chronos_sample.loc[
 ].copy()
 print(
     f"Using {{chronos_model_display}} ages from {str(chronos_results_path)} for displayed cluster samples: "
-    f"{{len(df_hunt_150_chronos)}} clusters <150 Myr, "
     f"{{len(df_hunt_60_chronos)}} clusters <60 Myr, {{len(df_hunt_young_chronos)}} clusters <15 Myr. "
     f"Displayed ages use {{chronos_age_value_col}}. "
     f"x/y within [{{main_figure_cluster_xy_min_pc:g}}, {{main_figure_cluster_xy_max_pc:g}}] pc; no z cut applied."
@@ -1093,9 +1089,6 @@ df_hunt_chronos_sample = df_hunt_chronos_full.loc[
 ].copy()
 df_hunt_chronos_sample['age_myr'] = df_hunt_chronos_sample['chronos_age_myr']
 df_hunt_chronos_sample['age_source'] = {model_display!r}
-df_hunt_150_chronos = df_hunt_chronos_sample.loc[
-    df_hunt_chronos_sample['age_myr'] < 150
-].copy()
 df_hunt_60_chronos = df_hunt_chronos_sample.loc[
     df_hunt_chronos_sample['age_myr'] < 60
 ].copy()
@@ -1104,7 +1097,6 @@ df_hunt_young_chronos = df_hunt_chronos_sample.loc[
 ].copy()
 print(
     'Using Chronos mode ages from {str(chronos_mode_ages_path)} for displayed cluster samples: '
-    f"{{len(df_hunt_150_chronos)}} clusters <150 Myr, "
     f"{{len(df_hunt_60_chronos)}} clusters <60 Myr, {{len(df_hunt_young_chronos)}} clusters <15 Myr. "
     f"x/y within [{{main_figure_cluster_xy_min_pc:g}}, {{main_figure_cluster_xy_max_pc:g}}] pc; no z cut applied."
 )
@@ -1134,7 +1126,7 @@ def patch_script_source(
         source, replaced_jun6_catalog = re.subn(
             (
                 r"(?ms)^df_hunt_full\s*=\s*pd\.read_csv\("
-                r"'/Users/swiggumc/Desktop/astro_research/supernovae_map_work/clusters/vels_output/2026-02-04/cluster_velocities_jan2026\.csv'\)"
+                r"'/Users/(?:cam|swiggumc)/Desktop/astro_research/supernovae_map_work/clusters/vels_output/2026-02-04/cluster_velocities_jan2026\.csv'\)"
                 r".*?^df_hunt_full\s*=\s*df_hunt_full\.rename\(columns=\{.*?^\}\)\s*$"
             ),
             jun6_catalog_block,
@@ -1192,40 +1184,6 @@ def patch_script_source(
         )
         if replaced_full_chronos_sample != 1:
             raise RuntimeError("Could not point the <60 Myr cluster trace at the Chronos sample.")
-
-        source, inserted_150_trace = re.subn(
-            r"(?m)^(full_sample_trace\s*=\s*Trace\(df_hunt_60_chronos,.*data_name\s*=\s*'Clusters\s*\(<\s*60\s*Myr\)'.*\)\s*)$",
-            (
-                "clusters_150_trace = Trace("
-                "df_hunt_150_chronos, data_name = 'Clusters (< 150 Myr)', "
-                "min_size = 0, max_size = 7, color = '#aeb4bb', opacity = .45, "
-                "marker_style = 'circle', show_tracks = False, size_by_n_stars=False"
-                ")\n"
-                r"\1"
-            ),
-            source,
-            count=1,
-        )
-        if inserted_150_trace != 1:
-            raise RuntimeError("Could not inject the <150 Myr cluster trace definition.")
-
-        source, inserted_150_collection = re.subn(
-            r"(?m)^(\s*)full_sample_trace,\s*$",
-            r"\1clusters_150_trace,\n\1full_sample_trace,",
-            source,
-            count=1,
-        )
-        if inserted_150_collection != 1:
-            raise RuntimeError("Could not add the <150 Myr cluster trace to the TraceCollection.")
-
-        source, inserted_150_group = re.subn(
-            r'"Clusters"\s*:\s*\[\s*\'Sun\'\s*,\s*\'Clusters\s*\(<\s*60\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*15\s*Myr\)\'\s*\]',
-            "\"Clusters\": ['Sun', 'Clusters (< 150 Myr)', 'Clusters (< 60 Myr)', 'Clusters (< 15 Myr)']",
-            source,
-            count=1,
-        )
-        if inserted_150_group != 1:
-            raise RuntimeError("Could not add the <150 Myr cluster trace to the cluster grouping.")
 
     source, replaced_time_grid = re.subn(
         r"(?m)^time_int\s*=\s*np\.round\(np\.arange\(0,\s*-66,\s*-1\),\s*1\)\s*$",
@@ -1481,8 +1439,8 @@ trace_groupings['Spiral Arms'] = ['Sun', *spiral_arm_trace_names]
             raise RuntimeError("Could not remove the <15 Myr trace from the galactic simple TraceCollection.")
 
         source, removed_young_from_grouping = re.subn(
-            r'"Clusters"\s*:\s*\[\s*\'Sun\'\s*,\s*\'Clusters\s*\(<\s*150\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*60\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*15\s*Myr\)\'\s*\]',
-            "\"Clusters\": ['Sun', 'Clusters (< 150 Myr)', 'Clusters (< 60 Myr)']",
+            r'"Clusters"\s*:\s*\[\s*\'Sun\'\s*,\s*(?:\'Clusters\s*\(<\s*150\s*Myr\)\'\s*,\s*)?\'Clusters\s*\(<\s*60\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*15\s*Myr\)\'\s*\]',
+            "\"Clusters\": ['Sun', 'Clusters (< 60 Myr)']",
             source,
             count=1,
         )

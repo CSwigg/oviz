@@ -1359,13 +1359,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         position: absolute;
         left: var(--oviz-sky-aperture-slider-x);
         top: var(--oviz-sky-aperture-slider-y);
+        z-index: 22;
         width: min(var(--oviz-sky-aperture-slider-width), calc(100% - 48px));
         min-width: 220px;
         max-width: 720px;
         transform:
           translate(-50%, -50%)
-          rotate(var(--oviz-sky-aperture-slider-angle))
-          scaleY(var(--oviz-sky-aperture-slider-depth))
           translateY(10px);
         transform-origin: 50% 50%;
         border: 1px solid rgba(255, 255, 255, 0.13);
@@ -1385,8 +1384,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         pointer-events: auto;
         transform:
           translate(-50%, -50%)
-          rotate(var(--oviz-sky-aperture-slider-angle))
-          scaleY(var(--oviz-sky-aperture-slider-depth))
           translateY(0);
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-top {
@@ -1432,6 +1429,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         width: 100%;
         margin: 0;
         accent-color: #9bd7ff;
+        touch-action: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-ticks {
         position: absolute;
@@ -1467,6 +1465,47 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-sky-aperture[data-promoting="true"] .oviz-three-sky-aperture-label {
         opacity: 0;
         pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-three-startup-status {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        z-index: 80;
+        transform: translate(-50%, -50%);
+        max-width: min(420px, calc(100% - 40px));
+        padding: 12px 14px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 6px;
+        background: rgba(8, 12, 18, 0.86);
+        color: rgba(238, 246, 255, 0.94);
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+        font: 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        text-align: center;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-three-startup-status[data-visible="false"] {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-debug-panel {
+        position: absolute;
+        right: max(12px, env(safe-area-inset-right));
+        bottom: max(12px, env(safe-area-inset-bottom));
+        z-index: 60;
+        width: min(360px, calc(100% - 24px));
+        max-height: min(48vh, 360px);
+        overflow: auto;
+        border: 1px solid rgba(134, 205, 255, 0.32);
+        border-radius: 6px;
+        background: rgba(8, 12, 18, 0.88);
+        color: rgba(232, 244, 255, 0.94);
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+        font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        padding: 9px 10px;
+        pointer-events: none;
+        white-space: pre-wrap;
+      }
+      #__ROOT_ID__ .oviz-three-debug-panel[hidden] {
+        display: none !important;
       }
       #__ROOT_ID__ .oviz-three-age-body {
         position: absolute;
@@ -4744,6 +4783,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         root.appendChild(box);
       }
 
+      const bootRoot = document.getElementById("__ROOT_ID__");
+      function setStartupStatus(message, visible = true) {
+        const statusEl = bootRoot ? bootRoot.querySelector(".oviz-three-startup-status") : null;
+        if (!statusEl) {
+          return;
+        }
+        statusEl.textContent = String(message || "");
+        statusEl.dataset.visible = visible ? "true" : "false";
+      }
+
       function loadScript(url) {
         return new Promise((resolve, reject) => {
           const script = document.createElement("script");
@@ -4769,6 +4818,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       try {
+        setStartupStatus("Loading browser dependencies...");
         for (const group of dependencyGroups) {
           await loadDependencyGroup(group);
         }
@@ -4856,11 +4906,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         try {
+          setStartupStatus("Decompressing scene payload...");
           const compressedBytes = decodeOvizBase64ToUint8Array(encoded);
           const stream = new Blob([compressedBytes])
             .stream()
             .pipeThrough(new DecompressionStream("gzip"));
           const buffer = await new Response(stream).arrayBuffer();
+          setStartupStatus("Parsing scene payload...");
           const jsonText = new TextDecoder().decode(buffer);
           return JSON.parse(jsonText);
         } catch (err) {
@@ -4878,6 +4930,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       if (!sceneSpec) {
         return;
       }
+      setStartupStatus("Initializing Oviz scene...");
       attachSceneSpecPayloadMetadata(sceneSpec);
       const initialState = sceneSpec.initial_state || {};
       const minimalModeEnabled = Boolean(
@@ -4900,6 +4953,302 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       root.dataset.minimal = minimalModeEnabled ? "true" : "false";
       root.dataset.mobile = mobileModeEnabled ? "true" : "false";
       root.dataset.galacticSimple = galacticSimpleModeEnabled ? "true" : "false";
+      function ovizDebugFlagEnabled() {
+        let queryEnabled = false;
+        try {
+          const params = new URLSearchParams(window.location.search || "");
+          const value = params.get("ovizDebug") || params.get("debugOviz") || params.get("skyDebug");
+          queryEnabled = value === "" || /^(1|true|yes|on)$/i.test(String(value || ""));
+        } catch (_err) {
+          queryEnabled = false;
+        }
+        let storageEnabled = false;
+        try {
+          const value = window.localStorage ? window.localStorage.getItem("ovizDebug") : "";
+          storageEnabled = /^(1|true|yes|on)$/i.test(String(value || ""));
+        } catch (_err) {
+          storageEnabled = false;
+        }
+        return Boolean(queryEnabled || storageEnabled);
+      }
+      const ovizDebugEnabled = ovizDebugFlagEnabled();
+      root.dataset.ovizDebug = ovizDebugEnabled ? "true" : "false";
+      const ovizDebugSkySentAt = new Map();
+      const ovizDebugApertureSentAt = new Map();
+      let ovizDebugPanelEl = null;
+      let ovizDebugPanelFrame = 0;
+      const ovizDebugState = {
+        enabled: ovizDebugEnabled,
+        rootId: root.id || "",
+        events: [],
+        sky: {
+          ready: false,
+          hasContentWindow: false,
+          blocker: "",
+          sent: 0,
+          applied: 0,
+          staleApplied: 0,
+          pending: 0,
+          lastSeq: 0,
+          lastAppliedSeq: 0,
+          lastSurvey: "",
+          lastView: null,
+          lastLatencyMs: null,
+          maxLatencyMs: 0,
+          firstVisibleAtMs: null,
+          lastReadyAtMs: null,
+          lastIssue: "",
+        },
+        aperture: {
+          open: false,
+          controlsAvailable: false,
+          canPrewarm: false,
+          prewarmStarted: false,
+          prewarmComplete: false,
+          prewarmIndex: 0,
+          framesTotal: 0,
+          framesReady: 0,
+          sent: 0,
+          applied: 0,
+          staleApplied: 0,
+          pending: 0,
+          lastSeq: 0,
+          lastAppliedSeq: 0,
+          lastLatencyMs: null,
+          maxLatencyMs: 0,
+          activeBlend: "",
+          pointerMode: "",
+          promoting: false,
+          lastIssue: "",
+        },
+      };
+      if (typeof window !== "undefined") {
+        window.__OVIZ_DEBUG__ = {
+          enabled: ovizDebugEnabled,
+          state: ovizDebugState,
+          events: ovizDebugState.events,
+          snapshot: () => JSON.parse(JSON.stringify(ovizDebugState)),
+        };
+      }
+      function ovizDebugNow() {
+        return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+      }
+      function ovizDebugRound(value, digits = 1) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+          return null;
+        }
+        const scale = 10 ** Math.max(Math.round(Number(digits) || 0), 0);
+        return Math.round(number * scale) / scale;
+      }
+      function ovizDebugSetDataset() {
+        if (!root || !root.dataset) {
+          return;
+        }
+        root.dataset.skyDomeDebugReady = ovizDebugState.sky.ready ? "true" : "false";
+        root.dataset.skyDomeDebugBlocker = String(ovizDebugState.sky.blocker || "");
+        root.dataset.skyDomeDebugPending = String(ovizDebugState.sky.pending || 0);
+        root.dataset.skyApertureDebugOpen = ovizDebugState.aperture.open ? "true" : "false";
+        root.dataset.skyApertureDebugFramesReady = `${ovizDebugState.aperture.framesReady || 0}/${ovizDebugState.aperture.framesTotal || 0}`;
+        root.dataset.skyApertureDebugPending = String(ovizDebugState.aperture.pending || 0);
+      }
+      function ovizDebugEnsurePanel() {
+        if (!ovizDebugEnabled || !root) {
+          return null;
+        }
+        if (ovizDebugPanelEl) {
+          return ovizDebugPanelEl;
+        }
+        ovizDebugPanelEl = document.createElement("div");
+        ovizDebugPanelEl.className = "oviz-three-debug-panel";
+        ovizDebugPanelEl.setAttribute("aria-hidden", "true");
+        root.appendChild(ovizDebugPanelEl);
+        return ovizDebugPanelEl;
+      }
+      function ovizDebugPanelText() {
+        const sky = ovizDebugState.sky;
+        const aperture = ovizDebugState.aperture;
+        const eventLines = ovizDebugState.events.slice(-5).map((entry) => {
+          const age = ovizDebugRound(ovizDebugNow() - Number(entry.t || 0), 0);
+          return `${age}ms ${entry.event}`;
+        });
+        return [
+          "OVIZ DEBUG",
+          `sky ready=${sky.ready ? "1" : "0"} blocker=${sky.blocker || "-"} pending=${sky.pending}`,
+          `sky seq=${sky.lastAppliedSeq}/${sky.lastSeq} latency=${sky.lastLatencyMs ?? "-"}ms max=${sky.maxLatencyMs || 0}ms`,
+          `sky survey=${sky.lastSurvey || "-"}`,
+          `aperture open=${aperture.open ? "1" : "0"} available=${aperture.controlsAvailable ? "1" : "0"} prewarm=${aperture.prewarmComplete ? "done" : (aperture.prewarmStarted ? "running" : "idle")}`,
+          `aperture frames=${aperture.framesReady}/${aperture.framesTotal} pending=${aperture.pending} blend=${aperture.activeBlend || "-"}`,
+          `aperture seq=${aperture.lastAppliedSeq}/${aperture.lastSeq} latency=${aperture.lastLatencyMs ?? "-"}ms max=${aperture.maxLatencyMs || 0}ms`,
+          ...eventLines,
+        ].join("\\n");
+      }
+      function ovizDebugRenderPanel() {
+        ovizDebugPanelFrame = 0;
+        const panel = ovizDebugEnsurePanel();
+        if (!panel) {
+          return;
+        }
+        panel.hidden = false;
+        panel.textContent = ovizDebugPanelText();
+      }
+      function ovizDebugSchedulePanel() {
+        ovizDebugSetDataset();
+        if (!ovizDebugEnabled || ovizDebugPanelFrame) {
+          return;
+        }
+        ovizDebugPanelFrame = window.requestAnimationFrame(ovizDebugRenderPanel);
+      }
+      function ovizDebugRecord(eventName, detail = {}) {
+        if (!ovizDebugEnabled) {
+          return;
+        }
+        const entry = {
+          t: ovizDebugNow(),
+          event: String(eventName || ""),
+          detail: detail && typeof detail === "object" ? { ...detail } : {},
+        };
+        ovizDebugState.events.push(entry);
+        if (ovizDebugState.events.length > 240) {
+          ovizDebugState.events.splice(0, ovizDebugState.events.length - 240);
+        }
+        ovizDebugSchedulePanel();
+      }
+      function ovizDebugUpdateSky(fields = {}, eventName = "") {
+        if (!ovizDebugEnabled) {
+          return;
+        }
+        Object.assign(ovizDebugState.sky, fields || {});
+        if (eventName) {
+          ovizDebugRecord(eventName, fields);
+        } else {
+          ovizDebugSchedulePanel();
+        }
+      }
+      function ovizDebugUpdateAperture(fields = {}, eventName = "") {
+        if (!ovizDebugEnabled) {
+          return;
+        }
+        Object.assign(ovizDebugState.aperture, fields || {});
+        if (eventName) {
+          ovizDebugRecord(eventName, fields);
+        } else {
+          ovizDebugSchedulePanel();
+        }
+      }
+      function ovizDebugTrackSkyViewSent(seq, view) {
+        if (!ovizDebugEnabled) {
+          return;
+        }
+        const safeSeq = Math.round(Number(seq) || 0);
+        if (safeSeq <= 0) {
+          return;
+        }
+        ovizDebugSkySentAt.set(safeSeq, ovizDebugNow());
+        if (ovizDebugSkySentAt.size > 24) {
+          const keys = Array.from(ovizDebugSkySentAt.keys()).sort((a, b) => a - b);
+          keys.slice(0, Math.max(0, keys.length - 24)).forEach((key) => ovizDebugSkySentAt.delete(key));
+        }
+        ovizDebugUpdateSky({
+          sent: ovizDebugState.sky.sent + 1,
+          pending: ovizDebugSkySentAt.size,
+          lastSeq: safeSeq,
+          lastView: view ? {
+            l: ovizDebugRound(view.l, 3),
+            b: ovizDebugRound(view.b, 3),
+            ra: ovizDebugRound(view.ra, 3),
+            dec: ovizDebugRound(view.dec, 3),
+            fovDeg: ovizDebugRound(view.fovDeg, 2),
+          } : null,
+        }, "sky-background-view-sent");
+      }
+      function ovizDebugTrackSkyViewApplied(seq, matched) {
+        if (!ovizDebugEnabled) {
+          return;
+        }
+        const safeSeq = Math.round(Number(seq) || 0);
+        const sentAt = ovizDebugSkySentAt.get(safeSeq);
+        const latencyMs = sentAt == null ? null : ovizDebugRound(ovizDebugNow() - sentAt, 1);
+        Array.from(ovizDebugSkySentAt.keys()).forEach((key) => {
+          if (key <= safeSeq) {
+            ovizDebugSkySentAt.delete(key);
+          }
+        });
+        ovizDebugUpdateSky({
+          applied: ovizDebugState.sky.applied + (matched ? 1 : 0),
+          staleApplied: ovizDebugState.sky.staleApplied + (matched ? 0 : 1),
+          pending: ovizDebugSkySentAt.size,
+          lastAppliedSeq: safeSeq,
+          lastLatencyMs: latencyMs,
+          maxLatencyMs: Math.max(Number(ovizDebugState.sky.maxLatencyMs) || 0, Number(latencyMs) || 0),
+        }, matched ? "sky-background-view-applied" : "sky-background-view-stale");
+      }
+      function ovizDebugTrackApertureViewSent(frameIndex, seq, view) {
+        if (!ovizDebugEnabled) {
+          return;
+        }
+        const safeFrameIndex = Math.round(Number(frameIndex));
+        const safeSeq = Math.round(Number(seq) || 0);
+        if (!Number.isFinite(safeFrameIndex) || safeSeq <= 0) {
+          return;
+        }
+        const key = `${safeFrameIndex}:${safeSeq}`;
+        ovizDebugApertureSentAt.set(key, ovizDebugNow());
+        if (ovizDebugApertureSentAt.size > 48) {
+          const keys = Array.from(ovizDebugApertureSentAt.keys());
+          keys.slice(0, Math.max(0, keys.length - 48)).forEach((oldKey) => ovizDebugApertureSentAt.delete(oldKey));
+        }
+        ovizDebugUpdateAperture({
+          sent: ovizDebugState.aperture.sent + 1,
+          pending: ovizDebugApertureSentAt.size,
+          lastSeq: safeSeq,
+          lastView: view ? {
+            l: ovizDebugRound(view.l, 3),
+            b: ovizDebugRound(view.b, 3),
+            fovDeg: ovizDebugRound(view.fovDeg, 2),
+          } : null,
+        }, "sky-aperture-view-sent");
+      }
+      function ovizDebugTrackApertureViewApplied(frameIndex, seq, matched) {
+        if (!ovizDebugEnabled) {
+          return;
+        }
+        const safeFrameIndex = Math.round(Number(frameIndex));
+        const safeSeq = Math.round(Number(seq) || 0);
+        const key = `${safeFrameIndex}:${safeSeq}`;
+        const sentAt = ovizDebugApertureSentAt.get(key);
+        const latencyMs = sentAt == null ? null : ovizDebugRound(ovizDebugNow() - sentAt, 1);
+        Array.from(ovizDebugApertureSentAt.keys()).forEach((pendingKey) => {
+          const parts = String(pendingKey).split(":");
+          if (Number(parts[0]) === safeFrameIndex && Number(parts[1]) <= safeSeq) {
+            ovizDebugApertureSentAt.delete(pendingKey);
+          }
+        });
+        ovizDebugUpdateAperture({
+          applied: ovizDebugState.aperture.applied + (matched ? 1 : 0),
+          staleApplied: ovizDebugState.aperture.staleApplied + (matched ? 0 : 1),
+          pending: ovizDebugApertureSentAt.size,
+          lastAppliedSeq: safeSeq,
+          lastLatencyMs: latencyMs,
+          maxLatencyMs: Math.max(Number(ovizDebugState.aperture.maxLatencyMs) || 0, Number(latencyMs) || 0),
+        }, matched ? "sky-aperture-view-applied" : "sky-aperture-view-stale");
+      }
+      function ovizDebugScheduleReadyTimeout(scope, timeoutMs = 9000.0) {
+        if (!ovizDebugEnabled) {
+          return;
+        }
+        const startedAt = ovizDebugNow();
+        window.setTimeout(() => {
+          if (scope === "sky-background" && !ovizDebugState.sky.ready) {
+            ovizDebugUpdateSky({ lastIssue: "ready-timeout" }, "sky-background-ready-timeout");
+          } else if (scope === "sky-aperture" && ovizDebugState.aperture.framesReady < ovizDebugState.aperture.framesTotal) {
+            ovizDebugUpdateAperture({
+              lastIssue: "frame-ready-timeout",
+              timeoutAgeMs: ovizDebugRound(ovizDebugNow() - startedAt, 0),
+            }, "sky-aperture-ready-timeout");
+          }
+        }, Math.max(Number(timeoutMs) || 0.0, 0.0));
+      }
       const initialZoomAnchorSpec = initialState.initial_zoom_anchor && typeof initialState.initial_zoom_anchor === "object"
         ? initialState.initial_zoom_anchor
         : null;
@@ -5356,6 +5705,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let pendingSliderFrameIndex = null;
       let sliderScrubRenderHandle = null;
       let skyPanelMode = "hidden";
+      let skyApertureSpectrumSliderActive = false;
       let boxMetricsPanelMode = "hidden";
       let ageKdePanelMode = "hidden";
       let clusterFilterPanelMode = "hidden";
@@ -10651,6 +11001,15 @@ __SKY_RUNTIME_JS__
           if (statusEl) {
             statusEl.textContent = message;
           }
+          if (window.parent && window.parent !== window && skyDomeCaptureOnly) {
+            window.parent.postMessage({
+              type: "oviz-aladin-debug-event",
+              event: "error",
+              message: String(message || ""),
+              survey: ${survey},
+              backgroundOnly: skyDomeBackgroundOnly,
+            }, "*");
+          }
         }
         if (typeof window.A === "undefined") {
           fail("Aladin Lite failed to load.");
@@ -10772,6 +11131,14 @@ __SKY_RUNTIME_JS__
           }
           if (skyDomeBackgroundOnly && viewMode === "overview") {
             postSkyBackgroundReady();
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage({
+                type: "oviz-aladin-debug-event",
+                event: "ready-posted",
+                survey: ${survey},
+                backgroundOnly: skyDomeBackgroundOnly,
+              }, "*");
+            }
           } else if (skyDomeCaptureEnabled && viewMode === "overview") {
             scheduleSkyDomeSnapshot(aladin, 1400);
             scheduleSkyDomeSnapshot(aladin, 5200);
@@ -10820,6 +11187,12 @@ __SKY_RUNTIME_JS__
           skyDomeFrameEl.style.height = `${captureHeight}px`;
         }
         skyDomeFrameEl.srcdoc = buildAladinSrcdoc([], [], "overview", null, true);
+        ovizDebugUpdateSky({
+          ready: false,
+          lastSurvey: String(skySpec.survey || ""),
+          lastIssue: "",
+        }, "sky-background-frame-created");
+        ovizDebugScheduleReadyTimeout("sky-background", 9000.0);
         skyDomeCaptureFrameSignature = signature;
       }
 
@@ -10944,11 +11317,28 @@ __SKY_RUNTIME_JS__
           }
           skyDomeBackgroundFrameReady = true;
           skyDomeSurvey = skyDomeLocalSourceName(data.survey || (skySpec && skySpec.survey) || "aladin");
+          ovizDebugUpdateSky({
+            ready: true,
+            lastReadyAtMs: ovizDebugNow(),
+            lastSurvey: skyDomeSurvey,
+            lastIssue: "",
+          }, "sky-background-ready");
           setSkyDomeSnapshotStatus("loaded", "");
           postSkyLayerStateToAladin();
           updateSkyDomeBackgroundFrame(
             (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()
           );
+        } else if (data.type === "oviz-aladin-debug-event") {
+          const eventName = String(data.event || "event");
+          if (fromSkyApertureFrame) {
+            ovizDebugUpdateAperture({
+              lastIssue: eventName,
+            }, `sky-aperture-aladin-${eventName}`);
+          } else if (fromSkyDomeCapture) {
+            ovizDebugUpdateSky({
+              lastIssue: eventName,
+            }, `sky-background-aladin-${eventName}`);
+          }
         } else if (data.type === "oviz-aladin-hips-favorites") {
           if (!fromSkyDomeCapture) {
             return;
@@ -15237,13 +15627,60 @@ __ACTION_RUNTIME_JS__
           });
         }
         if (skyApertureSpectrumSliderEl) {
+          const updateSkyApertureSpectrumFromPointer = (event) => {
+            if (!skyApertureControlsAvailable()) {
+              return;
+            }
+            const rect = skyApertureSpectrumSliderEl.getBoundingClientRect();
+            if (!rect || !(rect.width > 0)) {
+              return;
+            }
+            const fraction = Math.min(Math.max((Number(event.clientX) - rect.left) / rect.width, 0.0), 1.0);
+            const extent = skyApertureSpectrumExtent();
+            skyApertureSpectrumSliderActive = true;
+            setSkyApertureSpectrumPosition(fraction * extent);
+            skyApertureSpectrumSliderEl.value = String(clampSkyApertureSpectrumPosition(skyApertureState.spectrumPosition));
+            updateSkyApertureUi((typeof performance !== "undefined" && performance.now) ? performance.now() : 0.0);
+          };
+          ["pointerdown", "pointermove", "pointerup", "pointercancel", "click", "dblclick", "wheel", "keydown"].forEach((eventName) => {
+            skyApertureSpectrumSliderEl.addEventListener(eventName, (event) => {
+              event.stopPropagation();
+            }, eventName === "wheel" ? { passive: true } : undefined);
+          });
+          skyApertureSpectrumSliderEl.addEventListener("pointerdown", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            skyApertureSpectrumSliderActive = true;
+            try {
+              skyApertureSpectrumSliderEl.setPointerCapture(event.pointerId);
+            } catch (_err) {
+            }
+            updateSkyApertureSpectrumFromPointer(event);
+          });
+          skyApertureSpectrumSliderEl.addEventListener("pointermove", (event) => {
+            if (!skyApertureSpectrumSliderActive || !(event.buttons & 1)) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            updateSkyApertureSpectrumFromPointer(event);
+          });
+          skyApertureSpectrumSliderEl.addEventListener("focus", () => {
+            skyApertureSpectrumSliderActive = true;
+          });
           skyApertureSpectrumSliderEl.addEventListener("input", (event) => {
             if (!skyApertureControlsAvailable()) {
               return;
             }
+            skyApertureSpectrumSliderActive = true;
             setSkyApertureSpectrumPosition(event.target && event.target.value);
             updateSkyApertureUi((typeof performance !== "undefined" && performance.now) ? performance.now() : 0.0);
-            focusViewer();
+          });
+          ["change", "blur", "pointerup", "pointercancel"].forEach((eventName) => {
+            skyApertureSpectrumSliderEl.addEventListener(eventName, () => {
+              skyApertureSpectrumSliderActive = false;
+              focusViewer();
+            });
           });
         }
         if (skyAperturePromoteEl) {
@@ -15772,6 +16209,7 @@ __ACTION_RUNTIME_JS__
       setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);
       initialActionViewState = captureCurrentActionViewState();
       syncActionButtons();
+      setStartupStatus("", false);
       window.setTimeout(() => focusViewer(), 0);
       animate();
 
