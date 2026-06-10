@@ -516,11 +516,56 @@ def _compact_motion_payload(motion):
     return compact or None
 
 
+_COMPACT_POINT_TRACE_DEFAULTS = {
+    "color": "default_color",
+    "opacity": "default_opacity",
+    "symbol": "default_symbol",
+    "color_scalar_kind": "default_color_scalar_kind",
+}
+
+_MISSING_POINT_VALUE = object()
+
+
+def _common_point_value(points, key):
+    common = _MISSING_POINT_VALUE
+    for point in points:
+        if not isinstance(point, dict) or key not in point:
+            return _MISSING_POINT_VALUE
+        value = point.get(key)
+        if common is _MISSING_POINT_VALUE:
+            common = value
+        elif value != common:
+            return _MISSING_POINT_VALUE
+    return common
+
+
+def _hoist_common_point_defaults(trace):
+    points = [point for point in trace.get("points", []) or [] if isinstance(point, dict)]
+    if not points:
+        return
+
+    for point_key, trace_key in _COMPACT_POINT_TRACE_DEFAULTS.items():
+        common = _common_point_value(points, point_key)
+        if common is _MISSING_POINT_VALUE:
+            continue
+        if trace.get(trace_key) != common:
+            trace[trace_key] = common
+        for point in points:
+            point.pop(point_key, None)
+
+    common_size = _common_point_value(points, "size")
+    if common_size is not _MISSING_POINT_VALUE:
+        trace["default_point_size"] = common_size
+        for point in points:
+            point.pop("size", None)
+
+
 def _compact_threejs_frame_payloads(frame_specs):
     """Trim repeated per-frame point metadata while preserving t=0 selection data."""
     for frame_spec in frame_specs:
         keep_selection = np.isclose(float(frame_spec.get("time", np.nan)), 0.0, atol=1e-9)
         for trace in frame_spec.get("traces", []) or []:
+            _hoist_common_point_defaults(trace)
             for point in trace.get("points", []) or []:
                 if not keep_selection:
                     point.pop("selection", None)

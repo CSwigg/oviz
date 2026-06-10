@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from oviz import Layer, LayerCollection, Scene3D, galactic_lite_profile, website_background_profile  # noqa: E402
 from oviz.threejs_figure import ThreeJSFigure  # noqa: E402
+from oviz.threejs_scene import _compact_threejs_frame_payloads  # noqa: E402
 from oviz.viz import Animate3D  # noqa: E402
 
 
@@ -443,6 +444,87 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("/*__SCENE_SPEC_START__*/const sceneSpec = {", self._embedded_scene_spec_marker(forced_raw_html))
         self.assertNotIn("await inflateOvizGzipBase64SceneSpec(", self._embedded_scene_spec_marker(forced_raw_html))
         self.assertIn('"compression_method":"none"', forced_raw_html)
+
+    def test_compact_payload_hoists_repeated_point_style_defaults(self):
+        frame_specs = [
+            {
+                "time": 0.0,
+                "traces": [
+                    {
+                        "name": "Repeated",
+                        "points": [
+                            {
+                                "x": 1.0,
+                                "y": 2.0,
+                                "z": 3.0,
+                                "size": 4.0,
+                                "symbol": "circle",
+                                "color": "#aabbcc",
+                                "opacity": 0.4,
+                                "color_scalar_kind": "age",
+                                "selection": {"cluster_name": "A"},
+                                "hovertext": "A",
+                            },
+                            {
+                                "x": 2.0,
+                                "y": 3.0,
+                                "z": 4.0,
+                                "size": 4.0,
+                                "symbol": "circle",
+                                "color": "#aabbcc",
+                                "opacity": 0.4,
+                                "color_scalar_kind": "age",
+                                "selection": {"cluster_name": "B"},
+                                "hovertext": "B",
+                            },
+                        ],
+                    }
+                ],
+            },
+            {
+                "time": -1.0,
+                "traces": [
+                    {
+                        "name": "Repeated",
+                        "points": [
+                            {
+                                "x": 1.5,
+                                "y": 2.5,
+                                "z": 3.5,
+                                "size": 5.0,
+                                "symbol": "square",
+                                "color": "#ddeeff",
+                                "opacity": 0.2,
+                                "color_scalar_kind": "age",
+                                "selection": {"cluster_name": "A"},
+                                "hovertext": "A past",
+                                "motion": {"key": "A", "age_now_myr": 10, "time_myr": -1, "unused": "drop"},
+                            }
+                        ],
+                    }
+                ],
+            },
+        ]
+
+        _compact_threejs_frame_payloads(frame_specs)
+
+        first_trace = frame_specs[0]["traces"][0]
+        self.assertEqual(first_trace["default_point_size"], 4.0)
+        self.assertEqual(first_trace["default_symbol"], "circle")
+        self.assertEqual(first_trace["default_color"], "#aabbcc")
+        self.assertEqual(first_trace["default_opacity"], 0.4)
+        self.assertEqual(first_trace["default_color_scalar_kind"], "age")
+        self.assertNotIn("size", first_trace["points"][0])
+        self.assertNotIn("symbol", first_trace["points"][0])
+        self.assertNotIn("color", first_trace["points"][0])
+        self.assertNotIn("opacity", first_trace["points"][0])
+        self.assertIn("selection", first_trace["points"][0])
+        self.assertIn("hovertext", first_trace["points"][0])
+
+        past_point = frame_specs[1]["traces"][0]["points"][0]
+        self.assertNotIn("selection", past_point)
+        self.assertNotIn("hovertext", past_point)
+        self.assertEqual(past_point["motion"], {"key": "A", "age_now_myr": 10.0, "time_myr": -1.0})
 
     def test_threejs_save_state_recompresses_large_scene_spec_exports(self):
         scene_spec = {

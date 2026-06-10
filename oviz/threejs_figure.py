@@ -8865,7 +8865,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const selection = {
           cluster_name: clusterName,
           trace_name: String((trace && trace.name) || ""),
-          cluster_color: String((point && point.color) || (trace && trace.color) || "#ffffff"),
+          cluster_color: String(pointBaseColorForTrace(point, trace)),
         };
         if (Number.isFinite(xValue)) {
           selection.x0 = xValue;
@@ -11743,10 +11743,11 @@ __SKY_RUNTIME_JS__
 
       function pointColorForTrace(point, trace, traceState) {
         const colorBy = traceColorByConfig(trace) || (traceState && traceState.colorBy);
+        const baseColor = pointBaseColorForTrace(point, trace);
         if (colorBy && traceState && traceState.colorMode === "by_value") {
-          return traceColorFromColormap(colorBy, traceState.colormap, point && point.color_scalar, point && point.color || "#ffffff");
+          return traceColorFromColormap(colorBy, traceState.colormap, point && point.color_scalar, baseColor);
         }
-        return (traceState && traceState.color) || (point && point.color) || "#ffffff";
+        return (traceState && traceState.color) || baseColor;
       }
 
       function legendColorForItem(item) {
@@ -14027,6 +14028,36 @@ __SKY_RUNTIME_JS__
         return `${traceKey}\n${motionKey}`;
       }
 
+      function pointSizeForTrace(point, trace) {
+        const pointSize = Number(point && point.size);
+        if (Number.isFinite(pointSize)) {
+          return pointSize;
+        }
+        const traceSize = Number(trace && trace.default_point_size);
+        return Number.isFinite(traceSize) ? traceSize : 0.0;
+      }
+
+      function pointOpacityForTrace(point, trace) {
+        const pointOpacity = Number(point && point.opacity);
+        if (Number.isFinite(pointOpacity)) {
+          return pointOpacity;
+        }
+        const traceOpacity = Number(trace && trace.default_opacity);
+        return Number.isFinite(traceOpacity) ? traceOpacity : 1.0;
+      }
+
+      function pointSymbolForTrace(point, trace) {
+        return String((point && point.symbol) || (trace && trace.default_symbol) || "circle");
+      }
+
+      function pointBaseColorForTrace(point, trace) {
+        return (
+          (point && point.color)
+          || (trace && (trace.default_color || trace.legend_color || trace.color))
+          || "#ffffff"
+        );
+      }
+
       function clusterMotionRanges() {
         if (clusterMotionRangeCache) {
           return clusterMotionRangeCache;
@@ -14051,8 +14082,8 @@ __SKY_RUNTIME_JS__
                 };
                 clusterMotionRangeCache.set(rangeKey, entry);
               }
-              const pointSize = Number(point && point.size);
-              const pointOpacity = Number(point && point.opacity);
+              const pointSize = pointSizeForTrace(point, trace);
+              const pointOpacity = pointOpacityForTrace(point, trace);
               if (Number.isFinite(pointSize)) {
                 entry.sizeMin = Math.min(entry.sizeMin, pointSize);
                 entry.sizeMax = Math.max(entry.sizeMax, pointSize);
@@ -14079,7 +14110,7 @@ __SKY_RUNTIME_JS__
         if (Number.isFinite(motionSizeMax) && motionSizeMax > 0.0) {
           return motionSizeMax;
         }
-        return Number(point && point.size ? point.size : 0.0);
+        return pointSizeForTrace(point, trace);
       }
 
       function fadeVisibilityFactor(timeMyr, ageNowMyr, fadeTimeMyrValue, fadeInOut) {
@@ -14116,8 +14147,8 @@ __SKY_RUNTIME_JS__
 
       function animatedPointState(point, trace = null) {
         const motion = point && typeof point.motion === "object" ? point.motion : null;
-        const baseSize = Number(point.size ?? 0.0);
-        const baseOpacity = Number(point.opacity ?? 1.0);
+        const baseSize = pointSizeForTrace(point, trace);
+        const baseOpacity = pointOpacityForTrace(point, trace);
         if (!motion) {
           return {
             size: baseSize,
@@ -14152,7 +14183,7 @@ __SKY_RUNTIME_JS__
           || "Point"
         ).trim();
         const label = rawName.replace(/_/g, " ") || "Point";
-        const titleColor = tooltipColor || (selection && selection.cluster_color) || (point && point.color) || "#ffffff";
+        const titleColor = tooltipColor || (selection && selection.cluster_color) || pointBaseColorForTrace(point, trace);
         const parts = [`<b style="color:${escapeHtml(titleColor)};">${escapeHtml(label)}</b>`];
         const ageNowMyr = Number((selection && selection.age_now_myr) ?? (motion && motion.age_now_myr));
         if (Number.isFinite(ageNowMyr)) {
@@ -14252,7 +14283,7 @@ __SKY_RUNTIME_JS__
               return;
             }
           }
-          const baseOpacity = Number(pointState.opacity ?? point.opacity ?? 1.0);
+          const baseOpacity = Number(pointState.opacity ?? pointOpacityForTrace(point, trace));
           const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * traceVisibilityMultiplier * opacityMultiplier * globalPointOpacityScale));
           if (effectiveOpacity <= 0.001) {
             return;
@@ -14311,7 +14342,7 @@ __SKY_RUNTIME_JS__
             hoverTargets.push(coreSprite);
             registerCameraResponsivePointSprite(coreSprite, "core", pointPosition, scale, selectionKey);
           } else {
-            const sprite = new THREE.Sprite(markerMaterialFor(point.symbol, pointColor, effectiveOpacity));
+            const sprite = new THREE.Sprite(markerMaterialFor(pointSymbolForTrace(point, trace), pointColor, effectiveOpacity));
             const markerScale = nonGlowMarkerScaleForPoint(scale, pointPosition);
             sprite.position.copy(pointPosition);
             sprite.scale.set(markerScale, markerScale, 1.0);
