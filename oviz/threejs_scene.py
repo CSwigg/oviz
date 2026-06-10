@@ -192,6 +192,74 @@ def _sky_dome_config(plot, *, file_to_data_url, coerce_float):
             )
         ),
     }
+    aperture_config = _sky_dome_value(raw_config, initial_state, "aperture", {})
+    if isinstance(aperture_config, dict):
+        aperture_enabled = aperture_config.get("enabled", True)
+        aperture_presets = aperture_config.get("presets")
+    else:
+        aperture_enabled = True
+        aperture_presets = None
+    aperture_spec = {
+        "enabled": bool(aperture_enabled),
+        "default_size_deg": float(
+            np.clip(
+                coerce_float(
+                    aperture_config.get("default_size_deg") if isinstance(aperture_config, dict) else None,
+                    14.0,
+                ),
+                0.2,
+                120.0,
+            )
+        ),
+        "min_size_deg": float(
+            np.clip(
+                coerce_float(
+                    aperture_config.get("min_size_deg") if isinstance(aperture_config, dict) else None,
+                    3.0,
+                ),
+                0.1,
+                120.0,
+            )
+        ),
+        "max_size_deg": float(
+            np.clip(
+                coerce_float(
+                    aperture_config.get("max_size_deg") if isinstance(aperture_config, dict) else None,
+                    48.0,
+                ),
+                0.2,
+                160.0,
+            )
+        ),
+        "promotion_duration_ms": float(
+            np.clip(
+                coerce_float(
+                    aperture_config.get("promotion_duration_ms") if isinstance(aperture_config, dict) else None,
+                    650.0,
+                ),
+                120.0,
+                3000.0,
+            )
+        ),
+    }
+    if isinstance(aperture_config, dict) and aperture_config.get("default_angle_deg") is not None:
+        aperture_spec["default_angle_deg"] = float(
+            np.clip(coerce_float(aperture_config.get("default_angle_deg"), 145.0), 0.0, 360.0)
+        )
+    else:
+        aperture_spec["default_spectrum_position"] = float(
+            np.clip(
+                coerce_float(
+                    aperture_config.get("default_spectrum_position") if isinstance(aperture_config, dict) else None,
+                    2.0,
+                ),
+                0.0,
+                7.0,
+            )
+        )
+    if isinstance(aperture_presets, list) and aperture_presets:
+        aperture_spec["presets"] = copy.deepcopy(aperture_presets)
+    spec["aperture"] = aperture_spec
     if background_mode:
         spec["background_mode"] = str(background_mode)
     if image_data_url:
@@ -468,7 +536,7 @@ def build_threejs_scene_spec(
     plot,
     frames,
     *,
-    trace_to_plotly_json,
+    trace_to_scene_json,
     coerce_range,
     format_time_label,
     coerce_float,
@@ -496,7 +564,7 @@ def build_threejs_scene_spec(
         earliest_frame_json = None
         for raw_frame in frames:
             try:
-                frame_json = raw_frame.to_plotly_json()
+                frame_json = raw_frame.to_scene_json()
             except Exception:
                 frame_json = raw_frame if isinstance(raw_frame, dict) else {}
             if earliest_frame_json is None:
@@ -506,7 +574,7 @@ def build_threejs_scene_spec(
             {"x": 0.0, "y": 0.0, "z": 0.0},
         )
 
-    layout_json = plot.figure_layout.to_plotly_json()
+    layout_json = plot.figure_layout.to_scene_json()
     scene_layout = layout_json.get("scene", {})
     x_range = coerce_range(scene_layout.get("xaxis", {}).get("range"), [-1.0, 1.0])
     y_range = coerce_range(scene_layout.get("yaxis", {}).get("range"), [-1.0, 1.0])
@@ -536,7 +604,7 @@ def build_threejs_scene_spec(
     trace_keys = []
     legend_items = []
     for idx, trace in enumerate(plot.initial_data):
-        trace_json = trace_to_plotly_json(trace)
+        trace_json = trace_to_scene_json(trace)
         trace_key = f"trace-{idx}"
         trace_spec = plot._threejs_trace_spec(
             trace_key,
@@ -611,7 +679,7 @@ def build_threejs_scene_spec(
 
     frames_by_time = {}
     for time_val, frame in zip(plot.time, frames):
-        frames_by_time[round(float(time_val), 12)] = frame.to_plotly_json()
+        frames_by_time[round(float(time_val), 12)] = frame.to_scene_json()
 
     frame_specs = []
     ordered_times = [float(t) for t in plot._ordered_slider_times()]

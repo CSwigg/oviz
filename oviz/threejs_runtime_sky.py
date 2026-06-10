@@ -1191,24 +1191,18 @@ THREEJS_SKY_RUNTIME_JS = """
           return;
         }
         skyDomeFrameEl.style.transform = "";
+        if (typeof updateSkyApertureFramePredictiveTransforms === "function") {
+          updateSkyApertureFramePredictiveTransforms(null, { clear: true });
+        }
       }
 
-      function updateSkyDomeBackgroundPredictiveTransform(currentView = null) {
-        if (!skyDomeFrameEl || !skyDomeUsesAladinBackground()) {
-          return;
+      function skyBackgroundPredictiveTransformForAlignedView(alignedView, currentView = null) {
+        if (!camera || !canvas || !alignedView) {
+          return "";
         }
-        if (!skyDomeBackgroundAlignedView) {
-          clearSkyDomeBackgroundPredictiveTransform();
-          return;
-        }
-        if (!skyDomeBackgroundUserCameraActive && skyDomeBackgroundSentViews.size === 0) {
-          clearSkyDomeBackgroundPredictiveTransform();
-          return;
-        }
-        const alignedDirection = skyDomeBackgroundAlignedView.direction;
+        const alignedDirection = alignedView.direction;
         if (!(alignedDirection instanceof THREE.Vector3)) {
-          clearSkyDomeBackgroundPredictiveTransform();
-          return;
+          return "";
         }
         camera.updateMatrixWorld(true);
         camera.updateProjectionMatrix();
@@ -1223,8 +1217,7 @@ THREEJS_SKY_RUNTIME_JS = """
           || Math.abs(projected.x) > 3.0
           || Math.abs(projected.y) > 3.0
         ) {
-          clearSkyDomeBackgroundPredictiveTransform();
-          return;
+          return "";
         }
         const width = Math.max(Number(canvas && canvas.clientWidth) || 1.0, 1.0);
         const height = Math.max(Number(canvas && canvas.clientHeight) || 1.0, 1.0);
@@ -1232,16 +1225,34 @@ THREEJS_SKY_RUNTIME_JS = """
         const maxShiftY = height * 0.22;
         const dx = Math.min(Math.max(projected.x * width * 0.5, -maxShiftX), maxShiftX);
         const dy = Math.min(Math.max(-projected.y * height * 0.5, -maxShiftY), maxShiftY);
-        const alignedFov = Math.min(Math.max(Number(skyDomeBackgroundAlignedView.fovDeg) || 1.0, 0.05), 179.0);
+        const alignedFov = Math.min(Math.max(Number(alignedView.fovDeg) || 1.0, 0.05), 179.0);
         const currentFov = Math.min(Math.max(Number(currentView && currentView.fovDeg) || alignedFov, 0.05), 179.0);
         const alignedTan = Math.max(Math.tan(THREE.MathUtils.degToRad(alignedFov * 0.5)), 1e-6);
         const currentTan = Math.max(Math.tan(THREE.MathUtils.degToRad(currentFov * 0.5)), 1e-6);
         const scale = Math.min(Math.max(alignedTan / currentTan, 0.55), 1.9);
         if (Math.abs(dx) < 0.35 && Math.abs(dy) < 0.35 && Math.abs(scale - 1.0) < 0.002) {
+          return "";
+        }
+        return `translate3d(${dx.toFixed(2)}px, ${dy.toFixed(2)}px, 0) scale(${scale.toFixed(5)})`;
+      }
+
+      function updateSkyDomeBackgroundPredictiveTransform(currentView = null) {
+        if (!skyDomeFrameEl || !skyDomeUsesAladinBackground()) {
+          return;
+        }
+        if (!skyDomeBackgroundAlignedView) {
           clearSkyDomeBackgroundPredictiveTransform();
           return;
         }
-        skyDomeFrameEl.style.transform = `translate3d(${dx.toFixed(2)}px, ${dy.toFixed(2)}px, 0) scale(${scale.toFixed(5)})`;
+        if (!skyDomeBackgroundUserCameraActive && skyDomeBackgroundSentViews.size === 0) {
+          clearSkyDomeBackgroundPredictiveTransform();
+          return;
+        }
+        const transformCss = skyBackgroundPredictiveTransformForAlignedView(skyDomeBackgroundAlignedView, currentView);
+        skyDomeFrameEl.style.transform = transformCss;
+        if (typeof updateSkyApertureFramePredictiveTransforms === "function") {
+          updateSkyApertureFramePredictiveTransforms(currentView);
+        }
       }
 
       function recordSkyDomeBackgroundSentView(seq, view) {
@@ -1340,6 +1351,1529 @@ THREEJS_SKY_RUNTIME_JS = """
           fovDeg: view.fovDeg,
           cameraFovDeg: view.cameraFovDeg,
         }, "*");
+      }
+
+      function normalizeSkyAperturePreset(rawPreset, index = 0) {
+        if (typeof rawPreset === "string") {
+          const survey = cleanSkyLayerSurvey(rawPreset);
+          return survey ? {
+            key: survey,
+            label: survey,
+            survey,
+            color: "#9fc7ff",
+            index,
+          } : null;
+        }
+        if (!rawPreset || typeof rawPreset !== "object") {
+          return null;
+        }
+        const survey = cleanSkyLayerSurvey(rawPreset.survey || rawPreset.id || rawPreset.key || "");
+        if (!survey) {
+          return null;
+        }
+        return {
+          key: normalizeSkyLayerKey(rawPreset.key || survey),
+          label: cleanSkyLayerSurvey(rawPreset.label || rawPreset.name || "") || survey,
+          survey,
+          color: cleanSkyLayerSurvey(rawPreset.color || "") || "#9fc7ff",
+          index,
+        };
+      }
+
+      function normalizeSkyAperturePresetList(rawPresets) {
+        const seen = new Set();
+        const presets = [];
+        (Array.isArray(rawPresets) ? rawPresets : []).forEach((rawPreset, index) => {
+          const preset = normalizeSkyAperturePreset(rawPreset, index);
+          if (!preset || seen.has(preset.survey)) {
+            return;
+          }
+          seen.add(preset.survey);
+          presets.push(preset);
+        });
+        return presets;
+      }
+
+      const skyApertureSpec = (
+        skyDomeSpec
+        && skyDomeSpec.aperture
+        && typeof skyDomeSpec.aperture === "object"
+      ) ? skyDomeSpec.aperture : {};
+      const skyAperturePresetOptions = (
+        normalizeSkyAperturePresetList(skyApertureSpec.presets).length
+          ? normalizeSkyAperturePresetList(skyApertureSpec.presets)
+          : normalizeSkyAperturePresetList(defaultSkyAperturePresetOptions)
+      );
+      const skyApertureDefaultSizeDeg = Math.min(
+        Math.max(Number(skyApertureSpec.default_size_deg) || 14.0, 0.2),
+        120.0
+      );
+      const skyApertureMinSizeDeg = Math.min(
+        Math.max(Number(skyApertureSpec.min_size_deg) || 3.0, 0.1),
+        skyApertureDefaultSizeDeg
+      );
+      const skyApertureMaxSizeDeg = Math.max(
+        skyApertureMinSizeDeg,
+        Math.min(Math.max(Number(skyApertureSpec.max_size_deg) || 48.0, 0.2), 160.0)
+      );
+      const skyAperturePromotionDurationMs = Math.min(
+        Math.max(Number(skyApertureSpec.promotion_duration_ms) || 650.0, 120.0),
+        3000.0
+      );
+      let skyApertureState = {
+        open: false,
+        xNorm: 0.5,
+        yNorm: 0.5,
+        centerDirection: null,
+        axisXDirection: null,
+        axisYDirection: null,
+        sizeDeg: skyApertureDefaultSizeDeg,
+        spectrumPosition: skyApertureInitialSpectrumPosition(),
+      };
+      let skyApertureGeometryState = null;
+      let skyAperturePointerState = null;
+      let skyApertureSpectrumTickSignature = "";
+      let skyApertureFrameSignatureA = "";
+      let skyApertureFrameSignatureB = "";
+      let skyAperturePresetFrameEls = [];
+      let skyAperturePresetFrameSignatures = [];
+      let skyAperturePresetFrameReady = [];
+      let skyAperturePrewarmStarted = false;
+      let skyAperturePrewarmComplete = false;
+      let skyAperturePrewarmTimer = 0;
+      let skyAperturePrewarmIndex = 0;
+      let skyApertureBaseVisibleSinceMs = 0.0;
+      let skyAperturePrewarmSettledSinceMs = 0.0;
+      let skyApertureToggleStateSignature = "";
+      let skyApertureLastViewSignature = "";
+      let skyApertureLastViewSentAt = 0.0;
+      let skyApertureViewSequence = 0;
+      let skyApertureFrameSentViews = [];
+      let skyApertureFrameAlignedViews = [];
+      let skyAperturePromotionFrame = 0;
+      const skyAperturePrewarmInitialDelayMs = 1400.0;
+      const skyAperturePrewarmSettledDelayMs = 900.0;
+      const skyAperturePrewarmStepDelayMs = 520.0;
+
+      function normalizeSkyApertureAngle(value) {
+        let angle = Number(value);
+        if (!Number.isFinite(angle)) {
+          angle = 0.0;
+        }
+        angle %= 360.0;
+        if (angle < 0.0) {
+          angle += 360.0;
+        }
+        return angle;
+      }
+
+      function skyApertureSpectrumExtent() {
+        return Math.max(skyAperturePresetOptions.length - 1, 0);
+      }
+
+      function clampSkyApertureSpectrumPosition(value) {
+        const maxPosition = skyApertureSpectrumExtent();
+        if (maxPosition <= 0) {
+          return 0.0;
+        }
+        const position = Number(value);
+        return Math.min(Math.max(Number.isFinite(position) ? position : 0.0, 0.0), maxPosition);
+      }
+
+      function skyApertureInitialSpectrumPosition() {
+        if (Number.isFinite(Number(skyApertureSpec.default_spectrum_position))) {
+          return clampSkyApertureSpectrumPosition(skyApertureSpec.default_spectrum_position);
+        }
+        if (Number.isFinite(Number(skyApertureSpec.default_angle_deg))) {
+          return clampSkyApertureSpectrumPosition(
+            (normalizeSkyApertureAngle(skyApertureSpec.default_angle_deg) / 360.0) * skyApertureSpectrumExtent()
+          );
+        }
+        return clampSkyApertureSpectrumPosition(2.0);
+      }
+
+      function skyApertureBaseBackgroundVisible() {
+        if (!skyDomeUsesAladinBackground()) {
+          return true;
+        }
+        if (!skyDomeBackgroundFrameReady || !skyDomeFrameEl || !skyDomeFrameEl.contentWindow) {
+          return false;
+        }
+        if (root && root.dataset && root.dataset.skyDomeBackgroundBlocker) {
+          return root.dataset.skyDomeBackgroundBlocker === "visible";
+        }
+        const opacity = Number(skyDomeFrameEl.style.opacity || "0");
+        return Number.isFinite(opacity) && opacity > 0.002;
+      }
+
+      function skyApertureCanPrewarm() {
+        return Boolean(
+          skyApertureSpec.enabled !== false
+          && skySpec.enabled
+          && skyDomeIsEnabled()
+          && skyDomeUsesAladinBackground()
+          && skyApertureBaseBackgroundVisible()
+          && cameraViewMode === "earth"
+          && skyAperturePresetOptions.length >= 2
+          && skyApertureEl
+          && skyApertureFrameAEl
+          && skyApertureFrameBEl
+        );
+      }
+
+      function skyApertureControlsAvailable() {
+        return Boolean(
+          skyApertureSpec.enabled !== false
+          && skySpec.enabled
+          && skyDomeIsEnabled()
+          && skyDomeUsesAladinBackground()
+          && skyApertureBaseBackgroundVisible()
+          && cameraViewMode === "earth"
+          && skyAperturePresetOptions.length >= 2
+          && skyApertureEl
+          && skyApertureFrameAEl
+          && skyApertureFrameBEl
+          && skyApertureRingEl
+          && skyApertureQuadEl
+          && skyApertureSpectrumSliderEl
+        );
+      }
+
+      function skyAperturePrewarmInteractionSettled() {
+        return Boolean(
+          !skyDomeBackgroundUserCameraActive
+          && !cameraTransitionAnimationFrame
+          && !skyViewDragState
+          && (!root || !root.dataset || root.dataset.skyDomeMotion !== "camera-moving")
+        );
+      }
+
+      function skyApertureCanvasRect() {
+        const rect = (canvas || root).getBoundingClientRect();
+        return {
+          width: Math.max(Number(rect.width) || 1.0, 1.0),
+          height: Math.max(Number(rect.height) || 1.0, 1.0),
+          left: Number(rect.left) || 0.0,
+          top: Number(rect.top) || 0.0,
+        };
+      }
+
+      function clampSkyApertureSizeDeg(value) {
+        return Math.min(
+          Math.max(Number(value) || skyApertureDefaultSizeDeg, skyApertureMinSizeDeg),
+          skyApertureMaxSizeDeg
+        );
+      }
+
+      function clampSkyApertureCenter(xNorm, yNorm) {
+        const marginX = 0.02;
+        const marginY = 0.02;
+        return {
+          xNorm: Math.min(Math.max(Number(xNorm), marginX), 1.0 - marginX),
+          yNorm: Math.min(Math.max(Number(yNorm), marginY), 1.0 - marginY),
+        };
+      }
+
+      function skyApertureLegacySizeDegFromRadiusPx(radiusPx) {
+        const rect = skyApertureCanvasRect();
+        const view = skyDomeBackgroundViewForCamera();
+        const horizontalFovDeg = view && Number.isFinite(Number(view.fovDeg))
+          ? Number(view.fovDeg)
+          : 60.0;
+        const pxToDeg = horizontalFovDeg / Math.max(rect.width, 1.0);
+        return clampSkyApertureSizeDeg((Number(radiusPx) || 0.0) * 2.0 * pxToDeg);
+      }
+
+      function skyApertureBlendForPosition(position = skyApertureState.spectrumPosition) {
+        const presets = skyAperturePresetOptions;
+        if (!presets.length) {
+          return null;
+        }
+        const clampedPosition = clampSkyApertureSpectrumPosition(position);
+        const indexA = Math.min(Math.floor(clampedPosition), presets.length - 1);
+        const indexB = Math.min(indexA + 1, presets.length - 1);
+        const fraction = indexA === indexB ? 0.0 : (clampedPosition - indexA);
+        return {
+          position: clampedPosition,
+          indexA,
+          indexB,
+          fraction,
+          presetA: presets[indexA],
+          presetB: presets[indexB],
+        };
+      }
+
+      function skyApertureBlendForAngle(angleDeg = 0.0) {
+        return skyApertureBlendForPosition(
+          (normalizeSkyApertureAngle(angleDeg) / 360.0) * skyApertureSpectrumExtent()
+        );
+      }
+
+      function setSkyApertureSpectrumPosition(position) {
+        skyApertureState.spectrumPosition = clampSkyApertureSpectrumPosition(position);
+      }
+
+      function skyApertureBlendLabel(blend = skyApertureBlendForPosition()) {
+        if (!blend || !blend.presetA || !blend.presetB) {
+          return "";
+        }
+        if (blend.fraction < 0.08) {
+          return blend.presetA.label;
+        }
+        if (blend.fraction > 0.92) {
+          return blend.presetB.label;
+        }
+        return `${blend.presetA.label} / ${blend.presetB.label}`;
+      }
+
+      function skyApertureFrameClipForFrame(frameEl) {
+        if (!frameEl) {
+          return null;
+        }
+        const parent = frameEl.parentElement;
+        if (parent && parent.classList && parent.classList.contains("oviz-three-sky-aperture-frame-clip")) {
+          return parent;
+        }
+        const clipEl = document.createElement("div");
+        clipEl.className = "oviz-three-sky-aperture-frame-clip";
+        if (parent) {
+          parent.insertBefore(clipEl, frameEl);
+          clipEl.appendChild(frameEl);
+        }
+        return clipEl;
+      }
+
+      function setSkyApertureFrameSurvey(frameEl, survey, signatureKey) {
+        if (!frameEl || !survey) {
+          return signatureKey || "";
+        }
+        const signature = String(survey);
+        if (signature === signatureKey) {
+          return signatureKey;
+        }
+        frameEl.srcdoc = buildAladinSrcdoc([], [], "overview", null, true, { survey });
+        frameEl.dataset.survey = signature;
+        return signature;
+      }
+
+      function skyAperturePrewarmOrder() {
+        const blend = skyApertureBlendForPosition();
+        const order = [];
+        const pushIndex = (index) => {
+          const rawIndex = Math.round(Number(index));
+          const safeIndex = rawIndex;
+          if (
+            Number.isFinite(safeIndex)
+            && safeIndex >= 0
+            && safeIndex < skyAperturePresetOptions.length
+            && !order.includes(safeIndex)
+          ) {
+            order.push(safeIndex);
+          }
+        };
+        if (blend) {
+          pushIndex(blend.indexA);
+          pushIndex(blend.indexB);
+        }
+        for (let offset = 1; offset < skyAperturePresetOptions.length; offset += 1) {
+          pushIndex((blend ? blend.indexA : 0) - offset);
+          pushIndex((blend ? blend.indexB : 0) + offset);
+        }
+        skyAperturePresetOptions.forEach((_preset, index) => pushIndex(index));
+        return order;
+      }
+
+      function createSkyAperturePresetFrame(index) {
+        if (!skyApertureEl || !skyAperturePresetOptions.length) {
+          return null;
+        }
+        const safeIndex = Math.round(Number(index));
+        const preset = skyAperturePresetOptions[safeIndex];
+        if (!preset) {
+          return null;
+        }
+        const seedFrames = [skyApertureFrameAEl, skyApertureFrameBEl].filter(Boolean);
+        const insertBeforeEl = skyApertureShadeEl || skyApertureRingEl || null;
+        let frameEl = skyAperturePresetFrameEls[safeIndex] || seedFrames[safeIndex] || null;
+        if (!frameEl) {
+          frameEl = document.createElement("iframe");
+          frameEl.className = "oviz-three-sky-aperture-frame oviz-three-sky-aperture-frame-preset";
+          frameEl.loading = "eager";
+          frameEl.referrerPolicy = "no-referrer";
+          frameEl.tabIndex = -1;
+          const clipEl = document.createElement("div");
+          clipEl.className = "oviz-three-sky-aperture-frame-clip";
+          clipEl.appendChild(frameEl);
+          if (insertBeforeEl && insertBeforeEl.parentElement === skyApertureEl) {
+            skyApertureEl.insertBefore(clipEl, insertBeforeEl);
+          } else {
+            skyApertureEl.appendChild(clipEl);
+          }
+        } else {
+          skyApertureFrameClipForFrame(frameEl);
+        }
+        frameEl.dataset.presetIndex = String(safeIndex);
+        frameEl.dataset.presetKey = preset.key;
+        skyAperturePresetFrameEls[safeIndex] = frameEl;
+        const previousSignature = skyAperturePresetFrameSignatures[safeIndex] || "";
+        const nextSignature = String(preset.survey);
+        if (nextSignature !== previousSignature) {
+          skyAperturePresetFrameReady[safeIndex] = false;
+          skyApertureFrameSentViews[safeIndex] = new Map();
+          skyApertureFrameAlignedViews[safeIndex] = null;
+          frameEl.dataset.ready = "false";
+        }
+        skyAperturePresetFrameSignatures[safeIndex] = setSkyApertureFrameSurvey(
+          frameEl,
+          preset.survey,
+          previousSignature
+        );
+        skyApertureFrameSignatureA = skyAperturePresetFrameSignatures[0] || "";
+        skyApertureFrameSignatureB = skyAperturePresetFrameSignatures[1] || "";
+        return frameEl;
+      }
+
+      function ensureSkyAperturePresetFrames(options = {}) {
+        if (options.createAll) {
+          skyAperturePresetOptions.forEach((_preset, index) => createSkyAperturePresetFrame(index));
+        }
+        skyAperturePresetFrameEls.forEach((frameEl, index) => {
+          if (!frameEl) {
+            return;
+          }
+          const hidden = index >= skyAperturePresetOptions.length;
+          const clipEl = skyApertureFrameClipForFrame(frameEl);
+          frameEl.hidden = hidden;
+          if (clipEl) {
+            clipEl.hidden = hidden;
+          }
+          if (index >= skyAperturePresetOptions.length) {
+            if (clipEl) {
+              clipEl.style.opacity = "0";
+            }
+            frameEl.style.opacity = "1";
+          }
+        });
+        skyApertureFrameSignatureA = skyAperturePresetFrameSignatures[0] || "";
+        skyApertureFrameSignatureB = skyAperturePresetFrameSignatures[1] || "";
+        return skyAperturePresetFrameEls.slice(0, skyAperturePresetOptions.length).filter(Boolean);
+      }
+
+      function ensureSkyApertureBlendPresetFrames(blend = skyApertureBlendForPosition()) {
+        if (!blend) {
+          return [];
+        }
+        createSkyAperturePresetFrame(blend.indexA);
+        createSkyAperturePresetFrame(blend.indexB);
+        return ensureSkyAperturePresetFrames();
+      }
+
+      function skyAperturePrewarmReady() {
+        return skyAperturePresetOptions.every((_preset, index) => (
+          Boolean(skyAperturePresetFrameEls[index])
+          && skyAperturePresetFrameSignatures[index]
+          && skyAperturePresetFrameReady[index]
+        ));
+      }
+
+      function skyApertureFrameIndexForWindow(sourceWindow) {
+        return skyAperturePresetFrameEls.findIndex((frameEl) => (
+          frameEl && frameEl.contentWindow && frameEl.contentWindow === sourceWindow
+        ));
+      }
+
+      function markSkyApertureFrameReady(sourceWindow, survey) {
+        const index = skyApertureFrameIndexForWindow(sourceWindow);
+        if (index < 0) {
+          return false;
+        }
+        const frameEl = skyAperturePresetFrameEls[index];
+        skyAperturePresetFrameReady[index] = true;
+        if (frameEl) {
+          frameEl.dataset.ready = "true";
+          if (survey) {
+            frameEl.dataset.readySurvey = String(survey);
+          }
+        }
+        skyAperturePrewarmComplete = skyAperturePrewarmReady();
+        if (skyApertureState.open) {
+          postSkyApertureViewToFrames(
+            (typeof performance !== "undefined" && performance.now) ? performance.now() : 0.0,
+            { allowClosed: true, force: true, frameIndexes: [index] }
+          );
+        }
+        return true;
+      }
+
+      function recordSkyApertureFrameSentView(frameIndex, seq, view) {
+        const safeIndex = Math.round(Number(frameIndex));
+        const safeSeq = Math.round(Number(seq) || 0);
+        const direction = skyDomeBackgroundCameraDirection();
+        if (!direction || !view || !Number.isFinite(safeIndex) || safeIndex < 0 || safeSeq <= 0) {
+          return;
+        }
+        if (!skyApertureFrameSentViews[safeIndex]) {
+          skyApertureFrameSentViews[safeIndex] = new Map();
+        }
+        const sentView = {
+          direction,
+          fovDeg: Number(view.fovDeg) || 0.0,
+          cameraFovDeg: Number(view.cameraFovDeg) || Number(view.fovDeg) || 0.0,
+        };
+        skyApertureFrameSentViews[safeIndex].set(safeSeq, sentView);
+        if (!skyApertureFrameAlignedViews[safeIndex]) {
+          skyApertureFrameAlignedViews[safeIndex] = sentView;
+        }
+        const sentViews = skyApertureFrameSentViews[safeIndex];
+        if (sentViews.size > 6) {
+          const keys = Array.from(sentViews.keys()).sort((a, b) => a - b);
+          keys.slice(0, Math.max(0, keys.length - 6)).forEach((key) => sentViews.delete(key));
+        }
+      }
+
+      function markSkyApertureFrameViewApplied(sourceWindow, seq) {
+        const frameIndex = skyApertureFrameIndexForWindow(sourceWindow);
+        if (frameIndex < 0) {
+          return false;
+        }
+        const safeSeq = Math.round(Number(seq) || 0);
+        const sentViews = skyApertureFrameSentViews[frameIndex];
+        const appliedView = sentViews && sentViews.get(safeSeq);
+        if (appliedView) {
+          skyApertureFrameAlignedViews[frameIndex] = appliedView;
+          Array.from(sentViews.keys()).forEach((key) => {
+            if (key <= safeSeq) {
+              sentViews.delete(key);
+            }
+          });
+        }
+        updateSkyApertureFramePredictiveTransforms(skyDomeBackgroundViewForCamera());
+        return true;
+      }
+
+      function updateSkyApertureFramePredictiveTransforms(currentView = null, options = {}) {
+        if (!Array.isArray(skyAperturePresetFrameEls)) {
+          return;
+        }
+        const clear = Boolean(options && options.clear);
+        skyAperturePresetFrameEls.forEach((frameEl, index) => {
+          if (!frameEl) {
+            return;
+          }
+          if (clear) {
+            frameEl.style.transform = "";
+            return;
+          }
+          const alignedView = skyApertureFrameAlignedViews[index] || skyDomeBackgroundAlignedView;
+          frameEl.style.transform = alignedView
+            ? skyBackgroundPredictiveTransformForAlignedView(alignedView, currentView)
+            : "";
+        });
+      }
+
+      function scheduleSkyAperturePrewarmStep(delayMs = skyAperturePrewarmStepDelayMs) {
+        if (skyAperturePrewarmTimer) {
+          return;
+        }
+        skyAperturePrewarmTimer = window.setTimeout(() => {
+          skyAperturePrewarmTimer = 0;
+          runSkyAperturePrewarmStep();
+        }, Math.max(Number(delayMs) || 0.0, 0.0));
+      }
+
+      function runSkyAperturePrewarmStep() {
+        if (!skyApertureCanPrewarm() || !skyApertureState.open) {
+          skyAperturePrewarmTimer = 0;
+          skyAperturePrewarmStarted = false;
+          skyAperturePrewarmComplete = false;
+          skyAperturePrewarmIndex = 0;
+          return;
+        }
+        const order = skyAperturePrewarmOrder();
+        const frameIndex = order[skyAperturePrewarmIndex];
+        if (frameIndex !== undefined) {
+          createSkyAperturePresetFrame(frameIndex);
+          postSkyApertureViewToFrames(
+            (typeof performance !== "undefined" && performance.now) ? performance.now() : 0.0,
+            { allowClosed: true, force: true, frameIndexes: [frameIndex] }
+          );
+        }
+        skyAperturePrewarmIndex += 1;
+        skyAperturePrewarmComplete = skyAperturePrewarmIndex >= order.length && skyAperturePrewarmReady();
+        if (!skyAperturePrewarmComplete) {
+          scheduleSkyAperturePrewarmStep();
+        }
+      }
+
+      function maybeStartSkyAperturePrewarm(timestampMs = 0.0) {
+        if (!skyApertureCanPrewarm()) {
+          skyApertureBaseVisibleSinceMs = 0.0;
+          skyAperturePrewarmSettledSinceMs = 0.0;
+          return;
+        }
+        if (!skyApertureState.open) {
+          skyAperturePrewarmSettledSinceMs = 0.0;
+          return;
+        }
+        const now = Number(timestampMs) || (
+          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()
+        );
+        if (!skyApertureBaseVisibleSinceMs) {
+          skyApertureBaseVisibleSinceMs = now;
+        }
+        if (!skyAperturePrewarmInteractionSettled()) {
+          skyAperturePrewarmSettledSinceMs = 0.0;
+          return;
+        }
+        if (!skyAperturePrewarmSettledSinceMs) {
+          skyAperturePrewarmSettledSinceMs = now;
+        }
+        if (
+          skyAperturePrewarmStarted
+          || skyAperturePrewarmComplete
+          || (now - skyApertureBaseVisibleSinceMs) < skyAperturePrewarmInitialDelayMs
+          || (now - skyAperturePrewarmSettledSinceMs) < skyAperturePrewarmSettledDelayMs
+        ) {
+          return;
+        }
+        skyAperturePrewarmStarted = true;
+        skyAperturePrewarmIndex = 0;
+        scheduleSkyAperturePrewarmStep(0.0);
+      }
+
+      function formatSkyApertureSvgPoints(points) {
+        return points
+          .map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`)
+          .join(" ");
+      }
+
+      function formatSkyApertureClipPolygon(points) {
+        return `polygon(${points
+          .map((point) => `${point.x.toFixed(2)}px ${point.y.toFixed(2)}px`)
+          .join(", ")})`;
+      }
+
+      function averageSkyAperturePoints(a, b) {
+        return {
+          x: ((Number(a && a.x) || 0.0) + (Number(b && b.x) || 0.0)) * 0.5,
+          y: ((Number(a && a.y) || 0.0) + (Number(b && b.y) || 0.0)) * 0.5,
+        };
+      }
+
+      function setSkyApertureLine(lineEl, start, end) {
+        if (!lineEl || !start || !end) {
+          return;
+        }
+        lineEl.setAttribute("x1", start.x.toFixed(2));
+        lineEl.setAttribute("y1", start.y.toFixed(2));
+        lineEl.setAttribute("x2", end.x.toFixed(2));
+        lineEl.setAttribute("y2", end.y.toFixed(2));
+      }
+
+      function skyApertureFallbackPoints(rect, sizeDeg = skyApertureState.sizeDeg) {
+        const centerX = skyApertureState.xNorm * rect.width;
+        const centerY = skyApertureState.yNorm * rect.height;
+        const view = skyDomeBackgroundViewForCamera();
+        const fovDeg = view && Number.isFinite(Number(view.fovDeg)) ? Number(view.fovDeg) : 60.0;
+        const pxPerDeg = rect.width / Math.max(fovDeg, 0.1);
+        const halfPx = Math.min(
+          Math.max((Number(sizeDeg) || skyApertureDefaultSizeDeg) * pxPerDeg * 0.5, 18.0),
+          Math.max(rect.width, rect.height)
+        );
+        return [
+          { x: centerX - halfPx, y: centerY - halfPx },
+          { x: centerX + halfPx, y: centerY - halfPx },
+          { x: centerX + halfPx, y: centerY + halfPx },
+          { x: centerX - halfPx, y: centerY + halfPx },
+        ];
+      }
+
+      function skyApertureVectorFromObject(value) {
+        if (!value) {
+          return null;
+        }
+        const vector = value instanceof THREE.Vector3
+          ? value.clone()
+          : new THREE.Vector3(
+            Number(value.x),
+            Number(value.y),
+            Number(value.z)
+          );
+        if (
+          !Number.isFinite(vector.x)
+          || !Number.isFinite(vector.y)
+          || !Number.isFinite(vector.z)
+          || vector.lengthSq() <= 1e-12
+        ) {
+          return null;
+        }
+        return vector.normalize();
+      }
+
+      function skyApertureDirectionFromScreenNorm(xNorm, yNorm) {
+        if (!camera) {
+          return null;
+        }
+        camera.updateMatrixWorld(true);
+        camera.updateProjectionMatrix();
+        const center = clampSkyApertureCenter(xNorm, yNorm);
+        const ndcX = center.xNorm * 2.0 - 1.0;
+        const ndcY = 1.0 - center.yNorm * 2.0;
+        const direction = new THREE.Vector3(ndcX, ndcY, 0.5)
+          .unproject(camera)
+          .sub(camera.position);
+        if (
+          !Number.isFinite(direction.x)
+          || !Number.isFinite(direction.y)
+          || !Number.isFinite(direction.z)
+          || direction.lengthSq() <= 1e-12
+        ) {
+          return null;
+        }
+        return direction.normalize();
+      }
+
+      function skyApertureProjectDirectionToPoint(direction, rect) {
+        if (!camera) {
+          return null;
+        }
+        const vector = skyApertureVectorFromObject(direction);
+        if (!vector) {
+          return null;
+        }
+        const distance = Math.max(Number(sceneSpec.max_span) || 1.0, 1000.0) * 4.0;
+        camera.updateMatrixWorld(true);
+        camera.updateProjectionMatrix();
+        const projected = vector
+          .multiplyScalar(distance)
+          .add(camera.position)
+          .project(camera);
+        if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
+          return null;
+        }
+        return {
+          x: (projected.x * 0.5 + 0.5) * rect.width,
+          y: (-projected.y * 0.5 + 0.5) * rect.height,
+        };
+      }
+
+      function skyApertureDirectionFromGalacticDeg(lDeg, bDeg) {
+        const galacticVector = unitVectorFromLonLatDeg(lDeg, bDeg);
+        if (!galacticVector) {
+          return null;
+        }
+        const axisMatrix = skyDomeAxisTransformMatrix().clone().transpose();
+        return skyApertureVectorFromObject(new THREE.Vector3(
+          Number(galacticVector.x) || 0.0,
+          Number(galacticVector.y) || 0.0,
+          Number(galacticVector.z) || 0.0
+        ).applyMatrix3(axisMatrix));
+      }
+
+      function skyApertureSkyCenterForDirection(direction) {
+        const vector = skyApertureVectorFromObject(direction);
+        return vector
+          ? volumeSkyGalacticLonLatDegFromCartesian(vector.x, vector.y, vector.z)
+          : null;
+      }
+
+      function skyApertureDefaultAxesForCenter(centerDirection) {
+        if (!camera) {
+          return {
+            axisX: new THREE.Vector3(1, 0, 0),
+            axisY: new THREE.Vector3(0, 1, 0),
+          };
+        }
+        const center = skyApertureVectorFromObject(centerDirection) || new THREE.Vector3(0, 0, -1);
+        const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+        const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+        let axisX = right.clone().sub(center.clone().multiplyScalar(right.dot(center)));
+        if (axisX.lengthSq() <= 1e-10) {
+          axisX = new THREE.Vector3(0, 0, 1).cross(center);
+          if (axisX.lengthSq() <= 1e-10) {
+            axisX = new THREE.Vector3(0, 1, 0).cross(center);
+          }
+        }
+        axisX.normalize();
+        let axisY = up.clone().sub(center.clone().multiplyScalar(up.dot(center)));
+        axisY.sub(axisX.clone().multiplyScalar(axisY.dot(axisX)));
+        if (axisY.lengthSq() <= 1e-10) {
+          axisY = center.clone().cross(axisX);
+        }
+        axisY.normalize();
+        if (axisY.dot(up) < 0.0) {
+          axisY.multiplyScalar(-1.0);
+        }
+        return { axisX, axisY };
+      }
+
+      function skyApertureAxesForCenter(centerDirection) {
+        const center = skyApertureVectorFromObject(centerDirection);
+        if (!center) {
+          return skyApertureDefaultAxesForCenter(centerDirection);
+        }
+        let axisX = skyApertureVectorFromObject(skyApertureState.axisXDirection);
+        if (axisX) {
+          axisX.sub(center.clone().multiplyScalar(axisX.dot(center)));
+        }
+        if (!axisX || axisX.lengthSq() <= 1e-10) {
+          axisX = skyApertureDefaultAxesForCenter(center).axisX;
+        } else {
+          axisX.normalize();
+        }
+        let axisY = skyApertureVectorFromObject(skyApertureState.axisYDirection);
+        if (axisY) {
+          axisY.sub(center.clone().multiplyScalar(axisY.dot(center)));
+          axisY.sub(axisX.clone().multiplyScalar(axisY.dot(axisX)));
+        }
+        if (!axisY || axisY.lengthSq() <= 1e-10) {
+          axisY = center.clone().cross(axisX).normalize();
+        } else {
+          axisY.normalize();
+        }
+        skyApertureState.axisXDirection = axisX.clone();
+        skyApertureState.axisYDirection = axisY.clone();
+        return { axisX, axisY };
+      }
+
+      function skyApertureSetCenterDirection(direction, options = {}) {
+        const center = skyApertureVectorFromObject(direction);
+        if (!center) {
+          return null;
+        }
+        skyApertureState.centerDirection = center.clone();
+        if (options.resetAxes || !skyApertureState.axisXDirection || !skyApertureState.axisYDirection) {
+          const axes = skyApertureDefaultAxesForCenter(center);
+          skyApertureState.axisXDirection = axes.axisX.clone();
+          skyApertureState.axisYDirection = axes.axisY.clone();
+        } else {
+          skyApertureAxesForCenter(center);
+        }
+        return skyApertureState.centerDirection;
+      }
+
+      function skyApertureEnsureCenterDirection(rect = skyApertureCanvasRect()) {
+        const existing = skyApertureVectorFromObject(skyApertureState.centerDirection);
+        if (existing) {
+          skyApertureState.centerDirection = existing.clone();
+          return existing;
+        }
+        const center = clampSkyApertureCenter(skyApertureState.xNorm, skyApertureState.yNorm);
+        const direction = skyApertureDirectionFromScreenNorm(center.xNorm, center.yNorm);
+        if (direction) {
+          skyApertureSetCenterDirection(direction, { resetAxes: true });
+          skyApertureState.xNorm = center.xNorm;
+          skyApertureState.yNorm = center.yNorm;
+        }
+        return direction;
+      }
+
+      function skyApertureProjectedSquarePoints(rect, sizeDeg = skyApertureState.sizeDeg) {
+        if (!camera) {
+          return skyApertureFallbackPoints(rect, sizeDeg);
+        }
+        const centerDirection = skyApertureEnsureCenterDirection(rect);
+        if (!centerDirection) {
+          return skyApertureFallbackPoints(rect, sizeDeg);
+        }
+        const { axisX, axisY } = skyApertureAxesForCenter(centerDirection);
+        const halfRad = THREE.MathUtils.degToRad(clampSkyApertureSizeDeg(sizeDeg) * 0.5);
+        const tangentHalf = Math.tan(Math.min(Math.max(halfRad, 0.0005), Math.PI * 0.495));
+        const cornerSpecs = [
+          [-1.0, 1.0],
+          [1.0, 1.0],
+          [1.0, -1.0],
+          [-1.0, -1.0],
+        ];
+        const points = cornerSpecs.map(([sx, sy]) => {
+          const direction = centerDirection.clone()
+            .add(axisX.clone().multiplyScalar(sx * tangentHalf))
+            .add(axisY.clone().multiplyScalar(sy * tangentHalf))
+            .normalize();
+          return skyApertureProjectDirectionToPoint(direction, rect);
+        });
+        const centerPoint = skyApertureProjectDirectionToPoint(centerDirection, rect);
+        if (centerPoint) {
+          skyApertureState.xNorm = centerPoint.x / Math.max(rect.width, 1.0);
+          skyApertureState.yNorm = centerPoint.y / Math.max(rect.height, 1.0);
+        }
+        if (points.some((point) => !point || !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
+          return skyApertureFallbackPoints(rect, sizeDeg);
+        }
+        return points;
+      }
+
+      function skyApertureBoundingBox(points) {
+        const xs = points.map((point) => point.x);
+        const ys = points.map((point) => point.y);
+        return {
+          minX: Math.min(...xs),
+          maxX: Math.max(...xs),
+          minY: Math.min(...ys),
+          maxY: Math.max(...ys),
+        };
+      }
+
+      function updateSkyApertureSvgGeometry(points, rect) {
+        if (skyApertureOutlineEl) {
+          skyApertureOutlineEl.setAttribute("viewBox", `0 0 ${rect.width.toFixed(2)} ${rect.height.toFixed(2)}`);
+        }
+        if (skyApertureQuadEl) {
+          skyApertureQuadEl.setAttribute("points", formatSkyApertureSvgPoints(points));
+        }
+        const leftMid = averageSkyAperturePoints(points[0], points[3]);
+        const rightMid = averageSkyAperturePoints(points[1], points[2]);
+        const topMid = averageSkyAperturePoints(points[0], points[1]);
+        const bottomMid = averageSkyAperturePoints(points[3], points[2]);
+        setSkyApertureLine(skyApertureReticleXEl, leftMid, rightMid);
+        setSkyApertureLine(skyApertureReticleYEl, topMid, bottomMid);
+      }
+
+      function skyApertureTickLabel(preset) {
+        const label = String((preset && preset.label) || (preset && preset.survey) || "").trim();
+        return label
+          .replace(/\s+(Optical|Color|Emission)\b/gi, "")
+          .replace(/\s+/g, " ")
+          .trim() || label;
+      }
+
+      function renderSkyApertureSpectrumTicks() {
+        if (!skyApertureSpectrumTicksEl) {
+          return;
+        }
+        const signature = skyAperturePresetOptions.map((preset) => preset.key || preset.survey || "").join("|");
+        if (signature === skyApertureSpectrumTickSignature) {
+          return;
+        }
+        skyApertureSpectrumTickSignature = signature;
+        skyApertureSpectrumTicksEl.innerHTML = "";
+        const extent = skyApertureSpectrumExtent();
+        skyAperturePresetOptions.forEach((preset, index) => {
+          const tickEl = document.createElement("span");
+          tickEl.className = "oviz-three-sky-aperture-spectrum-tick";
+          tickEl.style.left = extent > 0 ? `${((index / extent) * 100.0).toFixed(3)}%` : "0%";
+          tickEl.textContent = skyApertureTickLabel(preset);
+          tickEl.title = String((preset && preset.label) || (preset && preset.survey) || "");
+          skyApertureSpectrumTicksEl.appendChild(tickEl);
+        });
+      }
+
+      function updateSkyApertureSpectrumControls(blend) {
+        renderSkyApertureSpectrumTicks();
+        if (skyApertureSpectrumSliderEl) {
+          const extent = skyApertureSpectrumExtent();
+          skyApertureSpectrumSliderEl.min = "0";
+          skyApertureSpectrumSliderEl.max = String(Math.max(extent, 1));
+          skyApertureSpectrumSliderEl.step = "0.001";
+          skyApertureSpectrumSliderEl.value = String(clampSkyApertureSpectrumPosition(skyApertureState.spectrumPosition));
+        }
+        const label = skyApertureBlendLabel(blend);
+        if (skyApertureSpectrumNameEl) {
+          skyApertureSpectrumNameEl.textContent = label;
+          skyApertureSpectrumNameEl.title = label;
+        }
+        if (skyApertureLabelEl) {
+          skyApertureLabelEl.textContent = label;
+        }
+      }
+
+      function applySkyApertureClipPoints(points, rect, options = {}) {
+        const bbox = skyApertureBoundingBox(points);
+        const centerX = points.reduce((total, point) => total + point.x, 0.0) / Math.max(points.length, 1);
+        const centerY = points.reduce((total, point) => total + point.y, 0.0) / Math.max(points.length, 1);
+        const bottomLeft = points[3];
+        const bottomRight = points[2];
+        const topLeft = points[0];
+        const topRight = points[1];
+        const bottomMid = averageSkyAperturePoints(bottomLeft, bottomRight);
+        const topMid = averageSkyAperturePoints(topLeft, topRight);
+        const bottomDx = (Number(bottomRight && bottomRight.x) || 0.0) - (Number(bottomLeft && bottomLeft.x) || 0.0);
+        const bottomDy = (Number(bottomRight && bottomRight.y) || 0.0) - (Number(bottomLeft && bottomLeft.y) || 0.0);
+        const bottomWidth = Math.max(Math.sqrt((bottomDx * bottomDx) + (bottomDy * bottomDy)), 1.0);
+        const topWidth = Math.max(
+          Math.sqrt(
+            (((Number(topRight && topRight.x) || 0.0) - (Number(topLeft && topLeft.x) || 0.0)) ** 2)
+            + (((Number(topRight && topRight.y) || 0.0) - (Number(topLeft && topLeft.y) || 0.0)) ** 2)
+          ),
+          1.0
+        );
+        const leftHeight = Math.sqrt(
+          (((Number(topLeft && topLeft.x) || 0.0) - (Number(bottomLeft && bottomLeft.x) || 0.0)) ** 2)
+          + (((Number(topLeft && topLeft.y) || 0.0) - (Number(bottomLeft && bottomLeft.y) || 0.0)) ** 2)
+        );
+        const rightHeight = Math.sqrt(
+          (((Number(topRight && topRight.x) || 0.0) - (Number(bottomRight && bottomRight.x) || 0.0)) ** 2)
+          + (((Number(topRight && topRight.y) || 0.0) - (Number(bottomRight && bottomRight.y) || 0.0)) ** 2)
+        );
+        const verticalDepth = ((leftHeight + rightHeight) * 0.5) / Math.max(bottomWidth, 1.0);
+        const sliderDepth = Math.min(Math.max(0.68 + verticalDepth * 0.22 + Math.min(bottomWidth / topWidth, 1.2) * 0.08, 0.72), 1.0);
+        let normalX = bottomMid.x - centerX;
+        let normalY = bottomMid.y - centerY;
+        const normalLength = Math.sqrt((normalX * normalX) + (normalY * normalY)) || 1.0;
+        normalX /= normalLength;
+        normalY /= normalLength;
+        const sliderWidth = Math.min(Math.max(bottomWidth * 0.84, 220.0), Math.min(rect.width - 48.0, 720.0));
+        const sliderX = Math.min(Math.max(bottomMid.x + normalX * 38.0, 130.0), rect.width - 130.0);
+        const sliderY = Math.min(Math.max(bottomMid.y + normalY * 38.0, 44.0), rect.height - 44.0);
+        const sliderAngleDeg = Math.atan2(bottomDy, bottomDx) * 180.0 / Math.PI;
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-x", `${centerX.toFixed(2)}px`);
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-y", `${centerY.toFixed(2)}px`);
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-label-x", `${Math.min(Math.max(centerX, 92.0), rect.width - 92.0).toFixed(2)}px`);
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-label-y", `${Math.min(Math.max(bbox.maxY + 10.0, 8.0), rect.height - 96.0).toFixed(2)}px`);
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-clip", formatSkyApertureClipPolygon(points));
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-slider-x", `${sliderX.toFixed(2)}px`);
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-slider-y", `${sliderY.toFixed(2)}px`);
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-slider-width", `${sliderWidth.toFixed(2)}px`);
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-slider-angle", `${sliderAngleDeg.toFixed(3)}deg`);
+        skyApertureEl.style.setProperty("--oviz-sky-aperture-slider-depth", sliderDepth.toFixed(3));
+        updateSkyApertureSvgGeometry(points, rect);
+        if (options.persistGeometry !== false) {
+          skyApertureGeometryState = {
+            points: points.map((point) => ({ x: point.x, y: point.y })),
+            centerX,
+            centerY,
+            bottomMid,
+            topMid,
+            bbox,
+          };
+        }
+      }
+
+      function renderSkyApertureProjectedSquare(options = {}) {
+        if (!skyApertureEl) {
+          return;
+        }
+        const rect = skyApertureCanvasRect();
+        if (Array.isArray(options.points) && options.points.length >= 4) {
+          applySkyApertureClipPoints(options.points.slice(0, 4), rect, { persistGeometry: options.persistGeometry });
+          return;
+        }
+        const sizeDeg = clampSkyApertureSizeDeg(
+          options.sizeDeg === undefined ? skyApertureState.sizeDeg : options.sizeDeg
+        );
+        const center = clampSkyApertureCenter(skyApertureState.xNorm, skyApertureState.yNorm);
+        if (options.persist !== false) {
+          skyApertureState.sizeDeg = sizeDeg;
+          skyApertureState.xNorm = center.xNorm;
+          skyApertureState.yNorm = center.yNorm;
+          skyApertureState.spectrumPosition = clampSkyApertureSpectrumPosition(skyApertureState.spectrumPosition);
+        }
+        const points = skyApertureProjectedSquarePoints(rect, sizeDeg);
+        applySkyApertureClipPoints(points, rect);
+      }
+
+      function renderSkyApertureGeometry(options = {}) {
+        renderSkyApertureProjectedSquare(options);
+      }
+
+      function updateSkyApertureBlendFrames() {
+        const blend = skyApertureBlendForPosition();
+        if (!blend || !blend.presetA || !blend.presetB) {
+          return;
+        }
+        ensureSkyApertureBlendPresetFrames(blend);
+        skyAperturePresetFrameEls.forEach((frameEl, index) => {
+          if (!frameEl) {
+            return;
+          }
+          let opacity = 0.0;
+          if (index === blend.indexA) {
+            opacity += 1.0 - blend.fraction;
+          }
+          if (index === blend.indexB) {
+            opacity += blend.fraction;
+          }
+          const clipEl = skyApertureFrameClipForFrame(frameEl);
+          if (clipEl) {
+            clipEl.style.opacity = skyAperturePresetFrameReady[index]
+              ? String(Math.min(Math.max(opacity, 0.0), 1.0))
+              : "0";
+          }
+          frameEl.style.opacity = "1";
+        });
+        updateSkyApertureSpectrumControls(blend);
+      }
+
+      function postSkyApertureViewToFrames(timestampMs = 0.0, options = {}) {
+        const prewarmSync = Boolean(options && options.frameIndexes && options.force);
+        const controlsReady = skyApertureControlsAvailable();
+        if ((!skyApertureState.open && !options.allowClosed) || (!controlsReady && !(prewarmSync && skyApertureCanPrewarm()))) {
+          return;
+        }
+        if (skyAperturePointerState) {
+          return;
+        }
+        const view = skyDomeBackgroundViewForCamera();
+        if (!view) {
+          return;
+        }
+        const requestedFrameIndexes = Array.isArray(options.frameIndexes)
+          ? options.frameIndexes.map((index) => Math.round(Number(index))).filter((index) => (
+            Number.isFinite(index) && index >= 0 && index < skyAperturePresetOptions.length
+          ))
+          : (() => {
+            const blend = skyApertureBlendForPosition();
+            if (!blend) {
+              return [];
+            }
+            return [blend.indexA, blend.indexB].filter((index, itemIndex, indexes) => indexes.indexOf(index) === itemIndex);
+          })();
+        const framePairs = requestedFrameIndexes
+          .map((index) => {
+            const frameEl = skyAperturePresetFrameEls[index] || createSkyAperturePresetFrame(index);
+            return frameEl ? { index, frameEl } : null;
+          })
+          .filter(Boolean);
+        const signature = [
+          view.ra.toFixed(3),
+          view.dec.toFixed(3),
+          view.fovDeg.toFixed(2),
+          requestedFrameIndexes.join(","),
+        ].join("|");
+        const now = Number(timestampMs) || 0.0;
+        if (!options.force && signature === skyApertureLastViewSignature && (now - skyApertureLastViewSentAt) < 120.0) {
+          return;
+        }
+        skyApertureLastViewSignature = signature;
+        skyApertureLastViewSentAt = now;
+        skyApertureViewSequence += 1;
+        const viewSeq = skyApertureViewSequence;
+        framePairs.forEach(({ index, frameEl }) => {
+          if (!frameEl || !frameEl.contentWindow) {
+            return;
+          }
+          recordSkyApertureFrameSentView(index, viewSeq, view);
+          try {
+            frameEl.contentWindow.postMessage({
+              type: "oviz-sky-background-view",
+              seq: viewSeq,
+              ra: view.ra,
+              dec: view.dec,
+              l: view.l,
+              b: view.b,
+              fovDeg: view.fovDeg,
+              cameraFovDeg: view.cameraFovDeg,
+            }, "*");
+          } catch (_err) {
+          }
+        });
+      }
+
+      function syncSkyApertureToggle() {
+        if (!skyApertureToggleEl) {
+          return;
+        }
+        const available = skyApertureControlsAvailable();
+        const canPrewarm = skyApertureCanPrewarm();
+        const pressed = skyApertureState.open && available;
+        const prewarming = skyApertureState.open && canPrewarm && !skyAperturePrewarmComplete;
+        const title = available
+          ? (skyApertureState.open ? "Close spectrum aperture" : "Open spectrum aperture")
+          : (
+            canPrewarm
+              ? "Spectrum aperture is warming after the sky background loads"
+              : "Spectrum aperture is available in Sky View with live Aladin backgrounds"
+          );
+        const signature = [
+          available ? "1" : "0",
+          pressed ? "1" : "0",
+          prewarming ? "1" : "0",
+          title,
+        ].join("|");
+        if (signature !== skyApertureToggleStateSignature) {
+          skyApertureToggleStateSignature = signature;
+          skyApertureToggleEl.hidden = !available;
+          skyApertureToggleEl.disabled = !available;
+          skyApertureToggleEl.setAttribute("aria-pressed", pressed ? "true" : "false");
+          skyApertureToggleEl.dataset.prewarming = prewarming ? "true" : "false";
+          skyApertureToggleEl.title = title;
+        }
+        if (!available && skyApertureState.open) {
+          setSkyApertureOpen(false);
+        }
+      }
+
+      function setSkyApertureOpen(open) {
+        const nextOpen = Boolean(open) && skyApertureControlsAvailable();
+        skyApertureState.open = nextOpen;
+        if (!nextOpen && skyAperturePrewarmTimer) {
+          window.clearTimeout(skyAperturePrewarmTimer);
+          skyAperturePrewarmTimer = 0;
+          skyAperturePrewarmStarted = false;
+          skyAperturePrewarmSettledSinceMs = 0.0;
+        }
+        if (skyApertureEl) {
+          skyApertureEl.dataset.open = nextOpen ? "true" : "false";
+          skyApertureEl.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+        }
+        if (skyApertureToggleEl) {
+          skyApertureToggleEl.setAttribute("aria-pressed", nextOpen ? "true" : "false");
+        }
+        if (nextOpen) {
+          skyAperturePrewarmStarted = false;
+          skyAperturePrewarmIndex = 0;
+          skyAperturePrewarmSettledSinceMs = 0.0;
+          renderSkyApertureGeometry();
+          updateSkyApertureBlendFrames();
+          postSkyApertureViewToFrames(
+            (typeof performance !== "undefined" && performance.now) ? performance.now() : 0.0,
+            { force: true }
+          );
+        }
+      }
+
+      function toggleSkyAperture() {
+        setSkyApertureOpen(!skyApertureState.open);
+      }
+
+      function updateSkyApertureUi(timestampMs = 0.0) {
+        syncSkyApertureToggle();
+        maybeStartSkyAperturePrewarm(timestampMs);
+        if (!skyApertureState.open || !skyApertureControlsAvailable()) {
+          return;
+        }
+        renderSkyApertureGeometry();
+        updateSkyApertureBlendFrames();
+        postSkyApertureViewToFrames(timestampMs);
+      }
+
+      function skyAperturePointerPoint(event) {
+        const rect = skyApertureCanvasRect();
+        return {
+          x: Number(event.clientX) - rect.left,
+          y: Number(event.clientY) - rect.top,
+          width: rect.width,
+          height: rect.height,
+        };
+      }
+
+      function skyAperturePointInPolygon(point, polygon) {
+        if (!point || !Array.isArray(polygon) || polygon.length < 3) {
+          return false;
+        }
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+          const pi = polygon[i];
+          const pj = polygon[j];
+          const intersects = ((pi.y > point.y) !== (pj.y > point.y))
+            && (point.x < ((pj.x - pi.x) * (point.y - pi.y)) / ((pj.y - pi.y) || 1e-9) + pi.x);
+          if (intersects) {
+            inside = !inside;
+          }
+        }
+        return inside;
+      }
+
+      function skyApertureDistanceToSegment(point, start, end) {
+        const vx = (Number(end && end.x) || 0.0) - (Number(start && start.x) || 0.0);
+        const vy = (Number(end && end.y) || 0.0) - (Number(start && start.y) || 0.0);
+        const wx = (Number(point && point.x) || 0.0) - (Number(start && start.x) || 0.0);
+        const wy = (Number(point && point.y) || 0.0) - (Number(start && start.y) || 0.0);
+        const lengthSq = vx * vx + vy * vy;
+        const t = lengthSq <= 1e-9 ? 0.0 : Math.min(Math.max((wx * vx + wy * vy) / lengthSq, 0.0), 1.0);
+        const px = (Number(start && start.x) || 0.0) + vx * t;
+        const py = (Number(start && start.y) || 0.0) + vy * t;
+        return Math.sqrt((point.x - px) ** 2 + (point.y - py) ** 2);
+      }
+
+      function skyApertureEdgeDistance(point, polygon) {
+        if (!Array.isArray(polygon) || polygon.length < 2) {
+          return Infinity;
+        }
+        let distance = Infinity;
+        for (let index = 0; index < polygon.length; index += 1) {
+          const nextIndex = (index + 1) % polygon.length;
+          distance = Math.min(distance, skyApertureDistanceToSegment(point, polygon[index], polygon[nextIndex]));
+        }
+        return distance;
+      }
+
+      function skyAperturePointerModeForPoint(point) {
+        const geometry = skyApertureGeometryState;
+        const polygon = geometry && Array.isArray(geometry.points) ? geometry.points : [];
+        if (!polygon.length || !skyAperturePointInPolygon(point, polygon)) {
+          return null;
+        }
+        return skyApertureEdgeDistance(point, polygon) <= 24.0 ? "resize" : "move";
+      }
+
+      function startSkyAperturePointer(event, mode) {
+        if (!skyApertureControlsAvailable()) {
+          return false;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        renderSkyApertureGeometry();
+        const point = skyAperturePointerPoint(event);
+        const pointerMode = mode || skyAperturePointerModeForPoint(point);
+        if (!pointerMode) {
+          return false;
+        }
+        const centerX = skyApertureGeometryState
+          ? skyApertureGeometryState.centerX
+          : skyApertureState.xNorm * point.width;
+        const centerY = skyApertureGeometryState
+          ? skyApertureGeometryState.centerY
+          : skyApertureState.yNorm * point.height;
+        const startDistance = Math.max(Math.sqrt((point.x - centerX) ** 2 + (point.y - centerY) ** 2), 1.0);
+        skyAperturePointerState = {
+          mode: pointerMode,
+          pointerId: event.pointerId,
+          startX: point.x,
+          startY: point.y,
+          centerOffsetX: point.x - centerX,
+          centerOffsetY: point.y - centerY,
+          startSizeDeg: skyApertureState.sizeDeg,
+          startDistance,
+        };
+        const target = event.currentTarget;
+        if (target && typeof target.setPointerCapture === "function") {
+          try {
+            target.setPointerCapture(event.pointerId);
+          } catch (_err) {
+          }
+        }
+        return true;
+      }
+
+      function moveSkyAperturePointer(event) {
+        if (!skyAperturePointerState) {
+          return false;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const point = skyAperturePointerPoint(event);
+        const rect = skyApertureCanvasRect();
+        if (skyAperturePointerState.mode === "resize") {
+          const centerX = skyApertureGeometryState
+            ? skyApertureGeometryState.centerX
+            : skyApertureState.xNorm * rect.width;
+          const centerY = skyApertureGeometryState
+            ? skyApertureGeometryState.centerY
+            : skyApertureState.yNorm * rect.height;
+          const distance = Math.max(Math.sqrt((point.x - centerX) ** 2 + (point.y - centerY) ** 2), 1.0);
+          const ratio = distance / Math.max(skyAperturePointerState.startDistance, 1.0);
+          skyApertureState.sizeDeg = clampSkyApertureSizeDeg(skyAperturePointerState.startSizeDeg * ratio);
+          renderSkyApertureGeometry();
+        } else {
+          const center = clampSkyApertureCenter(
+            (point.x - skyAperturePointerState.centerOffsetX) / rect.width,
+            (point.y - skyAperturePointerState.centerOffsetY) / rect.height
+          );
+          const direction = skyApertureDirectionFromScreenNorm(center.xNorm, center.yNorm);
+          if (direction) {
+            skyApertureSetCenterDirection(direction, { resetAxes: false });
+          }
+          skyApertureState.xNorm = center.xNorm;
+          skyApertureState.yNorm = center.yNorm;
+          renderSkyApertureGeometry();
+        }
+        return true;
+      }
+
+      function finishSkyAperturePointer(event) {
+        if (!skyAperturePointerState) {
+          return false;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        skyAperturePointerState = null;
+        return true;
+      }
+
+      function resizeSkyApertureBy(deltaDeg) {
+        skyApertureState.sizeDeg = clampSkyApertureSizeDeg(skyApertureState.sizeDeg + Number(deltaDeg || 0.0));
+        const center = clampSkyApertureCenter(skyApertureState.xNorm, skyApertureState.yNorm);
+        skyApertureState.xNorm = center.xNorm;
+        skyApertureState.yNorm = center.yNorm;
+        renderSkyApertureGeometry();
+      }
+
+      function skyApertureLayerForPreset(preset, opacity = 1.0) {
+        const layer = skyLayerFromSurvey(preset && preset.survey ? preset.survey : defaultSkyLayerSurvey(), {
+          key: preset && preset.key,
+          label: preset && preset.label,
+          color: preset && preset.color,
+          opacity,
+          visible: opacity > 0.0,
+        });
+        layer.opacity = clampSkyLayerOpacity(opacity, 1.0);
+        layer.visible = layer.opacity > 0.0;
+        return layer;
+      }
+
+      function applySkyAperturePromotionBlend() {
+        const blend = skyApertureBlendForPosition();
+        if (!blend || !blend.presetA || !blend.presetB) {
+          return;
+        }
+        if (blend.fraction < 0.08) {
+          skyLayerState = [skyApertureLayerForPreset(blend.presetA, 1.0)];
+          activeSkyLayerKey = skyLayerState[0].key;
+        } else if (blend.fraction > 0.92) {
+          skyLayerState = [skyApertureLayerForPreset(blend.presetB, 1.0)];
+          activeSkyLayerKey = skyLayerState[0].key;
+        } else {
+          const baseLayer = skyApertureLayerForPreset(blend.presetA, 1.0);
+          const overlayLayer = skyApertureLayerForPreset(blend.presetB, blend.fraction);
+          skyLayerState = [overlayLayer, baseLayer];
+          activeSkyLayerKey = overlayLayer.key;
+        }
+        skyLayerStateInitialized = true;
+        applySkyLayerState({ forceTiles: true });
+      }
+
+      function skyAperturePromotionTargetPoints(rect) {
+        const pad = 48.0;
+        return [
+          { x: -pad, y: -pad },
+          { x: rect.width + pad, y: -pad },
+          { x: rect.width + pad, y: rect.height + pad },
+          { x: -pad, y: rect.height + pad },
+        ];
+      }
+
+      function interpolateSkyAperturePoints(startPoints, endPoints, t) {
+        const amount = Math.min(Math.max(Number(t) || 0.0, 0.0), 1.0);
+        return startPoints.map((start, index) => {
+          const end = endPoints[index] || start;
+          return {
+            x: start.x + (end.x - start.x) * amount,
+            y: start.y + (end.y - start.y) * amount,
+          };
+        });
+      }
+
+      function promoteSkyApertureBackground() {
+        if (!skyApertureState.open || !skyApertureControlsAvailable() || skyAperturePromotionFrame) {
+          return;
+        }
+        const rect = skyApertureCanvasRect();
+        renderSkyApertureGeometry();
+        const startPoints = skyApertureGeometryState && Array.isArray(skyApertureGeometryState.points)
+          ? skyApertureGeometryState.points.map((point) => ({ x: point.x, y: point.y }))
+          : skyApertureFallbackPoints(rect, skyApertureState.sizeDeg);
+        const targetPoints = skyAperturePromotionTargetPoints(rect);
+        const startTime = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        if (skyApertureEl) {
+          skyApertureEl.dataset.promoting = "true";
+        }
+        const animatePromotion = (timestamp) => {
+          const now = Number(timestamp) || Date.now();
+          const t = Math.min(Math.max((now - startTime) / skyAperturePromotionDurationMs, 0.0), 1.0);
+          const eased = 1.0 - ((1.0 - t) ** 3);
+          renderSkyApertureGeometry({
+            points: interpolateSkyAperturePoints(startPoints, targetPoints, eased),
+            persistGeometry: false,
+          });
+          if (t < 1.0) {
+            skyAperturePromotionFrame = window.requestAnimationFrame(animatePromotion);
+            return;
+          }
+          skyAperturePromotionFrame = 0;
+          applySkyAperturePromotionBlend();
+          setSkyApertureOpen(false);
+          renderSkyApertureGeometry();
+          if (skyApertureEl) {
+            skyApertureEl.dataset.promoting = "false";
+          }
+        };
+        skyAperturePromotionFrame = window.requestAnimationFrame(animatePromotion);
+      }
+
+      function skyApertureSerializeVector(vector) {
+        const safeVector = skyApertureVectorFromObject(vector);
+        return safeVector ? {
+          x: Number(safeVector.x),
+          y: Number(safeVector.y),
+          z: Number(safeVector.z),
+        } : null;
+      }
+
+      function captureSkyApertureState() {
+        const blend = skyApertureBlendForPosition();
+        const centerDirection = skyApertureEnsureCenterDirection();
+        const skyCenter = skyApertureSkyCenterForDirection(centerDirection);
+        const extent = skyApertureSpectrumExtent();
+        return {
+          open: Boolean(skyApertureState.open),
+          center: {
+            x: Number(skyApertureState.xNorm),
+            y: Number(skyApertureState.yNorm),
+          },
+          sky_center: skyCenter ? {
+            l: Number(skyCenter.l),
+            b: Number(skyCenter.b),
+          } : null,
+          center_direction: skyApertureSerializeVector(centerDirection),
+          axis_x: skyApertureSerializeVector(skyApertureState.axisXDirection),
+          axis_y: skyApertureSerializeVector(skyApertureState.axisYDirection),
+          size_deg: Number(skyApertureState.sizeDeg),
+          spectrum_position: Number(skyApertureState.spectrumPosition),
+          angle_deg: extent > 0 ? Number((skyApertureState.spectrumPosition / extent) * 360.0) : 0.0,
+          blend: blend ? {
+            lower_survey: blend.presetA.survey,
+            upper_survey: blend.presetB.survey,
+            fraction: Number(blend.fraction),
+          } : null,
+        };
+      }
+
+      function restoreSkyApertureState(savedState) {
+        if (!savedState || typeof savedState !== "object") {
+          return;
+        }
+        const restoredAxisX = skyApertureVectorFromObject(savedState.axis_x);
+        const restoredAxisY = skyApertureVectorFromObject(savedState.axis_y);
+        if (restoredAxisX) {
+          skyApertureState.axisXDirection = restoredAxisX;
+        }
+        if (restoredAxisY) {
+          skyApertureState.axisYDirection = restoredAxisY;
+        }
+        const skyCenter = savedState.sky_center && typeof savedState.sky_center === "object"
+          ? savedState.sky_center
+          : null;
+        const restoredCenter = skyApertureVectorFromObject(savedState.center_direction)
+          || (skyCenter ? skyApertureDirectionFromGalacticDeg(skyCenter.l, skyCenter.b) : null);
+        if (restoredCenter) {
+          skyApertureSetCenterDirection(restoredCenter, { resetAxes: !(restoredAxisX && restoredAxisY) });
+        }
+        const center = savedState.center && typeof savedState.center === "object" ? savedState.center : {};
+        if (!restoredCenter && Number.isFinite(Number(center.x))) {
+          skyApertureState.xNorm = Number(center.x);
+        }
+        if (!restoredCenter && Number.isFinite(Number(center.y))) {
+          skyApertureState.yNorm = Number(center.y);
+        }
+        if (!restoredCenter && (Number.isFinite(Number(center.x)) || Number.isFinite(Number(center.y)))) {
+          skyApertureState.centerDirection = null;
+        }
+        if (Number.isFinite(Number(savedState.size_deg))) {
+          skyApertureState.sizeDeg = clampSkyApertureSizeDeg(savedState.size_deg);
+        } else if (Number.isFinite(Number(savedState.radius_px))) {
+          skyApertureState.sizeDeg = skyApertureLegacySizeDegFromRadiusPx(savedState.radius_px);
+        }
+        if (Number.isFinite(Number(savedState.spectrum_position))) {
+          skyApertureState.spectrumPosition = clampSkyApertureSpectrumPosition(savedState.spectrum_position);
+        } else if (Number.isFinite(Number(savedState.angle_deg))) {
+          skyApertureState.spectrumPosition = clampSkyApertureSpectrumPosition(
+            (normalizeSkyApertureAngle(savedState.angle_deg) / 360.0) * skyApertureSpectrumExtent()
+          );
+        }
+        const restoredBlend = savedState.blend && typeof savedState.blend === "object" ? savedState.blend : null;
+        if (restoredBlend && Number.isFinite(Number(restoredBlend.fraction)) && restoredBlend.lower_survey && restoredBlend.upper_survey) {
+          const lowerIndex = skyAperturePresetOptions.findIndex((preset) => preset.survey === restoredBlend.lower_survey);
+          const upperIndex = skyAperturePresetOptions.findIndex((preset) => preset.survey === restoredBlend.upper_survey);
+          if (lowerIndex >= 0 && upperIndex >= 0) {
+            skyApertureState.spectrumPosition = clampSkyApertureSpectrumPosition(
+              lowerIndex + Math.min(Math.max(Number(restoredBlend.fraction), 0.0), 1.0) * Math.max(upperIndex - lowerIndex, 0)
+            );
+          }
+        }
+        if (typeof savedState.open === "boolean") {
+          skyApertureState.open = savedState.open;
+        }
       }
 
       function skyDomeHipsSurveyName() {

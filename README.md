@@ -5,8 +5,7 @@
 It combines:
 - orbital integration (`galpy`)
 - a standalone Three.js viewer for interactive 3D exploration
-- animated 3D Plotly figures for legacy workflows
-- an optional Dash app with an on-sky Aladin Lite panel synced to cluster selection
+- on-sky Aladin Lite backgrounds and sky controls inside the Three.js viewer
 
 ## Installation
 
@@ -23,12 +22,10 @@ python -m pip install .
 Main dependencies:
 - `numpy`
 - `pandas`
-- `plotly`
-- `dash`
 - `astropy`
 - `galpy`
 
-The current primary renderer is the Three.js export path. Plotly support remains available for older notebook and figure workflows, but new interactive viewer work is centered on the Three.js stack.
+The supported renderer is the standalone Three.js export path.
 
 ## Core Data Model
 
@@ -55,7 +52,6 @@ import numpy as np
 import pandas as pd
 
 from oviz import Layer, LayerCollection, Scene3D, build_threejs_profile
-from oviz.app import run_dash_app_in_notebook
 
 # Example minimal cluster dataframe
 cluster_df = pd.DataFrame(
@@ -93,26 +89,17 @@ fig = viz.make_plot(
     show_galactic_guides=False,
     threejs_initial_state=build_threejs_profile("full"),
 )
-
-app = run_dash_app_in_notebook(
-    figure=fig,
-    mode="external",
-    port=8061,
-    enable_age_filter=False,
-)
+fig.write_html("oviz_scene.html")
 ```
 
-## Dash Sky Panel (Aladin Lite)
+## Sky View
 
-Enable the sky panel when launching Dash:
+Enable sky features directly on the Three.js viewer:
 
 ```python
-app = run_dash_app_in_notebook(
-    figure=fig,
-    mode="external",
-    port=8061,
-    title="oviz sky panel",
-    enable_age_filter=False,
+fig = viz.make_plot(
+    time=time,
+    show=False,
     enable_sky_panel=True,
     sky_radius_deg=7.0,
     sky_frame="galactic",
@@ -121,11 +108,10 @@ app = run_dash_app_in_notebook(
 )
 ```
 
-Sky panel behavior:
+Sky behavior:
 - click a cluster member in 3D at `t = 0` to set the footprint and sky target
 - cone footprint is shown only at `t = 0`
-- fullscreen, restore, and hide/show controls are built in
-- panel can be dragged in normal mode using the top drag strip
+- sky layers, Aladin backgrounds, and spectrum aperture controls are built into the viewer
 
 ## Optional Member File Format
 
@@ -150,10 +136,6 @@ From `oviz`:
 - `lite_profile`
 - `galactic_lite_profile`
 - `website_background_profile`
-- `create_dash_app`
-- `run_dash_app`
-- `run_dash_app_in_notebook`
-- `launch_from_animate3d`
 
 ## Testing
 
@@ -165,5 +147,4 @@ pytest -q tests
 
 ## Notes
 
-- `sky_frame="icrs"` is currently not supported in the Dash sky panel path.
-- The Dash sky panel uses Aladin Lite loaded from CDN, so network access is required at runtime.
+- Live Aladin sky backgrounds load remote Aladin/HiPS assets, so network access is required at runtime for those layers.

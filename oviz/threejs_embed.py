@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+from html import escape as html_escape
 import json
 import math
 from numbers import Integral, Real
@@ -10,6 +11,7 @@ from typing import Any
 
 DEFAULT_SCENE_SPEC_COMPRESSION_THRESHOLD_BYTES = 8 * 1024 * 1024
 SCENE_SPEC_COMPRESSED_CHUNK_SIZE = 64 * 1024
+SCENE_SPEC_COMPRESSED_SCRIPT_CHUNK_SIZE = 1024 * 1024
 
 
 def _normalize_scene_spec_compression_mode(compress_scene_spec: bool | str | None) -> bool | str:
@@ -95,15 +97,31 @@ def _scene_spec_payload(
 
     compressed_bytes = gzip.compress(scene_json_bytes, compresslevel=9, mtime=0)
     encoded_scene = base64.b64encode(compressed_bytes).decode("ascii")
-    encoded_chunks = [
-        encoded_scene[idx : idx + SCENE_SPEC_COMPRESSED_CHUNK_SIZE]
-        for idx in range(0, len(encoded_scene), SCENE_SPEC_COMPRESSED_CHUNK_SIZE)
-    ]
     payload_id = f"{root_id}-scene-spec-payload"
-    payload_html = (
-        f'<script type="application/octet-stream" id="{payload_id}">\n'
-        + "\n".join(encoded_chunks)
-        + "\n</script>"
+    encoded_script_chunks = [
+        encoded_scene[idx : idx + SCENE_SPEC_COMPRESSED_SCRIPT_CHUNK_SIZE]
+        for idx in range(0, len(encoded_scene), SCENE_SPEC_COMPRESSED_SCRIPT_CHUNK_SIZE)
+    ]
+    escaped_payload_id = html_escape(payload_id, quote=True)
+
+    def _payload_script_chunk_html(chunk_text: str, chunk_index: int) -> str:
+        encoded_lines = [
+            chunk_text[idx : idx + SCENE_SPEC_COMPRESSED_CHUNK_SIZE]
+            for idx in range(0, len(chunk_text), SCENE_SPEC_COMPRESSED_CHUNK_SIZE)
+        ]
+        attrs = [
+            'type="application/octet-stream"',
+            f'data-oviz-payload-id="{escaped_payload_id}"',
+            f'data-oviz-payload-index="{chunk_index}"',
+            f'data-oviz-payload-count="{len(encoded_script_chunks)}"',
+        ]
+        if chunk_index == 0:
+            attrs.append(f'id="{escaped_payload_id}"')
+        return f"<script {' '.join(attrs)}>\n" + "\n".join(encoded_lines) + "\n</script>"
+
+    payload_html = "\n".join(
+        _payload_script_chunk_html(chunk_text, chunk_index)
+        for chunk_index, chunk_text in enumerate(encoded_script_chunks)
     )
     metadata.update(
         {
@@ -111,6 +129,8 @@ def _scene_spec_payload(
             "compressed": True,
             "compressed_size_bytes": len(compressed_bytes),
             "embedded_base64_size_bytes": len(encoded_scene.encode("ascii")),
+            "embedded_payload_chunk_count": len(encoded_script_chunks),
+            "embedded_payload_chunk_size_bytes": SCENE_SPEC_COMPRESSED_SCRIPT_CHUNK_SIZE,
         }
     )
     return (

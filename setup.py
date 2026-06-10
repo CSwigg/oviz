@@ -19,8 +19,6 @@ setup(
         "galpy",
         "astropy",
         "pandas",
-        "plotly",
-        "dash"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

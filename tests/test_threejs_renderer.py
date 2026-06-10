@@ -10,7 +10,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 from astropy.io import fits
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
@@ -118,25 +117,37 @@ class ThreeJSRendererTests(unittest.TestCase):
         if payload_match:
             payload_id = json.loads(payload_match.group(1))
             payload_pattern = (
-                rf'<script type="application/octet-stream" id="{re.escape(payload_id)}">\n'
+                rf'<script\b(?=[^>]*\btype=["\']application/octet-stream["\'])(?=[^>]*\bid=["\']{re.escape(payload_id)}["\'])[^>]*>\n'
                 r"(.*?)\n</script>"
             )
             payload_script_match = re.search(payload_pattern, html, re.S)
             self.assertIsNotNone(payload_script_match)
-            encoded = re.sub(r"\s+", "", payload_script_match.group(1))
+            data_attr_pattern = (
+                rf'<script\b(?=[^>]*\btype=["\']application/octet-stream["\'])'
+                rf'(?=[^>]*\bdata-oviz-payload-id=["\']{re.escape(payload_id)}["\'])'
+                r'(?=[^>]*\bdata-oviz-payload-index=["\'](\d+)["\'])[^>]*>\n'
+                r"(.*?)\n</script>"
+            )
+            chunk_matches = re.findall(data_attr_pattern, html, re.S)
+            if chunk_matches:
+                encoded = "".join(
+                    chunk for _idx, chunk in sorted((int(idx), chunk) for idx, chunk in chunk_matches)
+                )
+            else:
+                encoded = payload_script_match.group(1)
+            encoded = re.sub(r"\s+", "", encoded)
         elif encoded_expr.endswith('.join("")'):
             encoded = "".join(json.loads(encoded_expr[: -len('.join("")')]))
         else:
             encoded = json.loads(encoded_expr)
         return json.loads(gzip.decompress(base64.b64decode(encoded)).decode("utf-8"))
 
-    def test_make_plot_keeps_plotly_renderer_default(self):
+    def test_make_plot_defaults_to_threejs_renderer(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(time=np.array([0.0, -1.0]), renderer="plotly", show=False)
+        fig = viz.make_plot(time=np.array([0.0, -1.0]), show=False)
 
-        self.assertIsInstance(fig, go.Figure)
-        step_labels = [step["label"] for step in viz.fig_dict["layout"]["sliders"][0]["steps"]]
-        self.assertEqual(step_labels, ["-1.0", "0.0"])
+        self.assertEqual(fig.__class__.__name__, "ThreeJSFigure")
+        self.assertEqual([frame["time"] for frame in viz.fig_dict["frames"]], [-1.0, 0.0])
 
     def test_make_plot_can_return_threejs_html_wrapper(self):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
@@ -474,21 +485,14 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("compression_method: \"gzip+base64\"", html)
         self.assertIn("<\\/script>`", html)
 
-    def test_threejs_renderer_rejects_actions_for_plotly(self):
+    def test_non_threejs_renderer_is_rejected(self):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
 
-        with self.assertRaisesRegex(ValueError, "actions are currently only supported"):
+        with self.assertRaisesRegex(ValueError, "renderer must be 'threejs'"):
             viz.make_plot(
                 time=np.array([0.0, -1.0]),
-                renderer="plotly",
+                renderer="legacy",
                 show=False,
-                actions=[
-                    {
-                        "key": "paper-1",
-                        "label": "Paper 1",
-                        "steps": [{"type": "legend_group", "group": "All"}],
-                    }
-                ],
             )
 
     def test_threejs_renderer_serializes_actions(self):
@@ -868,18 +872,19 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_text_trace_can_be_a_single_legend_item(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
-        text_trace = go.Scatter3d(
-            x=[10.0, -20.0],
-            y=[5.0, 15.0],
-            z=[2.0, 8.0],
-            mode="text",
-            text=["Orion", "Sco-Cen"],
-            textfont={"color": "#d7dce2", "size": 30, "family": "Helvetica"},
-            name="Nearby Region Labels",
-            showlegend=True,
-            meta={"screen_stable_text": True, "screen_px": 28.0},
-            hoverinfo="skip",
-        )
+        text_trace = {
+            "type": "scatter3d",
+            "x": [10.0, -20.0],
+            "y": [5.0, 15.0],
+            "z": [2.0, 8.0],
+            "mode": "text",
+            "text": ["Orion", "Sco-Cen"],
+            "textfont": {"color": "#d7dce2", "size": 30, "family": "Helvetica"},
+            "name": "Nearby Region Labels",
+            "showlegend": True,
+            "meta": {"screen_stable_text": True, "screen_px": 28.0},
+            "hoverinfo": "skip",
+        }
 
         viz.make_plot(
             time=np.array([0.0, -1.0]),
@@ -1167,7 +1172,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("const fovDeg = Math.min(Math.max(horizontalFovDeg, 0.05), 179.0);", html)
         self.assertNotIn("cameraFovDeg: fovDeg", html)
         self.assertIn("cameraFovDeg,", html)
-        self.assertIn("const alignedFov = Math.min(Math.max(Number(skyDomeBackgroundAlignedView.fovDeg) || 1.0, 0.05), 179.0);", html)
+        self.assertIn("function skyBackgroundPredictiveTransformForAlignedView(alignedView, currentView = null)", html)
+        self.assertIn("const alignedFov = Math.min(Math.max(Number(alignedView.fovDeg) || 1.0, 0.05), 179.0);", html)
         self.assertIn("const alignedTan = Math.max(Math.tan(THREE.MathUtils.degToRad(alignedFov * 0.5)), 1e-6);", html)
         self.assertIn("aladinInstance.setFoV(Math.min(Math.max(fovDeg, 0.05), 179.0));", html)
         self.assertIn("const scale = Math.min(Math.max(alignedTan / currentTan, 0.55), 1.9);", html)
@@ -1276,6 +1282,135 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("aladinInstance.gotoPosition(lDeg, bDeg)", html)
         self.assertIn("const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 16.0 : 50.0", html)
         self.assertIn("updateSkyDomeBackgroundFrame(\n            (typeof performance", html)
+
+    def test_threejs_renderer_exposes_sky_aperture_for_live_aladin_backgrounds(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=True,
+            sky_survey="P/DSS2/color",
+            threejs_initial_state={
+                "sky_dome_enabled": True,
+                "sky_dome_background_mode": "live_aladin",
+            },
+        )
+
+        sky_dome = viz.fig_dict["sky_dome"]
+        self.assertTrue(sky_dome["aperture"]["enabled"])
+        self.assertEqual(sky_dome["aperture"]["default_size_deg"], 14.0)
+        self.assertEqual(sky_dome["aperture"]["min_size_deg"], 3.0)
+        self.assertEqual(sky_dome["aperture"]["max_size_deg"], 48.0)
+        self.assertEqual(sky_dome["aperture"]["default_spectrum_position"], 2.0)
+        self.assertEqual(sky_dome["aperture"]["promotion_duration_ms"], 650.0)
+
+        html = fig.to_html()
+        self.assertIn("oviz-three-sky-aperture-toggle", html)
+        self.assertIn("oviz-three-sky-aperture-frame-clip", html)
+        self.assertIn("oviz-three-sky-aperture-frame-a", html)
+        self.assertIn("oviz-three-sky-aperture-frame-b", html)
+        self.assertIn("oviz-three-sky-aperture-outline", html)
+        self.assertIn("oviz-three-sky-aperture-quad", html)
+        self.assertIn("oviz-three-sky-aperture-spectrum-slider oviz-three-slider", html)
+        self.assertIn("oviz-three-sky-aperture-spectrum-tick", html)
+        self.assertIn("function skyApertureControlsAvailable()", html)
+        self.assertIn("function skyApertureCanPrewarm()", html)
+        self.assertIn("cameraViewMode === \"earth\"", html)
+        self.assertIn("skyDomeUsesAladinBackground()", html)
+        self.assertIn("function skyApertureBaseBackgroundVisible()", html)
+        self.assertIn("root.dataset.skyDomeBackgroundBlocker === \"visible\"", html)
+        self.assertIn("skyAperturePrewarmInitialDelayMs = 1400.0", html)
+        self.assertIn("skyAperturePrewarmSettledDelayMs = 900.0", html)
+        self.assertIn("skyAperturePrewarmStepDelayMs = 520.0", html)
+        self.assertIn("function skyAperturePrewarmInteractionSettled()", html)
+        self.assertIn("!skyDomeBackgroundUserCameraActive", html)
+        self.assertIn("!cameraTransitionAnimationFrame", html)
+        self.assertIn("!skyViewDragState", html)
+        self.assertIn("function maybeStartSkyAperturePrewarm(", html)
+        self.assertIn("function markSkyApertureFrameReady(", html)
+        self.assertIn("markSkyApertureFrameReady(event.source, data.survey || \"\")", html)
+        self.assertIn("function markSkyApertureFrameViewApplied(sourceWindow, seq)", html)
+        self.assertIn("markSkyApertureFrameViewApplied(event.source, data.seq)", html)
+        self.assertIn("function recordSkyApertureFrameSentView(frameIndex, seq, view)", html)
+        self.assertIn("function updateSkyApertureFramePredictiveTransforms(currentView = null, options = {})", html)
+        self.assertIn("skyAperturePrewarmComplete", html)
+        self.assertIn("if (!skyApertureState.open) {", html)
+        self.assertIn("window.clearTimeout(skyAperturePrewarmTimer);", html)
+        self.assertIn("function ensureSkyApertureBlendPresetFrames(", html)
+        self.assertIn("skyApertureToggleStateSignature", html)
+        self.assertIn("function updateSkyApertureBlendFrames()", html)
+        self.assertIn("function renderSkyApertureProjectedSquare(", html)
+        self.assertIn("function skyApertureProjectedSquarePoints(", html)
+        self.assertIn("centerDirection: null", html)
+        self.assertIn("axisXDirection: null", html)
+        self.assertIn("function skyApertureEnsureCenterDirection(", html)
+        self.assertIn("function skyApertureDirectionFromGalacticDeg(", html)
+        self.assertIn("skyApertureSetCenterDirection(direction, { resetAxes: false });", html)
+        self.assertIn("function setSkyApertureSpectrumPosition(", html)
+        self.assertIn("function promoteSkyApertureBackground()", html)
+        self.assertIn("function applySkyAperturePromotionBlend()", html)
+        self.assertIn("function ensureSkyAperturePresetFrames(options = {})", html)
+        self.assertIn('frameEl = document.createElement("iframe");', html)
+        self.assertIn("clipEl.className = \"oviz-three-sky-aperture-frame-clip\";", html)
+        self.assertIn("requestedFrameIndexes.join(\",\")", html)
+        self.assertIn("const blend = skyApertureBlendForPosition();", html)
+        self.assertIn("seq: viewSeq", html)
+        self.assertIn("if (skyAperturePointerState) {", html)
+        self.assertIn("{ allowClosed: true, force: true, frameIndexes: [frameIndex] }", html)
+        self.assertIn("const controlsReady = skyApertureControlsAvailable();", html)
+        self.assertIn("prewarmSync && skyApertureCanPrewarm()", html)
+        self.assertIn("if (signature === signatureKey)", html)
+        self.assertIn("fill: transparent;", html)
+        self.assertIn("--oviz-sky-aperture-clip: polygon", html)
+        self.assertIn("--oviz-sky-aperture-slider-x", html)
+        self.assertIn("--oviz-sky-aperture-slider-angle", html)
+        self.assertIn("clip-path: var(--oviz-sky-aperture-clip)", html)
+        self.assertNotIn("rgba(126, 209, 255, 0.40)", html)
+        self.assertIn("applySkyLayerState({ forceTiles: true });", html)
+        self.assertIn("captureSkyApertureState()", html)
+        self.assertIn("sky_center: skyCenter ? {", html)
+        self.assertIn("center_direction: skyApertureSerializeVector(centerDirection)", html)
+        self.assertIn("axis_x: skyApertureSerializeVector(skyApertureState.axisXDirection)", html)
+        self.assertIn("axis_y: skyApertureSerializeVector(skyApertureState.axisYDirection)", html)
+        self.assertIn("size_deg: Number(skyApertureState.sizeDeg)", html)
+        self.assertIn("spectrum_position: Number(skyApertureState.spectrumPosition)", html)
+        self.assertIn("restoreSkyApertureState(savedGlobalControls.sky_aperture || initialState.sky_aperture)", html)
+        self.assertIn("updateSkyApertureUi(now);", html)
+        self.assertIn("CDS/P/GALEXGR6/AIS/color", html)
+        self.assertIn("CDS/P/DSS2/color", html)
+        self.assertIn("CDS/P/Mellinger/color", html)
+        self.assertIn("CDS/P/2MASS/color", html)
+        self.assertIn("CDS/P/allWISE/color", html)
+        self.assertIn("CDS/P/IRIS/color", html)
+        self.assertIn("CDS/P/AKARI/FIS/Color", html)
+        self.assertIn("CDS/P/PLANCK/R2/HFI/color", html)
+
+    def test_threejs_renderer_restores_saved_sky_aperture_state(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=True,
+            sky_survey="P/DSS2/color",
+            threejs_initial_state={
+                "sky_dome_enabled": True,
+                "sky_dome_background_mode": "live_aladin",
+                "global_controls": {
+                    "sky_aperture": {
+                        "open": True,
+                        "center": {"x": 0.42, "y": 0.58},
+                        "size_deg": 16.5,
+                        "spectrum_position": 3.25,
+                    },
+                },
+            },
+        )
+
+        html = ThreeJSFigure(viz.fig_dict).to_html()
+        self.assertIn("restoreSkyApertureState(savedGlobalControls.sky_aperture || initialState.sky_aperture)", html)
+        self.assertIn("sky_aperture: typeof captureSkyApertureState === \"function\" ? captureSkyApertureState() : null", html)
 
     def test_threejs_renderer_can_use_native_hips_sky_dome_background(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")

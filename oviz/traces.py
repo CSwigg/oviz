@@ -22,7 +22,7 @@ class Trace:
     color : str, optional
         Color of the marker points (default is 'gray').
     colormap : str, optional
-        Plotly colorscale name for age-based coloring (default is None).
+        Colorscale name for age-based coloring (default is None).
     cmin : float, optional
         Minimum value for the colorscale (default is None, auto-computed).
     cmax : float, optional
@@ -59,7 +59,7 @@ class Trace:
     color : str
         Color of the marker points.
     colormap : str or None
-        Plotly colorscale name for age-based coloring.
+        Colorscale name for age-based coloring.
     cmin : float or None
         Minimum value for the colorscale.
     cmax : float or None

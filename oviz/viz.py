@@ -6,8 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import yaml
-import plotly.graph_objects as go
-import plotly.colors as pc
 import webcolors
 from astropy.coordinates import SkyCoord
 import astropy.units as u
@@ -17,6 +15,96 @@ import pandas as pd
 from .threejs_figure import ThreeJSFigure
 from .threejs_profiles import build_threejs_profile, merge_threejs_profile
 from .threejs_scene import build_threejs_scene_spec
+
+
+class _OvizAttrDict(dict):
+    """Small dict-backed object for legacy trace/frame/layout attribute access."""
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+    def __setattr__(self, name, value):
+        self[name] = value
+
+    def to_scene_json(self):
+        return copy.deepcopy(dict(self))
+
+
+def _attrdict_factory(kind):
+    def _factory(*args, **kwargs):
+        data = {}
+        if args:
+            if len(args) != 1 or not isinstance(args[0], dict):
+                raise TypeError(f"{kind} accepts at most one dict positional argument")
+            data.update(copy.deepcopy(args[0]))
+        data.update(kwargs)
+        return _OvizAttrDict(data)
+    return _factory
+
+
+_scatter3d = _attrdict_factory("Scatter3d")
+_scatter = _attrdict_factory("Scatter")
+_layout = _attrdict_factory("Layout")
+_frame = _attrdict_factory("Frame")
+
+
+_COLOR_SCALE_STOPS = {
+    "viridis": ("#440154", "#31688e", "#35b779", "#fde725"),
+    "plasma": ("#0d0887", "#9c179e", "#ed7953", "#f0f921"),
+    "magma": ("#000004", "#51127c", "#b73779", "#fcfdbf"),
+    "inferno": ("#000004", "#57106e", "#bc3754", "#fcffa4"),
+    "cividis": ("#00224e", "#575d6d", "#a59c74", "#fee838"),
+    "turbo": ("#30123b", "#28a5f5", "#7ef658", "#fca636", "#7a0403"),
+    "greys": ("#000000", "#777777", "#ffffff"),
+    "gist_heat": ("#000000", "#b00000", "#ffff00", "#ffffff"),
+}
+
+
+def _hex_to_rgb_tuple(value):
+    value = str(value or "").strip().lstrip("#")
+    if len(value) == 3:
+        value = "".join(ch * 2 for ch in value)
+    if len(value) != 6:
+        return (128, 128, 128)
+    try:
+        return tuple(int(value[idx : idx + 2], 16) for idx in (0, 2, 4))
+    except ValueError:
+        return (128, 128, 128)
+
+
+def _sample_colorscale(colorscale, positions):
+    if isinstance(colorscale, str):
+        stops = _COLOR_SCALE_STOPS.get(colorscale.strip().lower(), _COLOR_SCALE_STOPS["viridis"])
+    elif isinstance(colorscale, (list, tuple)) and colorscale:
+        raw_stops = []
+        for item in colorscale:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                raw_stops.append(item[1])
+            else:
+                raw_stops.append(item)
+        stops = tuple(str(item) for item in raw_stops) or _COLOR_SCALE_STOPS["viridis"]
+    else:
+        stops = _COLOR_SCALE_STOPS["viridis"]
+
+    rgbs = [_hex_to_rgb_tuple(stop) for stop in stops]
+    if len(rgbs) == 1:
+        rgbs = [rgbs[0], rgbs[0]]
+    out = []
+    for position in positions:
+        t = min(max(float(position), 0.0), 1.0)
+        scaled = t * (len(rgbs) - 1)
+        lo = int(np.floor(scaled))
+        hi = min(lo + 1, len(rgbs) - 1)
+        frac = scaled - lo
+        rgb = tuple(
+            int(round(rgbs[lo][channel] + (rgbs[hi][channel] - rgbs[lo][channel]) * frac))
+            for channel in range(3)
+        )
+        out.append(f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})")
+    return out
 
 GALACTIC_GUIDE_TRACE_NAMES = {
     'Galactic Quadrants',
@@ -128,7 +216,7 @@ class Animate3D:
         xyz_ranges=None,
         figure_title=None,
         figure_theme=None,
-        plotly_light_template=None,
+        light_template=None,
         figure_layout=None,
         figure_layout_dict=None,
         trace_grouping_dict=None,
@@ -150,7 +238,7 @@ class Animate3D:
         self.figure = None
         self.xyz_widths = xyz_widths
         self.xyz_ranges = xyz_ranges
-        self.plot_light_template = plotly_light_template
+        self.light_template = light_template
         self.trace_grouping_dict = trace_grouping_dict or {}
         self.figure_title = figure_title
 
@@ -196,7 +284,7 @@ class Animate3D:
         age_kde_bandwidth_myr=3.0,
         camera_zoom_factor=1.0,
         galactic_reference_opacity=0.5,
-        renderer='plotly',
+        renderer='threejs',
         show_milky_way_model=False,
         enable_sky_panel=False,
         sky_radius_deg=1.0,
@@ -330,7 +418,7 @@ class Animate3D:
             layout_dict['scene']['yaxis']['visible'] = False
             layout_dict['scene']['zaxis']['visible'] = False
 
-        self.figure_layout = go.Layout(layout_dict)
+        self.figure_layout = _layout(layout_dict)
         self.focus_group = focus_group
         self.static_traces_legendonly = static_traces_legendonly
 
@@ -363,7 +451,7 @@ class Animate3D:
 
         # Save the names of all static traces (if they have a name)
         self.base_static_trace_names = [
-            st.name for st in static_traces if hasattr(st, 'name') and st.name
+            self._trace_name(st) for st in static_traces if self._trace_name(st)
         ]
 
         # Build frames for each time step
@@ -403,27 +491,18 @@ class Animate3D:
             for item in frame_data['data']:
                 item.pop('visible', None)
 
-            frames.append(go.Frame(frame_data))
+            frames.append(_frame(frame_data))
 
         # Initialize the figure at t=0 (base data)
         self._initialize_figure(frames)
 
-        if renderer_name == 'plotly':
-            # Add slider & dropdown, and finalize
-            self._add_slider_and_dropdown()
-        else:
-            self._build_threejs_figure(frames)
+        self._build_threejs_figure(frames)
 
         # Show or save
         if show:
             self.figure.show()
         if save_name:
-            if renderer_name == 'plotly':
-                self.figure.update_layout(width=None, height=None)
-                post_script = self._legend_kde_sync_post_script() if self.show_age_kde_inset else None
-                self.figure.write_html(save_name, auto_play=False, post_script=post_script)
-            else:
-                self.figure.write_html(save_name)
+            self.figure.write_html(save_name)
 
         return self.figure
 
@@ -444,69 +523,6 @@ class Animate3D:
         y_rot = r * np.sin(theta - w1 * t1 + np.pi / 2.0)
         z_rot = z_gc_pc
         return x_rot, y_rot, z_rot
-
-    def _legend_kde_sync_post_script(self):
-        """JS hook for exported HTML: mirror 3D legend toggles to matching KDE traces."""
-        script = """
-(function() {
-  const gd = document.getElementById('{plot_id}');
-  if (!gd) return;
-
-  const KDE_PREFIX = __KDE_PREFIX__;
-  const KDE_MARKER_NAME = __KDE_MARKER_NAME__;
-  let syncing = false;
-
-  function findKdeIndexForTraceName(traceName) {
-    const kdeName = KDE_PREFIX + traceName;
-    for (let i = 0; i < gd.data.length; i++) {
-      const tr = gd.data[i];
-      if (tr && tr.name === kdeName) return i;
-    }
-    return -1;
-  }
-
-  gd.on('plotly_restyle', function(eventData) {
-    if (syncing) return;
-    if (!eventData || eventData.length < 2) return;
-
-    const update = eventData[0] || {};
-    const idxRaw = eventData[1] || [];
-    if (!Object.prototype.hasOwnProperty.call(update, 'visible')) return;
-
-    const idxs = Array.isArray(idxRaw) ? idxRaw : [idxRaw];
-    const visRaw = update.visible;
-    const visVals = Array.isArray(visRaw) ? visRaw : [visRaw];
-
-    const kdeIdxs = [];
-    const kdeVis = [];
-
-    for (let j = 0; j < idxs.length; j++) {
-      const iTrace = idxs[j];
-      const tr = gd.data[iTrace];
-      if (!tr || typeof tr.name !== 'string') continue;
-      if (tr.name.startsWith(KDE_PREFIX)) continue;
-      if (tr.name === KDE_MARKER_NAME) continue;
-
-      const kdeIdx = findKdeIndexForTraceName(tr.name);
-      if (kdeIdx < 0) continue;
-
-      const vis = visVals[Math.min(j, visVals.length - 1)];
-      kdeIdxs.push(kdeIdx);
-      kdeVis.push(vis);
-    }
-
-    if (!kdeIdxs.length) return;
-
-    syncing = true;
-    Plotly.restyle(gd, { visible: kdeVis }, kdeIdxs)
-      .then(function() { syncing = false; })
-      .catch(function() { syncing = false; });
-  });
-})();
-"""
-        script = script.replace('__KDE_PREFIX__', json.dumps(KDE_TRACE_PREFIX))
-        script = script.replace('__KDE_MARKER_NAME__', json.dumps(KDE_TIME_MARKER_TRACE_NAME))
-        return script
 
     def rotating_gc_line_rot(self, t_myr):
         """GC reference line in the same rotating coordinate system as x_rot/y_rot/z_rot."""
@@ -565,7 +581,7 @@ class Animate3D:
             z_vals = radius_circle.galactic.cartesian.z.value * 1000.0 - float(z_sub)
 
         line_color = self._reference_line_color()
-        return go.Scatter3d(
+        return _scatter3d(
             x=x_vals,
             y=y_vals,
             z=z_vals,
@@ -621,7 +637,7 @@ class Animate3D:
             coord_system=coord_system,
         )
         line_color = self._reference_line_color()
-        return go.Scatter3d(
+        return _scatter3d(
             x=[x_gc],
             y=[y_gc],
             z=[float(z_gc) + float(z_offset_pc)],
@@ -658,7 +674,7 @@ class Animate3D:
         y_vals = float(y_gc) + float(radius_pc) * np.sin(theta)
         z_vals = np.full_like(x_vals, float(z_gc))
         line_color = self._reference_line_color()
-        return go.Scatter3d(
+        return _scatter3d(
             x=x_vals,
             y=y_vals,
             z=z_vals,
@@ -687,7 +703,7 @@ class Animate3D:
         y_label = float(y_center) + radius_pc * np.cos(angle_rad)
         z_label = float(z_center)
 
-        return go.Scatter3d(
+        return _scatter3d(
             x=[x_label],
             y=[y_label],
             z=[z_label],
@@ -771,7 +787,7 @@ class Animate3D:
                 z_vals = z_gc - float(z_rf)
 
             traces.append(
-                go.Scatter3d(
+                _scatter3d(
                     x=x_vals,
                     y=y_vals,
                     z=z_vals,
@@ -1037,7 +1053,7 @@ class Animate3D:
             line_color = self._color_with_alpha(base_color, self.kde_opacity_by_trace.get(trace_name, 1.0))
             fill_color = self._color_with_alpha(base_color, 0.30)
             traces.append(
-                go.Scatter(
+                _scatter(
                     x=self.kde_x_grid,
                     y=self.kde_density_by_trace[trace_name],
                     mode='lines',
@@ -1062,7 +1078,7 @@ class Animate3D:
         if not np.isfinite(float(t)):
             t = 0.0
         x_t = float(np.clip(float(t), self.kde_x_range[0], 0.0))
-        return go.Scatter(
+        return _scatter(
             x=[x_t, x_t],
             y=[0.0, self.kde_y_max],
             mode='lines',
@@ -1113,21 +1129,21 @@ class Animate3D:
 
         if not show_guides:
             return [
-                go.Scatter3d(
+                _scatter3d(
                     x=[], y=[], z=[],
                     mode='lines',
                     name='Galactic Quadrants',
                     showlegend=False,
                     hoverinfo='skip'
                 ),
-                go.Scatter3d(
+                _scatter3d(
                     x=[], y=[], z=[],
                     mode='lines',
                     name='Galactic l Ticks',
                     showlegend=False,
                     hoverinfo='skip'
                 ),
-                go.Scatter3d(
+                _scatter3d(
                     x=[], y=[], z=[],
                     mode='text',
                     text=[],
@@ -1135,7 +1151,7 @@ class Animate3D:
                     showlegend=False,
                     hoverinfo='skip'
                 ),
-                go.Scatter3d(
+                _scatter3d(
                     x=[], y=[], z=[],
                     mode='lines',
                     name='Galactic Z Axis',
@@ -1145,7 +1161,7 @@ class Animate3D:
             ]
 
         # Cross-hair lines dividing the Galactic plane into quadrants around the Sun.
-        quadrants = go.Scatter3d(
+        quadrants = _scatter3d(
             x=[x_min, x_max, None, sun_x, sun_x],
             y=[sun_y, sun_y, None, y_min, y_max],
             z=[0.0, 0.0, None, 0.0, 0.0],
@@ -1181,7 +1197,7 @@ class Animate3D:
             y_labels.append(sun_y + (tick_radius + tick_half + label_gap) * s)
             z_labels.append(label_z)
 
-        l_ticks = go.Scatter3d(
+        l_ticks = _scatter3d(
             x=x_ticks,
             y=y_ticks,
             z=z_ticks,
@@ -1193,7 +1209,7 @@ class Animate3D:
             hoverinfo='skip'
         )
 
-        l_labels = go.Scatter3d(
+        l_labels = _scatter3d(
             x=x_labels,
             y=y_labels,
             z=z_labels,
@@ -1206,7 +1222,7 @@ class Animate3D:
             hoverinfo='skip'
         )
 
-        z_axis = go.Scatter3d(
+        z_axis = _scatter3d(
             x=[sun_x, sun_x],
             y=[sun_y, sun_y],
             z=[z_min, z_max],
@@ -1327,7 +1343,7 @@ class Animate3D:
         ]
 
     def _ordered_slider_times(self):
-        """Return times in the same order used by the Plotly slider."""
+        """Return times in the same order used by the time slider."""
         time_neg = self.time[self.time < 0]
         time_pos = self.time[self.time >= 0]
 
@@ -1591,7 +1607,7 @@ class Animate3D:
                 })
 
             scatter_list.append(
-                go.Scatter3d(
+                _scatter3d(
                     x=df_t[x_col].values,
                     y=df_t[y_col].values,
                     z=df_t[z_col].values,
@@ -1669,24 +1685,24 @@ class Animate3D:
         """
         for i, st in enumerate(static_traces):
             st_copy = copy.deepcopy(st)
-            existing_meta = st_copy.meta if isinstance(getattr(st_copy, 'meta', None), dict) else {}
+            existing_meta = st_copy.get('meta') if isinstance(st_copy, dict) else getattr(st_copy, 'meta', None)
+            existing_meta = existing_meta if isinstance(existing_meta, dict) else {}
             st_copy['meta'] = {**existing_meta, 'static': True}
+            trace_name = self._trace_name(st_copy)
 
             # Re-center if focusing on a group (except for tracks)
-            if (self.focus_group is not None) and (st_copy.name) and not st_copy.name.endswith('Track'):
-                if st_copy.x is not None:
-                    st_copy.x = np.array(st_copy.x) - reference_frame_center[0]
-                if st_copy.y is not None:
-                    st_copy.y = np.array(st_copy.y) - reference_frame_center[1]
-                if st_copy.z is not None:
-                    st_copy.z = np.array(st_copy.z) - reference_frame_center[2]
+            if (self.focus_group is not None) and trace_name and not trace_name.endswith('Track'):
+                for axis_idx, axis_key in enumerate(('x', 'y', 'z')):
+                    axis_values = st_copy.get(axis_key) if isinstance(st_copy, dict) else getattr(st_copy, axis_key, None)
+                    if axis_values is not None:
+                        st_copy[axis_key] = np.array(axis_values) - reference_frame_center[axis_idx]
 
             if t in static_traces_times[i]:
                 frame['data'].append(st_copy)
             else:
-                frame['data'].append(go.Scatter3d(
+                frame['data'].append(_scatter3d(
                     x=[], y=[], z=[],
-                    name=st_copy.name,
+                    name=trace_name,
                     visible=False,
                     meta={'static': True}
                 ))
@@ -1727,14 +1743,12 @@ class Animate3D:
         play_pause = self.generate_play_pause()
         self.fig['layout']['sliders'] = slider
 
-        self.figure = go.Figure(self.fig)
-
         if len(self.trace_grouping_dict) > 1:
             dropdown = self.dropdown_menu()
-            self.figure.update_layout(updatemenus=dropdown)
             self.fig['layout']['updatemenus'] = dropdown
 
         self.fig_dict = self.fig
+        self.figure = _OvizAttrDict(self.fig)
 
     def _build_threejs_figure(self, frames):
         """Build a standalone three.js figure wrapper from the current frame data."""
@@ -1756,7 +1770,7 @@ class Animate3D:
         return build_threejs_scene_spec(
             self,
             frames,
-            trace_to_plotly_json=_trace_to_plotly_json,
+            trace_to_scene_json=_trace_to_scene_json,
             coerce_range=_coerce_range,
             format_time_label=_format_time_label,
             coerce_float=_coerce_float,
@@ -2439,7 +2453,7 @@ class Animate3D:
         }
 
     def _threejs_theme(self, layout_json):
-        """Translate the Plotly layout theme into a smaller scene theme."""
+        """Translate the layout theme into a smaller scene theme."""
         scene_layout = layout_json.get('scene', {})
         axis_x = scene_layout.get('xaxis', {})
         axis_color = (
@@ -2477,7 +2491,7 @@ class Animate3D:
         }
 
     def _threejs_trace_spec(self, trace_key, trace_json, minimal_mode=False, galactic_simple_mode=False):
-        """Convert a Plotly trace into a simpler primitive spec for three.js."""
+        """Convert a trace dictionary into a simpler primitive spec for three.js."""
         if trace_json.get('type', 'scatter3d') != 'scatter3d':
             return None
 
@@ -2590,18 +2604,16 @@ class Animate3D:
 ####################################################################################################
 def _normalize_renderer_name(renderer):
     renderer_name = str(renderer).strip().lower()
-    if renderer_name in ('plotly',):
-        return 'plotly'
     if renderer_name in ('three', 'threejs', 'three.js'):
         return 'threejs'
-    raise ValueError("renderer must be one of: 'plotly', 'threejs'.")
+    raise ValueError("renderer must be 'threejs'.")
 
 
-def _trace_to_plotly_json(trace):
+def _trace_to_scene_json(trace):
     if isinstance(trace, dict):
         return copy.deepcopy(trace)
-    if hasattr(trace, 'to_plotly_json'):
-        return trace.to_plotly_json()
+    if hasattr(trace, 'to_scene_json'):
+        return trace.to_scene_json()
     raise TypeError(f'Unsupported trace type for serialization: {type(trace)!r}')
 
 
@@ -2752,7 +2764,7 @@ def _resolve_marker_color_values(marker, length, default_opacity=1.0):
         alpha_values = [float(default_opacity)] * length
         if np.any(finite_mask):
             finite_indices = np.flatnonzero(finite_mask)
-            sampled = pc.sample_colorscale(colorscale, scaled[finite_mask].tolist(), colortype='rgb')
+            sampled = _sample_colorscale(colorscale, scaled[finite_mask].tolist())
             for point_idx, item in zip(finite_indices, sampled):
                 css, alpha = _color_to_css_and_opacity(item, default_opacity)
                 css_values[int(point_idx)] = css
@@ -4374,7 +4386,7 @@ def read_theme(plot):
 
     if plot.figure_theme == 'light':
         layout['template'] = (
-            plot.plot_light_template if plot.plot_light_template else 'ggplot2'
+            plot.light_template if plot.light_template else 'default'
         )
 
     if plot.xyz_ranges:
@@ -4419,7 +4431,7 @@ def plot_trace_tracks(sc, fade_in_time=0, coord_system='centered'):
     else:
         x_col, y_col, z_col = 'x', 'y', 'z'
 
-    tracks = go.Scatter3d(
+    tracks = _scatter3d(
         x=df_int[x_col].iloc[::1],
         y=df_int[y_col].iloc[::1],
         z=df_int[z_col].iloc[::1],
