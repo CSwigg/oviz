@@ -1334,26 +1334,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         pointer-events: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-label {
-        position: absolute;
-        left: var(--oviz-sky-aperture-label-x);
-        top: var(--oviz-sky-aperture-label-y);
-        transform: translate(-50%, 0);
-        min-width: 168px;
-        max-width: 260px;
-        padding: 7px 10px;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 7px;
-        background: rgba(8, 12, 18, 0.78);
-        color: rgba(244, 249, 255, 0.94);
-        font: 600 11px/1.25 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        text-align: center;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        pointer-events: none;
-        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
-        backdrop-filter: blur(10px) saturate(118%);
-        -webkit-backdrop-filter: blur(10px) saturate(118%);
+        display: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum {
         position: absolute;
