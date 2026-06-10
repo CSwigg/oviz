@@ -1267,7 +1267,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         clip-path: var(--oviz-sky-aperture-clip);
         -webkit-clip-path: var(--oviz-sky-aperture-clip);
         will-change: opacity, clip-path;
-        transition: opacity 0.18s ease;
+        transition: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-frame {
         position: absolute;
@@ -6208,8 +6208,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
         updateSkyDomeBackgroundFrame(
-          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
-          { force: skyDomeBackgroundUserCameraActive }
+          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()
         );
       });
 
