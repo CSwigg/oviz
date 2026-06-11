@@ -1351,13 +1351,10 @@ THREEJS_SKY_RUNTIME_JS = """
           root.dataset.skyDomeMotion = skyDomeBackgroundUserCameraActive ? "camera-moving" : "settled";
         }
         const forceUpdate = Boolean(options && options.force);
-        if (skyDomeBackgroundUserCameraActive && !forceUpdate) {
+        if (!forceUpdate && signature === skyDomeBackgroundViewSignature && (now - skyDomeBackgroundLastSentAt) < 500.0) {
           return;
         }
-        if (!forceUpdate && signature === skyDomeBackgroundViewSignature) {
-          return;
-        }
-        const minUpdateIntervalMs = 50.0;
+        const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 72.0 : 50.0;
         if (!forceUpdate && (now - skyDomeBackgroundLastSentAt) < minUpdateIntervalMs) {
           return;
         }
@@ -1479,7 +1476,6 @@ THREEJS_SKY_RUNTIME_JS = """
       let skyApertureLastViewSignature = "";
       let skyApertureLastViewSentAt = 0.0;
       let skyApertureViewSequence = 0;
-      let skyApertureFrameLastViewSignatures = [];
       let skyApertureViewPostFrame = 0;
       let skyAperturePendingViewPostTimestamp = 0.0;
       let skyApertureFrameSentViews = [];
@@ -1796,7 +1792,6 @@ THREEJS_SKY_RUNTIME_JS = """
           skyAperturePresetFrameReady[safeIndex] = false;
           skyApertureFrameSentViews[safeIndex] = new Map();
           skyApertureFrameAlignedViews[safeIndex] = null;
-          skyApertureFrameLastViewSignatures[safeIndex] = "";
           frameEl.dataset.ready = "false";
         }
         skyAperturePresetFrameSignatures[safeIndex] = setSkyApertureFrameSurvey(
@@ -1807,17 +1802,6 @@ THREEJS_SKY_RUNTIME_JS = """
         skyApertureFrameSignatureA = skyAperturePresetFrameSignatures[0] || "";
         skyApertureFrameSignatureB = skyAperturePresetFrameSignatures[1] || "";
         return frameEl;
-      }
-
-      function skyAperturePostedFrameViewSignature(frameIndex, view) {
-        const safeIndex = Math.round(Number(frameIndex));
-        return [
-          safeIndex,
-          skyAperturePresetFrameSignatures[safeIndex] || "",
-          view.ra.toFixed(3),
-          view.dec.toFixed(3),
-          view.fovDeg.toFixed(2),
-        ].join("|");
       }
 
       function ensureSkyAperturePresetFrames(options = {}) {
@@ -2548,9 +2532,6 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!view) {
           return;
         }
-        if (skyDomeBackgroundUserCameraActive && !options.force) {
-          return;
-        }
         const requestedFrameIndexes = Array.isArray(options.frameIndexes)
           ? options.frameIndexes.map((index) => Math.round(Number(index))).filter((index) => (
             Number.isFinite(index) && index >= 0 && index < skyAperturePresetOptions.length
@@ -2575,27 +2556,17 @@ THREEJS_SKY_RUNTIME_JS = """
           requestedFrameIndexes.join(","),
         ].join("|");
         const now = Number(timestampMs) || 0.0;
-        if (!options.force && signature === skyApertureLastViewSignature) {
-          return;
-        }
-        const framePairsToSend = framePairs.filter(({ index }) => {
-          const frameSignature = skyAperturePostedFrameViewSignature(index, view);
-          return frameSignature !== skyApertureFrameLastViewSignatures[index];
-        });
-        if (!framePairsToSend.length) {
-          skyApertureLastViewSignature = signature;
-          skyApertureLastViewSentAt = now;
+        if (!options.force && signature === skyApertureLastViewSignature && (now - skyApertureLastViewSentAt) < 120.0) {
           return;
         }
         skyApertureLastViewSignature = signature;
         skyApertureLastViewSentAt = now;
         skyApertureViewSequence += 1;
         const viewSeq = skyApertureViewSequence;
-        framePairsToSend.forEach(({ index, frameEl }) => {
+        framePairs.forEach(({ index, frameEl }) => {
           if (!frameEl || !frameEl.contentWindow) {
             return;
           }
-          skyApertureFrameLastViewSignatures[index] = skyAperturePostedFrameViewSignature(index, view);
           recordSkyApertureFrameSentView(index, viewSeq, view);
           if (typeof ovizDebugTrackApertureViewSent === "function") {
             ovizDebugTrackApertureViewSent(index, viewSeq, view);

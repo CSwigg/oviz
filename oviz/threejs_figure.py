@@ -5142,19 +5142,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           lastIssue: "",
         },
       };
-      function ovizDebugSnapshot() {
-        return JSON.parse(JSON.stringify(ovizDebugState));
-      }
       if (typeof window !== "undefined") {
         window.__OVIZ_DEBUG__ = {
           enabled: ovizDebugEnabled,
           state: ovizDebugState,
           events: ovizDebugState.events,
-          snapshot: ovizDebugSnapshot,
+          snapshot: () => JSON.parse(JSON.stringify(ovizDebugState)),
         };
-      }
-      if (typeof window !== "undefined" && root) {
-        root.__OVIZ_DEBUG__ = window.__OVIZ_DEBUG__;
       }
       function ovizDebugNow() {
         return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
@@ -5180,15 +5174,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         root.dataset.skyApertureDebugOpen = ovizDebugState.aperture.open ? "true" : "false";
         root.dataset.skyApertureDebugFramesReady = `${ovizDebugState.aperture.framesReady || 0}/${ovizDebugState.aperture.framesTotal || 0}`;
         root.dataset.skyApertureDebugPending = String(ovizDebugState.aperture.pending || 0);
-        try {
-          root.dataset.ovizDebugSnapshot = JSON.stringify({
-            startup: ovizDebugState.startup,
-            sky: ovizDebugState.sky,
-            aperture: ovizDebugState.aperture,
-          });
-        } catch (_err) {
-          root.dataset.ovizDebugSnapshot = "";
-        }
       }
       function ovizDebugEnsurePanel() {
         if (!ovizDebugEnabled || !root) {
