@@ -1367,6 +1367,9 @@ THREEJS_SKY_RUNTIME_JS = """
           fovDeg: view.fovDeg,
           cameraFovDeg: view.cameraFovDeg,
         }, "*");
+        if (skyApertureState && skyApertureState.open) {
+          postSkyApertureViewToFrames(now, { view, syncWithBase: true });
+        }
       }
 
       function normalizeSkyAperturePreset(rawPreset, index = 0) {
@@ -1775,9 +1778,6 @@ THREEJS_SKY_RUNTIME_JS = """
         if (clipEl) {
           clipEl.hidden = false;
         }
-        if (skyApertureFrameBEl && skyApertureFrameBEl !== frameEl) {
-          hideSkyApertureFrame(skyApertureFrameBEl);
-        }
         frameEl.dataset.presetIndex = "stack";
         frameEl.dataset.presetKey = String(preset && preset.key || "stack");
         skyAperturePresetFrameEls = [frameEl];
@@ -1801,9 +1801,6 @@ THREEJS_SKY_RUNTIME_JS = """
 
       function ensureSkyAperturePresetFrames(options = {}) {
         createSkyAperturePresetFrame(0);
-        if (skyApertureFrameBEl) {
-          hideSkyApertureFrame(skyApertureFrameBEl);
-        }
         skyApertureFrameSignatureA = skyAperturePresetFrameSignatures[0] || "";
         skyApertureFrameSignatureB = "";
         return skyAperturePresetFrameEls.slice(0, 1).filter(Boolean);
@@ -2556,7 +2553,7 @@ THREEJS_SKY_RUNTIME_JS = """
         if (skyAperturePointerState) {
           return;
         }
-        const view = skyDomeBackgroundViewForCamera();
+        const view = options && options.view ? options.view : skyDomeBackgroundViewForCamera();
         if (!view) {
           return;
         }

@@ -5518,7 +5518,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const skyDomeFrameEl = root.querySelector(".oviz-three-sky-dome-frame");
       const skyApertureEl = root.querySelector(".oviz-three-sky-aperture");
       const skyApertureFrameAEl = root.querySelector(".oviz-three-sky-aperture-frame-a");
-      const skyApertureFrameBEl = root.querySelector(".oviz-three-sky-aperture-frame-b");
       const skyApertureShadeEl = root.querySelector(".oviz-three-sky-aperture-shade");
       const skyApertureRingEl = root.querySelector(".oviz-three-sky-aperture-ring");
       const skyApertureOutlineEl = root.querySelector(".oviz-three-sky-aperture-outline");
