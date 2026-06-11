@@ -10670,7 +10670,9 @@ __SKY_RUNTIME_JS__
         let lastAppliedSkyBackgroundSignature = "";
         let activeImageSurvey = ${survey};
         let activeSkyLayerStackSignature = "";
+        let activeSkyApertureLayerStackSignature = "";
         const managedSkyOverlayLayerNames = new Set();
+        const managedSkyApertureOverlayLayerNames = new Set();
         function normalizeClusterKey(value) {
           return String(value || "")
             .trim()
@@ -10938,6 +10940,24 @@ __SKY_RUNTIME_JS__
           });
           managedSkyOverlayLayerNames.clear();
         }
+        function removeManagedSkyApertureOverlays() {
+          if (!aladinInstance) {
+            managedSkyApertureOverlayLayerNames.clear();
+            return;
+          }
+          managedSkyApertureOverlayLayerNames.forEach((layerName) => {
+            try {
+              if (typeof aladinInstance.removeImageLayer === "function") {
+                aladinInstance.removeImageLayer(layerName);
+              } else if (typeof aladinInstance.removeOverlayImageLayer === "function") {
+                aladinInstance.removeOverlayImageLayer(layerName);
+              }
+            } catch (_err) {
+            }
+          });
+          managedSkyApertureOverlayLayerNames.clear();
+          activeSkyApertureLayerStackSignature = "";
+        }
         function imageLayerForName(layerName, isBase) {
           if (!aladinInstance) {
             return null;
@@ -11052,6 +11072,84 @@ __SKY_RUNTIME_JS__
             return;
           }
           attachOverlay(overlaySurvey);
+        }
+        function setApertureSkyImageLayer(layerName, survey, layer, expectedSignature) {
+          if (!aladinInstance || !survey || !layerName) {
+            return;
+          }
+          const attachOverlay = (overlaySurvey) => {
+            if (!overlaySurvey || (expectedSignature && activeSkyApertureLayerStackSignature !== expectedSignature)) {
+              return;
+            }
+            try {
+              if (typeof aladinInstance.addImageLayer === "function") {
+                aladinInstance.addImageLayer(overlaySurvey, layerName);
+                managedSkyApertureOverlayLayerNames.add(layerName);
+                applySkyImageLayerOptions(layerName, layer, false);
+              } else if (typeof aladinInstance.setOverlayImageLayer === "function") {
+                aladinInstance.setOverlayImageLayer(overlaySurvey, layerName);
+                managedSkyApertureOverlayLayerNames.add(layerName);
+                applySkyImageLayerOptions(layerName, layer, false);
+              }
+            } catch (_err) {
+            }
+          };
+          const overlaySurvey = skyImageSurveyObject(survey);
+          if (overlaySurvey && typeof overlaySurvey.then === "function") {
+            overlaySurvey.then(attachOverlay).catch(() => {});
+            return;
+          }
+          attachOverlay(overlaySurvey);
+        }
+        function applySkyApertureClip(data) {
+          const enabled = Boolean(data && data.enabled !== false && data.clip);
+          const clip = enabled ? String(data.clip) : "none";
+          document.body.dataset.ovizApertureClip = enabled ? "true" : "false";
+          document.documentElement.style.setProperty("--oviz-aperture-clip", clip);
+          let styleEl = document.getElementById("oviz-aperture-clip-style");
+          if (!styleEl) {
+            styleEl = document.createElement("style");
+            styleEl.id = "oviz-aperture-clip-style";
+            document.head.appendChild(styleEl);
+          }
+          styleEl.textContent = enabled ? `
+            body[data-oviz-aperture-clip="true"] #aladin-lite-div canvas:not(:first-of-type) {
+              clip-path: var(--oviz-aperture-clip);
+              -webkit-clip-path: var(--oviz-aperture-clip);
+            }
+          ` : "";
+        }
+        function applySkyApertureLayerState(data) {
+          if (!data || data.enabled === false) {
+            removeManagedSkyApertureOverlays();
+            applySkyApertureClip({ enabled: false });
+            return;
+          }
+          const layers = (Array.isArray(data.layers) ? data.layers : [])
+            .filter((layer) => layer && String(layer.survey || layer.key || "").trim());
+          const stackSignature = layers
+            .map((layer) => String(layer.key || layer.survey) + ":" + String(layer.survey || layer.key))
+            .join("|");
+          if (!layers.length) {
+            removeManagedSkyApertureOverlays();
+            return;
+          }
+          if (stackSignature !== activeSkyApertureLayerStackSignature) {
+            activeSkyApertureLayerStackSignature = stackSignature;
+            removeManagedSkyApertureOverlays();
+            activeSkyApertureLayerStackSignature = stackSignature;
+            layers.forEach((layer) => {
+              setApertureSkyImageLayer(
+                skyLayerNameFor(layer),
+                String(layer.survey || layer.key || "").trim(),
+                layer,
+                stackSignature
+              );
+            });
+          }
+          layers.forEach((layer) => {
+            applySkyImageLayerOptions(skyLayerNameFor(layer), layer, false);
+          });
         }
         function applySkyLayerState(data) {
           if (!data || typeof data !== "object") {
@@ -11261,6 +11359,12 @@ __SKY_RUNTIME_JS__
               }
               if (data.type === "oviz-sky-layer-state") {
                 applySkyLayerState(data);
+              }
+              if (data.type === "oviz-sky-aperture-layer-state") {
+                applySkyApertureLayerState(data);
+              }
+              if (data.type === "oviz-sky-aperture-clip") {
+                applySkyApertureClip(data);
               }
               return;
             }
