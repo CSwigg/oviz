@@ -1122,6 +1122,10 @@ THREEJS_SKY_RUNTIME_JS = """
         }
         const direction = new THREE.Vector3();
         camera.getWorldDirection(direction);
+        if (direction.lengthSq() <= 1e-12) {
+          return null;
+        }
+        direction.normalize();
         const galactic = volumeSkyGalacticLonLatDegFromCartesian(direction.x, direction.y, direction.z);
         if (!galactic) {
           return null;
@@ -1138,6 +1142,29 @@ THREEJS_SKY_RUNTIME_JS = """
           Math.tan(THREE.MathUtils.degToRad(cameraFovDeg * 0.5)) * aspect
         ) * 180.0 / Math.PI;
         const fovDeg = Math.min(Math.max(horizontalFovDeg, 0.05), 179.0);
+        const referenceUp = typeof skyViewUpVectorForDirection === "function"
+          ? skyViewUpVectorForDirection(direction)
+          : new THREE.Vector3(0.0, 0.0, 1.0);
+        const cameraUp = camera.up && camera.up.lengthSq && camera.up.lengthSq() > 1e-12
+          ? camera.up.clone()
+          : referenceUp.clone();
+        cameraUp.sub(direction.clone().multiplyScalar(cameraUp.dot(direction)));
+        if (cameraUp.lengthSq() <= 1e-12) {
+          cameraUp.copy(referenceUp);
+        }
+        cameraUp.normalize();
+        const safeReferenceUp = referenceUp.clone();
+        safeReferenceUp.sub(direction.clone().multiplyScalar(safeReferenceUp.dot(direction)));
+        if (safeReferenceUp.lengthSq() <= 1e-12) {
+          safeReferenceUp.copy(cameraUp);
+        }
+        safeReferenceUp.normalize();
+        const referenceRight = new THREE.Vector3().crossVectors(safeReferenceUp, direction);
+        let rotationDeg = 0.0;
+        if (referenceRight.lengthSq() > 1e-12) {
+          referenceRight.normalize();
+          rotationDeg = Math.atan2(cameraUp.dot(referenceRight), cameraUp.dot(safeReferenceUp)) * 180.0 / Math.PI;
+        }
         return {
           l: Number(galactic.l),
           b: Number(galactic.b),
@@ -1145,6 +1172,7 @@ THREEJS_SKY_RUNTIME_JS = """
           dec: Number(icrs.dec),
           fovDeg,
           cameraFovDeg,
+          rotationDeg,
         };
       }
 
@@ -1273,6 +1301,7 @@ THREEJS_SKY_RUNTIME_JS = """
           direction,
           fovDeg: Number(view.fovDeg) || 0.0,
           cameraFovDeg: Number(view.cameraFovDeg) || Number(view.fovDeg) || 0.0,
+          rotationDeg: Number(view.rotationDeg) || 0.0,
         });
         if (!skyDomeBackgroundAlignedView) {
           skyDomeBackgroundAlignedView = skyDomeBackgroundSentViews.get(seq);
@@ -1283,7 +1312,7 @@ THREEJS_SKY_RUNTIME_JS = """
         }
       }
 
-      function markSkyDomeBackgroundViewApplied(seq) {
+      function markSkyDomeBackgroundViewApplied(seq, applied = null) {
         const safeSeq = Math.round(Number(seq) || 0);
         const appliedView = skyDomeBackgroundSentViews.get(safeSeq);
         if (appliedView) {
@@ -1295,7 +1324,7 @@ THREEJS_SKY_RUNTIME_JS = """
           });
         }
         if (typeof ovizDebugTrackSkyViewApplied === "function") {
-          ovizDebugTrackSkyViewApplied(safeSeq, Boolean(appliedView));
+          ovizDebugTrackSkyViewApplied(safeSeq, Boolean(appliedView), applied);
         }
         updateSkyDomeBackgroundPredictiveTransform();
       }
@@ -1329,6 +1358,7 @@ THREEJS_SKY_RUNTIME_JS = """
           view.ra.toFixed(3),
           view.dec.toFixed(3),
           view.fovDeg.toFixed(2),
+          Number.isFinite(Number(view.rotationDeg)) ? Number(view.rotationDeg).toFixed(2) : "0.00",
         ].join("|");
         const now = Number(timestampMs) || 0.0;
         if (signature !== skyDomeBackgroundLatestViewSignature) {
@@ -1375,6 +1405,7 @@ THREEJS_SKY_RUNTIME_JS = """
           b: view.b,
           fovDeg: view.fovDeg,
           cameraFovDeg: view.cameraFovDeg,
+          rotationDeg: view.rotationDeg,
         }, "*");
       }
 

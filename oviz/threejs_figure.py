@@ -5113,6 +5113,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           lastAppliedSeq: 0,
           lastSurvey: "",
           lastView: null,
+          lastAppliedView: null,
+          lastAppliedFovDeg: null,
+          lastAppliedRotationDeg: null,
+          lastFovMethod: "",
+          lastRotationMethod: "",
           lastLatencyMs: null,
           maxLatencyMs: 0,
           firstVisibleAtMs: null,
@@ -5292,10 +5297,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             ra: ovizDebugRound(view.ra, 3),
             dec: ovizDebugRound(view.dec, 3),
             fovDeg: ovizDebugRound(view.fovDeg, 2),
+            rotationDeg: ovizDebugRound(view.rotationDeg, 2),
           } : null,
         }, "sky-background-view-sent");
       }
-      function ovizDebugTrackSkyViewApplied(seq, matched) {
+      function ovizDebugTrackSkyViewApplied(seq, matched, applied = null) {
         if (!ovizDebugEnabled) {
           return;
         }
@@ -5314,6 +5320,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           lastAppliedSeq: safeSeq,
           lastLatencyMs: latencyMs,
           maxLatencyMs: Math.max(Number(ovizDebugState.sky.maxLatencyMs) || 0, Number(latencyMs) || 0),
+          lastAppliedView: applied && typeof applied === "object" ? {
+            requestedFovDeg: ovizDebugRound(applied.requestedFovDeg, 2),
+            requestedRotationDeg: ovizDebugRound(applied.requestedRotationDeg, 2),
+            appliedFovDeg: ovizDebugRound(applied.appliedFovDeg, 2),
+            appliedRotationDeg: ovizDebugRound(applied.appliedRotationDeg, 2),
+          } : ovizDebugState.sky.lastAppliedView,
+          lastAppliedFovDeg: applied && typeof applied === "object"
+            ? ovizDebugRound(applied.appliedFovDeg, 2)
+            : ovizDebugState.sky.lastAppliedFovDeg,
+          lastAppliedRotationDeg: applied && typeof applied === "object"
+            ? ovizDebugRound(applied.appliedRotationDeg, 2)
+            : ovizDebugState.sky.lastAppliedRotationDeg,
+          lastFovMethod: applied && applied.fovMethod
+            ? String(applied.fovMethod)
+            : ovizDebugState.sky.lastFovMethod,
+          lastRotationMethod: applied && applied.rotationMethod
+            ? String(applied.rotationMethod)
+            : ovizDebugState.sky.lastRotationMethod,
         }, matched ? "sky-background-view-applied" : "sky-background-view-stale");
       }
       function ovizDebugTrackApertureViewSent(frameIndex, seq, view) {
@@ -10741,6 +10765,71 @@ __SKY_RUNTIME_JS__
             message: message ? String(message) : "",
           }, "*");
         }
+        function aladinCallable(name) {
+          return aladinInstance && typeof aladinInstance[name] === "function"
+            ? aladinInstance[name].bind(aladinInstance)
+            : null;
+        }
+        function setAladinFovDeg(fovDeg) {
+          if (!Number.isFinite(fovDeg) || fovDeg <= 0.0) {
+            return "";
+          }
+          const clampedFov = Math.min(Math.max(fovDeg, 0.05), 179.0);
+          const setFov = aladinCallable("setFov");
+          const setFoV = aladinCallable("setFoV");
+          if (setFov) {
+            setFov(clampedFov);
+            return "setFov";
+          }
+          if (setFoV) {
+            setFoV(clampedFov);
+            return "setFoV";
+          }
+          return "";
+        }
+        function readAladinFovDeg() {
+          const getFov = aladinCallable("getFov") || aladinCallable("getFoV");
+          if (!getFov) {
+            return null;
+          }
+          try {
+            const value = getFov();
+            const numeric = Array.isArray(value) ? Number(value[0]) : Number(value);
+            return Number.isFinite(numeric) ? numeric : null;
+          } catch (_err) {
+            return null;
+          }
+        }
+        function setAladinRotationDeg(rotationDeg) {
+          if (!Number.isFinite(rotationDeg)) {
+            return "";
+          }
+          const setRotation = aladinCallable("setRotation");
+          if (!setRotation) {
+            return "";
+          }
+          setRotation(rotationDeg);
+          return "setRotation";
+        }
+        function readAladinRotationDeg() {
+          const getRotation = aladinCallable("getRotation");
+          if (!getRotation) {
+            return null;
+          }
+          try {
+            const numeric = Number(getRotation());
+            return Number.isFinite(numeric) ? numeric : null;
+          } catch (_err) {
+            return null;
+          }
+        }
+        function aladinViewportSize() {
+          const el = document.getElementById("aladin-lite-div");
+          return {
+            width: el ? Math.round(Number(el.clientWidth) || 0) : 0,
+            height: el ? Math.round(Number(el.clientHeight) || 0) : 0,
+          };
+        }
         function validImageDataUrl(value) {
           return (
             typeof value === "string"
@@ -10873,28 +10962,48 @@ __SKY_RUNTIME_JS__
           const lDeg = Number(data.l);
           const bDeg = Number(data.b);
           const fovDeg = Number(data.fovDeg);
+          const rotationDeg = Number(data.rotationDeg);
           const signature = [
             Number.isFinite(lDeg) ? lDeg.toFixed(5) : "",
             Number.isFinite(bDeg) ? bDeg.toFixed(5) : "",
             Number.isFinite(ra) ? ra.toFixed(5) : "",
             Number.isFinite(dec) ? dec.toFixed(5) : "",
             Number.isFinite(fovDeg) ? fovDeg.toFixed(3) : "",
+            Number.isFinite(rotationDeg) ? rotationDeg.toFixed(3) : "",
           ].join("|");
+          let fovMethod = "";
+          let rotationMethod = "";
           if (signature === lastAppliedSkyBackgroundSignature) {
-            return;
+            return {
+              fovMethod: "cached",
+              rotationMethod: "cached",
+              requestedFovDeg: Number.isFinite(fovDeg) ? fovDeg : null,
+              requestedRotationDeg: Number.isFinite(rotationDeg) ? rotationDeg : null,
+              appliedFovDeg: readAladinFovDeg(),
+              appliedRotationDeg: readAladinRotationDeg(),
+              viewport: aladinViewportSize(),
+            };
           }
           lastAppliedSkyBackgroundSignature = signature;
           if (typeof aladinInstance.stopAnimation === "function") {
             aladinInstance.stopAnimation();
           }
-          if (Number.isFinite(fovDeg) && fovDeg > 0.0 && typeof aladinInstance.setFoV === "function") {
-            aladinInstance.setFoV(Math.min(Math.max(fovDeg, 0.05), 179.0));
-          }
+          fovMethod = setAladinFovDeg(fovDeg);
+          rotationMethod = setAladinRotationDeg(rotationDeg);
           if (Number.isFinite(lDeg) && Number.isFinite(bDeg) && typeof aladinInstance.gotoPosition === "function") {
             aladinInstance.gotoPosition(lDeg, bDeg);
           } else if (Number.isFinite(ra) && Number.isFinite(dec) && typeof aladinInstance.gotoRaDec === "function") {
             aladinInstance.gotoRaDec(ra, dec);
           }
+          return {
+            fovMethod,
+            rotationMethod,
+            requestedFovDeg: Number.isFinite(fovDeg) ? fovDeg : null,
+            requestedRotationDeg: Number.isFinite(rotationDeg) ? rotationDeg : null,
+            appliedFovDeg: readAladinFovDeg(),
+            appliedRotationDeg: readAladinRotationDeg(),
+            viewport: aladinViewportSize(),
+          };
         }
         function skyLayerNameFor(layer) {
           return "oviz-" + String((layer && layer.key) || (layer && layer.survey) || "layer")
@@ -11110,11 +11219,18 @@ __SKY_RUNTIME_JS__
             skyBackgroundViewAnimationFrame = 0;
             const latestView = pendingSkyBackgroundView;
             pendingSkyBackgroundView = null;
-            applySkyBackgroundViewNow(latestView);
+            const appliedView = applySkyBackgroundViewNow(latestView) || {};
             if (window.parent && window.parent !== window && latestView && latestView.seq != null) {
               window.parent.postMessage({
                 type: "oviz-aladin-sky-background-view-applied",
                 seq: latestView.seq,
+                requestedFovDeg: appliedView.requestedFovDeg,
+                requestedRotationDeg: appliedView.requestedRotationDeg,
+                appliedFovDeg: appliedView.appliedFovDeg,
+                appliedRotationDeg: appliedView.appliedRotationDeg,
+                fovMethod: appliedView.fovMethod || "",
+                rotationMethod: appliedView.rotationMethod || "",
+                viewport: appliedView.viewport || null,
               }, "*");
             }
           });
@@ -11182,8 +11298,8 @@ __SKY_RUNTIME_JS__
           if (viewMode !== "click" && aladin && typeof aladin.setProjection === "function") {
             aladin.setProjection(skyDomeBackgroundOnly ? "TAN" : "MOL");
           }
-          if (viewMode !== "click" && aladin && typeof aladin.setFoV === "function") {
-            aladin.setFoV(skyDomeBackgroundOnly ? 90.0 : 360.0);
+          if (viewMode !== "click" && aladin) {
+            setAladinFovDeg(skyDomeBackgroundOnly ? 90.0 : 360.0);
           }
           if (viewMode === "click") {
             const beam = A.graphicOverlay({ color: ${beamColor}, lineWidth: 2, opacity: 0.95 });
@@ -11436,7 +11552,7 @@ __SKY_RUNTIME_JS__
           if (!fromSkyDomeCapture) {
             return;
           }
-          markSkyDomeBackgroundViewApplied(data.seq);
+          markSkyDomeBackgroundViewApplied(data.seq, data);
         } else if (data.type === "oviz-aladin-sky-background-ready") {
           if (fromSkyApertureFrame) {
             markSkyApertureFrameReady(event.source, data.survey || "");
