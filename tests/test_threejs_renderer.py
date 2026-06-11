@@ -1257,7 +1257,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("function skyBackgroundPredictiveTransformForAlignedView(alignedView, currentView = null)", html)
         self.assertIn("const alignedFov = Math.min(Math.max(Number(alignedView.fovDeg) || 1.0, 0.05), 179.0);", html)
         self.assertIn("const alignedTan = Math.max(Math.tan(THREE.MathUtils.degToRad(alignedFov * 0.5)), 1e-6);", html)
-        self.assertIn("clearSkyDomeBackgroundPredictiveTransform();\n        return;", html)
+        self.assertIn("const transform = skyBackgroundPredictiveTransformForAlignedView(skyDomeBackgroundAlignedView, currentView);", html)
+        self.assertIn("skyDomeFrameEl.style.transform = transform;", html)
         self.assertIn("aladinInstance.setFoV(Math.min(Math.max(fovDeg, 0.05), 179.0));", html)
         self.assertIn("const scale = Math.min(Math.max(alignedTan / currentTan, 0.55), 1.9);", html)
         self.assertIn("function zoomEarthViewByWheelDelta(deltaY)", html)
@@ -1363,7 +1364,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertNotIn("Keep sky visible", html)
         self.assertIn("aladinInstance.stopAnimation()", html)
         self.assertIn("aladinInstance.gotoPosition(lDeg, bDeg)", html)
-        self.assertIn("const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 72.0 : 50.0", html)
+        self.assertIn("const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 16.0 : 50.0", html)
         self.assertIn("updateSkyDomeBackgroundFrame(\n            (typeof performance", html)
 
     def test_threejs_renderer_exposes_opt_in_sky_debug_instrumentation(self):

@@ -1152,25 +1152,15 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!skyDomeUsesAladinBackground()) {
           return;
         }
-        const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
-        skyDomeBackgroundMotionHoldUntil = now + Math.max(Number(holdMs) || 0.0, 0.0);
+        skyDomeBackgroundMotionHoldUntil = 0.0;
       }
 
       function setSkyDomeBackgroundCameraActive(active) {
         if (!skyDomeUsesAladinBackground()) {
           return;
         }
-        const nextActive = Boolean(active);
-        const changed = nextActive !== skyDomeBackgroundUserCameraActive;
-        skyDomeBackgroundUserCameraActive = nextActive;
-        holdSkyDomeBackgroundForCameraMotion(nextActive ? 180.0 : 0.0);
-        if (changed && !nextActive) {
-          const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
-          updateSkyDomeBackgroundFrame(now, { force: true });
-          if (typeof postSkyApertureViewToFrames === "function") {
-            postSkyApertureViewToFrames(now, { force: true, allowClosed: true });
-          }
-        }
+        skyDomeBackgroundUserCameraActive = Boolean(active);
+        holdSkyDomeBackgroundForCameraMotion(0.0);
       }
 
       function setSkyDomeBackgroundDebugState(reason) {
@@ -1211,9 +1201,6 @@ THREEJS_SKY_RUNTIME_JS = """
           return;
         }
         skyDomeFrameEl.style.transform = "";
-        if (typeof updateSkyApertureFramePredictiveTransforms === "function") {
-          updateSkyApertureFramePredictiveTransforms(null, { clear: true });
-        }
       }
 
       function skyBackgroundPredictiveTransformForAlignedView(alignedView, currentView = null) {
@@ -1260,8 +1247,12 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!skyDomeFrameEl || !skyDomeUsesAladinBackground()) {
           return;
         }
-        clearSkyDomeBackgroundPredictiveTransform();
-        return;
+        const transform = skyBackgroundPredictiveTransformForAlignedView(skyDomeBackgroundAlignedView, currentView);
+        if (!transform || (!skyDomeBackgroundUserCameraActive && skyDomeBackgroundSentViews.size === 0)) {
+          clearSkyDomeBackgroundPredictiveTransform();
+          return;
+        }
+        skyDomeFrameEl.style.transform = transform;
       }
 
       function recordSkyDomeBackgroundSentView(seq, view) {
@@ -1354,7 +1345,7 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!forceUpdate && signature === skyDomeBackgroundViewSignature && (now - skyDomeBackgroundLastSentAt) < 500.0) {
           return;
         }
-        const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 72.0 : 50.0;
+        const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 16.0 : 50.0;
         if (!forceUpdate && (now - skyDomeBackgroundLastSentAt) < minUpdateIntervalMs) {
           return;
         }
