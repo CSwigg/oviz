@@ -5139,6 +5139,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           activeBlend: "",
           pointerMode: "",
           promoting: false,
+          transformActiveCount: 0,
+          transformStatus: "",
           lastIssue: "",
         },
       };
