@@ -130,7 +130,7 @@ THREEJS_SHELL_HTML = """
       <iframe class="oviz-three-sky-dome-frame" loading="eager" referrerpolicy="no-referrer" aria-hidden="true" tabindex="-1"></iframe>
       <div class="oviz-three-sky-aperture" data-open="false" data-promoting="false" aria-hidden="true">
         <div class="oviz-three-sky-aperture-frame-clip">
-          <iframe class="oviz-three-sky-aperture-frame oviz-three-sky-aperture-frame-a oviz-three-sky-aperture-frame-preset" loading="eager" referrerpolicy="no-referrer" tabindex="-1"></iframe>
+          <iframe class="oviz-three-sky-aperture-frame oviz-three-sky-aperture-frame-a oviz-three-sky-aperture-frame-stack" loading="eager" referrerpolicy="no-referrer" tabindex="-1"></iframe>
         </div>
         <div class="oviz-three-sky-aperture-shade" aria-hidden="true"></div>
         <div class="oviz-three-sky-aperture-ring" role="application" tabindex="0" title="Drag to move. Drag an edge or use the wheel to resize. Double-click to set as sky background." aria-label="Projected sky aperture spectrum preview">
