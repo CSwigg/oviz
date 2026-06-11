@@ -11055,10 +11055,14 @@ __SKY_RUNTIME_JS__
           }
           const layers = (Array.isArray(data.layers) ? data.layers : [])
             .filter((layer) => layer && String(layer.survey || layer.key || "").trim());
+          const residentStack = Boolean(data.residentStack);
           const visibleLayers = layers.filter((layer) => (
             layer.visible !== false
             && Math.min(Math.max(Number(layer.opacity), 0.0), 1.0) > 0.0
           ));
+          const stackLayers = residentStack
+            ? layers.filter((layer) => layer.visible !== false)
+            : visibleLayers;
           const aladinEl = document.getElementById("aladin-lite-div");
           if (!visibleLayers.length) {
             if (aladinEl) {
@@ -11070,17 +11074,17 @@ __SKY_RUNTIME_JS__
           if (aladinEl) {
             aladinEl.style.opacity = "1";
           }
-          const stackSignature = visibleLayers
+          const stackSignature = stackLayers
             .map((layer) => String(layer.key || layer.survey) + ":" + String(layer.survey || layer.key))
             .join("|");
-          const baseLayer = visibleLayers[visibleLayers.length - 1];
+          const baseLayer = stackLayers[stackLayers.length - 1];
           const baseSurvey = String(baseLayer.survey || baseLayer.key || "").trim();
           if (stackSignature !== activeSkyLayerStackSignature) {
             activeSkyLayerStackSignature = stackSignature;
             removeManagedSkyOverlays();
             setBaseSkyImageLayer(baseSurvey);
-            for (let index = visibleLayers.length - 2; index >= 0; index -= 1) {
-              const layer = visibleLayers[index];
+            for (let index = stackLayers.length - 2; index >= 0; index -= 1) {
+              const layer = stackLayers[index];
               setOverlaySkyImageLayer(
                 skyLayerNameFor(layer),
                 String(layer.survey || layer.key || "").trim(),
@@ -11092,8 +11096,8 @@ __SKY_RUNTIME_JS__
             setBaseSkyImageLayer(baseSurvey);
           }
           applySkyImageLayerOptions("base", baseLayer, true);
-          for (let index = visibleLayers.length - 2; index >= 0; index -= 1) {
-            const layer = visibleLayers[index];
+          for (let index = stackLayers.length - 2; index >= 0; index -= 1) {
+            const layer = stackLayers[index];
             applySkyImageLayerOptions(skyLayerNameFor(layer), layer, false);
           }
         }

@@ -1945,20 +1945,48 @@ THREEJS_SKY_RUNTIME_JS = """
         };
       }
 
+      function skyApertureResidentBaseLayer() {
+        const survey = skyApertureStackFrameSurvey();
+        return {
+          key: `aperture-base-${survey}`,
+          label: "Aperture base",
+          survey,
+          color: "",
+          opacity: 1.0,
+          visible: true,
+          stretch: "linear",
+          colormap: "",
+          cut_min: null,
+          cut_max: null,
+        };
+      }
+
       function skyApertureLayerStateForBlend(blend = skyApertureBlendForPosition()) {
         if (!blend || !blend.presetA || !blend.presetB) {
           return [];
         }
-        if (blend.fraction <= 0.001) {
-          return [skyApertureLayerForBlendPreset(blend.presetA, 1.0)].filter(Boolean);
+        const activeA = Number(blend.indexA);
+        const activeB = Number(blend.indexB);
+        const layers = skyAperturePresetOptions
+          .slice()
+          .reverse()
+          .map((preset) => {
+            const presetIndex = Number(preset && preset.index);
+            let opacity = 0.0;
+            if (presetIndex === activeA) {
+              opacity = 1.0;
+            }
+            if (presetIndex === activeB) {
+              opacity = Math.max(opacity, blend.fraction);
+            }
+            return skyApertureLayerForBlendPreset(preset, opacity);
+          })
+          .filter(Boolean);
+        const baseLayer = skyApertureResidentBaseLayer();
+        if (baseLayer) {
+          layers.push(baseLayer);
         }
-        if (blend.fraction >= 0.999) {
-          return [skyApertureLayerForBlendPreset(blend.presetB, 1.0)].filter(Boolean);
-        }
-        return [
-          skyApertureLayerForBlendPreset(blend.presetB, blend.fraction),
-          skyApertureLayerForBlendPreset(blend.presetA, 1.0),
-        ].filter(Boolean);
+        return layers;
       }
 
       function postSkyApertureLayerStateToFrame(blend = skyApertureBlendForPosition()) {
@@ -1970,11 +1998,13 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!layers.length) {
           return;
         }
+        const activePreset = blend && blend.fraction > 0.5 ? blend.presetB : (blend && blend.presetA);
         try {
           frameEl.contentWindow.postMessage({
             type: "oviz-sky-layer-state",
             layers,
-            activeKey: String((layers[0] && layers[0].key) || ""),
+            residentStack: true,
+            activeKey: String((activePreset && activePreset.key) || (layers[0] && layers[0].key) || ""),
           }, "*");
         } catch (_err) {
         }
