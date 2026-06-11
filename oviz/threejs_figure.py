@@ -10673,6 +10673,7 @@ __SKY_RUNTIME_JS__
         let activeSkyApertureLayerStackSignature = "";
         const managedSkyOverlayLayerNames = new Set();
         const managedSkyApertureOverlayLayerNames = new Set();
+        const skyLayerCanvasScopes = new Map();
         function normalizeClusterKey(value) {
           return String(value || "")
             .trim()
@@ -10957,6 +10958,80 @@ __SKY_RUNTIME_JS__
           });
           managedSkyApertureOverlayLayerNames.clear();
           activeSkyApertureLayerStackSignature = "";
+          clearSkyLayerCanvasScope("aperture");
+        }
+        function skyLayerCanvasElements() {
+          return Array.from(document.querySelectorAll("#aladin-lite-div canvas"));
+        }
+        function normalizeSkyLayerCanvasScope(scope) {
+          return scope === "aperture" ? "aperture" : "main";
+        }
+        function markSkyLayerCanvas(canvasEl, layerName, scope) {
+          if (!canvasEl || !layerName) {
+            return;
+          }
+          const safeScope = normalizeSkyLayerCanvasScope(scope);
+          canvasEl.dataset.ovizSkyLayerName = String(layerName);
+          canvasEl.dataset.ovizSkyLayerScope = safeScope;
+          if (safeScope === "aperture") {
+            canvasEl.dataset.ovizApertureLayer = "true";
+          } else {
+            delete canvasEl.dataset.ovizApertureLayer;
+          }
+          if (!skyLayerCanvasScopes.has(layerName)) {
+            skyLayerCanvasScopes.set(layerName, new Set());
+          }
+          skyLayerCanvasScopes.get(layerName).add(canvasEl);
+        }
+        function clearSkyLayerCanvasScope(scope) {
+          const safeScope = normalizeSkyLayerCanvasScope(scope);
+          skyLayerCanvasElements().forEach((canvasEl) => {
+            if (canvasEl && canvasEl.dataset && canvasEl.dataset.ovizSkyLayerScope === safeScope) {
+              delete canvasEl.dataset.ovizSkyLayerName;
+              delete canvasEl.dataset.ovizSkyLayerScope;
+              delete canvasEl.dataset.ovizApertureLayer;
+            }
+          });
+          Array.from(skyLayerCanvasScopes.keys()).forEach((layerName) => {
+            const canvases = skyLayerCanvasScopes.get(layerName);
+            if (!canvases) {
+              return;
+            }
+            Array.from(canvases).forEach((canvasEl) => {
+              if (!canvasEl || !canvasEl.dataset || canvasEl.dataset.ovizSkyLayerScope !== safeScope) {
+                return;
+              }
+              canvases.delete(canvasEl);
+            });
+            if (!canvases.size) {
+              skyLayerCanvasScopes.delete(layerName);
+            }
+          });
+        }
+        function tagSkyLayerCanvases(layerName, beforeCanvases, scope) {
+          if (!layerName) {
+            return false;
+          }
+          const before = beforeCanvases instanceof Set ? beforeCanvases : new Set();
+          const canvases = skyLayerCanvasElements();
+          const newCanvases = canvases.filter((canvasEl) => !before.has(canvasEl));
+          const targetCanvases = newCanvases.length
+            ? newCanvases
+            : canvases.filter((canvasEl, index) => (
+              index > 0
+              && canvasEl
+              && canvasEl.dataset
+              && !canvasEl.dataset.ovizSkyLayerName
+            )).slice(-1);
+          targetCanvases.forEach((canvasEl) => markSkyLayerCanvas(canvasEl, layerName, scope));
+          return targetCanvases.length > 0;
+        }
+        function scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, scope) {
+          const before = beforeCanvases instanceof Set ? beforeCanvases : new Set(beforeCanvases || []);
+          const delays = [0, 32, 120, 360, 1000];
+          delays.forEach((delayMs) => {
+            window.setTimeout(() => tagSkyLayerCanvases(layerName, before, scope), delayMs);
+          });
         }
         function imageLayerForName(layerName, isBase) {
           if (!aladinInstance) {
@@ -11049,6 +11124,7 @@ __SKY_RUNTIME_JS__
           if (!aladinInstance || !survey || !layerName) {
             return;
           }
+          const beforeCanvases = new Set(skyLayerCanvasElements());
           const attachOverlay = (overlaySurvey) => {
             if (!overlaySurvey || (expectedSignature && activeSkyLayerStackSignature !== expectedSignature)) {
               return;
@@ -11058,10 +11134,12 @@ __SKY_RUNTIME_JS__
                 aladinInstance.addImageLayer(overlaySurvey, layerName);
                 managedSkyOverlayLayerNames.add(layerName);
                 applySkyImageLayerOptions(layerName, layer, false);
+                scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, "main");
               } else if (typeof aladinInstance.setOverlayImageLayer === "function") {
                 aladinInstance.setOverlayImageLayer(overlaySurvey, layerName);
                 managedSkyOverlayLayerNames.add(layerName);
                 applySkyImageLayerOptions(layerName, layer, false);
+                scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, "main");
               }
             } catch (_err) {
             }
@@ -11077,6 +11155,7 @@ __SKY_RUNTIME_JS__
           if (!aladinInstance || !survey || !layerName) {
             return;
           }
+          const beforeCanvases = new Set(skyLayerCanvasElements());
           const attachOverlay = (overlaySurvey) => {
             if (!overlaySurvey || (expectedSignature && activeSkyApertureLayerStackSignature !== expectedSignature)) {
               return;
@@ -11086,10 +11165,12 @@ __SKY_RUNTIME_JS__
                 aladinInstance.addImageLayer(overlaySurvey, layerName);
                 managedSkyApertureOverlayLayerNames.add(layerName);
                 applySkyImageLayerOptions(layerName, layer, false);
+                scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, "aperture");
               } else if (typeof aladinInstance.setOverlayImageLayer === "function") {
                 aladinInstance.setOverlayImageLayer(overlaySurvey, layerName);
                 managedSkyApertureOverlayLayerNames.add(layerName);
                 applySkyImageLayerOptions(layerName, layer, false);
+                scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, "aperture");
               }
             } catch (_err) {
             }
@@ -11113,9 +11194,10 @@ __SKY_RUNTIME_JS__
             document.head.appendChild(styleEl);
           }
           styleEl.textContent = enabled ? `
-            body[data-oviz-aperture-clip="true"] #aladin-lite-div canvas:not(:first-of-type) {
+            body[data-oviz-aperture-clip="true"] #aladin-lite-div canvas[data-oviz-aperture-layer="true"] {
               clip-path: var(--oviz-aperture-clip);
               -webkit-clip-path: var(--oviz-aperture-clip);
+              pointer-events: none;
             }
           ` : "";
         }

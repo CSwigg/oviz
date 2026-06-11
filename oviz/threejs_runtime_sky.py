@@ -1832,13 +1832,10 @@ THREEJS_SKY_RUNTIME_JS = """
       }
 
       function skyApertureUsesBaseFrameStack() {
-        const visibleMainLayers = (typeof visibleSkyLayers === "function") ? visibleSkyLayers() : [];
-        const visibleMainLayerCount = Array.isArray(visibleMainLayers) ? visibleMainLayers.length : 1;
         return Boolean(
           skyDomeFrameEl
           && skyDomeFrameEl.contentWindow
           && skyDomeBackgroundFrameReady
-          && visibleMainLayerCount <= 1
         );
       }
 
