@@ -1840,7 +1840,7 @@ THREEJS_SKY_RUNTIME_JS = """
       }
 
       function skyApertureNeedsFallbackFrame() {
-        return !skyApertureUsesBaseFrameStack();
+        return false;
       }
 
       function skyApertureDebugFramesTotal() {
@@ -2683,7 +2683,7 @@ THREEJS_SKY_RUNTIME_JS = """
         if (skyAperturePointerState) {
           return;
         }
-        if (!options.forceFallback && !skyApertureNeedsFallbackFrame()) {
+        if (!skyApertureNeedsFallbackFrame()) {
           return;
         }
         const view = options && options.view ? options.view : skyDomeBackgroundViewForCamera();
