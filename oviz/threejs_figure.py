@@ -5137,6 +5137,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           lastLatencyMs: null,
           maxLatencyMs: 0,
           activeBlend: "",
+          transformActiveCount: 0,
+          transformStatus: "",
           pointerMode: "",
           promoting: false,
           lastIssue: "",
@@ -5212,6 +5214,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           `sky survey=${sky.lastSurvey || "-"}`,
           `aperture open=${aperture.open ? "1" : "0"} available=${aperture.controlsAvailable ? "1" : "0"} prewarm=${aperture.prewarmComplete ? "done" : (aperture.prewarmStarted ? "running" : "idle")}`,
           `aperture frames=${aperture.framesReady}/${aperture.framesTotal} pending=${aperture.pending} blend=${aperture.activeBlend || "-"}`,
+          `aperture transform=${aperture.transformStatus || "-"}:${aperture.transformActiveCount || 0}`,
           `aperture seq=${aperture.lastAppliedSeq}/${aperture.lastSeq} latency=${aperture.lastLatencyMs ?? "-"}ms max=${aperture.maxLatencyMs || 0}ms`,
           ...eventLines,
         ].join("\\n");
