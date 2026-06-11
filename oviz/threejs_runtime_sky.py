@@ -1928,9 +1928,16 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!Array.isArray(skyAperturePresetFrameEls)) {
           return;
         }
+        const transform = (
+          !options.clear
+          && skyApertureState.open
+          && skyApertureControlsAvailable()
+          && !skyAperturePromotionFrame
+          && skyDomeFrameEl
+        ) ? String(skyDomeFrameEl.style.transform || "") : "";
         skyAperturePresetFrameEls.forEach((frameEl) => {
           if (frameEl) {
-            frameEl.style.transform = "";
+            frameEl.style.transform = transform;
           }
         });
       }
@@ -2547,7 +2554,8 @@ THREEJS_SKY_RUNTIME_JS = """
           requestedFrameIndexes.join(","),
         ].join("|");
         const now = Number(timestampMs) || 0.0;
-        if (!options.force && signature === skyApertureLastViewSignature && (now - skyApertureLastViewSentAt) < 120.0) {
+        const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 16.0 : 120.0;
+        if (!options.force && signature === skyApertureLastViewSignature && (now - skyApertureLastViewSentAt) < minUpdateIntervalMs) {
           return;
         }
         skyApertureLastViewSignature = signature;
@@ -2691,12 +2699,14 @@ THREEJS_SKY_RUNTIME_JS = """
         syncSkyApertureToggle();
         maybeStartSkyAperturePrewarm(timestampMs);
         if (!skyApertureState.open || !skyApertureControlsAvailable()) {
+          updateSkyApertureFramePredictiveTransforms(null, { clear: true });
           return;
         }
         updateSkyApertureRenderedSpectrumPosition(timestampMs);
         renderSkyApertureGeometry();
         updateSkyApertureBlendFrames();
         scheduleSkyApertureViewPost(timestampMs);
+        updateSkyApertureFramePredictiveTransforms(skyDomeBackgroundViewForCamera());
       }
 
       function skyAperturePointerPoint(event) {
@@ -2933,6 +2943,7 @@ THREEJS_SKY_RUNTIME_JS = """
           : skyApertureFallbackPoints(rect, skyApertureState.sizeDeg);
         const targetPoints = skyAperturePromotionTargetPoints(rect);
         const startTime = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        updateSkyApertureFramePredictiveTransforms(null, { clear: true });
         if (skyApertureEl) {
           skyApertureEl.dataset.promoting = "true";
         }
