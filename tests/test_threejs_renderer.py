@@ -1510,6 +1510,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("residentStack: true", html)
         self.assertIn("const residentStack = Boolean(data.residentStack);", html)
         self.assertIn("const stackLayers = residentStack", html)
+        self.assertIn("typeof aladinInstance.addImageLayer === \"function\"", html)
+        self.assertIn("aladinInstance.addImageLayer(overlaySurvey, layerName)", html)
         self.assertIn(".slice()", html)
         self.assertIn(".reverse()", html)
         self.assertIn("skyApertureLayerStateForBlend(blend)", html)

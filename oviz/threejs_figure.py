@@ -11034,7 +11034,11 @@ __SKY_RUNTIME_JS__
               return;
             }
             try {
-              if (typeof aladinInstance.setOverlayImageLayer === "function") {
+              if (typeof aladinInstance.addImageLayer === "function") {
+                aladinInstance.addImageLayer(overlaySurvey, layerName);
+                managedSkyOverlayLayerNames.add(layerName);
+                applySkyImageLayerOptions(layerName, layer, false);
+              } else if (typeof aladinInstance.setOverlayImageLayer === "function") {
                 aladinInstance.setOverlayImageLayer(overlaySurvey, layerName);
                 managedSkyOverlayLayerNames.add(layerName);
                 applySkyImageLayerOptions(layerName, layer, false);
