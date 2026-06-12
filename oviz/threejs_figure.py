@@ -10650,6 +10650,11 @@ __SKY_RUNTIME_JS__
     </div>
     <script src="https://aladin.u-strasbg.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"><\/script>
     <script>
+      if (typeof A === "undefined") {
+        document.write('<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"><\\/script>');
+      }
+    <\/script>
+    <script>
       (function () {
         const viewMode = ${modeJson};
         const payload = ${payloadJson};
@@ -11196,13 +11201,13 @@ __SKY_RUNTIME_JS__
             styleEl.id = "oviz-aperture-clip-style";
             document.head.appendChild(styleEl);
           }
-          styleEl.textContent = enabled ? `
-            body[data-oviz-aperture-clip="true"] #aladin-lite-div canvas[data-oviz-aperture-layer="true"] {
-              clip-path: var(--oviz-aperture-clip);
-              -webkit-clip-path: var(--oviz-aperture-clip);
-              pointer-events: none;
-            }
-          ` : "";
+          styleEl.textContent = enabled ? [
+            'body[data-oviz-aperture-clip="true"] #aladin-lite-div canvas[data-oviz-aperture-layer="true"] {',
+            "  clip-path: var(--oviz-aperture-clip);",
+            "  -webkit-clip-path: var(--oviz-aperture-clip);",
+            "  pointer-events: none;",
+            "}",
+          ].join("\\\\n") : "";
         }
         function applySkyApertureLayerState(data) {
           if (!data || data.enabled === false) {
