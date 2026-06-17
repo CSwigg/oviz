@@ -35,11 +35,10 @@ data/
   taurus_core_sigma_age-Feb-2025-v2.csv
   cluster_velocities_jan2026.csv
   hunt_sample_chronos_ages_multiprocessing_feb_2026.csv
-  cluster_sample_data.csv
   mean_and_std_xyz.fits
 ```
 
-The four CSV files are small enough to share directly through Google Drive, Dropbox, Box, or similar. Do not put the Edenhofer FITS cube in Git.
+The three CSV files are small enough to share directly through Google Drive, Dropbox, Box, or similar. Do not put the Edenhofer FITS cube in Git.
 
 The Edenhofer Cartesian dust map is large, about 15.7 GB. They should download it themselves:
 
