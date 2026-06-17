@@ -433,55 +433,56 @@ def build_taurus_star_customdata(taurus_stars):
 
 def build_taurus_static_traces(taurus_bulk, taurus_stars):
     import numpy as np
-    import plotly.graph_objects as go
 
     star_ages = taurus_stars["age_myr"].to_numpy(dtype=float)
     age_cmin = float(np.nanmin(star_ages))
     age_cmax = float(np.nanmax(star_ages))
 
-    star_trace = go.Scatter3d(
-        x=taurus_stars["x"].to_numpy(dtype=float),
-        y=taurus_stars["y"].to_numpy(dtype=float),
-        z=taurus_stars["z"].to_numpy(dtype=float),
-        mode="markers",
-        marker=dict(
-            size=0.35,
-            color=star_ages,
-            colorscale=TAURUS_STAR_COLORMAP,
-            cmin=age_cmin,
-            cmax=age_cmax,
-            opacity=0.75,
-            symbol="circle",
-            line=dict(width=0),
-        ),
-        customdata=build_taurus_star_customdata(taurus_stars),
-        name=TAURUS_STARS_TRACE_NAME,
-        hoverinfo="skip",
-        meta={
+    star_trace = {
+        "type": "scatter3d",
+        "x": taurus_stars["x"].to_numpy(dtype=float),
+        "y": taurus_stars["y"].to_numpy(dtype=float),
+        "z": taurus_stars["z"].to_numpy(dtype=float),
+        "mode": "markers",
+        "marker": {
+            "size": 0.35,
+            "color": star_ages,
+            "colorscale": TAURUS_STAR_COLORMAP,
+            "cmin": age_cmin,
+            "cmax": age_cmax,
+            "opacity": 0.75,
+            "symbol": "circle",
+            "line": {"width": 0},
+        },
+        "customdata": build_taurus_star_customdata(taurus_stars),
+        "name": TAURUS_STARS_TRACE_NAME,
+        "hoverinfo": "skip",
+        "meta": {
             "trace_kind": "stars",
             "static": True,
             "color_by": "age",
             "color_label": "Age (Myr)",
             "colormap": TAURUS_STAR_COLORMAP,
         },
-    )
+    }
 
-    label_trace = go.Scatter3d(
-        x=taurus_bulk["x"].to_numpy(dtype=float),
-        y=taurus_bulk["y"].to_numpy(dtype=float),
-        z=(taurus_bulk["z"] + 7.0).to_numpy(dtype=float),
-        mode="text",
-        text=taurus_bulk["name"].astype(str).to_numpy(dtype=object),
-        textposition="top center",
-        textfont=dict(color="#dcffe8", size=18, family="Helvetica"),
-        name=TAURUS_LABEL_TRACE_NAME,
-        hoverinfo="skip",
-        meta={
+    label_trace = {
+        "type": "scatter3d",
+        "x": taurus_bulk["x"].to_numpy(dtype=float),
+        "y": taurus_bulk["y"].to_numpy(dtype=float),
+        "z": (taurus_bulk["z"] + 7.0).to_numpy(dtype=float),
+        "mode": "text",
+        "text": taurus_bulk["name"].astype(str).to_numpy(dtype=object),
+        "textposition": "top center",
+        "textfont": {"color": "#dcffe8", "size": 18, "family": "Helvetica"},
+        "name": TAURUS_LABEL_TRACE_NAME,
+        "hoverinfo": "skip",
+        "meta": {
             "screen_stable_text": True,
             "screen_px": 18.0,
             "trace_kind": "labels",
         },
-    )
+    }
     return [star_trace, label_trace]
 
 
