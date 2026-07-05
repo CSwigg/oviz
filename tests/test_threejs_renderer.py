@@ -686,6 +686,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("oviz-three-mobile-selection-status", html)
         self.assertIn('height: 100dvh;', html)
         self.assertIn('env(safe-area-inset-bottom, 0px)', html)
+        self.assertIn("const mobileDeferVolumes = mobileModeEnabled && initialState.mobile_defer_volumes !== false;", html)
+        self.assertIn('root.dataset.mobileVolumesDeferred = mobileDeferVolumes ? "true" : "false";', html)
+        self.assertIn("!state || !volumeVisibleForFrame(layer, state, currentFrame())", html)
 
     def test_threejs_renderer_auto_detects_mobile_runtime(self):
         fig = ThreeJSFigure(

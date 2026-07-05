@@ -8463,6 +8463,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             }
           });
         }
+        const mobileDeferVolumes = mobileModeEnabled && initialState.mobile_defer_volumes !== false;
+        if (mobileDeferVolumes) {
+          volumeStateKeys.forEach((stateKey) => {
+            const target = volumeStateByKey[String(stateKey)];
+            if (target) {
+              target.visible = false;
+            }
+            legendState[String(stateKey)] = false;
+          });
+        }
+        if (root && root.dataset) {
+          root.dataset.mobileVolumesDeferred = mobileDeferVolumes ? "true" : "false";
+        }
 
         const savedClusterFilterState = initialState.cluster_filter_state;
         if (savedClusterFilterState && typeof savedClusterFilterState === "object") {
@@ -14770,6 +14783,10 @@ __SKY_RUNTIME_JS__
           }
           const stateKey = volumeStateKeyForLayer(layer);
           if (legendState[stateKey] === false) {
+            return;
+          }
+          const state = volumeStateByKey[stateKey];
+          if (!state || !volumeVisibleForFrame(layer, state, currentFrame())) {
             return;
           }
           const runtime = createVolumeRuntime(layer);
