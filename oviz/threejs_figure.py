@@ -5115,18 +5115,79 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       ovizStartupMark("sceneSpecReady");
       attachSceneSpecPayloadMetadata(sceneSpec);
       const initialState = sceneSpec.initial_state || {};
+      function ovizQueryFlagValue(...names) {
+        try {
+          const params = new URLSearchParams(window.location.search || "");
+          for (const name of names) {
+            if (!params.has(name)) {
+              continue;
+            }
+            const rawValue = String(params.get(name) ?? "").trim().toLowerCase();
+            if (!rawValue || /^(1|true|yes|on)$/i.test(rawValue)) {
+              return true;
+            }
+            if (/^(0|false|no|off)$/i.test(rawValue)) {
+              return false;
+            }
+          }
+        } catch (_err) {
+          return null;
+        }
+        return null;
+      }
+
+      function ovizMobileModeOverride() {
+        const desktopOverride = ovizQueryFlagValue("desktop", "ovizDesktop", "desktopMode");
+        if (desktopOverride === true) {
+          return false;
+        }
+        const mobileOverride = ovizQueryFlagValue("mobile", "ovizMobile", "mobileMode");
+        if (mobileOverride !== null) {
+          return mobileOverride;
+        }
+        return null;
+      }
+
+      function ovizRuntimeLooksMobile() {
+        const nav = window.navigator || {};
+        const userAgent = String(nav.userAgent || "");
+        const maxTouchPoints = Number(nav.maxTouchPoints || 0);
+        const isiPhoneLike = /iPhone|iPod/i.test(userAgent);
+        const isAndroidPhone = /Android/i.test(userAgent) && /Mobile/i.test(userAgent);
+        const coarsePointer = (
+          (typeof window.matchMedia === "function" && window.matchMedia("(hover: none) and (pointer: coarse)").matches)
+          || maxTouchPoints > 1
+        );
+        const viewportWidth = Math.min(
+          Number(window.innerWidth) || Number.POSITIVE_INFINITY,
+          Number(window.screen && window.screen.width) || Number.POSITIVE_INFINITY,
+          Number(window.screen && window.screen.availWidth) || Number.POSITIVE_INFINITY
+        );
+        const viewportHeight = Math.min(
+          Number(window.innerHeight) || Number.POSITIVE_INFINITY,
+          Number(window.screen && window.screen.height) || Number.POSITIVE_INFINITY,
+          Number(window.screen && window.screen.availHeight) || Number.POSITIVE_INFINITY
+        );
+        const narrowViewport = Math.min(viewportWidth, viewportHeight) <= 760;
+        return Boolean(isiPhoneLike || isAndroidPhone || (coarsePointer && narrowViewport));
+      }
+
       const minimalModeEnabled = Boolean(
         initialState.lite_mode_enabled
         || initialState.minimal_mode_enabled
         || sceneSpec.export_profile === "lite"
         || sceneSpec.export_profile === "minimal"
       );
-      const mobileModeEnabled = Boolean(
+      const mobileModeOverride = ovizMobileModeOverride();
+      const sceneMobileModeEnabled = Boolean(
         initialState.mobile_mode_enabled
         || initialState.mobile_mode
         || sceneSpec.export_profile === "mobile"
         || (sceneSpec.mobile && sceneSpec.mobile.enabled)
       );
+      const mobileModeEnabled = mobileModeOverride === null
+        ? Boolean(sceneMobileModeEnabled || ovizRuntimeLooksMobile())
+        : mobileModeOverride;
       const galacticSimpleSpec = sceneSpec.galactic_simple && typeof sceneSpec.galactic_simple === "object"
         ? sceneSpec.galactic_simple
         : {};

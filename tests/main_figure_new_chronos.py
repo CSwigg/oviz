@@ -109,6 +109,17 @@ MAIN_FIGURE_VERGELY_VMIN = 0.0
 MAIN_FIGURE_VERGELY_VMAX = 0.02
 MAIN_FIGURE_VERGELY_DEFAULT_VMIN_QUANTILE = 0.70
 MAIN_FIGURE_VERGELY_DEFAULT_VMAX_QUANTILE = 0.995
+MOBILE_SAFE_TIMESTEP_MYR = 5
+MOBILE_SAFE_DUST_MAX_RESOLUTION = 128
+MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP = 128
+MOBILE_SAFE_DUST_SAMPLES = 64
+MOBILE_SAFE_VERGELY_MAX_RESOLUTION = 128
+MOBILE_SAFE_VERGELY_MAX_RESOLUTION_CAP = 128
+MOBILE_SAFE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION = 96
+MOBILE_SAFE_VERGELY_SAMPLES = 80
+MOBILE_SAFE_SKY_DOME_CAPTURE_WIDTH_PX = 1024
+MOBILE_SAFE_SKY_DOME_CAPTURE_HEIGHT_PX = 512
+MOBILE_SAFE_SKY_DOME_CAPTURE_QUALITY = 0.82
 
 
 def _sanitize_notebook_cell_source(source: str) -> str:
@@ -606,7 +617,19 @@ mccallum_ne_volumes = _build_mccallum_ne_volumes_for_main_figure()
 """.strip()
 
 
-def build_vergely_dust_volume_source_block() -> str:
+def build_vergely_dust_volume_source_block(*, mobile_safe_mode: bool = False) -> str:
+    max_resolution = MOBILE_SAFE_VERGELY_MAX_RESOLUTION if mobile_safe_mode else MAIN_FIGURE_VERGELY_MAX_RESOLUTION
+    max_resolution_cap = (
+        MOBILE_SAFE_VERGELY_MAX_RESOLUTION_CAP
+        if mobile_safe_mode
+        else MAIN_FIGURE_VERGELY_MAX_RESOLUTION_CAP
+    )
+    sky_overlay_max_resolution = (
+        MOBILE_SAFE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION
+        if mobile_safe_mode
+        else MAIN_FIGURE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION
+    )
+    samples = MOBILE_SAFE_VERGELY_SAMPLES if mobile_safe_mode else MAIN_FIGURE_VERGELY_SAMPLES
     return f"""
 import os
 from pathlib import Path as _OvizPath
@@ -630,12 +653,12 @@ def _build_vergely_dust_volumes_for_main_figure():
             "path": str(VERGELY_DUST_PATH),
             "hdu": "PRIMARY",
             "clip_bounds": {{"z": [{float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[0])}, {float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[1])}]}},
-            "max_resolution": {int(MAIN_FIGURE_VERGELY_MAX_RESOLUTION)},
-            "max_resolution_cap": {int(MAIN_FIGURE_VERGELY_MAX_RESOLUTION_CAP)},
-            "sky_overlay_max_resolution": {int(MAIN_FIGURE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION)},
+            "max_resolution": {int(max_resolution)},
+            "max_resolution_cap": {int(max_resolution_cap)},
+            "sky_overlay_max_resolution": {int(sky_overlay_max_resolution)},
             "data_encoding": "png_atlas_uint8",
             "opacity": {float(MAIN_FIGURE_VERGELY_OPACITY)!r},
-            "samples": {int(MAIN_FIGURE_VERGELY_SAMPLES)},
+            "samples": {int(samples)},
             "alpha_coef": {float(MAIN_FIGURE_VERGELY_ALPHA_COEF)!r},
             "gradient_step": 0.006,
             "stretch": "asinh",
@@ -1335,6 +1358,7 @@ def patch_script_source(
     galactic_simple: bool = False,
     mist_ages: bool = False,
     compact_payload: bool = True,
+    mobile_safe_mode: bool = False,
     chronos_results_path: Path = CHRONOS_CLUSTER_RESULTS_PATH,
     chronos_model: str = DEFAULT_CHRONOS_CLUSTER_MODEL,
     include_spiral_arms: bool = False,
@@ -1453,9 +1477,10 @@ def patch_script_source(
         if recolored_full_chronos_sample != 1:
             raise RuntimeError("Could not recolor the <60 Myr Chronos cluster trace.")
 
+    time_step_myr = MOBILE_SAFE_TIMESTEP_MYR if mobile_safe_mode else MAIN_FIGURE_TIMESTEP_MYR
     source, replaced_time_grid = re.subn(
         r"(?m)^time_int\s*=\s*np\.round\(np\.arange\(0,\s*-66,\s*-1\),\s*1\)\s*$",
-        f"time_int = np.round(np.arange(0, -{MAIN_FIGURE_LOOKBACK_MYR + 1}, -{MAIN_FIGURE_TIMESTEP_MYR}), 1)",
+        f"time_int = np.round(np.arange(0, -{MAIN_FIGURE_LOOKBACK_MYR + 1}, -{time_step_myr}), 1)",
         source,
         count=1,
     )
@@ -1465,7 +1490,7 @@ def patch_script_source(
     if galactic_simple:
         source, replaced_time_grid = re.subn(
             r"(?m)^time_int\s*=\s*np\.round\(np\.arange\(0,\s*-\d+,\s*-\d+\),\s*1\)\s*$",
-            f"time_int = np.round(np.arange(0, -{MAIN_FIGURE_LOOKBACK_MYR + 1}, -{MAIN_FIGURE_TIMESTEP_MYR}), 1)",
+            f"time_int = np.round(np.arange(0, -{MAIN_FIGURE_LOOKBACK_MYR + 1}, -{time_step_myr}), 1)",
             source,
             count=1,
         )
@@ -1475,18 +1500,18 @@ def patch_script_source(
     source = patch_edenhofer_volume_integer_setting(
         source,
         "max_resolution",
-        MAIN_FIGURE_DUST_MAX_RESOLUTION,
+        MOBILE_SAFE_DUST_MAX_RESOLUTION if mobile_safe_mode else MAIN_FIGURE_DUST_MAX_RESOLUTION,
     )
     source = patch_edenhofer_volume_integer_setting(
         source,
         "max_resolution_cap",
-        MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP,
+        MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP if mobile_safe_mode else MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP,
         insert_after="max_resolution",
     )
     source = patch_edenhofer_volume_integer_setting(
         source,
         "samples",
-        MAIN_FIGURE_DUST_SAMPLES,
+        MOBILE_SAFE_DUST_SAMPLES if mobile_safe_mode else MAIN_FIGURE_DUST_SAMPLES,
     )
     source = patch_edenhofer_volume_numeric_setting(
         source,
@@ -1529,7 +1554,7 @@ def patch_script_source(
             "'current_group': 'Clusters'",
             "'click_selection_enabled': False",
             f"'compact_payload_enabled': {bool(compact_payload)!r}",
-            "'scene_float_precision': 2",
+            f"'scene_float_precision': {1 if mobile_safe_mode else 2}",
             "'active_volume_key': ('vergely-dust' if vergely_dust_volumes else ('supernova-density' if supernova_volumes else 'volume-0'))",
             "'legend_state': ({'volume-0': True, **({'supernova-density': False} if supernova_volumes else {}), 'vergely-dust': True} if vergely_dust_volumes else ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True}))",
             "'volume_state_by_key': ({'volume-0': {'visible': True}, **({'supernova-density': {'visible': False}} if supernova_volumes else {}), 'vergely-dust': {'visible': True}} if vergely_dust_volumes else ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}}))",
@@ -1543,10 +1568,10 @@ def patch_script_source(
             "'sky_dome_background_mode': 'live_aladin'",
             "'sky_dome_source': 'aladin'",
             "'sky_dome_projection': 'TAN'",
-            "'sky_dome_capture_width_px': 4096",
-            "'sky_dome_capture_height_px': 2048",
+            f"'sky_dome_capture_width_px': {MOBILE_SAFE_SKY_DOME_CAPTURE_WIDTH_PX if mobile_safe_mode else 4096}",
+            f"'sky_dome_capture_height_px': {MOBILE_SAFE_SKY_DOME_CAPTURE_HEIGHT_PX if mobile_safe_mode else 2048}",
             "'sky_dome_capture_format': 'image/jpeg'",
-            "'sky_dome_capture_quality': 0.94",
+            f"'sky_dome_capture_quality': {MOBILE_SAFE_SKY_DOME_CAPTURE_QUALITY if mobile_safe_mode else 0.94}",
             "'sky_dome_radius_pc': 40000.0",
             "'sky_dome_opacity': 1.0",
             "'sky_dome_force_visible': False",
@@ -1725,7 +1750,17 @@ trace_groupings['Spiral Arms'] = ['Sun', *spiral_arm_trace_names]
         if removed_young_from_grouping != 1:
             raise RuntimeError("Could not remove the <15 Myr cluster trace from galactic simple groupings.")
 
-    if "supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)" not in source:
+    if mobile_safe_mode:
+        if "supernova_volumes = []" not in source:
+            source, inserted_supernova_stub = re.subn(
+                r"(?m)^(fig3d\s*=\s*plot_3d\.make_plot\()",
+                "supernova_volumes = []\n\n" + r"\1",
+                source,
+                count=1,
+            )
+            if inserted_supernova_stub != 1:
+                raise RuntimeError("Could not inject mobile-safe supernova volume stub.")
+    elif "supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)" not in source:
         supernova_block = build_supernova_volume_source_block()
         source, inserted_supernova = re.subn(
             r"(?m)^(fig3d\s*=\s*plot_3d\.make_plot\()",
@@ -1737,7 +1772,7 @@ trace_groupings['Spiral Arms'] = ['Sun', *spiral_arm_trace_names]
             raise RuntimeError("Could not inject supernova volume helper block.")
 
     if "vergely_dust_volumes = _build_vergely_dust_volumes_for_main_figure()" not in source:
-        vergely_block = build_vergely_dust_volume_source_block()
+        vergely_block = build_vergely_dust_volume_source_block(mobile_safe_mode=mobile_safe_mode)
         source, inserted_vergely = re.subn(
             r"(?m)^(fig3d\s*=\s*plot_3d\.make_plot\()",
             vergely_block + "\n\n" + r"\1",
@@ -1786,6 +1821,7 @@ def run_main_figure(
     galactic_simple: bool = False,
     mist_ages: bool = False,
     compact_payload: bool = True,
+    mobile_safe_mode: bool = False,
     chronos_results_path: Path = CHRONOS_CLUSTER_RESULTS_PATH,
     chronos_model: str = DEFAULT_CHRONOS_CLUSTER_MODEL,
     include_spiral_arms: bool = False,
@@ -1812,6 +1848,7 @@ def run_main_figure(
         galactic_simple=galactic_simple,
         mist_ages=mist_ages,
         compact_payload=compact_payload,
+        mobile_safe_mode=mobile_safe_mode,
         chronos_results_path=chronos_results_path,
         chronos_model=chronos_model,
         include_spiral_arms=include_spiral_arms,
@@ -1849,6 +1886,15 @@ def parse_args() -> argparse.Namespace:
         "--mobile-mode",
         action="store_true",
         help="Render the figure with mobile-mode metadata enabled.",
+    )
+    parser.add_argument(
+        "--mobile-safe-mode",
+        action="store_true",
+        help=(
+            "Render a smaller upload/iPhone-safe payload with coarser time steps, "
+            "lower-resolution volumes, lower sky capture resolution, and no "
+            "embedded supernova density volume."
+        ),
     )
     parser.add_argument(
         "--mist-ages",
@@ -1899,6 +1945,7 @@ def main() -> None:
         mobile_mode=bool(args.mobile_mode),
         mist_ages=bool(args.mist_ages),
         compact_payload=not bool(args.full_payload),
+        mobile_safe_mode=bool(args.mobile_safe_mode),
         chronos_results_path=args.chronos_results_path,
         chronos_model=args.chronos_model,
         include_spiral_arms=bool(args.include_spiral_arms),

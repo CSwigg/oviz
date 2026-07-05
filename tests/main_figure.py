@@ -34,6 +34,7 @@ CHRONOS_PARSEC_CLUSTER_RESULTS_PATH = (
 )
 DESKTOP_ROOT = HOME_DIR / "Desktop"
 DEFAULT_OUTPUT_HTML = Path(__file__).resolve().with_suffix(".html")
+SHARE_OUTPUT_HTML = Path(__file__).resolve().with_name("main_figure_share.html")
 WEBSITE_OUTPUT_HTML = (
     HOME_DIR
     / "Desktop"
@@ -51,6 +52,22 @@ MAIN_FIGURE_DUST_SAMPLES = 200
 MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION = 512
 MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP = 512
 MAIN_FIGURE_MCCALLUM_SAMPLES = 200
+SHARE_FIGURE_TIME_STEP_MYR = 5
+SHARE_FIGURE_DUST_MAX_RESOLUTION = 128
+SHARE_FIGURE_DUST_MAX_RESOLUTION_CAP = 128
+SHARE_FIGURE_DUST_SAMPLES = 64
+SHARE_FIGURE_SKY_DOME_CAPTURE_WIDTH_PX = 1024
+SHARE_FIGURE_SKY_DOME_CAPTURE_HEIGHT_PX = 512
+SHARE_FIGURE_SKY_DOME_CAPTURE_QUALITY = 0.82
+
+
+SHARE_FIGURE_VOLUME_STUB = """
+supernova_volumes = []
+mccallum_ne_volumes = []
+local_shell_volumes = []
+optional_static_volume_state = {}
+optional_static_legend_state = {}
+""".strip()
 
 
 def _sanitize_notebook_cell_source(source: str) -> str:
@@ -170,6 +187,20 @@ def patch_edenhofer_volume_clip_bounds(source: str, z_bounds: tuple[float, float
         raise RuntimeError("Could not update the Edenhofer dust clip_bounds.")
 
     return source[:block_match.start(1)] + updated_block + source[block_match.end(1):]
+
+
+def patch_time_grid_step(source: str, step_myr: int) -> str:
+    if int(step_myr) <= 0:
+        raise ValueError("step_myr must be positive.")
+    source, replaced = re.subn(
+        r"(?m)^time_int\s*=\s*np\.round\(np\.arange\(0,\s*-66,\s*-1\),\s*1\)\s*$",
+        f"time_int = np.round(np.arange(0, -66, -{int(step_myr)}), 1)",
+        source,
+        count=1,
+    )
+    if replaced != 1:
+        raise RuntimeError("Could not patch the main figure time grid.")
+    return source
 
 
 def build_supernova_volume_source_block() -> str:
@@ -621,9 +652,13 @@ def patch_script_source(
     galactic_simple: bool = False,
     mist_ages: bool = False,
     compact_payload: bool = True,
+    share_mode: bool = False,
 ) -> str:
     source = source.replace("/Users/cam", str(HOME_DIR))
     source = source.replace("/Users/cam/Desktop", str(DESKTOP_ROOT))
+
+    if share_mode:
+        source = patch_time_grid_step(source, SHARE_FIGURE_TIME_STEP_MYR)
 
     source, removed_local_bubble_info = re.subn(
         r"(?ms)^from astropy\.io import fits\n"
@@ -698,18 +733,18 @@ def patch_script_source(
     source = patch_edenhofer_volume_integer_setting(
         source,
         "max_resolution",
-        MAIN_FIGURE_DUST_MAX_RESOLUTION,
+        SHARE_FIGURE_DUST_MAX_RESOLUTION if share_mode else MAIN_FIGURE_DUST_MAX_RESOLUTION,
     )
     source = patch_edenhofer_volume_integer_setting(
         source,
         "max_resolution_cap",
-        MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP,
+        SHARE_FIGURE_DUST_MAX_RESOLUTION_CAP if share_mode else MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP,
         insert_after="max_resolution",
     )
     source = patch_edenhofer_volume_integer_setting(
         source,
         "samples",
-        MAIN_FIGURE_DUST_SAMPLES,
+        SHARE_FIGURE_DUST_SAMPLES if share_mode else MAIN_FIGURE_DUST_SAMPLES,
     )
     source = patch_edenhofer_volume_clip_bounds(
         source,
@@ -742,7 +777,7 @@ def patch_script_source(
             "'current_group': 'Clusters'",
             "'click_selection_enabled': False",
             f"'compact_payload_enabled': {bool(compact_payload)!r}",
-            "'scene_float_precision': 2",
+            f"'scene_float_precision': {1 if share_mode else 2}",
             "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
             "'legend_state': ({'volume-0': False, **optional_static_legend_state, 'supernova-density': True} if supernova_volumes else {'volume-0': True, **optional_static_legend_state})",
             "'volume_state_by_key': ({'volume-0': {'visible': False}, **optional_static_volume_state, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}, **optional_static_volume_state})",
@@ -756,10 +791,10 @@ def patch_script_source(
             "'sky_dome_background_mode': 'live_aladin'",
             "'sky_dome_source': 'aladin'",
             "'sky_dome_projection': 'TAN'",
-            "'sky_dome_capture_width_px': 4096",
-            "'sky_dome_capture_height_px': 2048",
+            f"'sky_dome_capture_width_px': {SHARE_FIGURE_SKY_DOME_CAPTURE_WIDTH_PX if share_mode else 4096}",
+            f"'sky_dome_capture_height_px': {SHARE_FIGURE_SKY_DOME_CAPTURE_HEIGHT_PX if share_mode else 2048}",
             "'sky_dome_capture_format': 'image/jpeg'",
-            "'sky_dome_capture_quality': 0.94",
+            f"'sky_dome_capture_quality': {SHARE_FIGURE_SKY_DOME_CAPTURE_QUALITY if share_mode else 0.94}",
             "'sky_dome_radius_pc': 40000.0",
             "'sky_dome_opacity': 1.0",
             "'sky_dome_force_visible': False",
@@ -910,7 +945,26 @@ trace_groupings = {
         if removed_young_from_grouping != 1:
             raise RuntimeError("Could not remove the <15 Myr cluster trace from galactic simple groupings.")
 
-    if "supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)" not in source:
+    if share_mode:
+        if SHARE_FIGURE_VOLUME_STUB not in source:
+            source, inserted_share_stub = re.subn(
+                r"(?m)^(fig3d\s*=\s*plot_3d\.make_plot\()",
+                SHARE_FIGURE_VOLUME_STUB + "\n\n" + r"\1",
+                source,
+                count=1,
+            )
+            if inserted_share_stub != 1:
+                raise RuntimeError("Could not inject share-mode volume stubs.")
+
+        source, replaced_share_volumes = re.subn(
+            r"volumes\s*=\s*\[\s*edenhofer_volume\s*,\s*mccallum_ne\s*\]",
+            "volumes=[edenhofer_volume]",
+            source,
+            count=1,
+        )
+        if replaced_share_volumes != 1:
+            raise RuntimeError("Could not replace notebook volume list for share mode.")
+    elif "supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)" not in source:
         supernova_block = build_supernova_volume_source_block()
         source, inserted_supernova = re.subn(
             r"(?m)^(fig3d\s*=\s*plot_3d\.make_plot\()",
@@ -921,7 +975,7 @@ trace_groupings = {
         if inserted_supernova != 1:
             raise RuntimeError("Could not inject supernova volume helper block.")
 
-    if "mccallum_ne_volumes = _build_mccallum_ne_volumes_for_main_figure()" not in source:
+    if not share_mode and "mccallum_ne_volumes = _build_mccallum_ne_volumes_for_main_figure()" not in source:
         ne_block = build_mccallum_ne_volume_source_block()
         source, inserted_ne = re.subn(
             r"(?m)^(supernova_volumes\s*=\s*_build_supernova_volumes_for_main_figure\(time_int\)\s*)$",
@@ -932,7 +986,7 @@ trace_groupings = {
         if inserted_ne != 1:
             raise RuntimeError("Could not inject McCallum electron-density volume helper block.")
 
-    if "local_shell_volumes = _build_local_shell_volumes_for_main_figure()" not in source:
+    if not share_mode and "local_shell_volumes = _build_local_shell_volumes_for_main_figure()" not in source:
         local_shell_block = build_local_shell_volume_source_block()
         source, inserted_local_shell = re.subn(
             r"(?m)^(mccallum_ne_volumes\s*=\s*_build_mccallum_ne_volumes_for_main_figure\(\)\s*)$",
@@ -943,14 +997,15 @@ trace_groupings = {
         if inserted_local_shell != 1:
             raise RuntimeError("Could not inject local shell volume helper block.")
 
-    source, replaced_supernova_volumes = re.subn(
-        r"volumes\s*=\s*\[\s*edenhofer_volume\s*,\s*mccallum_ne\s*\]",
-        "volumes=[edenhofer_volume, *mccallum_ne_volumes, *local_shell_volumes, *supernova_volumes]",
-        source,
-        count=1,
-    )
-    if replaced_supernova_volumes != 1:
-        raise RuntimeError("Could not replace notebook volume list with supernova volumes.")
+    if not share_mode:
+        source, replaced_supernova_volumes = re.subn(
+            r"volumes\s*=\s*\[\s*edenhofer_volume\s*,\s*mccallum_ne\s*\]",
+            "volumes=[edenhofer_volume, *mccallum_ne_volumes, *local_shell_volumes, *supernova_volumes]",
+            source,
+            count=1,
+        )
+        if replaced_supernova_volumes != 1:
+            raise RuntimeError("Could not replace notebook volume list with supernova volumes.")
 
     source, edenhofer_time_patch = re.subn(
         r'("colormap"\s*:\s*greys_cmap,\s*# or just "ice"\s*\n)(\s*})',
@@ -982,6 +1037,7 @@ def run_main_figure(
     galactic_simple: bool = False,
     mist_ages: bool = False,
     compact_payload: bool = True,
+    share_mode: bool = False,
     website_output_html: Path | None = WEBSITE_OUTPUT_HTML,
 ) -> Path:
     output_html.parent.mkdir(parents=True, exist_ok=True)
@@ -1004,6 +1060,7 @@ def run_main_figure(
         galactic_simple=galactic_simple,
         mist_ages=mist_ages,
         compact_payload=compact_payload,
+        share_mode=share_mode,
     )
 
     run_script_source(patched_source)
@@ -1039,6 +1096,15 @@ def parse_args() -> argparse.Namespace:
         help="Render the figure with mobile-mode metadata enabled.",
     )
     parser.add_argument(
+        "--share-mode",
+        action="store_true",
+        help=(
+            "Render a smaller self-contained HTML for sharing/mobile use: coarser "
+            "timeline, lower-resolution dust, lower sky capture resolution, and no "
+            "extra embedded volume layers."
+        ),
+    )
+    parser.add_argument(
         "--mist-ages",
         action="store_true",
         help="Use the matched MIST isochrone ages instead of the default notebook ages.",
@@ -1062,9 +1128,10 @@ def main() -> None:
         output_html=args.output_html,
         theme_key=args.theme_key,
         minimal_mode=bool(args.minimal_mode),
-        mobile_mode=bool(args.mobile_mode),
+        mobile_mode=bool(args.mobile_mode or args.share_mode),
         mist_ages=bool(args.mist_ages),
         compact_payload=not bool(args.full_payload),
+        share_mode=bool(args.share_mode),
         website_output_html=None if args.no_website_copy else WEBSITE_OUTPUT_HTML,
     )
     print(f"Wrote {output_html}")

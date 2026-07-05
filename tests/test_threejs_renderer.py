@@ -687,6 +687,32 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('height: 100dvh;', html)
         self.assertIn('env(safe-area-inset-bottom, 0px)', html)
 
+    def test_threejs_renderer_auto_detects_mobile_runtime(self):
+        fig = ThreeJSFigure(
+            {
+                "renderer": "threejs",
+                "width": 900,
+                "height": 700,
+                "initial_state": {},
+                "frames": [{"name": "0", "time": 0.0, "traces": []}],
+            }
+        )
+
+        html = fig.to_html()
+
+        self.assertIn('data-mobile="false"', html)
+        self.assertIn("function ovizRuntimeLooksMobile()", html)
+        self.assertIn('const isiPhoneLike = /iPhone|iPod/i.test(userAgent);', html)
+        self.assertIn('const isAndroidPhone = /Android/i.test(userAgent) && /Mobile/i.test(userAgent);', html)
+        self.assertIn('window.matchMedia("(hover: none) and (pointer: coarse)").matches', html)
+        self.assertIn("const narrowViewport = Math.min(viewportWidth, viewportHeight) <= 760;", html)
+        self.assertIn('function ovizMobileModeOverride()', html)
+        self.assertIn('ovizQueryFlagValue("desktop", "ovizDesktop", "desktopMode")', html)
+        self.assertIn('ovizQueryFlagValue("mobile", "ovizMobile", "mobileMode")', html)
+        self.assertIn("const mobileModeEnabled = mobileModeOverride === null", html)
+        self.assertIn("? Boolean(sceneMobileModeEnabled || ovizRuntimeLooksMobile())", html)
+        self.assertIn("root.dataset.mobile = mobileModeEnabled ? \"true\" : \"false\";", html)
+
     def test_threejs_renderer_keeps_grouped_family_traces_in_galactic_lite_mode(self):
         viz = Animate3D(
             _FakeFamilyCollection(show_tracks=True),
