@@ -159,13 +159,14 @@ _THREEJS_TOPBAR_HTML = """
               </div>
             </div>
           </div>
-          <button class="oviz-three-sky-aperture-toggle" type="button" title="Open spectrum aperture" aria-label="Open spectrum aperture" aria-pressed="false">
+          <button class="oviz-three-sky-aperture-toggle" type="button" title="Add sky aperture" aria-label="Add sky aperture" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="5.2" y="5.2" width="10.6" height="10.6" rx="1.3"></rect>
               <path d="M15.2 15.2 20 20"></path>
               <path d="M7.6 9.1h5.8"></path>
               <path d="M7.6 12.1h5.8"></path>
             </svg>
+            <span class="oviz-three-sky-aperture-toggle-plus" aria-hidden="true">+</span>
           </button>
           <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
           <button class="oviz-three-mobile-sky-view" type="button" title="Switch between 3D and Sky view" aria-pressed="false">Sky</button>
@@ -1203,6 +1204,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         transition: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-toggle {
+        position: relative;
         width: 34px;
         height: 30px;
         display: inline-flex;
@@ -1225,6 +1227,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         stroke-linecap: round;
         stroke-linejoin: round;
       }
+      #__ROOT_ID__ .oviz-three-sky-aperture-toggle-plus {
+        position: absolute;
+        right: 3px;
+        top: 2px;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: rgba(142, 203, 255, 0.96);
+        color: rgba(8, 15, 23, 0.98);
+        font: 800 10px/11px Helvetica, Arial, sans-serif;
+        text-align: center;
+        pointer-events: none;
+      }
       #__ROOT_ID__ .oviz-three-sky-aperture-toggle:hover,
       #__ROOT_ID__ .oviz-three-sky-aperture-toggle:focus-visible,
       #__ROOT_ID__ .oviz-three-sky-aperture-toggle[aria-pressed="true"] {
@@ -1236,11 +1251,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-sky-aperture-toggle[hidden] {
         display: none !important;
       }
+      #__ROOT_ID__ .oviz-three-sky-apertures {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        pointer-events: none;
+      }
       #__ROOT_ID__ .oviz-three-sky-aperture {
         --oviz-sky-aperture-x: 50%;
         --oviz-sky-aperture-y: 50%;
         --oviz-sky-aperture-label-x: 50%;
         --oviz-sky-aperture-label-y: 50%;
+        --oviz-sky-aperture-control-x: 50%;
+        --oviz-sky-aperture-control-y: 50%;
         --oviz-sky-aperture-clip: polygon(42% 38%, 58% 38%, 58% 62%, 42% 62%);
         --oviz-sky-aperture-frame-transform: none;
         --oviz-sky-aperture-slider-x: 50%;
@@ -1248,26 +1271,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         --oviz-sky-aperture-slider-width: 320px;
         --oviz-sky-aperture-slider-angle: 0deg;
         --oviz-sky-aperture-slider-depth: 1;
+        --oviz-sky-aperture-opacity: 1;
+        --oviz-sky-aperture-z: 4;
         position: absolute;
         inset: 0;
-        z-index: 4;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.22s ease;
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture[data-open="true"],
-      #__ROOT_ID__ .oviz-three-sky-aperture[data-promoting="true"] {
+        z-index: var(--oviz-sky-aperture-z);
         opacity: 1;
+        pointer-events: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-frame-clip {
         position: absolute;
         inset: 0;
         pointer-events: none;
-        opacity: 0;
+        opacity: var(--oviz-sky-aperture-opacity);
         clip-path: var(--oviz-sky-aperture-clip);
         -webkit-clip-path: var(--oviz-sky-aperture-clip);
         will-change: opacity, clip-path;
         transition: none;
+        z-index: 8;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-frame {
         position: absolute;
@@ -1288,19 +1309,27 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         clip-path: var(--oviz-sky-aperture-clip);
         -webkit-clip-path: var(--oviz-sky-aperture-clip);
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.54);
-        opacity: 0;
+        opacity: 1;
+        z-index: 10;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-hit-shield {
+        position: absolute;
+        inset: 0;
+        z-index: 11;
+        clip-path: var(--oviz-sky-aperture-clip);
+        -webkit-clip-path: var(--oviz-sky-aperture-clip);
+        pointer-events: auto;
+        background: transparent;
+        cursor: grab;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-ring {
         position: absolute;
         inset: 0;
+        z-index: 12;
         pointer-events: none;
         cursor: grab;
-        opacity: 0;
-        transition: opacity 0.18s ease;
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture[data-open="true"] .oviz-three-sky-aperture-ring,
-      #__ROOT_ID__ .oviz-three-sky-aperture[data-promoting="true"] .oviz-three-sky-aperture-ring {
         opacity: 1;
+        transition: opacity 0.18s ease;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture-ring:active {
         cursor: grabbing;
@@ -1336,14 +1365,54 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-sky-aperture-label {
         display: none;
       }
+      #__ROOT_ID__ .oviz-three-sky-aperture-controls {
+        position: absolute;
+        left: var(--oviz-sky-aperture-control-x);
+        top: var(--oviz-sky-aperture-control-y);
+        z-index: 24;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transform: translate(0, -100%) translateY(-6px);
+        pointer-events: auto;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-control-button {
+        width: 22px;
+        height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, 0.30);
+        border-radius: 4px;
+        background: rgba(14, 18, 24, 0.82);
+        color: rgba(246, 252, 255, 0.94);
+        padding: 0;
+        cursor: pointer;
+        font: 700 13px/1 Helvetica, Arial, sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-control-button svg {
+        width: 13px;
+        height: 13px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-control-button:hover,
+      #__ROOT_ID__ .oviz-three-sky-aperture-control-button:focus-visible {
+        background: rgba(32, 42, 54, 0.94);
+        border-color: rgba(142, 203, 255, 0.52);
+        outline: none;
+      }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum {
         position: absolute;
         left: var(--oviz-sky-aperture-slider-x);
         top: var(--oviz-sky-aperture-slider-y);
         z-index: 22;
-        width: min(max(196px, calc(var(--oviz-sky-aperture-slider-width) * 0.66)), calc(100% - 56px));
-        min-width: 196px;
-        max-width: 360px;
+        width: min(max(336px, calc(var(--oviz-sky-aperture-slider-width) * 0.96)), calc(100% - 56px));
+        min-width: 300px;
+        max-width: 760px;
         transform:
           translate(-50%, -50%)
           translateY(6px);
@@ -1357,9 +1426,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         filter: none;
         opacity: 0;
         pointer-events: none;
+        overflow: visible;
         transition: opacity 0.18s ease, transform 0.18s ease;
       }
-      #__ROOT_ID__ .oviz-three-sky-aperture[data-open="true"] .oviz-three-sky-aperture-spectrum {
+      #__ROOT_ID__ .oviz-three-sky-aperture .oviz-three-sky-aperture-spectrum {
         opacity: 1;
         pointer-events: auto;
         transform:
@@ -1369,7 +1439,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-top {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: center;
         gap: 6px;
         min-height: 17px;
         margin: 0 0 4px;
@@ -1386,106 +1456,99 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 600 10px/1.2 Helvetica, Arial, sans-serif;
         letter-spacing: 0;
       }
-      #__ROOT_ID__ .oviz-three-sky-aperture-promote {
-        flex: 0 0 auto;
-        min-width: 30px;
-        height: 20px;
-        border: 1px solid var(--oviz-panel-border);
-        border-radius: 4px;
-        background: transparent;
-        color: rgba(238, 247, 255, 0.78);
-        font: 600 10px/1 Helvetica, Arial, sans-serif;
-        padding: 0 7px;
-        cursor: pointer;
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture-promote:hover,
-      #__ROOT_ID__ .oviz-three-sky-aperture-promote:focus-visible {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.22);
-        color: rgba(249, 253, 255, 0.92);
-        outline: none;
-      }
       #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-track {
         position: relative;
-        height: 14px;
-        border-radius: 4px;
-        background:
-          linear-gradient(90deg,
-            rgba(135, 183, 245, 0.64),
-            rgba(234, 238, 246, 0.70) 30%,
-            rgba(246, 207, 130, 0.68) 56%,
-            rgba(235, 118, 82, 0.64) 76%,
-            rgba(151, 92, 222, 0.60));
-        box-shadow:
-          inset 0 0 0 1px rgba(255, 255, 255, 0.16),
-          0 3px 10px rgba(0, 0, 0, 0.24);
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider {
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: -7px;
-        height: 28px;
-        width: 100%;
-        margin: 0;
-        accent-color: #9bd7ff;
+        display: grid;
+        grid-template-columns: repeat(8, minmax(34px, 1fr));
+        align-items: start;
+        min-height: 64px;
+        border-radius: 0;
+        padding: 0 4px 10px;
         background: transparent;
-        opacity: 0.92;
-        touch-action: none;
+        box-shadow: none;
+        overflow: visible;
       }
-      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-webkit-slider-runnable-track {
-        height: 14px;
-        border: 0;
-        border-radius: 4px;
-        background: transparent;
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-webkit-slider-thumb {
-        width: 10px;
-        height: 18px;
-        margin-top: -2px;
-        border: 1px solid rgba(255, 255, 255, 0.72);
-        border-radius: 3px;
-        background: rgba(247, 252, 255, 0.90);
-        box-shadow: 0 2px 7px rgba(0, 0, 0, 0.44);
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-moz-range-track {
-        height: 14px;
-        border: 0;
-        border-radius: 4px;
-        background: transparent;
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-slider::-moz-range-thumb {
-        width: 10px;
-        height: 18px;
-        border: 1px solid rgba(255, 255, 255, 0.72);
-        border-radius: 3px;
-        background: rgba(247, 252, 255, 0.90);
-        box-shadow: 0 2px 7px rgba(0, 0, 0, 0.44);
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-ticks {
-        position: absolute;
-        left: 10px;
-        right: 10px;
-        top: 4px;
-        height: 6px;
-        pointer-events: none;
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-tick {
-        position: absolute;
-        top: 0;
-        transform: translateX(-50%);
-        width: 1px;
-        height: 6px;
-        overflow: hidden;
-        color: transparent;
-      }
-      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-tick::before {
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-track::before {
         content: "";
-        display: block;
+        position: absolute;
+        left: 4px;
+        right: 4px;
+        top: 6px;
+        height: 1px;
+        background: rgba(235, 246, 255, 0.48);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band {
+        position: relative;
+        min-width: 0;
+        height: 64px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: rgba(242, 248, 255, 0.82);
+        padding: 0;
+        overflow: visible;
+        cursor: pointer;
+        font: 700 10px/1 Helvetica, Arial, sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 1px;
         width: 1px;
-        height: 6px;
-        margin: 0 auto;
-        background: rgba(255, 255, 255, 0.28);
+        height: 11px;
+        background: rgba(235, 246, 255, 0.60);
+        transform: translateX(-50%);
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 3px;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: rgba(235, 246, 255, 0.74);
+        transform: translateX(-50%);
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band-label {
+        position: absolute;
+        left: 50%;
+        top: 17px;
+        display: block;
+        max-width: none;
+        transform: translateX(-2px) rotate(-36deg);
+        transform-origin: 0 0;
+        white-space: nowrap;
+        color: inherit;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.72);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band[data-active="true"] {
+        background: transparent;
+        color: rgba(255, 255, 255, 0.98);
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band[data-active="true"]::before {
+        height: 15px;
+        background: rgba(142, 218, 255, 0.95);
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band[data-active="true"]::after {
+        width: 8px;
+        height: 8px;
+        top: 1px;
+        background: rgba(142, 218, 255, 0.98);
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band:disabled {
+        cursor: default;
+        opacity: 0.36;
+      }
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band:not(:disabled):hover,
+      #__ROOT_ID__ .oviz-three-sky-aperture-spectrum-band:not(:disabled):focus-visible {
+        color: rgba(255, 255, 255, 0.96);
+        outline: none;
       }
       #__ROOT_ID__ .oviz-three-sky-aperture[data-promoting="true"] .oviz-three-sky-aperture-ring {
         pointer-events: none;
@@ -5519,20 +5582,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const skyPanelEl = root.querySelector(".oviz-three-sky-panel");
       const skyFrameEl = root.querySelector(".oviz-three-sky-frame");
       const skyDomeFrameEl = root.querySelector(".oviz-three-sky-dome-frame");
-      const skyApertureEl = root.querySelector(".oviz-three-sky-aperture");
-      const skyApertureFrameAEl = root.querySelector(".oviz-three-sky-aperture-frame-a");
-      const skyApertureShadeEl = root.querySelector(".oviz-three-sky-aperture-shade");
-      const skyApertureRingEl = root.querySelector(".oviz-three-sky-aperture-ring");
-      const skyApertureOutlineEl = root.querySelector(".oviz-three-sky-aperture-outline");
-      const skyApertureQuadEl = root.querySelector(".oviz-three-sky-aperture-quad");
-      const skyApertureReticleXEl = root.querySelector(".oviz-three-sky-aperture-reticle-x");
-      const skyApertureReticleYEl = root.querySelector(".oviz-three-sky-aperture-reticle-y");
-      const skyApertureLabelEl = root.querySelector(".oviz-three-sky-aperture-label");
-      const skyApertureSpectrumEl = root.querySelector(".oviz-three-sky-aperture-spectrum");
-      const skyApertureSpectrumNameEl = root.querySelector(".oviz-three-sky-aperture-spectrum-name");
-      const skyApertureSpectrumSliderEl = root.querySelector(".oviz-three-sky-aperture-spectrum-slider");
-      const skyApertureSpectrumTicksEl = root.querySelector(".oviz-three-sky-aperture-spectrum-ticks");
-      const skyAperturePromoteEl = root.querySelector(".oviz-three-sky-aperture-promote");
+      const skyApertureContainerEl = root.querySelector(".oviz-three-sky-apertures");
+      let skyApertureEl = null;
+      let skyApertureFrameAEl = null;
+      let skyApertureShadeEl = null;
+      let skyApertureHitShieldEl = null;
+      let skyApertureRingEl = null;
+      let skyApertureOutlineEl = null;
+      let skyApertureQuadEl = null;
+      let skyApertureReticleXEl = null;
+      let skyApertureReticleYEl = null;
+      let skyApertureLabelEl = null;
+      let skyApertureSpectrumEl = null;
+      let skyApertureSpectrumNameEl = null;
+      let skyApertureSpectrumSliderEl = null;
+      let skyApertureSpectrumTicksEl = null;
+      let skyApertureBandPickerEl = null;
+      let skyApertureCloseEl = null;
+      let skyAperturePromoteEl = null;
       const skyBodyEl = null;
       const skyCanvasEl = root.querySelector(".oviz-three-sky-canvas");
       const skyImageSelectEl = root.querySelector(".oviz-three-sky-image-select");
@@ -5840,7 +5907,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let pendingSliderFrameIndex = null;
       let sliderScrubRenderHandle = null;
       let skyPanelMode = "hidden";
-      let skyApertureSpectrumSliderActive = false;
       let boxMetricsPanelMode = "hidden";
       let ageKdePanelMode = "hidden";
       let clusterFilterPanelMode = "hidden";
@@ -6270,6 +6336,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           hasPoints: Boolean(item.has_points),
           hasSegments: Boolean(item.has_segments),
           hasLabels: Boolean(item.has_labels),
+          hasVectors: Boolean(item.has_vectors || item.kind === "vector" || item.trace_type === "vector"),
           hasNStars: Boolean(item.has_n_stars),
           sizeByNStarsDefault: Boolean(item.size_by_n_stars_default),
           colorBy: colorBy,
@@ -8177,9 +8244,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedGlobalControls.sky_background_hidden === "boolean") {
             skyBackgroundHidden = savedGlobalControls.sky_background_hidden;
           }
-          if (typeof restoreSkyApertureState === "function") {
-            restoreSkyApertureState(savedGlobalControls.sky_aperture || initialState.sky_aperture);
-          }
           if (typeof savedGlobalControls.camera_auto_orbit_enabled === "boolean") {
             cameraAutoOrbitEnabled = savedGlobalControls.camera_auto_orbit_enabled;
           }
@@ -8198,9 +8262,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (savedGlobalControls.earth_view_return_camera_state) {
             earthViewReturnCameraState = cameraReturnStateFromPlainObject(savedGlobalControls.earth_view_return_camera_state);
           }
+          if (typeof restoreSkyApertureState === "function") {
+            restoreSkyApertureState(
+              savedGlobalControls.sky_apertures
+              || savedGlobalControls.sky_aperture
+              || initialState.sky_apertures
+              || initialState.sky_aperture
+            );
+          }
         }
-        if (typeof restoreSkyApertureState === "function" && initialState.sky_aperture) {
-          restoreSkyApertureState(initialState.sky_aperture);
+        if (
+          typeof restoreSkyApertureState === "function"
+          && !savedGlobalControls
+          && (initialState.sky_apertures || initialState.sky_aperture)
+        ) {
+          restoreSkyApertureState(initialState.sky_apertures || initialState.sky_aperture);
         }
         skyDomeViewOpacityScale = cameraViewMode === "earth" ? 1.0 : 0.0;
 
@@ -8575,6 +8651,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             sky_dome_hips_brightness: Number(skyDomeSpec.hips_brightness ?? 2.4),
             sky_dome_hips_contrast: Number(skyDomeSpec.hips_contrast ?? 1.25),
             sky_dome_hips_gamma: Number(skyDomeSpec.hips_gamma ?? 1.35),
+            sky_apertures: typeof captureSkyApertureStates === "function" ? captureSkyApertureStates() : [],
             sky_aperture: typeof captureSkyApertureState === "function" ? captureSkyApertureState() : null,
             sky_background_hidden: Boolean(skyBackgroundHidden),
             camera_auto_orbit_enabled: cameraAutoOrbitEnabled,
@@ -15341,7 +15418,7 @@ __SKY_RUNTIME_JS__
           renderFrame(currentFrameIndex);
         });
 
-        if (state.hasPoints || state.hasLabels) {
+        if (state.hasPoints || state.hasLabels || state.hasVectors) {
           const sizeInput = document.createElement("input");
           sizeInput.type = "range";
           sizeInput.min = "0.25";
@@ -15350,7 +15427,11 @@ __SKY_RUNTIME_JS__
           sizeInput.value = String(Math.max(Number(state.sizeScale), 0.25));
           const sizeLabel = state.hasPoints && state.hasLabels
             ? "Size"
-            : (state.hasLabels ? "Text size" : "Point size");
+            : (
+              state.hasVectors
+                ? "Arrow scale"
+                : (state.hasLabels ? "Text size" : "Point size")
+            );
           const sizeField = createLegendField(`${sizeLabel} (${Number(state.sizeScale).toFixed(2)}x)`, sizeInput);
           controls.appendChild(sizeField.field);
           sizeInput.addEventListener("input", () => {
@@ -15361,13 +15442,15 @@ __SKY_RUNTIME_JS__
 
           const summary = document.createElement("div");
           summary.className = "oviz-three-legend-summary";
-          summary.textContent = state.hasPoints && state.hasLabels
+          summary.textContent = state.hasVectors
+            ? "Arrow scale multiplies the displayed vector lengths. Color and opacity apply to the full arrow trace."
+            : (state.hasPoints && state.hasLabels
             ? "Size is applied as a multiplier on the original marker and label sizes."
             : (
               state.hasLabels
                 ? "Text size is applied as a multiplier on the original label sizes."
                 : "Point size is applied as a multiplier on the original marker sizes."
-            );
+            ));
           controls.appendChild(summary);
         }
 
@@ -15942,117 +16025,6 @@ __ACTION_RUNTIME_JS__
             event.preventDefault();
             event.stopPropagation();
             toggleSkyAperture();
-            focusViewer();
-          });
-        }
-        if (skyApertureRingEl) {
-          skyApertureRingEl.addEventListener("pointerdown", (event) => {
-            startSkyAperturePointer(event);
-          });
-          skyApertureRingEl.addEventListener("pointermove", moveSkyAperturePointer);
-          skyApertureRingEl.addEventListener("pointerup", finishSkyAperturePointer);
-          skyApertureRingEl.addEventListener("pointercancel", finishSkyAperturePointer);
-          skyApertureRingEl.addEventListener("dblclick", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            promoteSkyApertureBackground();
-            focusViewer();
-          });
-          skyApertureRingEl.addEventListener("wheel", (event) => {
-            if (!skyApertureControlsAvailable()) {
-              return;
-            }
-            event.preventDefault();
-            event.stopPropagation();
-            resizeSkyApertureBy(-Number(event.deltaY || 0.0) * 0.025);
-            focusViewer();
-          }, { passive: false });
-          skyApertureRingEl.addEventListener("keydown", (event) => {
-            if (!skyApertureControlsAvailable()) {
-              return;
-            }
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              promoteSkyApertureBackground();
-            } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-              event.preventDefault();
-              setSkyApertureSpectrumPosition(skyApertureState.spectrumPosition - (event.shiftKey ? 1.0 : 0.25));
-              updateSkyApertureUi((typeof performance !== "undefined" && performance.now) ? performance.now() : 0.0);
-            } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-              event.preventDefault();
-              setSkyApertureSpectrumPosition(skyApertureState.spectrumPosition + (event.shiftKey ? 1.0 : 0.25));
-              updateSkyApertureUi((typeof performance !== "undefined" && performance.now) ? performance.now() : 0.0);
-            } else if (event.key === "+" || event.key === "=") {
-              event.preventDefault();
-              resizeSkyApertureBy(event.shiftKey ? 8.0 : 2.0);
-            } else if (event.key === "-" || event.key === "_") {
-              event.preventDefault();
-              resizeSkyApertureBy(event.shiftKey ? -8.0 : -2.0);
-            }
-          });
-        }
-        if (skyApertureSpectrumSliderEl) {
-          const updateSkyApertureSpectrumFromPointer = (event) => {
-            if (!skyApertureControlsAvailable()) {
-              return;
-            }
-            const rect = skyApertureSpectrumSliderEl.getBoundingClientRect();
-            if (!rect || !(rect.width > 0)) {
-              return;
-            }
-            const fraction = Math.min(Math.max((Number(event.clientX) - rect.left) / rect.width, 0.0), 1.0);
-            const extent = skyApertureSpectrumExtent();
-            skyApertureSpectrumSliderActive = true;
-            setSkyApertureSpectrumPosition(fraction * extent);
-            skyApertureSpectrumSliderEl.value = String(clampSkyApertureSpectrumPosition(skyApertureState.spectrumPosition));
-            updateSkyApertureUi((typeof performance !== "undefined" && performance.now) ? performance.now() : 0.0);
-          };
-          ["pointerdown", "pointermove", "pointerup", "pointercancel", "click", "dblclick", "wheel", "keydown"].forEach((eventName) => {
-            skyApertureSpectrumSliderEl.addEventListener(eventName, (event) => {
-              event.stopPropagation();
-            }, eventName === "wheel" ? { passive: true } : undefined);
-          });
-          skyApertureSpectrumSliderEl.addEventListener("pointerdown", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            skyApertureSpectrumSliderActive = true;
-            try {
-              skyApertureSpectrumSliderEl.setPointerCapture(event.pointerId);
-            } catch (_err) {
-            }
-            updateSkyApertureSpectrumFromPointer(event);
-          });
-          skyApertureSpectrumSliderEl.addEventListener("pointermove", (event) => {
-            if (!skyApertureSpectrumSliderActive || !(event.buttons & 1)) {
-              return;
-            }
-            event.preventDefault();
-            event.stopPropagation();
-            updateSkyApertureSpectrumFromPointer(event);
-          });
-          skyApertureSpectrumSliderEl.addEventListener("focus", () => {
-            skyApertureSpectrumSliderActive = true;
-          });
-          skyApertureSpectrumSliderEl.addEventListener("input", (event) => {
-            if (!skyApertureControlsAvailable()) {
-              return;
-            }
-            skyApertureSpectrumSliderActive = true;
-            setSkyApertureSpectrumPosition(event.target && event.target.value);
-            updateSkyApertureUi((typeof performance !== "undefined" && performance.now) ? performance.now() : 0.0);
-          });
-          ["change", "blur", "pointerup", "pointercancel"].forEach((eventName) => {
-            skyApertureSpectrumSliderEl.addEventListener(eventName, () => {
-              skyApertureSpectrumSliderActive = false;
-              focusViewer();
-            });
-          });
-        }
-        if (skyAperturePromoteEl) {
-          skyAperturePromoteEl.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            promoteSkyApertureBackground();
             focusViewer();
           });
         }

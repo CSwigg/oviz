@@ -1084,6 +1084,129 @@ THREEJS_SCENE_RUNTIME_JS = """
         };
       }
 
+      function makeVectorObject(trace, materialBucket) {
+        const vectors = Array.isArray(trace && trace.vectors) ? trace.vectors : [];
+        if (!vectors.length) {
+          return null;
+        }
+        const traceState = traceStyleStateForKey(trace.key);
+        const vectorConfig = trace.vector && typeof trace.vector === "object" ? trace.vector : {};
+        const color = (traceState && traceState.color)
+          || trace.default_color
+          || trace.color
+          || ((trace.line || {}).color)
+          || "#ffffff";
+        let opacity = traceState ? clamp01(traceState.opacity) : clamp01(trace.opacity ?? trace.default_opacity ?? 1.0);
+        opacity *= traceVisibilityOpacityMultiplier(trace);
+        const focusedTraceKey = dendrogramFocusTraceKey();
+        if (focusedTraceKey && String(trace.key) !== focusedTraceKey) {
+          opacity *= 0.16;
+        }
+        if (opacity <= 0.001) {
+          return null;
+        }
+        const sizeScale = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
+        const pcPerKms = Math.max(Number(vectorConfig.pc_per_kms ?? trace.pc_per_kms ?? 1.0), 0.0) * sizeScale;
+        if (!(pcPerKms > 0.0)) {
+          return null;
+        }
+        const referenceFrames = (trace.reference_frames && typeof trace.reference_frames === "object")
+          ? trace.reference_frames
+          : {};
+        const requestedReferenceKey = normalizeMemberKey(focusSelectionKey);
+        const referenceFrame = requestedReferenceKey ? referenceFrames[requestedReferenceKey] : null;
+        const subtractReferenceVelocity = Boolean(referenceFrame && vectorConfig.reference_velocity !== false);
+        const referenceVx = subtractReferenceVelocity ? Number(referenceFrame.vx ?? 0.0) : 0.0;
+        const referenceVy = subtractReferenceVelocity ? Number(referenceFrame.vy ?? 0.0) : 0.0;
+        const referenceVz = subtractReferenceVelocity ? Number(referenceFrame.vz ?? 0.0) : 0.0;
+        const headFraction = clampRange(Number(vectorConfig.head_fraction ?? 0.22), 0.02, 0.80);
+        const headMinPc = Math.max(Number(vectorConfig.head_min_pc ?? 4.0), 0.0);
+        const headMaxPc = Math.max(Number(vectorConfig.head_max_pc ?? 30.0), headMinPc);
+        const headWidthFraction = clampRange(Number(vectorConfig.head_width_fraction ?? 0.48), 0.05, 1.5);
+        const maxLengthBasePc = Math.max(Number(vectorConfig.max_length_pc ?? 0.0), 0.0);
+        const maxLengthPc = maxLengthBasePc > 0.0 ? maxLengthBasePc * Math.max(sizeScale, 1.0) : 0.0;
+        const lineWidth = Math.max(Number((trace.line || {}).width ?? vectorConfig.line_width ?? 1.35), 0.25);
+        const positions = [];
+        const fallbackUp = sceneUpVector instanceof THREE.Vector3
+          ? sceneUpVector.clone()
+          : new THREE.Vector3(0.0, 0.0, 1.0);
+        const fallbackSideAxis = new THREE.Vector3(1.0, 0.0, 0.0);
+
+        vectors.forEach((item) => {
+          const x = Number(item && item.x);
+          const y = Number(item && item.y);
+          const z = Number(item && item.z);
+          const vx = Number(item && item.vx);
+          const vy = Number(item && item.vy);
+          const vz = Number(item && item.vz);
+          if (
+            !Number.isFinite(x)
+            || !Number.isFinite(y)
+            || !Number.isFinite(z)
+            || !Number.isFinite(vx)
+            || !Number.isFinite(vy)
+            || !Number.isFinite(vz)
+          ) {
+            return;
+          }
+          const velocity = new THREE.Vector3(vx - referenceVx, vy - referenceVy, vz - referenceVz);
+          const speed = velocity.length();
+          if (!(speed > 1e-8)) {
+            return;
+          }
+          const direction = velocity.multiplyScalar(1.0 / speed);
+          let lengthPc = speed * pcPerKms;
+          if (maxLengthPc > 0.0) {
+            lengthPc = Math.min(lengthPc, maxLengthPc);
+          }
+          if (!(lengthPc > 1e-6)) {
+            return;
+          }
+          const start = new THREE.Vector3(x, y, z);
+          const end = start.clone().add(direction.clone().multiplyScalar(lengthPc));
+          positions.push(start.x, start.y, start.z, end.x, end.y, end.z);
+
+          let side = new THREE.Vector3().crossVectors(direction, fallbackUp);
+          if (side.lengthSq() <= 1e-10) {
+            side = new THREE.Vector3().crossVectors(direction, fallbackSideAxis);
+          }
+          if (side.lengthSq() <= 1e-10) {
+            return;
+          }
+          side.normalize();
+          const up = new THREE.Vector3().crossVectors(side, direction).normalize();
+          const headLength = Math.min(
+            Math.max(lengthPc * headFraction, headMinPc * Math.max(sizeScale, 0.35)),
+            Math.min(headMaxPc * Math.max(sizeScale, 0.35), lengthPc * 0.85)
+          );
+          const headWidth = headLength * headWidthFraction;
+          const headBase = end.clone().add(direction.clone().multiplyScalar(-headLength));
+          [side, side.clone().multiplyScalar(-1.0), up, up.clone().multiplyScalar(-1.0)].forEach((axis) => {
+            const headPoint = headBase.clone().add(axis.multiplyScalar(headWidth));
+            positions.push(end.x, end.y, end.z, headPoint.x, headPoint.y, headPoint.z);
+          });
+        });
+
+        if (!positions.length) {
+          return null;
+        }
+        const geometry = new LineSegmentsGeometry();
+        geometry.setPositions(positions);
+        const material = new LineMaterial({
+          color,
+          linewidth: lineWidth,
+          dashed: false,
+          transparent: opacity < 1.0,
+          opacity,
+          worldUnits: false,
+        });
+        material.resolution.set(root.clientWidth, root.clientHeight);
+        const line = new LineSegments2(geometry, material);
+        line.computeLineDistances();
+        materialBucket.push(material);
+        return line;
+      }
+
       function renderFrameScene(frame, displayedTimeMyr, options = {}) {
         const updateWidgets = options.updateWidgets !== false;
         if (!frame) {
@@ -1115,6 +1238,12 @@ THREEJS_SCENE_RUNTIME_JS = """
             return;
           }
 
+          if (trace.vectors && trace.vectors.length) {
+            const vectorTrace = makeVectorObject(trace, frameLineMaterials);
+            if (vectorTrace) {
+              plotGroup.add(vectorTrace);
+            }
+          }
           if (trace.segments && trace.segments.length) {
             const line = makeLineObject(trace, frameLineMaterials);
             if (line) {

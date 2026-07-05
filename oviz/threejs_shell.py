@@ -128,30 +128,7 @@ THREEJS_SHELL_HTML = """
         <div class="oviz-three-sky-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
       <iframe class="oviz-three-sky-dome-frame" loading="eager" referrerpolicy="no-referrer" aria-hidden="true" tabindex="-1"></iframe>
-      <div class="oviz-three-sky-aperture" data-open="false" data-promoting="false" aria-hidden="true">
-        <div class="oviz-three-sky-aperture-frame-clip">
-          <iframe class="oviz-three-sky-aperture-frame oviz-three-sky-aperture-frame-a oviz-three-sky-aperture-frame-stack" loading="eager" referrerpolicy="no-referrer" tabindex="-1"></iframe>
-        </div>
-        <div class="oviz-three-sky-aperture-shade" aria-hidden="true"></div>
-        <div class="oviz-three-sky-aperture-ring" role="application" tabindex="0" title="Drag to move. Drag an edge or use the wheel to resize. Double-click to set as sky background." aria-label="Projected sky aperture spectrum preview">
-          <svg class="oviz-three-sky-aperture-outline" aria-hidden="true">
-            <polygon class="oviz-three-sky-aperture-quad"></polygon>
-            <line class="oviz-three-sky-aperture-reticle oviz-three-sky-aperture-reticle-x"></line>
-            <line class="oviz-three-sky-aperture-reticle oviz-three-sky-aperture-reticle-y"></line>
-          </svg>
-          <div class="oviz-three-sky-aperture-label" aria-live="polite"></div>
-        </div>
-        <div class="oviz-three-sky-aperture-spectrum" role="group" aria-label="Aperture wavelength">
-          <div class="oviz-three-sky-aperture-spectrum-top">
-            <span class="oviz-three-sky-aperture-spectrum-name"></span>
-            <button class="oviz-three-sky-aperture-promote" type="button" title="Set aperture wavelength as sky background">Set</button>
-          </div>
-          <div class="oviz-three-sky-aperture-spectrum-track">
-            <input class="oviz-three-sky-aperture-spectrum-slider oviz-three-slider" type="range" min="0" max="1" step="0.001" value="0" aria-label="Aperture wavelength blend" />
-            <div class="oviz-three-sky-aperture-spectrum-ticks" aria-hidden="true"></div>
-          </div>
-        </div>
-      </div>
+      <div class="oviz-three-sky-apertures" aria-hidden="true"></div>
       <div class="oviz-three-age-panel oviz-three-widget-panel" data-widget-key="age_kde" data-mode="hidden">
         <div class="oviz-three-age-drag oviz-three-widget-drag">
           <span class="oviz-three-widget-title">Age KDE</span>

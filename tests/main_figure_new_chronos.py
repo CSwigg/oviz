@@ -18,6 +18,7 @@ NOTEBOOK_PATH = HOME_DIR / "Desktop" / "astro_research" / "radcliffe" / "oviz_no
 SUPERNOVAE_ROOT = HOME_DIR / "Desktop" / "astro_research" / "supernovae_map"
 SUPERNOVAE_CATALOG_PATH = SUPERNOVAE_ROOT / "paper" / "solar_encounter_catalog_current.csv.gz"
 MCCALLUM_NE_GRID_PATH = HOME_DIR / "Downloads" / "ne_grid.fits"
+VERGELY_DUST_PATH = HOME_DIR / "Downloads" / "vergely_3D_Dust.fits"
 ONEILL_LOCAL_BUBBLE_PATH = HOME_DIR / "Downloads" / "ONeill2024_LocalBubble_Shell_xyz.fits"
 GAO_IVS_PEAKS_PATH = HOME_DIR / "Downloads" / "peaks_meanmap_xyz.csv"
 GAO_IVS_BOUNDARY_IN_PATH = HOME_DIR / "Downloads" / "npix128boundary_mean_sigma10.csv"
@@ -77,21 +78,37 @@ WEBSITE_OUTPUT_HTML = (
 )
 GALACTIC_PLANE_IMAGE_PATH = HOME_DIR / "Downloads" / "Top-down_view_of_the_Milky_Way.jpg"
 MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS = (-400.0, 400.0)
-MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC = (-2000.0, 2000.0)
-MAIN_FIGURE_LOOKBACK_MYR = 60
+MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC = (-4000.0, 4000.0)
+MAIN_FIGURE_LOOKBACK_MYR = 120
 MAIN_FIGURE_TIMESTEP_MYR = 1
+MAIN_FIGURE_CLUSTER_YOUNG_AGE_MYR = 15
+MAIN_FIGURE_CLUSTER_BLUE_MAX_AGE_MYR = 60
+MAIN_FIGURE_CLUSTER_GREY_MAX_AGE_MYR = 150
+MAIN_FIGURE_CLUSTER_GREY_COLOR = "#9ca3af"
 MAIN_FIGURE_SPIRAL_ARM_TRACE_NAMES = (
     "Spiral Arm: Perseus",
     "Spiral Arm: Local",
     "Spiral Arm: Sagittarius",
     "Spiral Arm: Scutum",
 )
-MAIN_FIGURE_DUST_MAX_RESOLUTION = 256
-MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 256
+MAIN_FIGURE_DUST_MAX_RESOLUTION = 512
+MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 512
 MAIN_FIGURE_DUST_SAMPLES = 200
+MAIN_FIGURE_DUST_OPACITY = 0.38
+MAIN_FIGURE_DUST_ALPHA_COEF = 105.0
 MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION = 512
 MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP = 512
 MAIN_FIGURE_MCCALLUM_SAMPLES = 200
+MAIN_FIGURE_VERGELY_MAX_RESOLUTION = 512
+MAIN_FIGURE_VERGELY_MAX_RESOLUTION_CAP = 512
+MAIN_FIGURE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION = 256
+MAIN_FIGURE_VERGELY_SAMPLES = 220
+MAIN_FIGURE_VERGELY_OPACITY = 0.46
+MAIN_FIGURE_VERGELY_ALPHA_COEF = 200.0
+MAIN_FIGURE_VERGELY_VMIN = 0.0
+MAIN_FIGURE_VERGELY_VMAX = 0.02
+MAIN_FIGURE_VERGELY_DEFAULT_VMIN_QUANTILE = 0.70
+MAIN_FIGURE_VERGELY_DEFAULT_VMAX_QUANTILE = 0.995
 
 
 def _sanitize_notebook_cell_source(source: str) -> str:
@@ -176,6 +193,34 @@ def patch_edenhofer_volume_integer_setting(
     return source[:block_match.start(1)] + updated_block + source[block_match.end(1):]
 
 
+def patch_edenhofer_volume_numeric_setting(
+    source: str,
+    setting_name: str,
+    value: float,
+) -> str:
+    edenhofer_block_pattern = (
+        r'(?ms)(edenhofer_volume\s*=\s*\{.*?'
+        r'"name"\s*:\s*"Edenhofer\+2024 Dust".*?'
+        r'^\s*\})'
+    )
+    block_match = re.search(edenhofer_block_pattern, source)
+    if not block_match:
+        raise RuntimeError("Could not find the Edenhofer dust volume block.")
+
+    block = block_match.group(1)
+    numeric_literal = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+    updated_block, replaced = re.subn(
+        rf'(?m)^(\s*"{re.escape(setting_name)}"\s*:\s*){numeric_literal}(\s*,)',
+        rf"\g<1>{float(value)!r}\2",
+        block,
+        count=1,
+    )
+    if replaced != 1:
+        raise RuntimeError(f"Could not update the Edenhofer dust {setting_name}.")
+
+    return source[:block_match.start(1)] + updated_block + source[block_match.end(1):]
+
+
 def patch_edenhofer_volume_clip_bounds(source: str, z_bounds: tuple[float, float]) -> str:
     edenhofer_block_pattern = (
         r'(?ms)(edenhofer_volume\s*=\s*\{.*?'
@@ -211,6 +256,35 @@ def patch_edenhofer_volume_clip_bounds(source: str, z_bounds: tuple[float, float
         raise RuntimeError("Could not update the Edenhofer dust clip_bounds.")
 
     return source[:block_match.start(1)] + updated_block + source[block_match.end(1):]
+
+
+def patch_base_cluster_filter(source: str) -> str:
+    replacement = f"""
+df_hunt_good = df_hunt_full.loc[
+    (df_hunt_full['U_err'] < 10) &
+    (df_hunt_full['V_err'] < 10) &
+    (df_hunt_full['W_err'] < 10) &
+    (df_hunt_full['U'].notnull()) &
+    (df_hunt_full['V'].notnull()) &
+    (df_hunt_full['W'].notnull()) &
+    (df_hunt_full['x'].notnull()) &
+    (df_hunt_full['y'].notnull()) &
+    (df_hunt_full['z'].notnull()) &
+    (df_hunt_full['age_myr'].notnull()) &
+    (df_hunt_full['x'].between({MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[0]!r}, {MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[1]!r})) &
+    (df_hunt_full['y'].between({MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[0]!r}, {MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[1]!r})) &
+    (df_hunt_full['n_rvs_2026'] >= 3)
+]
+""".strip()
+    source, replaced = re.subn(
+        r"(?ms)^df_hunt_good\s*=\s*df_hunt_full\.loc\[\s*\n.*?^\s*\]\s*$",
+        replacement,
+        source,
+        count=1,
+    )
+    if replaced != 1:
+        raise RuntimeError("Could not rewrite the notebook base cluster filter.")
+    return source
 
 
 def build_supernova_volume_source_block() -> str:
@@ -532,6 +606,57 @@ mccallum_ne_volumes = _build_mccallum_ne_volumes_for_main_figure()
 """.strip()
 
 
+def build_vergely_dust_volume_source_block() -> str:
+    return f"""
+import os
+from pathlib import Path as _OvizPath
+
+VERGELY_DUST_PATH = _OvizPath(
+    os.environ.get("OVIZ_VERGELY_DUST_FITS", {str(VERGELY_DUST_PATH)!r})
+).expanduser()
+
+
+def _build_vergely_dust_volumes_for_main_figure():
+    if not VERGELY_DUST_PATH.exists():
+        print(f"Skipping Vergely 3D dust volume; missing FITS cube: {{VERGELY_DUST_PATH}}")
+        return []
+
+    return [
+        {{
+            "key": "vergely-dust",
+            "state_key": "vergely-dust",
+            "state_name": "Vergely 3D Dust",
+            "name": "Vergely 3D Dust",
+            "path": str(VERGELY_DUST_PATH),
+            "hdu": "PRIMARY",
+            "clip_bounds": {{"z": [{float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[0])}, {float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[1])}]}},
+            "max_resolution": {int(MAIN_FIGURE_VERGELY_MAX_RESOLUTION)},
+            "max_resolution_cap": {int(MAIN_FIGURE_VERGELY_MAX_RESOLUTION_CAP)},
+            "sky_overlay_max_resolution": {int(MAIN_FIGURE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION)},
+            "data_encoding": "png_atlas_uint8",
+            "opacity": {float(MAIN_FIGURE_VERGELY_OPACITY)!r},
+            "samples": {int(MAIN_FIGURE_VERGELY_SAMPLES)},
+            "alpha_coef": {float(MAIN_FIGURE_VERGELY_ALPHA_COEF)!r},
+            "gradient_step": 0.006,
+            "stretch": "asinh",
+            "vmin": {float(MAIN_FIGURE_VERGELY_VMIN)!r},
+            "vmax": {float(MAIN_FIGURE_VERGELY_VMAX)!r},
+            "default_vmin_quantile": {float(MAIN_FIGURE_VERGELY_DEFAULT_VMIN_QUANTILE)!r},
+            "default_vmax_quantile": {float(MAIN_FIGURE_VERGELY_DEFAULT_VMAX_QUANTILE)!r},
+            "colormap": "magma",
+            "unit_label": "mag pc^-1",
+            "visible": True,
+            "supports_show_all_times": True,
+            "co_rotate_with_frame": True,
+            "show_all_times": False,
+        }}
+    ]
+
+
+vergely_dust_volumes = _build_vergely_dust_volumes_for_main_figure()
+""".strip()
+
+
 def build_local_shell_volume_source_block() -> str:
     return f"""
 import os
@@ -839,6 +964,29 @@ def build_jun6_catalog_source_block() -> str:
     ]
     return f"""
 df_hunt_full = pd.read_csv({str(JUN6_MASS_VELOCITY_CATALOG_PATH)!r})
+df_hunt_full['hunt_age_myr'] = pd.to_numeric(
+    df_hunt_full['age_myr'] if 'age_myr' in df_hunt_full.columns else pd.Series(np.nan, index=df_hunt_full.index),
+    errors='coerce',
+)
+df_hunt_full['hunt_initial_mass_msun'] = pd.to_numeric(
+    df_hunt_full['mass_all_previous'] if 'mass_all_previous' in df_hunt_full.columns else (
+        df_hunt_full['mass_all'] if 'mass_all' in df_hunt_full.columns else pd.Series(np.nan, index=df_hunt_full.index)
+    ),
+    errors='coerce',
+)
+df_hunt_full['chronos_initial_mass_msun'] = pd.to_numeric(
+    df_hunt_full['mass_all'] if 'mass_all' in df_hunt_full.columns else pd.Series(np.nan, index=df_hunt_full.index),
+    errors='coerce',
+)
+df_hunt_full['display_initial_mass_msun'] = df_hunt_full['chronos_initial_mass_msun'].combine_first(
+    df_hunt_full['hunt_initial_mass_msun']
+)
+df_hunt_full['mass_all'] = df_hunt_full['display_initial_mass_msun']
+df_hunt_full['mass_source'] = np.where(
+    df_hunt_full['chronos_initial_mass_msun'].notnull(),
+    'Chronos',
+    np.where(df_hunt_full['hunt_initial_mass_msun'].notnull(), 'Hunt', pd.NA),
+)
 jun6_velocity_cols = ['name', *{velocity_cols!r}]
 jun6_velocity_source = pd.read_csv(
     {str(JUN6_CLUSTER_VELOCITIES_PATH)!r},
@@ -886,7 +1034,12 @@ for _jun6_col in [
 ]:
     if _jun6_col in df_hunt_full.columns:
         df_hunt_full[_jun6_col] = pd.to_numeric(df_hunt_full[_jun6_col], errors='coerce')
-df_hunt_full['age_myr'] = df_hunt_full['age_chronos_mode']
+df_hunt_full['age_myr'] = df_hunt_full['age_chronos_mode'].combine_first(df_hunt_full['hunt_age_myr'])
+df_hunt_full['age_source'] = np.where(
+    df_hunt_full['age_chronos_mode'].notnull(),
+    'Chronos',
+    np.where(df_hunt_full['hunt_age_myr'].notnull(), 'Hunt', pd.NA),
+)
 df_hunt_full = df_hunt_full.drop(
     columns=['x', 'y', 'z', 'U', 'V', 'W', 'U_err', 'V_err', 'W_err'],
     errors='ignore',
@@ -973,14 +1126,46 @@ chronos_cluster_ages = chronos_cluster_ages.loc[
     chronos_cluster_ages['chronos_status'].eq('success')
     & chronos_cluster_ages['chronos_age_myr'].notnull()
 ].copy()
-df_hunt_chronos_full = df_hunt_full.merge(
+df_hunt_chronos_full = df_hunt_full.drop(
+    columns=[
+        'chronos_age_lo_myr',
+        'chronos_age_myr',
+        'chronos_age_hi_myr',
+        'chronos_initial_mass_msun',
+        'chronos_status',
+    ],
+    errors='ignore',
+).merge(
     chronos_cluster_ages,
     on='name',
     how='left',
     validate='m:1',
 )
+if 'hunt_age_myr' not in df_hunt_chronos_full.columns:
+    df_hunt_chronos_full['hunt_age_myr'] = pd.to_numeric(
+        df_hunt_chronos_full['age_myr'] if 'age_myr' in df_hunt_chronos_full.columns else pd.Series(np.nan, index=df_hunt_chronos_full.index),
+        errors='coerce',
+    )
+if 'hunt_initial_mass_msun' not in df_hunt_chronos_full.columns:
+    df_hunt_chronos_full['hunt_initial_mass_msun'] = pd.to_numeric(
+        df_hunt_chronos_full['mass_all_previous'] if 'mass_all_previous' in df_hunt_chronos_full.columns else (
+            df_hunt_chronos_full['mass_all'] if 'mass_all' in df_hunt_chronos_full.columns else pd.Series(np.nan, index=df_hunt_chronos_full.index)
+        ),
+        errors='coerce',
+    )
+df_hunt_chronos_full['display_age_myr'] = df_hunt_chronos_full['chronos_age_myr'].combine_first(
+    df_hunt_chronos_full['hunt_age_myr']
+)
+df_hunt_chronos_full['chronos_initial_mass_msun'] = df_hunt_chronos_full['chronos_initial_mass_msun'].combine_first(
+    df_hunt_chronos_full['hunt_initial_mass_msun']
+)
+df_hunt_chronos_full['display_initial_mass_msun'] = df_hunt_chronos_full['chronos_initial_mass_msun']
+df_hunt_chronos_full['mass_all'] = df_hunt_chronos_full['display_initial_mass_msun']
 main_figure_cluster_xy_min_pc = {MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[0]!r}
 main_figure_cluster_xy_max_pc = {MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[1]!r}
+main_figure_cluster_young_age_myr = {MAIN_FIGURE_CLUSTER_YOUNG_AGE_MYR!r}
+main_figure_cluster_blue_max_age_myr = {MAIN_FIGURE_CLUSTER_BLUE_MAX_AGE_MYR!r}
+main_figure_cluster_grey_max_age_myr = {MAIN_FIGURE_CLUSTER_GREY_MAX_AGE_MYR!r}
 df_hunt_chronos_sample = df_hunt_chronos_full.loc[
     (df_hunt_chronos_full['U_err'] < 10) &
     (df_hunt_chronos_full['V_err'] < 10) &
@@ -993,23 +1178,30 @@ df_hunt_chronos_sample = df_hunt_chronos_full.loc[
     (df_hunt_chronos_full['z'].notnull()) &
     (df_hunt_chronos_full['x'].between(main_figure_cluster_xy_min_pc, main_figure_cluster_xy_max_pc)) &
     (df_hunt_chronos_full['y'].between(main_figure_cluster_xy_min_pc, main_figure_cluster_xy_max_pc)) &
-    (df_hunt_chronos_full['chronos_age_myr'].notnull()) &
-    (df_hunt_chronos_full['n_rvs_2026'] >= 3) &
-    (df_hunt_chronos_full['class_50'] > 0.5) &
-    (df_hunt_chronos_full['cst'] > 5)
+    (df_hunt_chronos_full['display_age_myr'].notnull()) &
+    (df_hunt_chronos_full['n_rvs_2026'] >= 3)
 ].copy()
-df_hunt_chronos_sample['age_myr'] = df_hunt_chronos_sample['chronos_age_myr']
-df_hunt_chronos_sample['age_source'] = chronos_model_display
+df_hunt_chronos_sample['age_myr'] = df_hunt_chronos_sample['display_age_myr']
+df_hunt_chronos_sample['age_source'] = np.where(
+    df_hunt_chronos_sample['chronos_age_myr'].notnull(),
+    chronos_model_display,
+    'Hunt',
+)
 df_hunt_60_chronos = df_hunt_chronos_sample.loc[
-    df_hunt_chronos_sample['age_myr'] < 60
+    df_hunt_chronos_sample['age_myr'] < main_figure_cluster_blue_max_age_myr
+].copy()
+df_hunt_0_to_150_chronos = df_hunt_chronos_sample.loc[
+    df_hunt_chronos_sample['age_myr'] < main_figure_cluster_grey_max_age_myr
 ].copy()
 df_hunt_young_chronos = df_hunt_chronos_sample.loc[
-    df_hunt_chronos_sample['age_myr'] < 15
+    df_hunt_chronos_sample['age_myr'] < main_figure_cluster_young_age_myr
 ].copy()
 print(
     f"Using {{chronos_model_display}} ages from {str(chronos_results_path)} for displayed cluster samples: "
-    f"{{len(df_hunt_60_chronos)}} clusters <60 Myr, {{len(df_hunt_young_chronos)}} clusters <15 Myr. "
-    f"Displayed ages use {{chronos_age_value_col}}. "
+    f"{{len(df_hunt_60_chronos)}} clusters <{{main_figure_cluster_blue_max_age_myr:g}} Myr, "
+    f"{{len(df_hunt_0_to_150_chronos)}} clusters 0-{{main_figure_cluster_grey_max_age_myr:g}} Myr, "
+    f"{{len(df_hunt_young_chronos)}} clusters <{{main_figure_cluster_young_age_myr:g}} Myr. "
+    f"Displayed ages use {{chronos_age_value_col}} with Hunt fallbacks when Chronos is missing. "
     f"x/y within [{{main_figure_cluster_xy_min_pc:g}}, {{main_figure_cluster_xy_max_pc:g}}] pc; no z cut applied."
 )
 """.strip()
@@ -1061,6 +1253,18 @@ df_hunt_chronos_full = df_hunt_full.drop(
     how='left',
     validate='1:1',
 )
+if 'hunt_age_myr' not in df_hunt_chronos_full.columns:
+    df_hunt_chronos_full['hunt_age_myr'] = pd.to_numeric(
+        df_hunt_chronos_full['age_myr'] if 'age_myr' in df_hunt_chronos_full.columns else pd.Series(np.nan, index=df_hunt_chronos_full.index),
+        errors='coerce',
+    )
+if 'hunt_initial_mass_msun' not in df_hunt_chronos_full.columns:
+    df_hunt_chronos_full['hunt_initial_mass_msun'] = pd.to_numeric(
+        df_hunt_chronos_full['mass_all_previous'] if 'mass_all_previous' in df_hunt_chronos_full.columns else (
+            df_hunt_chronos_full['mass_all'] if 'mass_all' in df_hunt_chronos_full.columns else pd.Series(np.nan, index=df_hunt_chronos_full.index)
+        ),
+        errors='coerce',
+    )
 if 'mass_all' in df_hunt_chronos_full.columns:
     df_hunt_chronos_full['chronos_initial_mass_msun'] = pd.to_numeric(
         df_hunt_chronos_full['mass_all'],
@@ -1068,8 +1272,18 @@ if 'mass_all' in df_hunt_chronos_full.columns:
     )
 else:
     df_hunt_chronos_full['chronos_initial_mass_msun'] = np.nan
+df_hunt_chronos_full['display_age_myr'] = df_hunt_chronos_full['chronos_age_myr'].combine_first(
+    df_hunt_chronos_full['hunt_age_myr']
+)
+df_hunt_chronos_full['display_initial_mass_msun'] = df_hunt_chronos_full['chronos_initial_mass_msun'].combine_first(
+    df_hunt_chronos_full['hunt_initial_mass_msun']
+)
+df_hunt_chronos_full['mass_all'] = df_hunt_chronos_full['display_initial_mass_msun']
 main_figure_cluster_xy_min_pc = {MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[0]!r}
 main_figure_cluster_xy_max_pc = {MAIN_FIGURE_CLUSTER_XY_BOUNDS_PC[1]!r}
+main_figure_cluster_young_age_myr = {MAIN_FIGURE_CLUSTER_YOUNG_AGE_MYR!r}
+main_figure_cluster_blue_max_age_myr = {MAIN_FIGURE_CLUSTER_BLUE_MAX_AGE_MYR!r}
+main_figure_cluster_grey_max_age_myr = {MAIN_FIGURE_CLUSTER_GREY_MAX_AGE_MYR!r}
 df_hunt_chronos_sample = df_hunt_chronos_full.loc[
     (df_hunt_chronos_full['U_err'] < 10) &
     (df_hunt_chronos_full['V_err'] < 10) &
@@ -1082,22 +1296,30 @@ df_hunt_chronos_sample = df_hunt_chronos_full.loc[
     (df_hunt_chronos_full['z'].notnull()) &
     (df_hunt_chronos_full['x'].between(main_figure_cluster_xy_min_pc, main_figure_cluster_xy_max_pc)) &
     (df_hunt_chronos_full['y'].between(main_figure_cluster_xy_min_pc, main_figure_cluster_xy_max_pc)) &
-    (df_hunt_chronos_full['chronos_age_myr'].notnull()) &
-    (df_hunt_chronos_full['n_rvs_2026'] >= 3) &
-    (df_hunt_chronos_full['class_50'] > 0.5) &
-    (df_hunt_chronos_full['cst'] > 5)
+    (df_hunt_chronos_full['display_age_myr'].notnull()) &
+    (df_hunt_chronos_full['n_rvs_2026'] >= 3)
 ].copy()
-df_hunt_chronos_sample['age_myr'] = df_hunt_chronos_sample['chronos_age_myr']
-df_hunt_chronos_sample['age_source'] = {model_display!r}
+df_hunt_chronos_sample['age_myr'] = df_hunt_chronos_sample['display_age_myr']
+df_hunt_chronos_sample['age_source'] = np.where(
+    df_hunt_chronos_sample['chronos_age_myr'].notnull(),
+    {model_display!r},
+    'Hunt',
+)
 df_hunt_60_chronos = df_hunt_chronos_sample.loc[
-    df_hunt_chronos_sample['age_myr'] < 60
+    df_hunt_chronos_sample['age_myr'] < main_figure_cluster_blue_max_age_myr
+].copy()
+df_hunt_0_to_150_chronos = df_hunt_chronos_sample.loc[
+    df_hunt_chronos_sample['age_myr'] < main_figure_cluster_grey_max_age_myr
 ].copy()
 df_hunt_young_chronos = df_hunt_chronos_sample.loc[
-    df_hunt_chronos_sample['age_myr'] < 15
+    df_hunt_chronos_sample['age_myr'] < main_figure_cluster_young_age_myr
 ].copy()
 print(
     'Using Chronos mode ages from {str(chronos_mode_ages_path)} for displayed cluster samples: '
-    f"{{len(df_hunt_60_chronos)}} clusters <60 Myr, {{len(df_hunt_young_chronos)}} clusters <15 Myr. "
+    f"{{len(df_hunt_60_chronos)}} clusters <{{main_figure_cluster_blue_max_age_myr:g}} Myr, "
+    f"{{len(df_hunt_0_to_150_chronos)}} clusters 0-{{main_figure_cluster_grey_max_age_myr:g}} Myr, "
+    f"{{len(df_hunt_young_chronos)}} clusters <{{main_figure_cluster_young_age_myr:g}} Myr. "
+    f"Chronos ages use Hunt fallbacks when missing. "
     f"x/y within [{{main_figure_cluster_xy_min_pc:g}}, {{main_figure_cluster_xy_max_pc:g}}] pc; no z cut applied."
 )
 """.strip()
@@ -1136,6 +1358,8 @@ def patch_script_source(
         if replaced_jun6_catalog != 1:
             raise RuntimeError("Could not replace the notebook cluster catalog block with the Jun 6 catalog block.")
 
+    source = patch_base_cluster_filter(source)
+
     if mist_ages:
         mist_block = build_mist_age_source_block()
         source, replaced_mist_ages = re.subn(
@@ -1148,7 +1372,7 @@ def patch_script_source(
             raise RuntimeError("Could not inject MIST cluster ages into converted notebook script.")
 
     if "df_hunt_60_chronos" not in source:
-        if jun6_catalog:
+        if jun6_catalog and Path(chronos_results_path).resolve() == CHRONOS_CLUSTER_RESULTS_PATH.resolve():
             chronos_cluster_block = build_chronos_mode_age_sample_source_block(
                 JUN6_CHRONOS_MODE_AGES_PATH,
                 model_display=chronos_model.upper(),
@@ -1185,6 +1409,50 @@ def patch_script_source(
         if replaced_full_chronos_sample != 1:
             raise RuntimeError("Could not point the <60 Myr cluster trace at the Chronos sample.")
 
+        old_cluster_trace_source = (
+            "old_sample_trace = Trace("
+            "df_hunt_0_to_150_chronos, "
+            "data_name = 'Clusters (0-150 Myr)', "
+            "min_size = 0, max_size = 7, "
+            f"color = {MAIN_FIGURE_CLUSTER_GREY_COLOR!r}, "
+            "opacity = .55, marker_style = 'circle', show_tracks = False, size_by_n_stars=False)"
+        )
+        source, inserted_old_cluster_trace = re.subn(
+            r"(?m)^(full_sample_trace\s*=\s*Trace\(df_hunt_60_chronos,.*)$",
+            r"\1\n" + old_cluster_trace_source,
+            source,
+            count=1,
+        )
+        if inserted_old_cluster_trace != 1:
+            raise RuntimeError("Could not add the 0-150 Myr cluster trace.")
+
+        source, inserted_old_cluster_collection = re.subn(
+            r"(?m)^(\s*)full_sample_trace,\s*$",
+            r"\1old_sample_trace,\n\1full_sample_trace,",
+            source,
+            count=1,
+        )
+        if inserted_old_cluster_collection != 1:
+            raise RuntimeError("Could not add the 0-150 Myr trace to the TraceCollection.")
+
+        source, inserted_old_cluster_grouping = re.subn(
+            r'"Clusters"\s*:\s*\[\s*\'Sun\'\s*,\s*\'Clusters\s*\(<\s*60\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*15\s*Myr\)\'\s*\]',
+            "\"Clusters\": ['Sun', 'Clusters (0-150 Myr)', 'Clusters (< 60 Myr)', 'Clusters (< 15 Myr)']",
+            source,
+            count=1,
+        )
+        if inserted_old_cluster_grouping != 1:
+            raise RuntimeError("Could not add the 0-150 Myr trace to the cluster grouping.")
+
+        source, recolored_full_chronos_sample = re.subn(
+            r"(full_sample_trace\s*=\s*Trace\([^\n]*?data_name\s*=\s*'Clusters\s*\(<\s*60\s*Myr\)'[^\n]*?color\s*=\s*)(['\"][^'\"]+['\"])",
+            r"\g<1>'#2f80ff'",
+            source,
+            count=1,
+        )
+        if recolored_full_chronos_sample != 1:
+            raise RuntimeError("Could not recolor the <60 Myr Chronos cluster trace.")
+
     source, replaced_time_grid = re.subn(
         r"(?m)^time_int\s*=\s*np\.round\(np\.arange\(0,\s*-66,\s*-1\),\s*1\)\s*$",
         f"time_int = np.round(np.arange(0, -{MAIN_FIGURE_LOOKBACK_MYR + 1}, -{MAIN_FIGURE_TIMESTEP_MYR}), 1)",
@@ -1220,6 +1488,16 @@ def patch_script_source(
         "samples",
         MAIN_FIGURE_DUST_SAMPLES,
     )
+    source = patch_edenhofer_volume_numeric_setting(
+        source,
+        "opacity",
+        MAIN_FIGURE_DUST_OPACITY,
+    )
+    source = patch_edenhofer_volume_numeric_setting(
+        source,
+        "alpha_coef",
+        MAIN_FIGURE_DUST_ALPHA_COEF,
+    )
     source = patch_edenhofer_volume_clip_bounds(
         source,
         MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS,
@@ -1252,9 +1530,9 @@ def patch_script_source(
             "'click_selection_enabled': False",
             f"'compact_payload_enabled': {bool(compact_payload)!r}",
             "'scene_float_precision': 2",
-            "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
-            "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
-            "'volume_state_by_key': ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}})",
+            "'active_volume_key': ('vergely-dust' if vergely_dust_volumes else ('supernova-density' if supernova_volumes else 'volume-0'))",
+            "'legend_state': ({'volume-0': True, **({'supernova-density': False} if supernova_volumes else {}), 'vergely-dust': True} if vergely_dust_volumes else ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True}))",
+            "'volume_state_by_key': ({'volume-0': {'visible': True}, **({'supernova-density': {'visible': False}} if supernova_volumes else {}), 'vergely-dust': {'visible': True}} if vergely_dust_volumes else ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}}))",
             "'galaxy_image': True",
             f"'galaxy_image_path': {str(GALACTIC_PLANE_IMAGE_PATH)!r}",
             "'galaxy_image_size_pc': 40000.0",
@@ -1439,8 +1717,8 @@ trace_groupings['Spiral Arms'] = ['Sun', *spiral_arm_trace_names]
             raise RuntimeError("Could not remove the <15 Myr trace from the galactic simple TraceCollection.")
 
         source, removed_young_from_grouping = re.subn(
-            r'"Clusters"\s*:\s*\[\s*\'Sun\'\s*,\s*(?:\'Clusters\s*\(<\s*150\s*Myr\)\'\s*,\s*)?\'Clusters\s*\(<\s*60\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*15\s*Myr\)\'\s*\]',
-            "\"Clusters\": ['Sun', 'Clusters (< 60 Myr)']",
+            r'"Clusters"\s*:\s*\[\s*\'Sun\'\s*,\s*(?:\'Clusters\s*\(0-150\s*Myr\)\'\s*,\s*)?\'Clusters\s*\(<\s*60\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*15\s*Myr\)\'\s*\]',
+            "\"Clusters\": ['Sun', 'Clusters (0-150 Myr)', 'Clusters (< 60 Myr)']",
             source,
             count=1,
         )
@@ -1458,9 +1736,20 @@ trace_groupings['Spiral Arms'] = ['Sun', *spiral_arm_trace_names]
         if inserted_supernova != 1:
             raise RuntimeError("Could not inject supernova volume helper block.")
 
+    if "vergely_dust_volumes = _build_vergely_dust_volumes_for_main_figure()" not in source:
+        vergely_block = build_vergely_dust_volume_source_block()
+        source, inserted_vergely = re.subn(
+            r"(?m)^(fig3d\s*=\s*plot_3d\.make_plot\()",
+            vergely_block + "\n\n" + r"\1",
+            source,
+            count=1,
+        )
+        if inserted_vergely != 1:
+            raise RuntimeError("Could not inject Vergely dust volume helper block.")
+
     source, replaced_supernova_volumes = re.subn(
         r"volumes\s*=\s*\[\s*edenhofer_volume\s*,\s*mccallum_ne\s*\]",
-        "volumes=[edenhofer_volume, *supernova_volumes]",
+        "volumes=[edenhofer_volume, *supernova_volumes, *vergely_dust_volumes]",
         source,
         count=1,
     )
