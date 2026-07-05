@@ -83,6 +83,13 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert 'data-mobile="false"' in html
     assert "ovizRuntimeLooksMobile" in html
     assert "ovizMobileModeOverride" in html
+    assert 'ovizQueryFlagValue("desktop", "ovizDesktop", "desktopMode")' in html
+    assert 'ovizQueryFlagValue("mobile", "ovizMobile", "mobileMode")' in html
+    assert "/iPhone|iPod/i.test(userAgent)" in html
+    assert "/Android/i.test(userAgent) && /Mobile/i.test(userAgent)" in html
+    assert 'window.matchMedia("(hover: none) and (pointer: coarse)")' in html
+    assert "const narrowViewport = Math.min(viewportWidth, viewportHeight) <= 760;" in html
+    assert "return Boolean(isiPhoneLike || isAndroidPhone || (coarsePointer && narrowViewport));" in html
     assert "mobileVolumesDeferred" in html
     assert "oviz-three-mobile-sky-view" in html
     assert "oviz-three-mobile-lasso" in html
