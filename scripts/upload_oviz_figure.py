@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,7 @@ class UploadPlan:
     commit_message: str
     push: bool
     dry_run: bool
+    public_url: str | None
 
 
 def _max_size_bytes(max_size_mb: float) -> int:
@@ -69,6 +71,53 @@ def _git_relative_path(path: Path, website_dir: Path) -> str:
         raise ValueError(f"Destination must live inside the website repo: {path}") from exc
 
 
+def _origin_remote_url(website_dir: Path) -> str | None:
+    if not website_dir.exists():
+        return None
+    result = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=website_dir,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    remote_url = result.stdout.strip()
+    return remote_url or None
+
+
+def _github_pages_base_url(remote_url: str | None) -> str | None:
+    if not remote_url:
+        return None
+    remote_url = remote_url.strip()
+    owner_repo = None
+    if remote_url.startswith("git@github.com:"):
+        owner_repo = remote_url.removeprefix("git@github.com:")
+    elif remote_url.startswith("https://github.com/"):
+        owner_repo = remote_url.removeprefix("https://github.com/")
+    elif remote_url.startswith("http://github.com/"):
+        owner_repo = remote_url.removeprefix("http://github.com/")
+    if owner_repo is None:
+        return None
+    owner_repo = owner_repo.removesuffix(".git").strip("/")
+    parts = owner_repo.split("/")
+    if len(parts) != 2 or not all(parts):
+        return None
+    owner, repo = parts
+    host_owner = owner.lower()
+    if repo.lower() == f"{host_owner}.github.io":
+        return f"https://{host_owner}.github.io/"
+    return f"https://{host_owner}.github.io/{quote(repo.strip('/'))}/"
+
+
+def _public_url(base_url: str | None, git_path: str) -> str | None:
+    if not base_url:
+        return None
+    normalized_base = base_url.rstrip("/") + "/"
+    return normalized_base + "/".join(quote(part) for part in git_path.split("/"))
+
+
 def build_upload_plan(
     source_html: Path,
     *,
@@ -77,6 +126,8 @@ def build_upload_plan(
     output_name: str | None = None,
     max_size_mb: float = DEFAULT_MAX_SIZE_MB,
     commit_message: str | None = None,
+    public_base_url: str | None = None,
+    remote_url: str | None = None,
     push: bool = True,
     dry_run: bool = False,
 ) -> UploadPlan:
@@ -88,6 +139,7 @@ def build_upload_plan(
     destination = _destination_for(source, target_dir, output_name)
     git_path = _git_relative_path(destination, website_dir)
     message = commit_message or f"Upload Oviz figure {destination.name}"
+    base_url = public_base_url or _github_pages_base_url(remote_url or _origin_remote_url(website_dir))
     return UploadPlan(
         source=source,
         destination=destination,
@@ -98,6 +150,7 @@ def build_upload_plan(
         commit_message=message,
         push=push,
         dry_run=dry_run,
+        public_url=_public_url(base_url, git_path),
     )
 
 
@@ -114,6 +167,8 @@ def upload_oviz_figure(plan: UploadPlan) -> None:
     print(f"Source: {plan.source}")
     print(f"Destination: {plan.destination}")
     print(f"Size: {size_mb:.1f} MiB")
+    if plan.public_url:
+        print(f"Expected URL: {plan.public_url}")
     if plan.dry_run:
         print("DRY-RUN: not copying or publishing")
     else:
@@ -161,6 +216,10 @@ def parse_args() -> argparse.Namespace:
         help="Git commit message. Defaults to 'Upload Oviz figure <name>'.",
     )
     parser.add_argument(
+        "--public-base-url",
+        help="Public base URL for the website. Defaults to one derived from the GitHub origin remote.",
+    )
+    parser.add_argument(
         "--no-push",
         action="store_true",
         help="Copy, add, and commit, but do not push.",
@@ -182,6 +241,7 @@ def main() -> None:
         output_name=args.name,
         max_size_mb=args.max_size_mb,
         commit_message=args.message,
+        public_base_url=args.public_base_url,
         push=not bool(args.no_push),
         dry_run=bool(args.dry_run),
     )

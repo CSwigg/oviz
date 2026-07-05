@@ -27,13 +27,44 @@ def test_build_upload_plan_defaults_to_website_oviz_figures(tmp_path):
     source = _write_html(tmp_path / "figure.html")
     website_dir = tmp_path / "cam_website"
 
-    plan = module.build_upload_plan(source, website_dir=website_dir)
+    plan = module.build_upload_plan(
+        source,
+        website_dir=website_dir,
+        remote_url="https://github.com/CSwigg/cam_website.git",
+    )
 
     assert plan.source == source.resolve()
     assert plan.destination == (website_dir / "oviz_figures" / "figure.html").resolve()
     assert plan.git_path == "oviz_figures/figure.html"
     assert plan.commit_message == "Upload Oviz figure figure.html"
     assert plan.push is True
+    assert plan.public_url == "https://cswigg.github.io/cam_website/oviz_figures/figure.html"
+
+
+def test_build_upload_plan_derives_project_pages_url_from_ssh_remote(tmp_path):
+    module = _load_upload_module()
+    source = _write_html(tmp_path / "figure with space.html")
+
+    plan = module.build_upload_plan(
+        source,
+        website_dir=tmp_path / "site",
+        remote_url="git@github.com:CSwigg/cam_website.git",
+    )
+
+    assert plan.public_url == "https://cswigg.github.io/cam_website/oviz_figures/figure%20with%20space.html"
+
+
+def test_build_upload_plan_derives_user_pages_url(tmp_path):
+    module = _load_upload_module()
+    source = _write_html(tmp_path / "figure.html")
+
+    plan = module.build_upload_plan(
+        source,
+        website_dir=tmp_path / "site",
+        remote_url="https://github.com/CSwigg/cswigg.github.io.git",
+    )
+
+    assert plan.public_url == "https://cswigg.github.io/oviz_figures/figure.html"
 
 
 def test_build_upload_plan_rejects_oversized_file(tmp_path):
