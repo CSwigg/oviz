@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -110,18 +111,21 @@ MAIN_FIGURE_VERGELY_VMAX = 0.02
 MAIN_FIGURE_VERGELY_DEFAULT_VMIN_QUANTILE = 0.70
 MAIN_FIGURE_VERGELY_DEFAULT_VMAX_QUANTILE = 0.995
 MOBILE_SAFE_TIMESTEP_MYR = 20
-MOBILE_SAFE_DUST_MAX_RESOLUTION = 128
-MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP = 128
-MOBILE_SAFE_DUST_SAMPLES = 64
-MOBILE_SAFE_VERGELY_MAX_RESOLUTION = 128
-MOBILE_SAFE_VERGELY_MAX_RESOLUTION_CAP = 128
-MOBILE_SAFE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION = 96
-MOBILE_SAFE_VERGELY_SAMPLES = 80
-MOBILE_SAFE_SKY_DOME_CAPTURE_WIDTH_PX = 1024
-MOBILE_SAFE_SKY_DOME_CAPTURE_HEIGHT_PX = 512
-MOBILE_SAFE_SKY_DOME_CAPTURE_QUALITY = 0.82
-MOBILE_SAFE_FULL_CATALOG_MAX_POINTS = 900
-MOBILE_SAFE_BACKGROUND_CLUSTER_MAX_POINTS = 900
+MOBILE_SAFE_DUST_MAX_RESOLUTION = 64
+MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP = 64
+MOBILE_SAFE_DUST_SAMPLES = 40
+MOBILE_SAFE_VERGELY_MAX_RESOLUTION = 64
+MOBILE_SAFE_VERGELY_MAX_RESOLUTION_CAP = 64
+MOBILE_SAFE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION = 48
+MOBILE_SAFE_VERGELY_SAMPLES = 48
+MOBILE_SAFE_SKY_DOME_CAPTURE_WIDTH_PX = 640
+MOBILE_SAFE_SKY_DOME_CAPTURE_HEIGHT_PX = 320
+MOBILE_SAFE_SKY_DOME_CAPTURE_QUALITY = 0.70
+MOBILE_SAFE_FULL_CATALOG_MAX_POINTS = 500
+MOBILE_SAFE_BACKGROUND_CLUSTER_MAX_POINTS = 500
+MOBILE_SAFE_BLUE_CLUSTER_MAX_POINTS = 650
+MOBILE_SAFE_GALAXY_IMAGE_MAX_PX = 1024
+MOBILE_SAFE_GALAXY_IMAGE_QUALITY = 58
 
 
 def _sanitize_notebook_cell_source(source: str) -> str:
@@ -162,6 +166,41 @@ def convert_notebook_to_script_source(notebook_path: Path) -> str:
         raise RuntimeError(f"No code cells found in notebook: {notebook_path}")
 
     return "\n\n".join(code_blocks) + "\n"
+
+
+def mobile_safe_galaxy_image_path(source_path: Path = GALACTIC_PLANE_IMAGE_PATH) -> Path:
+    """Return a smaller copy of the Milky Way image for upload-safe HTML exports."""
+    source_path = Path(source_path).expanduser()
+    if not source_path.exists():
+        return source_path
+
+    target_path = (
+        Path(tempfile.gettempdir())
+        / f"oviz_mobile_safe_galaxy_{MOBILE_SAFE_GALAXY_IMAGE_MAX_PX}px_q{MOBILE_SAFE_GALAXY_IMAGE_QUALITY}.jpg"
+    )
+    if target_path.exists() and target_path.stat().st_mtime >= source_path.stat().st_mtime:
+        return target_path
+
+    try:
+        from PIL import Image, ImageOps
+    except Exception:
+        return source_path
+
+    with Image.open(source_path) as image:
+        image = ImageOps.exif_transpose(image).convert("RGB")
+        resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+        image.thumbnail(
+            (MOBILE_SAFE_GALAXY_IMAGE_MAX_PX, MOBILE_SAFE_GALAXY_IMAGE_MAX_PX),
+            resampling,
+        )
+        image.save(
+            target_path,
+            format="JPEG",
+            quality=MOBILE_SAFE_GALAXY_IMAGE_QUALITY,
+            optimize=True,
+            progressive=True,
+        )
+    return target_path
 
 
 def patch_edenhofer_volume_integer_setting(
@@ -1426,9 +1465,16 @@ def patch_script_source(
         if replaced_young_chronos_sample != 1:
             raise RuntimeError("Could not point the <15 Myr cluster trace at the Chronos sample.")
 
+        full_chronos_source = (
+            "df_hunt_60_chronos.sample("
+            f"n=min(len(df_hunt_60_chronos), {MOBILE_SAFE_BLUE_CLUSTER_MAX_POINTS}), "
+            "random_state=29)"
+            if mobile_safe_mode
+            else "df_hunt_60_chronos"
+        )
         source, replaced_full_chronos_sample = re.subn(
             r"full_sample_trace\s*=\s*Trace\(df_hunt_60,",
-            "full_sample_trace = Trace(df_hunt_60_chronos,",
+            f"full_sample_trace = Trace({full_chronos_source},",
             source,
             count=1,
         )
@@ -1451,7 +1497,7 @@ def patch_script_source(
             "opacity = .55, marker_style = 'circle', show_tracks = False, size_by_n_stars=False)"
         )
         source, inserted_old_cluster_trace = re.subn(
-            r"(?m)^(full_sample_trace\s*=\s*Trace\(df_hunt_60_chronos,.*)$",
+            r"(?m)^(full_sample_trace\s*=\s*Trace\(.*)$",
             r"\1\n" + old_cluster_trace_source,
             source,
             count=1,
@@ -1559,6 +1605,11 @@ def patch_script_source(
         ])
 
     if "threejs_initial_state=" not in source:
+        galaxy_image_path = (
+            mobile_safe_galaxy_image_path()
+            if mobile_safe_mode
+            else GALACTIC_PLANE_IMAGE_PATH
+        )
         initial_state_bits = [
             "'current_group': 'Clusters'",
             "'click_selection_enabled': False",
@@ -1569,7 +1620,7 @@ def patch_script_source(
             "'legend_state': ({'volume-0': True, **({'supernova-density': False} if supernova_volumes else {}), 'vergely-dust': True} if vergely_dust_volumes else ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True}))",
             "'volume_state_by_key': ({'volume-0': {'visible': True}, **({'supernova-density': {'visible': False}} if supernova_volumes else {}), 'vergely-dust': {'visible': True}} if vergely_dust_volumes else ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}}))",
             "'galaxy_image': True",
-            f"'galaxy_image_path': {str(GALACTIC_PLANE_IMAGE_PATH)!r}",
+            f"'galaxy_image_path': {str(galaxy_image_path)!r}",
             "'galaxy_image_size_pc': 40000.0",
             "'galaxy_image_opacity': 0.35",
             "'galaxy_image_hide_below_scale_bar_pc': 420.0",
@@ -1601,7 +1652,7 @@ def patch_script_source(
         if galactic_simple:
             initial_state_bits.extend([
                 "'galactic_simple_mode_enabled': True",
-                f"'galactic_plane_image_path': {str(GALACTIC_PLANE_IMAGE_PATH)!r}",
+                f"'galactic_plane_image_path': {str(galaxy_image_path)!r}",
                 "'galactic_plane_size_pc': 40000.0",
                 "'galactic_plane_opacity': 0.6",
                 "'initial_zoom_anchor': {'x': 0.0, 'y': 0.0, 'z': 0.0}",

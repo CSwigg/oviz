@@ -11,11 +11,12 @@ import pytest
 
 
 ARTIFACT_HTML = Path(__file__).with_name("main_figure_chronos_july4.html")
-MAX_HTML_SIZE_BYTES = 20 * 1024 * 1024
-MAX_RAW_SCENE_SIZE_BYTES = 30 * 1024 * 1024
+MAX_HTML_SIZE_BYTES = 12 * 1024 * 1024
+MAX_RAW_SCENE_SIZE_BYTES = 20 * 1024 * 1024
 EXPECTED_FRAME_TIMES = [-120.0, -100.0, -80.0, -60.0, -40.0, -20.0, 0.0]
-MAX_BACKGROUND_POINTS = 900
-MAX_VOLUME_AXIS_PIXELS = 128
+MAX_BACKGROUND_POINTS = 500
+MAX_BLUE_CLUSTER_POINTS = 650
+MAX_VOLUME_AXIS_PIXELS = 64
 
 
 def _read_scene_spec(path: Path):
@@ -61,6 +62,7 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
 
     assert ARTIFACT_HTML.stat().st_size <= MAX_HTML_SIZE_BYTES
     assert len(raw_scene) <= MAX_RAW_SCENE_SIZE_BYTES
+    assert len(json.dumps(scene_spec["image_planes"], separators=(",", ":"))) <= 512 * 1024
 
     assert scene_spec["mobile"]["enabled"] is False
     initial_state = scene_spec["initial_state"]
@@ -77,7 +79,8 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     }
     assert len(first_frame_traces["Full Cluster Catalog"]["points"]) <= MAX_BACKGROUND_POINTS
     assert len(first_frame_traces["Clusters (0-150 Myr)"]["points"]) <= MAX_BACKGROUND_POINTS
-    assert len(first_frame_traces["Clusters (< 60 Myr)"]["points"]) >= 900
+    assert len(first_frame_traces["Clusters (< 60 Myr)"]["points"]) <= MAX_BLUE_CLUSTER_POINTS
+    assert len(first_frame_traces["Clusters (< 60 Myr)"]["points"]) >= 600
     assert len(first_frame_traces["Clusters (< 15 Myr)"]["points"]) >= 400
 
     for widget_key in ("sky_panel", "age_kde", "cluster_filter", "dendrogram"):
