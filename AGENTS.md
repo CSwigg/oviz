@@ -8,6 +8,11 @@
   `/Users/swiggumc/Desktop/astro_research/cam_website/oviz_figures`, then in
   `/Users/swiggumc/Desktop/astro_research/cam_website` git add, commit, and
   push the copied figure so it is available from the GitHub website.
+- Prefer `python scripts/upload_oviz_figure.py <path-to-html>` for that upload
+  workflow. The helper checks the file size, copies only the requested HTML into
+  `oviz_figures`, stages/commits/pushes only that copied path in `cam_website`,
+  and prints the expected GitHub Pages URL. Use `--dry-run --no-push` first when
+  checking the target path or public URL.
 - Before uploading Oviz HTML, check the artifact size and prefer compact or
   mobile-safe exports for large scenes. Uploaded figures should keep the
   desktop layout on laptop/desktop browsers while auto-detecting iPhone/mobile
