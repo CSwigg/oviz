@@ -109,7 +109,7 @@ MAIN_FIGURE_VERGELY_VMIN = 0.0
 MAIN_FIGURE_VERGELY_VMAX = 0.02
 MAIN_FIGURE_VERGELY_DEFAULT_VMIN_QUANTILE = 0.70
 MAIN_FIGURE_VERGELY_DEFAULT_VMAX_QUANTILE = 0.995
-MOBILE_SAFE_TIMESTEP_MYR = 10
+MOBILE_SAFE_TIMESTEP_MYR = 20
 MOBILE_SAFE_DUST_MAX_RESOLUTION = 128
 MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP = 128
 MOBILE_SAFE_DUST_SAMPLES = 64
@@ -120,6 +120,8 @@ MOBILE_SAFE_VERGELY_SAMPLES = 80
 MOBILE_SAFE_SKY_DOME_CAPTURE_WIDTH_PX = 1024
 MOBILE_SAFE_SKY_DOME_CAPTURE_HEIGHT_PX = 512
 MOBILE_SAFE_SKY_DOME_CAPTURE_QUALITY = 0.82
+MOBILE_SAFE_FULL_CATALOG_MAX_POINTS = 900
+MOBILE_SAFE_BACKGROUND_CLUSTER_MAX_POINTS = 900
 
 
 def _sanitize_notebook_cell_source(source: str) -> str:
@@ -1433,9 +1435,16 @@ def patch_script_source(
         if replaced_full_chronos_sample != 1:
             raise RuntimeError("Could not point the <60 Myr cluster trace at the Chronos sample.")
 
+        old_cluster_source = (
+            "df_hunt_0_to_150_chronos.sample("
+            f"n=min(len(df_hunt_0_to_150_chronos), {MOBILE_SAFE_BACKGROUND_CLUSTER_MAX_POINTS}), "
+            "random_state=23)"
+            if mobile_safe_mode
+            else "df_hunt_0_to_150_chronos"
+        )
         old_cluster_trace_source = (
             "old_sample_trace = Trace("
-            "df_hunt_0_to_150_chronos, "
+            f"{old_cluster_source}, "
             "data_name = 'Clusters (0-150 Myr)', "
             "min_size = 0, max_size = 7, "
             f"color = {MAIN_FIGURE_CLUSTER_GREY_COLOR!r}, "
@@ -1618,9 +1627,16 @@ def patch_script_source(
             raise RuntimeError("Could not inject threejs_initial_state into make_plot call.")
 
     if "df_hunt_good" in source and "Full Cluster Catalog" not in source:
-        catalog_trace_block = """
+        full_catalog_source = (
+            "df_hunt_good.sample("
+            f"n=min(len(df_hunt_good), {MOBILE_SAFE_FULL_CATALOG_MAX_POINTS}), "
+            "random_state=17)"
+            if mobile_safe_mode
+            else "df_hunt_good"
+        )
+        catalog_trace_block = f"""
 full_catalog_trace = Trace(
-    df_hunt_good,
+    {full_catalog_source},
     data_name='Full Cluster Catalog',
     min_size=0.0,
     max_size=4.0,
