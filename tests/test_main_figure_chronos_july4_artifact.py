@@ -2,6 +2,9 @@ import base64
 import gzip
 import json
 import re
+import shutil
+import subprocess
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -44,6 +47,12 @@ def _read_scene_spec(path: Path):
     )
     raw_scene = gzip.decompress(base64.b64decode(encoded))
     return html, raw_scene, json.loads(raw_scene)
+
+
+def _extract_mobile_detection_js(html: str) -> str:
+    start = html.index("function ovizQueryFlagValue")
+    end = html.index("      const minimalModeEnabled", start)
+    return textwrap.dedent(html[start:end])
 
 
 @pytest.mark.skipif(not ARTIFACT_HTML.exists(), reason="main_figure_chronos_july4.html has not been generated")
@@ -94,3 +103,65 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "oviz-three-mobile-sky-view" in html
     assert "oviz-three-mobile-lasso" in html
     assert "oviz-three-mobile-legend" in html
+
+
+@pytest.mark.skipif(not ARTIFACT_HTML.exists(), reason="main_figure_chronos_july4.html has not been generated")
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not available")
+def test_main_figure_chronos_july4_artifact_executes_mobile_detection():
+    html, _raw_scene, _scene_spec = _read_scene_spec(ARTIFACT_HTML)
+    mobile_detection_js = _extract_mobile_detection_js(html)
+    script = f"""
+    {mobile_detection_js}
+
+    function evaluateCase(options) {{
+      const width = options.width ?? 1280;
+      const height = options.height ?? 720;
+      globalThis.window = {{
+        location: {{ search: options.search || "" }},
+        navigator: {{
+          userAgent: options.userAgent || "",
+          maxTouchPoints: options.maxTouchPoints || 0,
+        }},
+        innerWidth: width,
+        innerHeight: height,
+        screen: {{
+          width,
+          height,
+          availWidth: width,
+          availHeight: height,
+        }},
+        matchMedia: () => ({{ matches: Boolean(options.coarsePointer) }}),
+      }};
+      const override = ovizMobileModeOverride();
+      return override === null ? ovizRuntimeLooksMobile() : override;
+    }}
+
+    const results = {{
+      desktop: evaluateCase({{ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" }}),
+      iphone: evaluateCase({{ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" }}),
+      androidPhone: evaluateCase({{ userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile" }}),
+      coarseNarrow: evaluateCase({{ coarsePointer: true, maxTouchPoints: 5, width: 390, height: 844 }}),
+      coarseWide: evaluateCase({{ coarsePointer: true, maxTouchPoints: 5, width: 1024, height: 900 }}),
+      mobileOverride: evaluateCase({{ search: "?mobile=1" }}),
+      desktopOverride: evaluateCase({{ search: "?desktop=1", userAgent: "Mozilla/5.0 (iPhone)" }}),
+      mobileFalseOverride: evaluateCase({{ search: "?mobile=0", userAgent: "Mozilla/5.0 (iPhone)" }}),
+    }};
+    process.stdout.write(JSON.stringify(results));
+    """
+    result = subprocess.run(
+        ["node"],
+        input=script,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert json.loads(result.stdout) == {
+        "desktop": False,
+        "iphone": True,
+        "androidPhone": True,
+        "coarseNarrow": True,
+        "coarseWide": False,
+        "mobileOverride": True,
+        "desktopOverride": False,
+        "mobileFalseOverride": False,
+    }
