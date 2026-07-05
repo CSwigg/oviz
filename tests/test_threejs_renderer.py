@@ -713,6 +713,33 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("? Boolean(sceneMobileModeEnabled || ovizRuntimeLooksMobile())", html)
         self.assertIn("root.dataset.mobile = mobileModeEnabled ? \"true\" : \"false\";", html)
 
+    def test_threejs_renderer_compact_widget_payload_drops_optional_widget_data(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        viz.data_collection.cluster.df_int["age_myr"] = [8.0, 2.0]
+        viz.data_collection.cluster.df_int["name"] = ["member_1", "member_2"]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            members_file = Path(tmp_dir) / "members.csv"
+            members_file.write_text("name,l,b\nCluster A,120.0,-20.0\n", encoding="utf-8")
+
+            viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                enable_sky_panel=True,
+                show_age_kde_inset=True,
+                cluster_members_file=str(members_file),
+                threejs_initial_state={"compact_widget_payload_enabled": True},
+            )
+
+        self.assertTrue(viz.fig_dict["initial_state"]["compact_widget_payload_enabled"])
+        self.assertFalse(viz.fig_dict["sky_panel"]["enabled"])
+        self.assertFalse(viz.fig_dict["age_kde"]["enabled"])
+        self.assertFalse(viz.fig_dict["cluster_filter"]["enabled"])
+        self.assertFalse(viz.fig_dict["dendrogram"]["enabled"])
+        self.assertGreater(len(viz.fig_dict["frames"]), 0)
+        self.assertTrue(any(frame["traces"] for frame in viz.fig_dict["frames"]))
+
     def test_threejs_renderer_keeps_grouped_family_traces_in_galactic_lite_mode(self):
         viz = Animate3D(
             _FakeFamilyCollection(show_tracks=True),

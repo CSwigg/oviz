@@ -1554,6 +1554,7 @@ def patch_script_source(
             "'current_group': 'Clusters'",
             "'click_selection_enabled': False",
             f"'compact_payload_enabled': {bool(compact_payload)!r}",
+            f"'compact_widget_payload_enabled': {bool(mobile_safe_mode)!r}",
             f"'scene_float_precision': {1 if mobile_safe_mode else 2}",
             "'active_volume_key': ('vergely-dust' if vergely_dust_volumes else ('supernova-density' if supernova_volumes else 'volume-0'))",
             "'legend_state': ({'volume-0': True, **({'supernova-density': False} if supernova_volumes else {}), 'vergely-dust': True} if vergely_dust_volumes else ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True}))",

@@ -772,18 +772,19 @@ def build_threejs_scene_spec(
             initial_frame_index = idx
             break
 
+    normalized_initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
+    compact_payload = bool(normalized_initial_state.get("compact_payload_enabled"))
+    compact_widget_payload = bool(normalized_initial_state.get("compact_widget_payload_enabled"))
+    mobile_mode = bool(normalized_initial_state.get("mobile_mode_enabled"))
+
     default_sky_catalog = {}
-    if getattr(plot, "enable_sky_panel", False) and frame_specs:
+    if getattr(plot, "enable_sky_panel", False) and frame_specs and not compact_widget_payload:
         default_sky_catalog = catalog_from_frame_spec(frame_specs[initial_frame_index])
     sky_dome = _sky_dome_config(
         plot,
         file_to_data_url=file_to_data_url,
         coerce_float=coerce_float,
     )
-
-    normalized_initial_state = normalize_threejs_initial_state(getattr(plot, "threejs_initial_state", {}) or {})
-    compact_payload = bool(normalized_initial_state.get("compact_payload_enabled"))
-    mobile_mode = bool(normalized_initial_state.get("mobile_mode_enabled"))
 
     if minimal_mode:
         default_sky_catalog = {}
@@ -938,7 +939,7 @@ def build_threejs_scene_spec(
         "image_planes": image_planes,
         "sky_panel": (
             {"enabled": False}
-            if minimal_mode
+            if minimal_mode or compact_widget_payload
             else plot._build_threejs_sky_panel_spec(default_sky_catalog)
         ),
         "sky_dome": {"enabled": False} if minimal_mode else sky_dome,
@@ -949,17 +950,17 @@ def build_threejs_scene_spec(
         ),
         "age_kde": (
             {"enabled": False}
-            if minimal_mode
+            if minimal_mode or compact_widget_payload
             else plot._build_threejs_age_kde_spec(trace_key_by_name)
         ),
         "cluster_filter": (
             {"enabled": False}
-            if minimal_mode
+            if minimal_mode or compact_widget_payload
             else plot._build_threejs_cluster_filter_spec(trace_key_by_name)
         ),
         "dendrogram": (
             {"enabled": False}
-            if minimal_mode
+            if minimal_mode or compact_widget_payload
             else plot._build_threejs_dendrogram_spec(trace_key_by_name)
         ),
         "volumes": {
