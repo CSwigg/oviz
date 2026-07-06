@@ -150,7 +150,17 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "setExclusiveVolumeVariantSelection(activeVolumeKey)" in html
     assert "oviz-three-mobile-sky-view" in html
     assert "oviz-three-mobile-lasso" in html
+    assert "oviz-three-mobile-ar" in html
     assert "oviz-three-mobile-legend" in html
+    assert "function collectOvizArSnapshot" in html
+    assert "function ovizArPresentFrameIndex" in html
+    assert "const OVIZ_AR_SKY_TEXTURE_HIGH = { width: 4096, height: 2048 };" in html
+    assert "const OVIZ_AR_SKY_TEXTURE_LOW = { width: 2048, height: 1024 };" in html
+    assert "function buildOvizArSkyDomeScene" in html
+    assert "skyDomeHips2FitsUrl(width, height)" in html
+    assert "function loadOvizUSDZExporter" in html
+    assert "USDZExporter" in html
+    assert 'rel="ar"' in html
 
 
 @pytest.mark.skipif(not ARTIFACT_HTML.exists(), reason="main_figure_chronos_july4.html has not been generated")

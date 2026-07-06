@@ -152,6 +152,7 @@ def render_threejs_html(
     widget_runtime_js: str,
     widget_content_runtime_js: str,
     interaction_runtime_js: str,
+    ar_runtime_js: str,
     scene_runtime_js: str,
     sky_runtime_js: str,
     viewer_runtime_js: str,
@@ -200,6 +201,7 @@ def render_threejs_html(
     html = html.replace("__WIDGET_RUNTIME_JS__", widget_runtime_js)
     html = html.replace("__WIDGET_CONTENT_RUNTIME_JS__", widget_content_runtime_js)
     html = html.replace("__INTERACTION_RUNTIME_JS__", interaction_runtime_js)
+    html = html.replace("__AR_RUNTIME_JS__", "" if minimal_mode else ar_runtime_js)
     html = html.replace("__SCENE_RUNTIME_JS__", scene_runtime_js)
     html = html.replace("__SKY_RUNTIME_JS__", sky_runtime_js)
     html = html.replace("__VIEWER_RUNTIME_JS__", viewer_runtime_js)

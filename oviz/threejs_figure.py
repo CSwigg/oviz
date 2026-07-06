@@ -15,6 +15,7 @@ from .threejs_embed import (
 from .threejs_shell import THREEJS_SHELL_HTML
 from .threejs_runtime_legend import THREEJS_LEGEND_RUNTIME_JS
 from .threejs_runtime_interactions import THREEJS_INTERACTION_RUNTIME_JS
+from .threejs_runtime_ar import THREEJS_AR_RUNTIME_JS
 from .threejs_runtime_actions import THREEJS_ACTION_RUNTIME_JS
 from .threejs_runtime_scene import THREEJS_SCENE_RUNTIME_JS
 from .threejs_runtime_sky import THREEJS_SKY_RUNTIME_JS
@@ -171,6 +172,7 @@ _THREEJS_TOPBAR_HTML = """
           <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
           <button class="oviz-three-mobile-sky-view" type="button" title="Switch between 3D and Sky view" aria-pressed="false">Sky</button>
           <button class="oviz-three-mobile-lasso" type="button" title="Arm lasso selection for touch input" aria-pressed="false">Lasso</button>
+          <button class="oviz-three-mobile-ar" type="button" title="Select clusters to enable AR export" aria-haspopup="dialog" aria-expanded="false" disabled>AR</button>
           <button class="oviz-three-mobile-legend" type="button" title="Show or hide the legend" aria-expanded="false">Legend</button>
           <button class="oviz-three-reset-camera-view" type="button" title="Reset the camera to the initial 3D view">Reset Camera</button>
           <button class="oviz-three-reset-selection" type="button" title="Clear the current lasso and cluster selection">Reset Selection</button>
@@ -238,6 +240,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-mobile-sky-view,
       #__ROOT_ID__ .oviz-three-mobile-lasso,
+      #__ROOT_ID__ .oviz-three-mobile-ar,
       #__ROOT_ID__ .oviz-three-mobile-legend,
       #__ROOT_ID__ .oviz-three-mobile-selection-status {
         display: none;
@@ -4395,6 +4398,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sky-view,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-lasso,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-ar,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-legend {
         display: inline-flex !important;
       }
@@ -4414,20 +4418,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-lasso {
         order: 2;
       }
-      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-legend {
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-ar {
         order: 3;
       }
-      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle {
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-legend {
         order: 4;
       }
-      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-toggle {
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle {
         order: 5;
       }
-      #__ROOT_ID__[data-mobile="true"] .oviz-three-reset-camera-view {
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-toggle {
         order: 6;
       }
-      #__ROOT_ID__[data-mobile="true"] .oviz-three-zen-mode {
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-reset-camera-view {
         order: 7;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-zen-mode {
+        order: 8;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu select,
@@ -4460,8 +4467,96 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: rgba(246, 200, 95, 0.98) !important;
         box-shadow: inset 0 -2px 0 rgba(246, 200, 95, 0.72) !important;
       }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-ar:disabled {
+        opacity: 0.38 !important;
+        color: rgba(238, 242, 247, 0.48) !important;
+        box-shadow: none !important;
+        cursor: default;
+      }
+      #__ROOT_ID__ .oviz-three-ar-dialog {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        color: var(--oviz-text);
+      }
+      #__ROOT_ID__ .oviz-three-ar-dialog[data-open="true"] {
+        display: block;
+      }
+      #__ROOT_ID__ .oviz-three-ar-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.46);
+      }
+      #__ROOT_ID__ .oviz-three-ar-card {
+        position: absolute;
+        left: 50%;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+        box-sizing: border-box;
+        width: min(420px, calc(100vw - 24px));
+        transform: translateX(-50%);
+        padding: 14px;
+        border: 1px solid rgba(170, 176, 185, 0.30);
+        border-radius: 8px;
+        background: rgba(14, 18, 24, 0.94);
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.40);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+      #__ROOT_ID__ .oviz-three-ar-heading {
+        margin: 0 0 10px;
+        color: rgba(246, 248, 251, 0.95);
+        font: 760 14px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+      }
+      #__ROOT_ID__ .oviz-three-ar-actions,
+      #__ROOT_ID__ .oviz-three-ar-ready-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      #__ROOT_ID__ .oviz-three-ar-status {
+        min-height: 18px;
+        margin: 10px 0;
+        color: rgba(221, 226, 235, 0.88);
+        font: 520 12px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+      }
+      #__ROOT_ID__ .oviz-three-ar-status[data-tone="warn"] {
+        color: rgba(250, 210, 116, 0.98);
+      }
+      #__ROOT_ID__ .oviz-three-ar-status[data-tone="error"] {
+        color: rgba(255, 138, 138, 0.98);
+      }
+      #__ROOT_ID__ .oviz-three-ar-status[data-tone="ready"] {
+        color: rgba(145, 232, 183, 0.98);
+      }
+      #__ROOT_ID__ .oviz-three-ar-mode,
+      #__ROOT_ID__ .oviz-three-ar-open-link,
+      #__ROOT_ID__ .oviz-three-ar-download,
+      #__ROOT_ID__ .oviz-three-ar-close {
+        min-height: 36px;
+        padding: 0 11px;
+        border: 1px solid rgba(170, 176, 185, 0.32);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.07);
+        color: rgba(246, 248, 251, 0.94);
+        font: 700 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+        text-decoration: none;
+      }
+      #__ROOT_ID__ .oviz-three-ar-mode:disabled,
+      #__ROOT_ID__ .oviz-three-ar-open-link:disabled {
+        opacity: 0.48;
+      }
+      #__ROOT_ID__ .oviz-three-ar-close {
+        margin-top: 10px;
+        background: transparent;
+      }
       #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-sky-view,
       #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-lasso,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-ar,
       #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-legend,
       #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-controls-shell,
       #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-sky-controls-shell,
@@ -5519,6 +5614,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
       const mobileSkyViewButtonEl = root.querySelector(".oviz-three-mobile-sky-view");
       const mobileLassoButtonEl = root.querySelector(".oviz-three-mobile-lasso");
+      const mobileArButtonEl = root.querySelector(".oviz-three-mobile-ar");
       const mobileLegendButtonEl = root.querySelector(".oviz-three-mobile-legend");
       const resetCameraViewButtonEl = root.querySelector(".oviz-three-reset-camera-view");
       const resetSelectionButtonEl = root.querySelector(".oviz-three-reset-selection");
@@ -11703,10 +11799,15 @@ __SKY_RUNTIME_JS__
       }
 
       function updateSelectionUI() {
+        const hasSelectionContent = typeof selectionStateHasContent === "function"
+          ? selectionStateHasContent()
+          : (currentSelections.length > 0 || Boolean(currentSelection) || selectedClusterKeys.size || hasActiveLassoSelectionMask());
+        if (typeof renderArSnapshotButtonState === "function") {
+          renderArSnapshotButtonState();
+        }
         if (!clearSelectionButtonEl || !volumeLassoToggleEl) {
           return;
         }
-        const hasSelectionContent = currentSelections.length > 0 || Boolean(currentSelection) || hasActiveLassoSelectionMask();
         if (clickSelectToggleEl) {
           clickSelectToggleEl.checked = false;
           clickSelectToggleEl.disabled = true;
@@ -15778,6 +15879,8 @@ __WIDGET_CONTENT_RUNTIME_JS__
 
 __INTERACTION_RUNTIME_JS__
 
+__AR_RUNTIME_JS__
+
 __SCENE_RUNTIME_JS__
 
 __VIEWER_RUNTIME_JS__
@@ -16000,6 +16103,15 @@ __ACTION_RUNTIME_JS__
             lassoArmed = !lassoArmed;
             updateSelectionUI();
             focusViewer();
+          });
+        }
+        if (mobileArButtonEl) {
+          mobileArButtonEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof openOvizArSnapshotChooser === "function") {
+              openOvizArSnapshotChooser();
+            }
           });
         }
         if (mobileSelectionClearButtonEl) {
@@ -16726,6 +16838,7 @@ class ThreeJSFigure:
             widget_runtime_js=THREEJS_WIDGET_RUNTIME_JS,
             widget_content_runtime_js=THREEJS_WIDGET_CONTENT_RUNTIME_JS,
             interaction_runtime_js=THREEJS_INTERACTION_RUNTIME_JS,
+            ar_runtime_js=THREEJS_AR_RUNTIME_JS,
             scene_runtime_js=THREEJS_SCENE_RUNTIME_JS,
             sky_runtime_js=THREEJS_SKY_RUNTIME_JS,
             viewer_runtime_js=THREEJS_VIEWER_RUNTIME_JS,
