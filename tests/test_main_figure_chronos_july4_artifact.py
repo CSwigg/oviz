@@ -11,8 +11,8 @@ import pytest
 
 
 ARTIFACT_HTML = Path(__file__).with_name("main_figure_chronos_july4.html")
-MAX_HTML_SIZE_BYTES = 25 * 1024 * 1024
-MAX_RAW_SCENE_SIZE_BYTES = 64 * 1024 * 1024
+MAX_HTML_SIZE_BYTES = 100 * 1024 * 1024
+MAX_RAW_SCENE_SIZE_BYTES = 220 * 1024 * 1024
 EXPECTED_FRAME_TIMES = [float(value) for value in range(-120, 1)]
 MAX_BACKGROUND_POINTS = 500
 MAX_BLUE_CLUSTER_POINTS = 650
@@ -117,8 +117,10 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert desktop_volume["base_state_name"] == "Edenhofer+2024 Dust"
     assert mobile_volume["base_state_name"] == desktop_volume["base_state_name"]
     assert desktop_volume["variant_order"] < mobile_volume["variant_order"]
-    assert desktop_volume["data_encoding"] == "png_atlas_uint8"
+    assert desktop_volume["data_encoding"] == "uint8"
+    assert desktop_volume.get("data_atlas_tiles") is None
     assert mobile_volume["data_encoding"] == "png_atlas_uint8"
+    assert mobile_volume.get("data_atlas_tiles")
     desktop_shape = desktop_volume["shape"]
     mobile_shape = mobile_volume["shape"]
     assert max(int(desktop_shape["x"]), int(desktop_shape["y"])) >= MIN_DESKTOP_VOLUME_AXIS_PIXELS

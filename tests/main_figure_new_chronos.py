@@ -739,7 +739,6 @@ edenhofer_volume_desktop.update({{
     "max_resolution": {int(MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION)},
     "max_resolution_cap": {int(MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION_CAP)},
     "sky_overlay_max_resolution": {int(MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION)},
-    "data_encoding": "png_atlas_uint8",
     "samples": {int(MOBILE_SAFE_DESKTOP_DUST_SAMPLES)},
     "visible": True,
 }})
