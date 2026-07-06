@@ -151,6 +151,8 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "oviz-three-mobile-sky-view" in html
     assert "oviz-three-mobile-lasso" in html
     assert "oviz-three-mobile-ar" in html
+    assert 'class="oviz-three-mobile-ar" type="button" title="Open AR export options"' in html
+    assert 'class="oviz-three-mobile-ar" type="button" title="Open AR export options" aria-haspopup="dialog" aria-expanded="false" data-has-selection="false" disabled' not in html
     assert "oviz-three-mobile-legend" in html
     assert "function collectOvizArSnapshot" in html
     assert "function ovizArPresentFrameIndex" in html

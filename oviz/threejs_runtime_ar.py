@@ -95,13 +95,14 @@ THREEJS_AR_RUNTIME_JS = r"""
           return;
         }
         const selectedCount = ovizArSelectedClusterKeys().size;
-        const enabled = !minimalModeEnabled && selectedCount > 0 && !ovizArExportBusy;
+        const enabled = !minimalModeEnabled && !ovizArExportBusy;
         mobileArButtonEl.disabled = !enabled;
+        mobileArButtonEl.dataset.hasSelection = selectedCount > 0 ? "true" : "false";
         mobileArButtonEl.dataset.active = ovizArDialogEl && ovizArDialogEl.dataset.open === "true" ? "true" : "false";
         mobileArButtonEl.setAttribute("aria-expanded", mobileArButtonEl.dataset.active === "true" ? "true" : "false");
         mobileArButtonEl.title = selectedCount
           ? `Export ${selectedCount} selected cluster${selectedCount === 1 ? "" : "s"} to AR Quick Look`
-          : "Select clusters to enable AR export";
+          : "Open AR export options. Select clusters before exporting.";
       }
 
       function ovizArSelectionLabel(selection, fallback = "Cluster") {

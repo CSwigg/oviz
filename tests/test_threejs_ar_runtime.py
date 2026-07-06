@@ -65,7 +65,15 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     let selectedClusterKeys = new Set(["a"]);
     let minimalModeEnabled = false;
     let ovizTestCoordsys = "galactic";
-    const mobileArButtonEl = null;
+    const mobileArButtonEl = {{
+      disabled: null,
+      dataset: {{}},
+      attrs: {{}},
+      title: "",
+      setAttribute(key, value) {{
+        this.attrs[key] = value;
+      }},
+    }};
     const root = {{ appendChild: () => {{}} }};
 
     function normalizeMemberKey(value) {{
@@ -106,6 +114,12 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     {THREEJS_AR_RUNTIME_JS}
 
     const snapshot = collectOvizArSnapshot("3d");
+    renderArSnapshotButtonState();
+    const selectedButtonState = {{
+      disabled: mobileArButtonEl.disabled,
+      hasSelection: mobileArButtonEl.dataset.hasSelection,
+      title: mobileArButtonEl.title,
+    }};
     const lon0 = ovizArSkyDirectionForLonLatDeg(0, 0, 1);
     const lon90 = ovizArSkyDirectionForLonLatDeg(90, 0, 1);
     const lat90 = ovizArSkyDirectionForLonLatDeg(0, 90, 1);
@@ -115,6 +129,7 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     currentSelections = [];
     currentSelection = null;
     const emptySnapshot = collectOvizArSnapshot("3d");
+    renderArSnapshotButtonState();
 
     process.stdout.write(JSON.stringify({{
       presentTimeMyr: snapshot.presentTimeMyr,
@@ -130,6 +145,12 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
       icrsPoint,
       emptyPointCount: emptySnapshot.points.length,
       emptyCanExport: ovizArCanExportSelection(),
+      selectedButtonState,
+      emptyButtonState: {{
+        disabled: mobileArButtonEl.disabled,
+        hasSelection: mobileArButtonEl.dataset.hasSelection,
+        title: mobileArButtonEl.title,
+      }},
     }}));
     """
     result = subprocess.run(
@@ -150,6 +171,11 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     assert payload["trailPointCount"] == 2
     assert payload["emptyPointCount"] == 0
     assert payload["emptyCanExport"] is False
+    assert payload["selectedButtonState"]["disabled"] is False
+    assert payload["selectedButtonState"]["hasSelection"] == "true"
+    assert payload["emptyButtonState"]["disabled"] is False
+    assert payload["emptyButtonState"]["hasSelection"] == "false"
+    assert "Select clusters before exporting" in payload["emptyButtonState"]["title"]
 
     assert payload["lon0"]["x"] == pytest.approx(-1)
     assert payload["lon0"]["y"] == pytest.approx(0, abs=1e-12)

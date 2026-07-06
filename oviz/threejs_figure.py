@@ -172,7 +172,7 @@ _THREEJS_TOPBAR_HTML = """
           <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
           <button class="oviz-three-mobile-sky-view" type="button" title="Switch between 3D and Sky view" aria-pressed="false">Sky</button>
           <button class="oviz-three-mobile-lasso" type="button" title="Arm lasso selection for touch input" aria-pressed="false">Lasso</button>
-          <button class="oviz-three-mobile-ar" type="button" title="Select clusters to enable AR export" aria-haspopup="dialog" aria-expanded="false" disabled>AR</button>
+          <button class="oviz-three-mobile-ar" type="button" title="Open AR export options" aria-haspopup="dialog" aria-expanded="false" data-has-selection="false">AR</button>
           <button class="oviz-three-mobile-legend" type="button" title="Show or hide the legend" aria-expanded="false">Legend</button>
           <button class="oviz-three-reset-camera-view" type="button" title="Reset the camera to the initial 3D view">Reset Camera</button>
           <button class="oviz-three-reset-selection" type="button" title="Clear the current lasso and cluster selection">Reset Selection</button>
@@ -4472,6 +4472,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: rgba(238, 242, 247, 0.48) !important;
         box-shadow: none !important;
         cursor: default;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-ar[data-has-selection="false"]:not(:disabled) {
+        opacity: 0.68 !important;
+        color: rgba(238, 242, 247, 0.68) !important;
       }
       #__ROOT_ID__ .oviz-three-ar-dialog {
         display: none;
