@@ -237,6 +237,15 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
         callback({{ isMesh: true, material }});
       }},
     }});
+    const sourceBuffer = new Uint8Array([0, 1, 2, 3, 4, 5]).buffer;
+    const slicedViewBuffer = await ovizArArrayBufferFromExporterResult(new Uint8Array(sourceBuffer, 2, 3));
+    const validUsdZBuffer = ovizArValidateUsdZArrayBuffer(new ArrayBuffer(OVIZ_AR_MIN_USDZ_BYTES + 32));
+    let emptyUsdZError = "";
+    try {{
+      ovizArValidateUsdZArrayBuffer(new ArrayBuffer(0));
+    }} catch (err) {{
+      emptyUsdZError = err && err.message ? String(err.message) : String(err);
+    }}
 
     process.stdout.write(JSON.stringify({{
       presentTimeMyr: snapshot.presentTimeMyr,
@@ -277,6 +286,9 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
         roughness: material.roughness,
         metalness: material.metalness,
       }},
+      slicedViewBytes: Array.from(new Uint8Array(slicedViewBuffer)),
+      validUsdZBytes: validUsdZBuffer.byteLength,
+      emptyUsdZError,
     }}));
     }})().catch((err) => {{
       console.error(err && err.stack ? err.stack : err);
@@ -327,6 +339,9 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
         "roughness": 0.7,
         "metalness": 0,
     }
+    assert payload["slicedViewBytes"] == [2, 3, 4]
+    assert payload["validUsdZBytes"] > 1024
+    assert "empty or incomplete" in payload["emptyUsdZError"]
 
     assert payload["lon0"]["x"] == pytest.approx(-1)
     assert payload["lon0"]["y"] == pytest.approx(0, abs=1e-12)

@@ -14,6 +14,9 @@ from pathlib import Path
 
 HOME_DIR = Path.home()
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from oviz.threejs_runtime_ar import THREEJS_AR_QUICKLOOK_SERVICE_WORKER_JS
 NOTEBOOK_PATH = HOME_DIR / "Desktop" / "astro_research" / "radcliffe" / "oviz_notebooks" / "main_figure.ipynb"
 SUPERNOVAE_ROOT = HOME_DIR / "Desktop" / "astro_research" / "supernovae_map"
 SUPERNOVAE_CATALOG_PATH = SUPERNOVAE_ROOT / "paper" / "solar_encounter_catalog_current.csv.gz"
@@ -68,6 +71,13 @@ local_shell_volumes = []
 optional_static_volume_state = {}
 optional_static_legend_state = {}
 """.strip()
+AR_QUICKLOOK_SERVICE_WORKER_NAME = "oviz-ar-quicklook-sw.js"
+
+
+def write_ar_quicklook_service_worker(output_dir: Path) -> Path:
+    worker_path = Path(output_dir) / AR_QUICKLOOK_SERVICE_WORKER_NAME
+    worker_path.write_text(THREEJS_AR_QUICKLOOK_SERVICE_WORKER_JS + "\n", encoding="utf-8")
+    return worker_path
 
 
 def _sanitize_notebook_cell_source(source: str) -> str:
@@ -1064,11 +1074,13 @@ def run_main_figure(
     )
 
     run_script_source(patched_source)
+    write_ar_quicklook_service_worker(output_html.parent)
     if website_output_html is not None:
         website_output_html = Path(website_output_html)
         if output_html.resolve() != website_output_html.resolve():
             website_output_html.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(output_html, website_output_html)
+        write_ar_quicklook_service_worker(website_output_html.parent)
     return output_html
 
 

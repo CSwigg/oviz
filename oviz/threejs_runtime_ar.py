@@ -7,10 +7,13 @@ THREEJS_AR_RUNTIME_JS = r"""
       const OVIZ_AR_VOLUME_SCAN_TARGET = 180000;
       const OVIZ_AR_VOLUME_COLOR_BINS = 8;
       const OVIZ_AR_VOLUME_MIN_STRETCHED_VALUE = 0.055;
+      const OVIZ_AR_MIN_USDZ_BYTES = 1024;
+      const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v1";
       const OVIZ_AR_SKY_TEXTURE_HIGH = { width: 4096, height: 2048 };
       const OVIZ_AR_SKY_TEXTURE_LOW = { width: 2048, height: 1024 };
       let ovizArDialogEl = null;
       let ovizArObjectUrl = "";
+      let ovizArQuickLookUrl = "";
       let ovizArExportBusy = false;
 
       function ovizArFiniteNumber(value, fallback = NaN) {
@@ -1051,21 +1054,47 @@ THREEJS_AR_RUNTIME_JS = r"""
         throw lastError || new Error("USDZExporter is unavailable.");
       }
 
+      function ovizArFormatByteSize(byteCount) {
+        const bytes = Math.max(0, Math.round(Number(byteCount) || 0));
+        if (bytes < 1024) {
+          return `${bytes} B`;
+        }
+        if (bytes < 1024 * 1024) {
+          return `${(bytes / 1024).toFixed(1)} KB`;
+        }
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      async function ovizArArrayBufferFromExporterResult(result) {
+        if (result instanceof ArrayBuffer) {
+          return result;
+        }
+        if (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView && ArrayBuffer.isView(result)) {
+          return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
+        }
+        if (result && result.buffer instanceof ArrayBuffer) {
+          return result.buffer;
+        }
+        if (typeof Blob !== "undefined" && result instanceof Blob) {
+          return await result.arrayBuffer();
+        }
+        throw new Error("USDZ exporter returned an unsupported payload.");
+      }
+
+      function ovizArValidateUsdZArrayBuffer(arrayBuffer) {
+        const byteLength = Number(arrayBuffer && arrayBuffer.byteLength) || 0;
+        if (!(arrayBuffer instanceof ArrayBuffer) || byteLength < OVIZ_AR_MIN_USDZ_BYTES) {
+          throw new Error(`USDZ exporter produced an empty or incomplete package (${ovizArFormatByteSize(byteLength)}).`);
+        }
+        return arrayBuffer;
+      }
+
       async function ovizArParseUsdZ(sceneAr) {
         const USDZExporter = await loadOvizUSDZExporter();
         const exporter = new USDZExporter();
         normalizeOvizArSceneForUSDZ(sceneAr);
         const result = await Promise.resolve(exporter.parse(sceneAr, { quickLookCompatible: true }));
-        if (result instanceof ArrayBuffer) {
-          return result;
-        }
-        if (result && result.buffer instanceof ArrayBuffer) {
-          return result.buffer;
-        }
-        if (result instanceof Blob) {
-          return await result.arrayBuffer();
-        }
-        throw new Error("USDZ exporter returned an unsupported payload.");
+        return ovizArValidateUsdZArrayBuffer(await ovizArArrayBufferFromExporterResult(result));
       }
 
       function normalizeOvizArMaterialForUSDZ(material) {
@@ -1110,6 +1139,7 @@ THREEJS_AR_RUNTIME_JS = r"""
           URL.revokeObjectURL(ovizArObjectUrl);
           ovizArObjectUrl = "";
         }
+        ovizArQuickLookUrl = "";
       }
 
       function ovizArQuickLookAvailable() {
@@ -1118,6 +1148,98 @@ THREEJS_AR_RUNTIME_JS = r"""
         const platform = String(nav.platform || "");
         return /iPad|iPhone|iPod/i.test(userAgent)
           || (platform === "MacIntel" && Number(nav.maxTouchPoints) > 1);
+      }
+
+      function ovizArHostedQuickLookAvailable() {
+        return Boolean(
+          typeof window !== "undefined"
+          && window.isSecureContext
+          && window.location
+          && /^https?:$/i.test(String(window.location.protocol || ""))
+          && typeof navigator !== "undefined"
+          && navigator.serviceWorker
+          && window.caches
+        );
+      }
+
+      function ovizArQuickLookWorkerUrl() {
+        return new URL("oviz-ar-quicklook-sw.js", window.location.href).href;
+      }
+
+      function ovizArQuickLookScopeUrl() {
+        return new URL("./", window.location.href).href;
+      }
+
+      function ovizArQuickLookAssetUrl(filename) {
+        const safeFilename = String(filename || "oviz_ar_snapshot.usdz")
+          .replace(/[^a-z0-9_.-]+/gi, "_")
+          .replace(/^_+/, "")
+          || "oviz_ar_snapshot.usdz";
+        const cryptoObj = typeof window !== "undefined" ? window.crypto : null;
+        const token = cryptoObj && typeof cryptoObj.randomUUID === "function"
+          ? cryptoObj.randomUUID()
+          : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        return new URL(`oviz-ar-quicklook/${token}/${safeFilename}`, window.location.href).href;
+      }
+
+      function ovizArWaitForServiceWorkerControl(timeoutMs = 2500) {
+        if (!navigator.serviceWorker || navigator.serviceWorker.controller) {
+          return Promise.resolve(Boolean(navigator.serviceWorker && navigator.serviceWorker.controller));
+        }
+        return new Promise((resolve) => {
+          let settled = false;
+          const finish = (value) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            window.clearTimeout(timer);
+            navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+            resolve(value);
+          };
+          const onControllerChange = () => finish(true);
+          const timer = window.setTimeout(() => finish(Boolean(navigator.serviceWorker.controller)), timeoutMs);
+          navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+        });
+      }
+
+      async function ovizArPrepareQuickLookAsset(blob, filename) {
+        if (!ovizArHostedQuickLookAvailable()) {
+          throw new Error("Hosted Quick Look handoff is unavailable.");
+        }
+        const byteLength = Number(blob && blob.size) || 0;
+        if (byteLength < OVIZ_AR_MIN_USDZ_BYTES) {
+          throw new Error(`USDZ package is too small for Quick Look (${ovizArFormatByteSize(byteLength)}).`);
+        }
+        const registration = await navigator.serviceWorker.register(
+          ovizArQuickLookWorkerUrl(),
+          { scope: ovizArQuickLookScopeUrl() }
+        );
+        if (registration && typeof registration.update === "function") {
+          try {
+            await registration.update();
+          } catch (_err) {
+            // A stale but active worker is still usable for this short-lived cache handoff.
+          }
+        }
+        await navigator.serviceWorker.ready;
+        const controlled = await ovizArWaitForServiceWorkerControl();
+        if (!controlled) {
+          throw new Error("Quick Look handoff worker is not controlling this page yet.");
+        }
+        const assetUrl = ovizArQuickLookAssetUrl(filename);
+        const cache = await window.caches.open(OVIZ_AR_QUICKLOOK_CACHE);
+        const safeFilename = String(filename || "oviz_ar_snapshot.usdz").replace(/"/g, "");
+        await cache.put(assetUrl, new Response(blob, {
+          headers: {
+            "Content-Type": "model/vnd.usdz+zip",
+            "Content-Disposition": `inline; filename="${safeFilename}"`,
+            "Cache-Control": "no-store",
+            "Accept-Ranges": "bytes",
+            "X-Oviz-AR-Bytes": String(byteLength),
+          },
+        }));
+        return assetUrl;
       }
 
       function ovizArUsdZFilename(mode) {
@@ -1144,31 +1266,62 @@ THREEJS_AR_RUNTIME_JS = r"""
         renderArSnapshotButtonState();
       }
 
-      function ovizArSetReady(blob, filename, message) {
+      async function ovizArSetReady(blob, filename, message) {
+        const byteLength = Number(blob && blob.size) || 0;
+        if (byteLength < OVIZ_AR_MIN_USDZ_BYTES) {
+          throw new Error(`USDZ exporter produced an empty or incomplete package (${ovizArFormatByteSize(byteLength)}).`);
+        }
         ovizArClearObjectUrl();
         ovizArObjectUrl = URL.createObjectURL(blob);
+        let quickLookError = "";
+        if (ovizArQuickLookAvailable()) {
+          try {
+            ovizArQuickLookUrl = await ovizArPrepareQuickLookAsset(blob, filename);
+          } catch (err) {
+            quickLookError = err && err.message ? String(err.message) : "direct Quick Look handoff failed";
+            ovizArQuickLookUrl = "";
+          }
+        }
         const dialog = ensureOvizArDialog();
         const hiddenLink = dialog.querySelector(".oviz-three-ar-hidden-link");
         const openButton = dialog.querySelector(".oviz-three-ar-open-link");
         const downloadLink = dialog.querySelector(".oviz-three-ar-download");
         if (hiddenLink) {
-          hiddenLink.href = ovizArObjectUrl;
-          hiddenLink.download = filename;
+          if (ovizArQuickLookUrl) {
+            hiddenLink.href = ovizArQuickLookUrl;
+            hiddenLink.removeAttribute("download");
+          } else {
+            hiddenLink.removeAttribute("href");
+            hiddenLink.removeAttribute("download");
+          }
         }
         if (openButton) {
-          openButton.hidden = false;
-          openButton.disabled = false;
+          openButton.hidden = !ovizArQuickLookUrl;
+          openButton.disabled = !ovizArQuickLookUrl;
         }
         if (downloadLink) {
           downloadLink.hidden = false;
           downloadLink.href = ovizArObjectUrl;
           downloadLink.download = filename;
         }
+        const sizeText = ovizArFormatByteSize(byteLength);
+        const baseMessage = message || (ovizArQuickLookAvailable() ? "AR snapshot is ready." : "USDZ snapshot is ready.");
+        const canOpenQuickLook = Boolean(ovizArQuickLookAvailable() && ovizArQuickLookUrl);
+        let statusMessage = `${baseMessage} (${sizeText})`;
+        let tone = canOpenQuickLook ? "ready" : "warn";
+        if (ovizArQuickLookAvailable() && !ovizArQuickLookUrl) {
+          statusMessage = `${baseMessage} (${sizeText}). Direct AR handoff is unavailable here; use Download USDZ.`;
+          if (quickLookError) {
+            statusMessage += ` ${quickLookError}`;
+          }
+        } else if (!ovizArQuickLookAvailable()) {
+          statusMessage = `${baseMessage} (${sizeText}). Download the USDZ on this browser.`;
+        }
         ovizArSetStatus(
-          message || (ovizArQuickLookAvailable() ? "AR snapshot is ready." : "USDZ snapshot is ready."),
-          ovizArQuickLookAvailable() ? "ready" : "warn"
+          statusMessage,
+          tone
         );
-        if (ovizArQuickLookAvailable() && hiddenLink) {
+        if (canOpenQuickLook && hiddenLink) {
           window.setTimeout(() => {
             try {
               hiddenLink.click();
@@ -1225,7 +1378,7 @@ THREEJS_AR_RUNTIME_JS = r"""
           const volumeText = volumeCount ? ` plus ${volumeCount} volume sample${volumeCount === 1 ? "" : "s"}` : "";
           const selectionText = snapshot.selectionMode === "selection" ? "selected " : "";
           const suffix = (snapshot.truncated || summary.volumeTruncated) ? " AR limits applied." : "";
-          ovizArSetReady(blob, filename, `${selectionText}${pointText}${volumeText} exported at t=0 Myr.${suffix}`);
+          await ovizArSetReady(blob, filename, `${selectionText}${pointText}${volumeText} exported at t=0 Myr.${suffix}`);
         } catch (err) {
           const message = err && err.message ? String(err.message) : "AR export failed.";
           ovizArSetStatus(`AR export failed: ${message}`, "error");
@@ -1235,9 +1388,11 @@ THREEJS_AR_RUNTIME_JS = r"""
       }
 
       function ovizArResetDialogActions() {
+        ovizArQuickLookUrl = "";
         const dialog = ensureOvizArDialog();
         const openButton = dialog.querySelector(".oviz-three-ar-open-link");
         const downloadLink = dialog.querySelector(".oviz-three-ar-download");
+        const hiddenLink = dialog.querySelector(".oviz-three-ar-hidden-link");
         if (openButton) {
           openButton.hidden = true;
           openButton.disabled = true;
@@ -1246,6 +1401,10 @@ THREEJS_AR_RUNTIME_JS = r"""
           downloadLink.hidden = true;
           downloadLink.removeAttribute("href");
           downloadLink.removeAttribute("download");
+        }
+        if (hiddenLink) {
+          hiddenLink.removeAttribute("href");
+          hiddenLink.removeAttribute("download");
         }
       }
 
@@ -1323,4 +1482,69 @@ THREEJS_AR_RUNTIME_JS = r"""
         renderArSnapshotButtonState();
         focusViewer();
       }
+""".strip()
+
+
+THREEJS_AR_QUICKLOOK_SERVICE_WORKER_JS = r"""
+const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v1";
+
+async function ovizArRangeResponse(request, response) {
+  const range = request.headers.get("range");
+  if (!range) {
+    return response;
+  }
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(range);
+  if (!match) {
+    return response;
+  }
+  const buffer = await response.arrayBuffer();
+  const size = buffer.byteLength;
+  let start = match[1] ? Number.parseInt(match[1], 10) : 0;
+  let end = match[2] ? Number.parseInt(match[2], 10) : size - 1;
+  if (!match[1] && match[2]) {
+    const suffixLength = Math.max(0, Number.parseInt(match[2], 10) || 0);
+    start = Math.max(size - suffixLength, 0);
+    end = size - 1;
+  }
+  start = Math.max(0, Math.min(start, size - 1));
+  end = Math.max(start, Math.min(end, size - 1));
+  const headers = new Headers(response.headers);
+  headers.set("Content-Range", `bytes ${start}-${end}/${size}`);
+  headers.set("Accept-Ranges", "bytes");
+  headers.set("Content-Length", String(end - start + 1));
+  return new Response(buffer.slice(start, end + 1), {
+    status: 206,
+    statusText: "Partial Content",
+    headers,
+  });
+}
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (!url.pathname.includes("/oviz-ar-quicklook/")) {
+    return;
+  }
+  event.respondWith((async () => {
+    const cache = await caches.open(OVIZ_AR_QUICKLOOK_CACHE);
+    const cached = await cache.match(event.request, { ignoreSearch: false });
+    if (cached) {
+      return ovizArRangeResponse(event.request, cached);
+    }
+    return new Response("Missing Oviz AR snapshot.", {
+      status: 404,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
+  })());
+});
 """.strip()
