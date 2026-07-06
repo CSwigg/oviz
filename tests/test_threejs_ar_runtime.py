@@ -65,6 +65,16 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     let selectedClusterKeys = new Set(["a"]);
     let minimalModeEnabled = false;
     let ovizTestCoordsys = "galactic";
+    const THREE = {{
+      Color: class {{
+        constructor(value) {{
+          this.value = value;
+        }}
+        getHex() {{
+          return this.value === 0x000000 ? 0 : 1;
+        }}
+      }},
+    }};
     const mobileArButtonEl = {{
       disabled: null,
       dataset: {{}},
@@ -130,6 +140,12 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     currentSelection = null;
     const emptySnapshot = collectOvizArSnapshot("3d");
     renderArSnapshotButtonState();
+    const material = {{ uuid: "mat-1", color: null, map: undefined, normalMap: undefined }};
+    normalizeOvizArSceneForUSDZ({{
+      traverse(callback) {{
+        callback({{ isMesh: true, material }});
+      }},
+    }});
 
     process.stdout.write(JSON.stringify({{
       presentTimeMyr: snapshot.presentTimeMyr,
@@ -144,12 +160,25 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
       lat90,
       icrsPoint,
       emptyPointCount: emptySnapshot.points.length,
+      emptySelectionMode: emptySnapshot.selectionMode,
       emptyCanExport: ovizArCanExportSelection(),
       selectedButtonState,
       emptyButtonState: {{
         disabled: mobileArButtonEl.disabled,
         hasSelection: mobileArButtonEl.dataset.hasSelection,
         title: mobileArButtonEl.title,
+      }},
+      materialState: {{
+        mapIsNull: material.map === null,
+        normalMapIsNull: material.normalMap === null,
+        aoMapIsNull: material.aoMap === null,
+        roughnessMapIsNull: material.roughnessMap === null,
+        metalnessMapIsNull: material.metalnessMap === null,
+        emissiveMapIsNull: material.emissiveMap === null,
+        hasColor: Boolean(material.color),
+        hasEmissive: Boolean(material.emissive),
+        roughness: material.roughness,
+        metalness: material.metalness,
       }},
     }}));
     """
@@ -169,13 +198,26 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     assert payload["firstY"] == 6
     assert payload["firstZ"] == 7
     assert payload["trailPointCount"] == 2
-    assert payload["emptyPointCount"] == 0
-    assert payload["emptyCanExport"] is False
+    assert payload["emptyPointCount"] == 1
+    assert payload["emptySelectionMode"] == "present-day-scene"
+    assert payload["emptyCanExport"] is True
     assert payload["selectedButtonState"]["disabled"] is False
     assert payload["selectedButtonState"]["hasSelection"] == "true"
     assert payload["emptyButtonState"]["disabled"] is False
     assert payload["emptyButtonState"]["hasSelection"] == "false"
     assert "Select clusters before exporting" in payload["emptyButtonState"]["title"]
+    assert payload["materialState"] == {
+        "mapIsNull": True,
+        "normalMapIsNull": True,
+        "aoMapIsNull": True,
+        "roughnessMapIsNull": True,
+        "metalnessMapIsNull": True,
+        "emissiveMapIsNull": True,
+        "hasColor": True,
+        "hasEmissive": True,
+        "roughness": 0.7,
+        "metalness": 0,
+    }
 
     assert payload["lon0"]["x"] == pytest.approx(-1)
     assert payload["lon0"]["y"] == pytest.approx(0, abs=1e-12)

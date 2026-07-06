@@ -87,7 +87,7 @@ THREEJS_AR_RUNTIME_JS = r"""
       }
 
       function ovizArCanExportSelection() {
-        return !minimalModeEnabled && ovizArSelectedClusterKeys().size > 0;
+        return !minimalModeEnabled;
       }
 
       function renderArSnapshotButtonState() {
@@ -249,19 +249,20 @@ THREEJS_AR_RUNTIME_JS = r"""
 
       function collectOvizArSnapshot(mode = "3d") {
         const selectedKeys = ovizArSelectedClusterKeys();
+        const requireSelection = selectedKeys.size > 0;
         const selectionObjects = ovizArSelectionObjectsByKey();
         const frameIndex = ovizArPresentFrameIndex();
         const frame = ovizArPresentFrame();
         const points = [];
         const seen = new Set();
-        if (frame && selectedKeys.size) {
+        if (frame) {
           const traces = Array.isArray(frame.traces) ? frame.traces : [];
           traces.forEach((trace) => {
             const tracePoints = trace && Array.isArray(trace.points) ? trace.points : [];
             tracePoints.forEach((point) => {
               const selection = selectionForPoint(point, trace);
               const key = selection ? normalizedSelectionKeyFor(selection) : "";
-              if (!key || !selectedKeys.has(key) || seen.has(key)) {
+              if (!key || (requireSelection && !selectedKeys.has(key)) || seen.has(key)) {
                 return;
               }
               const mergedSelection = Object.assign(
@@ -282,6 +283,7 @@ THREEJS_AR_RUNTIME_JS = r"""
         const includedKeys = new Set(cappedPoints.map((point) => point.key));
         return {
           mode: String(mode || "3d"),
+          selectionMode: requireSelection ? "selection" : "present-day-scene",
           selectedCount: selectedKeys.size,
           presentFrameIndex: frameIndex,
           presentTimeMyr: ovizArFiniteNumber(frame && frame.time, 0.0),
@@ -628,6 +630,7 @@ THREEJS_AR_RUNTIME_JS = r"""
       async function ovizArParseUsdZ(sceneAr) {
         const USDZExporter = await loadOvizUSDZExporter();
         const exporter = new USDZExporter();
+        normalizeOvizArSceneForUSDZ(sceneAr);
         const result = await Promise.resolve(exporter.parse(sceneAr, { quickLookCompatible: true }));
         if (result instanceof ArrayBuffer) {
           return result;
@@ -639,6 +642,43 @@ THREEJS_AR_RUNTIME_JS = r"""
           return await result.arrayBuffer();
         }
         throw new Error("USDZ exporter returned an unsupported payload.");
+      }
+
+      function normalizeOvizArMaterialForUSDZ(material) {
+        if (!material || typeof material !== "object") {
+          return;
+        }
+        const textureSlots = ["map", "normalMap", "aoMap", "roughnessMap", "metalnessMap", "emissiveMap"];
+        textureSlots.forEach((slot) => {
+          if (material[slot] === undefined) {
+            material[slot] = null;
+          }
+        });
+        if (!material.color) {
+          material.color = new THREE.Color(0xffffff);
+        }
+        if (!material.emissive) {
+          material.emissive = new THREE.Color(0x000000);
+        }
+        if (material.roughness === undefined) {
+          material.roughness = 0.7;
+        }
+        if (material.metalness === undefined) {
+          material.metalness = 0.0;
+        }
+      }
+
+      function normalizeOvizArSceneForUSDZ(sceneAr) {
+        if (!sceneAr || typeof sceneAr.traverse !== "function") {
+          return;
+        }
+        sceneAr.traverse((object) => {
+          if (!object || !object.isMesh) {
+            return;
+          }
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          materials.forEach(normalizeOvizArMaterialForUSDZ);
+        });
       }
 
       function ovizArClearObjectUrl() {
@@ -718,7 +758,7 @@ THREEJS_AR_RUNTIME_JS = r"""
       async function ovizArBuildAndExport(mode) {
         const snapshot = collectOvizArSnapshot(mode);
         if (!snapshot.points.length) {
-          ovizArSetStatus("Select one or more clusters first.", "warn");
+          ovizArSetStatus("No AR-ready clusters were found in the t=0 Myr frame.", "warn");
           return;
         }
         ovizArSetBusy(true);
@@ -746,8 +786,9 @@ THREEJS_AR_RUNTIME_JS = r"""
           }
           const blob = new Blob([arrayBuffer], { type: "model/vnd.usdz+zip" });
           const pointText = `${snapshot.points.length} cluster${snapshot.points.length === 1 ? "" : "s"}`;
+          const selectionText = snapshot.selectionMode === "selection" ? "selected " : "";
           const suffix = snapshot.truncated ? " Point limit applied." : "";
-          ovizArSetReady(blob, filename, `${pointText} exported at t=0 Myr.${suffix}`);
+          ovizArSetReady(blob, filename, `${selectionText}${pointText} exported at t=0 Myr.${suffix}`);
         } catch (err) {
           const message = err && err.message ? String(err.message) : "AR export failed.";
           ovizArSetStatus(`AR export failed: ${message}`, "error");
@@ -818,10 +859,15 @@ THREEJS_AR_RUNTIME_JS = r"""
         const dialog = ensureOvizArDialog();
         ovizArResetDialogActions();
         if (!ovizArCanExportSelection()) {
-          ovizArSetStatus("Select one or more clusters first.", "warn");
+          ovizArSetStatus("AR export is unavailable for this view.", "warn");
         } else {
           const selectedCount = ovizArSelectedClusterKeys().size;
-          ovizArSetStatus(`${selectedCount} selected cluster${selectedCount === 1 ? "" : "s"}.`, "neutral");
+          ovizArSetStatus(
+            selectedCount
+              ? `${selectedCount} selected cluster${selectedCount === 1 ? "" : "s"}.`
+              : `No selection; exporting a capped t=0 Myr scene snapshot.`,
+            selectedCount ? "neutral" : "warn"
+          );
         }
         dialog.dataset.open = "true";
         dialog.setAttribute("aria-hidden", "false");
