@@ -565,6 +565,9 @@ def _compact_threejs_frame_payloads(frame_specs):
     for frame_spec in frame_specs:
         keep_selection = np.isclose(float(frame_spec.get("time", np.nan)), 0.0, atol=1e-9)
         for trace in frame_spec.get("traces", []) or []:
+            color_by = trace.get("color_by")
+            if isinstance(color_by, dict):
+                color_by.pop("colormap_options", None)
             _hoist_common_point_defaults(trace)
             for point in trace.get("points", []) or []:
                 if not keep_selection:

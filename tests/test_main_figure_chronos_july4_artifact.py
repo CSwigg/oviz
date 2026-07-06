@@ -11,9 +11,9 @@ import pytest
 
 
 ARTIFACT_HTML = Path(__file__).with_name("main_figure_chronos_july4.html")
-MAX_HTML_SIZE_BYTES = 12 * 1024 * 1024
-MAX_RAW_SCENE_SIZE_BYTES = 20 * 1024 * 1024
-EXPECTED_FRAME_TIMES = [-120.0, -100.0, -80.0, -60.0, -40.0, -20.0, 0.0]
+MAX_HTML_SIZE_BYTES = 25 * 1024 * 1024
+MAX_RAW_SCENE_SIZE_BYTES = 64 * 1024 * 1024
+EXPECTED_FRAME_TIMES = [float(value) for value in range(-120, 1)]
 MAX_BACKGROUND_POINTS = 500
 MAX_BLUE_CLUSTER_POINTS = 650
 MAX_VOLUME_AXIS_PIXELS = 64
@@ -69,6 +69,15 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert initial_state["compact_payload_enabled"] is True
     assert initial_state["compact_widget_payload_enabled"] is True
     assert "mobile_mode_enabled" not in initial_state
+    assert not any(
+        isinstance(trace.get("color_by"), dict) and "colormap_options" in trace["color_by"]
+        for frame in scene_spec["frames"]
+        for trace in frame["traces"]
+    )
+    assert any(
+        isinstance(item.get("color_by"), dict) and item["color_by"].get("colormap_options")
+        for item in scene_spec["legend"]["items"]
+    )
 
     assert [frame["time"] for frame in scene_spec["frames"]] == EXPECTED_FRAME_TIMES
     assert scene_spec["timeline"]["frame_count"] == len(EXPECTED_FRAME_TIMES)

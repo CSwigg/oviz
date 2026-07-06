@@ -12045,6 +12045,26 @@ __SKY_RUNTIME_JS__
         return config && typeof config === "object" ? config : null;
       }
 
+      function mergeTraceColorByConfig(sourceColorBy, fallbackColorBy) {
+        if (!sourceColorBy) {
+          return fallbackColorBy || null;
+        }
+        if (!fallbackColorBy) {
+          return sourceColorBy;
+        }
+        if (Array.isArray(sourceColorBy.colormap_options) && sourceColorBy.colormap_options.length) {
+          return sourceColorBy;
+        }
+        const merged = Object.assign({}, fallbackColorBy, sourceColorBy);
+        if (
+          !Array.isArray(merged.colormap_options)
+          && Array.isArray(fallbackColorBy.colormap_options)
+        ) {
+          merged.colormap_options = fallbackColorBy.colormap_options;
+        }
+        return merged;
+      }
+
       function traceColormapOptionFor(colorBy, colormapName) {
         const options = (colorBy && Array.isArray(colorBy.colormap_options)) ? colorBy.colormap_options : [];
         const requested = String(colormapName || "").trim().toLowerCase();
@@ -12084,7 +12104,7 @@ __SKY_RUNTIME_JS__
       }
 
       function traceLegendColorForItem(item, state) {
-        const colorBy = traceColorByConfig(item) || (state && state.colorBy);
+        const colorBy = mergeTraceColorByConfig(traceColorByConfig(item), state && state.colorBy);
         if (colorBy && state && state.colorMode === "by_value") {
           const option = traceColormapOptionFor(colorBy, state.colormap);
           return (option && option.legend_color) || item.default_color || item.color || theme.text_color || theme.axis_color;
@@ -12093,7 +12113,7 @@ __SKY_RUNTIME_JS__
       }
 
       function pointColorForTrace(point, trace, traceState) {
-        const colorBy = traceColorByConfig(trace) || (traceState && traceState.colorBy);
+        const colorBy = mergeTraceColorByConfig(traceColorByConfig(trace), traceState && traceState.colorBy);
         const baseColor = pointBaseColorForTrace(point, trace);
         if (colorBy && traceState && traceState.colorMode === "by_value") {
           return traceColorFromColormap(colorBy, traceState.colormap, point && point.color_scalar, baseColor);
