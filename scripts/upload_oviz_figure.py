@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE_HTML = REPO_ROOT / "tests" / "main_figure_chronos_july4.html"
 DEFAULT_WEBSITE_DIR = Path.home() / "Desktop" / "astro_research" / "cam_website"
 DEFAULT_TARGET_DIR = DEFAULT_WEBSITE_DIR / "oviz_figures"
-DEFAULT_MAX_SIZE_MB = 50
+DEFAULT_MAX_SIZE_MB = 25
 
 
 @dataclass(frozen=True)
@@ -209,7 +209,7 @@ def parse_args() -> argparse.Namespace:
         "--max-size-mb",
         type=float,
         default=DEFAULT_MAX_SIZE_MB,
-        help="Refuse to upload files larger than this many MiB.",
+        help="Refuse to upload files larger than this many MiB. Defaults to a cautious mobile-safe limit.",
     )
     parser.add_argument(
         "--message",

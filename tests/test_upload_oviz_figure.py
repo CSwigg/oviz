@@ -75,6 +75,16 @@ def test_build_upload_plan_rejects_oversized_file(tmp_path):
         module.build_upload_plan(source, website_dir=tmp_path / "site", max_size_mb=0.001)
 
 
+def test_build_upload_plan_uses_cautious_default_size_limit(tmp_path):
+    module = _load_upload_module()
+    source = _write_html(tmp_path / "large.html")
+    with source.open("ab") as handle:
+        handle.truncate((module.DEFAULT_MAX_SIZE_MB * 1024 * 1024) + 1)
+
+    with pytest.raises(ValueError, match="above the configured 25.0 MiB limit"):
+        module.build_upload_plan(source, website_dir=tmp_path / "site")
+
+
 def test_build_upload_plan_rejects_path_like_output_name(tmp_path):
     module = _load_upload_module()
     source = _write_html(tmp_path / "figure.html")
