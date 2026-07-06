@@ -1710,24 +1710,109 @@ THREEJS_VIEWER_RUNTIME_JS = """
         );
       }
 
+      function ovizStandaloneDisplayMode() {
+        try {
+          return Boolean(
+            (typeof navigator !== "undefined" && navigator.standalone === true)
+            || (
+              typeof window !== "undefined"
+              && typeof window.matchMedia === "function"
+              && (
+                window.matchMedia("(display-mode: fullscreen)").matches
+                || window.matchMedia("(display-mode: standalone)").matches
+              )
+            )
+          );
+        } catch (_err) {
+          return false;
+        }
+      }
+
+      function ovizMobileFullscreenFallbackAvailable() {
+        return Boolean(mobileModeEnabled || ovizStandaloneDisplayMode());
+      }
+
+      function showOvizFullscreenNotice(message, timeoutMs = 5200) {
+        if (!fullscreenNoticeEl) {
+          return;
+        }
+        fullscreenNoticeEl.textContent = String(message || "");
+        fullscreenNoticeEl.dataset.visible = "true";
+        if (fullscreenNoticeTimer) {
+          window.clearTimeout(fullscreenNoticeTimer);
+        }
+        fullscreenNoticeTimer = window.setTimeout(() => {
+          fullscreenNoticeEl.dataset.visible = "false";
+          fullscreenNoticeTimer = 0;
+        }, Math.max(Number(timeoutMs) || 0, 1200));
+      }
+
+      function syncOvizBrowserFullscreenFallback() {
+        if (root && root.dataset) {
+          root.dataset.browserFullscreen = browserFullscreenFallbackEnabled ? "true" : "false";
+        }
+      }
+
       function syncOvizFullscreenButton() {
         if (!fullscreenButtonEl) {
           return;
         }
         nativeFullscreenEnabled = ovizNativeFullscreenAvailable();
-        const active = ovizNativeFullscreenElement() === root;
+        const nativeActive = ovizNativeFullscreenElement() === root;
+        const active = nativeActive || browserFullscreenFallbackEnabled;
+        const fallbackAvailable = ovizMobileFullscreenFallbackAvailable();
         root.dataset.fullscreen = active ? "true" : "false";
-        fullscreenButtonEl.disabled = !nativeFullscreenEnabled;
+        syncOvizBrowserFullscreenFallback();
+        fullscreenButtonEl.disabled = !nativeFullscreenEnabled && !fallbackAvailable;
         fullscreenButtonEl.title = nativeFullscreenEnabled
           ? (active ? "Exit fullscreen" : "Enter fullscreen")
-          : "Native fullscreen is not available in this browser";
+          : (
+            fallbackAvailable
+              ? (browserFullscreenFallbackEnabled ? "Exit compact fullscreen view" : "iPhone Safari blocks true fullscreen; tap for compact view")
+              : "Native fullscreen is not available in this browser"
+          );
         fullscreenButtonEl.setAttribute("aria-label", active ? "Exit fullscreen" : "Enter fullscreen");
         fullscreenButtonEl.setAttribute("aria-pressed", active ? "true" : "false");
       }
 
+      function toggleOvizMobileFullscreenFallback() {
+        if (!ovizMobileFullscreenFallbackAvailable()) {
+          showOvizFullscreenNotice("Native fullscreen is not available in this browser.", 4200);
+          return;
+        }
+        const nextEnabled = !browserFullscreenFallbackEnabled;
+        if (nextEnabled) {
+          browserFullscreenFallbackPreviousZen = zenModeEnabled;
+          browserFullscreenFallbackEnabled = true;
+          setZenMode(true);
+          showOvizFullscreenNotice(
+            "iPhone Safari blocks true fullscreen for HTML. Oviz entered compact view; Add to Home Screen to hide Safari bars.",
+            7200
+          );
+          window.setTimeout(() => {
+            try {
+              window.scrollTo(0, 1);
+            } catch (_err) {
+            }
+          }, 80);
+        } else {
+          browserFullscreenFallbackEnabled = false;
+          if (!browserFullscreenFallbackPreviousZen) {
+            setZenMode(false);
+          }
+          showOvizFullscreenNotice("Exited compact view.", 2400);
+        }
+        syncOvizFullscreenButton();
+        focusViewer();
+      }
+
       async function toggleOvizNativeFullscreen() {
-        if (!fullscreenButtonEl || !nativeFullscreenEnabled) {
+        if (!fullscreenButtonEl) {
           syncOvizFullscreenButton();
+          return;
+        }
+        if (!nativeFullscreenEnabled) {
+          toggleOvizMobileFullscreenFallback();
           return;
         }
         const active = ovizNativeFullscreenElement() === root;

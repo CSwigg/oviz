@@ -196,6 +196,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Oviz" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>oviz three.js figure</title>
     <style>
       html, body {
@@ -295,6 +299,29 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__[data-fullscreen="true"] .oviz-three-fullscreen-compress {
         display: block !important;
+      }
+      #__ROOT_ID__ .oviz-three-fullscreen-notice {
+        position: absolute;
+        right: calc(env(safe-area-inset-right, 0px) + 14px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
+        z-index: 34;
+        box-sizing: border-box;
+        width: min(330px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 28px));
+        padding: 10px 12px;
+        border: 1px solid rgba(246, 200, 95, 0.34);
+        border-radius: 8px;
+        background: rgba(10, 13, 18, 0.92);
+        color: rgba(246, 248, 251, 0.94);
+        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.34);
+        backdrop-filter: blur(14px) saturate(122%);
+        -webkit-backdrop-filter: blur(14px) saturate(122%);
+        font: 650 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        letter-spacing: 0;
+        text-align: left;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-three-fullscreen-notice[data-visible="false"] {
+        display: none !important;
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel {
@@ -4962,6 +4989,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         height: 42px;
         border-radius: 8px;
       }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-fullscreen-notice {
+        left: calc(env(safe-area-inset-left, 0px) + 14px);
+        right: calc(env(safe-area-inset-right, 0px) + 14px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 130px);
+        width: auto;
+        text-align: center;
+      }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-slider::-webkit-slider-thumb {
         width: 24px !important;
         height: 24px !important;
@@ -5012,6 +5046,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           <path d="m20 15-5 5"></path>
         </svg>
       </button>
+      <div class="oviz-three-fullscreen-notice" data-visible="false" role="status" aria-live="polite"></div>
       __SHELL_HTML__
     </div>
     __SCENE_SPEC_PAYLOAD_HTML__
@@ -5703,6 +5738,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const widgetMenuEl = root.querySelector(".oviz-three-widget-menu");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
       const fullscreenButtonEl = root.querySelector(".oviz-three-fullscreen");
+      const fullscreenNoticeEl = root.querySelector(".oviz-three-fullscreen-notice");
       const mobileSkyViewButtonEl = root.querySelector(".oviz-three-mobile-sky-view");
       const mobileLassoButtonEl = root.querySelector(".oviz-three-mobile-lasso");
       const mobileArButtonEl = root.querySelector(".oviz-three-mobile-ar");
@@ -6317,6 +6353,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const skyViewTouchPointers = new Map();
       let skyViewPinchState = null;
       let nativeFullscreenEnabled = false;
+      let browserFullscreenFallbackEnabled = false;
+      let browserFullscreenFallbackPreviousZen = false;
+      let fullscreenNoticeTimer = 0;
       let currentLassoSelectionMask = null;
       let lassoSelectionFilterEnabled = true;
       const selectionUndoStack = [];
