@@ -161,6 +161,8 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "function buildOvizArSkyDomeScene" in html
     assert "skyDomeHips2FitsUrl(width, height)" in html
     assert "function loadOvizUSDZExporter" in html
+    assert "function loadOvizFflateGlobal" in html
+    assert "examples/js/libs/fflate.min.js" in html
     assert "function normalizeOvizArMaterialForUSDZ" in html
     assert 'const textureSlots = ["map", "normalMap", "aoMap", "roughnessMap", "metalnessMap", "emissiveMap"];' in html
     assert "No selection; exporting a capped t=0 Myr scene snapshot." in html

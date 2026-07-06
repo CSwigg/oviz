@@ -591,16 +591,49 @@ THREEJS_AR_RUNTIME_JS = r"""
         });
       }
 
+      async function loadOvizFflateGlobal() {
+        if (typeof window !== "undefined" && window.fflate && window.fflate.zipSync && window.fflate.strToU8) {
+          return window.fflate;
+        }
+        const urls = [
+          "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js",
+          "https://unpkg.com/three@0.128.0/examples/js/libs/fflate.min.js",
+        ];
+        let lastError = null;
+        for (const url of urls) {
+          try {
+            await ovizArLoadScript(url);
+            if (typeof window !== "undefined" && window.fflate && window.fflate.zipSync && window.fflate.strToU8) {
+              return window.fflate;
+            }
+          } catch (err) {
+            lastError = err;
+          }
+        }
+        throw lastError || new Error("fflate is unavailable for USDZ export.");
+      }
+
       async function loadOvizUSDZExporter() {
         if (THREE.USDZExporter) {
+          await loadOvizFflateGlobal();
           return THREE.USDZExporter;
         }
         const legacyUrls = [
           "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/USDZExporter.js",
           "https://unpkg.com/three@0.128.0/examples/js/exporters/USDZExporter.js",
         ];
+        let legacyDependencyLoaded = false;
+        try {
+          await loadOvizFflateGlobal();
+          legacyDependencyLoaded = true;
+        } catch (_err) {
+          legacyDependencyLoaded = false;
+        }
         for (const url of legacyUrls) {
           try {
+            if (!legacyDependencyLoaded) {
+              break;
+            }
             await ovizArLoadScript(url);
             if (THREE.USDZExporter) {
               return THREE.USDZExporter;

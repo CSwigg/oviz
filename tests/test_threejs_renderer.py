@@ -702,6 +702,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("function buildOvizArSkyDomeScene", html)
         self.assertIn("skyDomeHips2FitsUrl(width, height)", html)
         self.assertIn("function loadOvizUSDZExporter", html)
+        self.assertIn("function loadOvizFflateGlobal", html)
+        self.assertIn("examples/js/libs/fflate.min.js", html)
         self.assertIn("function normalizeOvizArMaterialForUSDZ", html)
         self.assertIn('const textureSlots = ["map", "normalMap", "aoMap", "roughnessMap", "metalnessMap", "emissiveMap"];', html)
         self.assertIn("No selection; exporting a capped t=0 Myr scene snapshot.", html)
