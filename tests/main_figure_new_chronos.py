@@ -9,7 +9,6 @@ import os
 import re
 import shutil
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -98,7 +97,7 @@ MAIN_FIGURE_SPIRAL_ARM_TRACE_NAMES = (
 MAIN_FIGURE_DUST_MAX_RESOLUTION = 512
 MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 512
 MAIN_FIGURE_DUST_SAMPLES = 200
-MAIN_FIGURE_DUST_OPACITY = 0.38
+MAIN_FIGURE_DUST_OPACITY = 1.0
 MAIN_FIGURE_DUST_ALPHA_COEF = 105.0
 MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION = 512
 MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP = 512
@@ -114,12 +113,6 @@ MAIN_FIGURE_VERGELY_VMAX = 0.02
 MAIN_FIGURE_VERGELY_DEFAULT_VMIN_QUANTILE = 0.70
 MAIN_FIGURE_VERGELY_DEFAULT_VMAX_QUANTILE = 0.995
 MOBILE_SAFE_TIMESTEP_MYR = 1
-MOBILE_SAFE_DUST_MAX_RESOLUTION = 64
-MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP = 64
-MOBILE_SAFE_DUST_SAMPLES = 40
-MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION = MAIN_FIGURE_DUST_MAX_RESOLUTION
-MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION_CAP = MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP
-MOBILE_SAFE_DESKTOP_DUST_SAMPLES = MAIN_FIGURE_DUST_SAMPLES
 MOBILE_SAFE_VERGELY_MAX_RESOLUTION = 64
 MOBILE_SAFE_VERGELY_MAX_RESOLUTION_CAP = 64
 MOBILE_SAFE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION = 48
@@ -130,8 +123,6 @@ MOBILE_SAFE_SKY_DOME_CAPTURE_QUALITY = 0.70
 MOBILE_SAFE_FULL_CATALOG_MAX_POINTS = 500
 MOBILE_SAFE_BACKGROUND_CLUSTER_MAX_POINTS = 500
 MOBILE_SAFE_BLUE_CLUSTER_MAX_POINTS = 650
-MOBILE_SAFE_GALAXY_IMAGE_MAX_PX = 1024
-MOBILE_SAFE_GALAXY_IMAGE_QUALITY = 58
 AR_QUICKLOOK_SERVICE_WORKER_NAME = "oviz-ar-quicklook-sw.js"
 
 
@@ -179,41 +170,6 @@ def convert_notebook_to_script_source(notebook_path: Path) -> str:
         raise RuntimeError(f"No code cells found in notebook: {notebook_path}")
 
     return "\n\n".join(code_blocks) + "\n"
-
-
-def mobile_safe_galaxy_image_path(source_path: Path = GALACTIC_PLANE_IMAGE_PATH) -> Path:
-    """Return a smaller copy of the Milky Way image for upload-safe HTML exports."""
-    source_path = Path(source_path).expanduser()
-    if not source_path.exists():
-        return source_path
-
-    target_path = (
-        Path(tempfile.gettempdir())
-        / f"oviz_mobile_safe_galaxy_{MOBILE_SAFE_GALAXY_IMAGE_MAX_PX}px_q{MOBILE_SAFE_GALAXY_IMAGE_QUALITY}.jpg"
-    )
-    if target_path.exists() and target_path.stat().st_mtime >= source_path.stat().st_mtime:
-        return target_path
-
-    try:
-        from PIL import Image, ImageOps
-    except Exception:
-        return source_path
-
-    with Image.open(source_path) as image:
-        image = ImageOps.exif_transpose(image).convert("RGB")
-        resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
-        image.thumbnail(
-            (MOBILE_SAFE_GALAXY_IMAGE_MAX_PX, MOBILE_SAFE_GALAXY_IMAGE_MAX_PX),
-            resampling,
-        )
-        image.save(
-            target_path,
-            format="JPEG",
-            quality=MOBILE_SAFE_GALAXY_IMAGE_QUALITY,
-            optimize=True,
-            progressive=True,
-        )
-    return target_path
 
 
 def patch_edenhofer_volume_integer_setting(
@@ -731,45 +687,6 @@ def _build_vergely_dust_volumes_for_main_figure():
 
 
 vergely_dust_volumes = _build_vergely_dust_volumes_for_main_figure()
-""".strip()
-
-
-def build_adaptive_edenhofer_volume_source_block() -> str:
-    return f"""
-edenhofer_volume_desktop = dict(edenhofer_volume)
-edenhofer_volume_desktop.update({{
-    "key": "edenhofer-dust-desktop",
-    "state_key": "edenhofer-dust-desktop",
-    "state_name": "Edenhofer+2024 Dust",
-    "base_state_name": "Edenhofer+2024 Dust",
-    "name": "Edenhofer+2024 Dust (desktop)",
-    "variant_group": "edenhofer-dust-resolution",
-    "variant_label": "Desktop high-res",
-    "variant_order": 0,
-    "max_resolution": {int(MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION)},
-    "max_resolution_cap": {int(MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION_CAP)},
-    "sky_overlay_max_resolution": {int(MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION)},
-    "samples": {int(MOBILE_SAFE_DESKTOP_DUST_SAMPLES)},
-    "visible": True,
-}})
-edenhofer_volume_mobile = dict(edenhofer_volume)
-edenhofer_volume_mobile.update({{
-    "key": "edenhofer-dust-mobile",
-    "state_key": "edenhofer-dust-mobile",
-    "state_name": "Edenhofer+2024 Dust",
-    "base_state_name": "Edenhofer+2024 Dust",
-    "name": "Edenhofer+2024 Dust (mobile)",
-    "variant_group": "edenhofer-dust-resolution",
-    "variant_label": "Mobile low-res",
-    "variant_order": 1,
-    "max_resolution": {int(MOBILE_SAFE_DUST_MAX_RESOLUTION)},
-    "max_resolution_cap": {int(MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP)},
-    "sky_overlay_max_resolution": {int(MOBILE_SAFE_DUST_MAX_RESOLUTION)},
-    "data_encoding": "png_atlas_uint8",
-    "samples": {int(MOBILE_SAFE_DUST_SAMPLES)},
-    "visible": False,
-}})
-edenhofer_volumes = [edenhofer_volume_desktop, edenhofer_volume_mobile]
 """.strip()
 
 
@@ -1607,18 +1524,18 @@ def patch_script_source(
     source = patch_edenhofer_volume_integer_setting(
         source,
         "max_resolution",
-        MOBILE_SAFE_DUST_MAX_RESOLUTION if mobile_safe_mode else MAIN_FIGURE_DUST_MAX_RESOLUTION,
+        MAIN_FIGURE_DUST_MAX_RESOLUTION,
     )
     source = patch_edenhofer_volume_integer_setting(
         source,
         "max_resolution_cap",
-        MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP if mobile_safe_mode else MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP,
+        MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP,
         insert_after="max_resolution",
     )
     source = patch_edenhofer_volume_integer_setting(
         source,
         "samples",
-        MOBILE_SAFE_DUST_SAMPLES if mobile_safe_mode else MAIN_FIGURE_DUST_SAMPLES,
+        MAIN_FIGURE_DUST_SAMPLES,
     )
     source = patch_edenhofer_volume_numeric_setting(
         source,
@@ -1657,25 +1574,14 @@ def patch_script_source(
         ])
 
     if "threejs_initial_state=" not in source:
-        galaxy_image_path = (
-            mobile_safe_galaxy_image_path()
-            if mobile_safe_mode
-            else GALACTIC_PLANE_IMAGE_PATH
-        )
-        if mobile_safe_mode:
-            volume_initial_state_bits = [
-                "'active_volume_key': 'edenhofer-dust-desktop'",
-                "'mobile_active_volume_key': 'edenhofer-dust-mobile'",
-                "'mobile_defer_volumes': False",
-                "'legend_state': {'edenhofer-dust-desktop': True, 'edenhofer-dust-mobile': False}",
-                "'volume_state_by_key': {'edenhofer-dust-desktop': {'visible': True}, 'edenhofer-dust-mobile': {'visible': False}}",
-            ]
-        else:
-            volume_initial_state_bits = [
-                "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
-                "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
-                "'volume_state_by_key': ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}})",
-            ]
+        galaxy_image_path = GALACTIC_PLANE_IMAGE_PATH
+        dust_opacity_literal = repr(float(MAIN_FIGURE_DUST_OPACITY))
+        volume_initial_state_bits = [
+            "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
+            "'mobile_defer_volumes': False",
+            "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
+            f"'volume_state_by_key': ({{'volume-0': {{'visible': False, 'opacity': {dust_opacity_literal}}}, 'supernova-density': {{'visible': True}}}} if supernova_volumes else {{'volume-0': {{'visible': True, 'opacity': {dust_opacity_literal}}}}})",
+        ]
         initial_state_bits = [
             "'current_group': 'Clusters'",
             "'click_selection_enabled': False",
@@ -1903,22 +1809,7 @@ trace_groupings['Spiral Arms'] = ['Sun', *spiral_arm_trace_names]
         if inserted_supernova != 1:
             raise RuntimeError("Could not inject supernova volume helper block.")
 
-    if mobile_safe_mode and "edenhofer_volumes = [edenhofer_volume_desktop, edenhofer_volume_mobile]" not in source:
-        edenhofer_variant_block = build_adaptive_edenhofer_volume_source_block()
-        source, inserted_edenhofer_variants = re.subn(
-            r"(?m)^(fig3d\s*=\s*plot_3d\.make_plot\()",
-            edenhofer_variant_block + "\n\n" + r"\1",
-            source,
-            count=1,
-        )
-        if inserted_edenhofer_variants != 1:
-            raise RuntimeError("Could not inject adaptive Edenhofer volume helper block.")
-
-    volume_list_source = (
-        "volumes=[*edenhofer_volumes, *supernova_volumes]"
-        if mobile_safe_mode
-        else "volumes=[edenhofer_volume, *supernova_volumes]"
-    )
+    volume_list_source = "volumes=[edenhofer_volume, *supernova_volumes]"
     source, replaced_supernova_volumes = re.subn(
         r"volumes\s*=\s*\[\s*edenhofer_volume\s*,\s*mccallum_ne\s*\]",
         volume_list_source,

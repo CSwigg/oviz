@@ -245,6 +245,57 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-mobile-selection-status {
         display: none;
       }
+      #__ROOT_ID__ .oviz-three-fullscreen {
+        position: absolute;
+        right: calc(env(safe-area-inset-right, 0px) + 14px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+        z-index: 16;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: 1px solid rgba(210, 218, 230, 0.30);
+        border-radius: 8px;
+        background: rgba(8, 10, 14, 0.66);
+        color: rgba(246, 248, 251, 0.92);
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.30);
+        backdrop-filter: blur(12px) saturate(122%);
+        -webkit-backdrop-filter: blur(12px) saturate(122%);
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      #__ROOT_ID__ .oviz-three-fullscreen:hover,
+      #__ROOT_ID__ .oviz-three-fullscreen:focus-visible {
+        color: #ffffff;
+        border-color: rgba(246, 200, 95, 0.58);
+        outline: none;
+      }
+      #__ROOT_ID__ .oviz-three-fullscreen:disabled {
+        opacity: 0.42;
+        cursor: default;
+      }
+      #__ROOT_ID__ .oviz-three-fullscreen svg {
+        display: block;
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-three-fullscreen-compress {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-fullscreen="true"] .oviz-three-fullscreen-expand {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-fullscreen="true"] .oviz-three-fullscreen-compress {
+        display: block !important;
+      }
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel {
         display: none !important;
@@ -4354,9 +4405,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         touch-action: none;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-topbar {
-        top: calc(env(safe-area-inset-top, 0px) + 8px);
-        left: calc(env(safe-area-inset-left, 0px) + 8px);
-        right: calc(env(safe-area-inset-right, 0px) + 8px);
+        top: calc(env(safe-area-inset-top, 0px) + 2px);
+        left: calc(env(safe-area-inset-left, 0px) + 4px);
+        right: calc(env(safe-area-inset-right, 0px) + 4px);
         display: flex;
         justify-content: center;
         align-items: flex-start;
@@ -4373,6 +4424,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-mobile="true"] .oviz-three-scale-bar,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-reset-selection,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-selection-row,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-aperture-toggle,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-panel {
         display: none !important;
       }
@@ -4380,11 +4432,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         position: static !important;
         display: flex !important;
         box-sizing: border-box;
-        flex-wrap: wrap;
-        justify-content: center;
+        flex-wrap: nowrap;
+        justify-content: space-between;
         align-items: center;
-        gap: 6px !important;
-        width: min(430px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 8px)) !important;
+        gap: 2px !important;
+        width: min(480px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 8px)) !important;
         max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 8px) !important;
         padding: 0;
         border: 0;
@@ -4394,7 +4446,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
         pointer-events: auto;
-        overflow: visible;
+        overflow: hidden;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sky-view,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-lasso,
@@ -4440,10 +4492,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu select,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-toggle {
-        min-width: 44px !important;
-        min-height: 44px !important;
-        height: 44px !important;
-        padding: 0 2px !important;
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        min-height: 40px !important;
+        height: 40px !important;
+        padding: 0 1px !important;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -4453,7 +4507,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: rgba(238, 242, 247, 0.90) !important;
         box-shadow: none !important;
         text-shadow: 0 0 9px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
-        font: 760 11.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        font: 760 10.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
         letter-spacing: 0 !important;
         white-space: nowrap;
         touch-action: manipulation;
@@ -4839,8 +4893,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         right: auto !important;
         box-sizing: border-box;
         bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
-        width: min(430px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px)) !important;
-        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 16px) !important;
+        width: min(410px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 32px)) !important;
+        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 32px) !important;
         display: grid !important;
         grid-template-columns: minmax(0, 1fr) 44px 44px max-content minmax(0, 1fr);
         grid-template-areas:
@@ -4878,10 +4932,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-slider-shell {
         grid-area: slider;
-        width: 100% !important;
+        justify-self: center;
+        box-sizing: border-box;
+        width: calc(100% - 16px) !important;
         max-width: none !important;
         flex: 1 1 auto !important;
         height: 34px !important;
+        padding-inline: 8px !important;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-slider-track-wrap {
         height: 30px !important;
@@ -4898,6 +4955,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         text-shadow: 0 0 9px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
         touch-action: manipulation;
       }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-fullscreen {
+        right: calc(env(safe-area-inset-right, 0px) + 10px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 82px);
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+      }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-slider::-webkit-slider-thumb {
         width: 24px !important;
         height: 24px !important;
@@ -4909,15 +4973,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       @media (max-width: 360px) {
         #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu {
-          gap: 6px 8px;
+          gap: 1px !important;
         }
         #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button,
         #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu select,
         #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-toggle,
         #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-toggle {
-          min-width: 42px !important;
-          padding: 0 3px !important;
-          font-size: 11px !important;
+          min-width: 0 !important;
+          padding: 0 !important;
+          font-size: 9.8px !important;
         }
       }
     </style>
@@ -4926,6 +4990,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
     <div id="__ROOT_ID__" tabindex="0" data-zen="false" __ROOT_MINIMAL_ATTR__ __ROOT_MOBILE_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__>
       __TOPBAR_HTML__
       <button class="oviz-three-earth-view-toggle" type="button" title="Current view: 3D. Click or press V to enter Sky view." aria-pressed="false" aria-label="Current view: 3D. Switch to Sky View.">View: 3D</button>
+      <button class="oviz-three-fullscreen" type="button" title="Enter fullscreen" aria-label="Enter fullscreen">
+        <svg class="oviz-three-fullscreen-expand" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9V4h5"></path>
+          <path d="M20 9V4h-5"></path>
+          <path d="M4 15v5h5"></path>
+          <path d="M20 15v5h-5"></path>
+          <path d="M9 4 4 9"></path>
+          <path d="m15 4 5 5"></path>
+          <path d="m4 15 5 5"></path>
+          <path d="m20 15-5 5"></path>
+        </svg>
+        <svg class="oviz-three-fullscreen-compress" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 4v5H4"></path>
+          <path d="M15 4v5h5"></path>
+          <path d="M9 20v-5H4"></path>
+          <path d="M15 20v-5h5"></path>
+          <path d="M4 9 9 4"></path>
+          <path d="m20 9-5-5"></path>
+          <path d="m4 15 5 5"></path>
+          <path d="m20 15-5 5"></path>
+        </svg>
+      </button>
       __SHELL_HTML__
     </div>
     __SCENE_SPEC_PAYLOAD_HTML__
@@ -5616,6 +5702,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const titleEl = root.querySelector(".oviz-three-title");
       const widgetMenuEl = root.querySelector(".oviz-three-widget-menu");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
+      const fullscreenButtonEl = root.querySelector(".oviz-three-fullscreen");
       const mobileSkyViewButtonEl = root.querySelector(".oviz-three-mobile-sky-view");
       const mobileLassoButtonEl = root.querySelector(".oviz-three-mobile-lasso");
       const mobileArButtonEl = root.querySelector(".oviz-three-mobile-ar");
@@ -6227,6 +6314,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let skyBackgroundHidden = Boolean(initialState.global_controls && initialState.global_controls.sky_background_hidden);
       let skyViewTransitionSerial = 0;
       let skyViewDragState = null;
+      const skyViewTouchPointers = new Map();
+      let skyViewPinchState = null;
+      let nativeFullscreenEnabled = false;
       let currentLassoSelectionMask = null;
       let lassoSelectionFilterEnabled = true;
       const selectionUndoStack = [];
@@ -16086,6 +16176,14 @@ __ACTION_RUNTIME_JS__
             focusViewer();
           });
         }
+        if (fullscreenButtonEl) {
+          fullscreenButtonEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleOvizNativeFullscreen();
+          });
+          syncOvizFullscreenButton();
+        }
         if (resetCameraViewButtonEl) {
           resetCameraViewButtonEl.addEventListener("click", () => {
             if (!actionInterruptsMuted()) {
@@ -16618,8 +16716,11 @@ __ACTION_RUNTIME_JS__
         handleManualCameraInteractionStart();
         focusViewer();
         canvasPointerDownInfo = event.button === 0
-          ? { x: Number(event.clientX), y: Number(event.clientY), button: event.button }
+          ? { x: Number(event.clientX), y: Number(event.clientY), button: event.button, pointerType: event.pointerType || "", pointerId: event.pointerId }
           : null;
+        if (startSkyViewTouchPinch(event)) {
+          return;
+        }
         if (startSkyViewCameraDrag(event)) {
           return;
         }
@@ -16633,6 +16734,9 @@ __ACTION_RUNTIME_JS__
       }
 
       function onWindowPointerMove(event) {
+        if (updateSkyViewTouchPinch(event)) {
+          return;
+        }
         if (updateSkyViewCameraDrag(event)) {
           return;
         }
@@ -16678,6 +16782,9 @@ __ACTION_RUNTIME_JS__
       }
 
       function onWindowPointerEnd(event) {
+        if (finishSkyViewTouchPinch(event)) {
+          return;
+        }
         if (finishSkyViewCameraDrag(event)) {
           return;
         }
@@ -16694,6 +16801,9 @@ __ACTION_RUNTIME_JS__
           return;
         }
         onWidgetPointerEnd(event);
+        if (handleCanvasTouchTap(event)) {
+          return;
+        }
         finishLassoSelection(event);
       }
 
@@ -16792,6 +16902,8 @@ __ACTION_RUNTIME_JS__
       window.addEventListener("pointercancel", onWindowPointerEnd);
       window.addEventListener("resize", resize);
       window.addEventListener("message", onWindowMessage);
+      document.addEventListener("fullscreenchange", syncOvizFullscreenButton);
+      document.addEventListener("webkitfullscreenchange", syncOvizFullscreenButton);
       if (typeof ResizeObserver !== "undefined") {
         const observer = new ResizeObserver(() => resize());
         observer.observe(root);

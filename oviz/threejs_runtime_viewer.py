@@ -887,6 +887,128 @@ THREEJS_VIEWER_RUNTIME_JS = """
         return setCameraFovFromZoomFactor(zoomFactor);
       }
 
+      function skyViewPinchCanStart(event) {
+        return Boolean(
+          mobileModeEnabled
+          && cameraViewMode === "earth"
+          && event
+          && event.pointerType === "touch"
+          && !widgetPointerState
+          && !selectionBoxPointerState
+          && !manualLabelPointerState
+          && !lassoState
+          && !lassoArmed
+        );
+      }
+
+      function skyViewPinchDistanceFromPointers() {
+        const pointers = Array.from(skyViewTouchPointers.values());
+        if (pointers.length < 2) {
+          return 0.0;
+        }
+        const first = pointers[0];
+        const second = pointers[1];
+        const dx = Number(second.x) - Number(first.x);
+        const dy = Number(second.y) - Number(first.y);
+        return Math.hypot(dx, dy);
+      }
+
+      function releaseSkyViewDragPointerCapture() {
+        if (!skyViewDragState || typeof canvas.releasePointerCapture !== "function" || skyViewDragState.pointerId === undefined) {
+          return;
+        }
+        try {
+          canvas.releasePointerCapture(skyViewDragState.pointerId);
+        } catch (_err) {
+        }
+      }
+
+      function startSkyViewTouchPinch(event) {
+        if (!skyViewPinchCanStart(event)) {
+          return false;
+        }
+        skyViewTouchPointers.set(event.pointerId, {
+          x: Number(event.clientX) || 0.0,
+          y: Number(event.clientY) || 0.0,
+        });
+        if (skyViewTouchPointers.size < 2) {
+          return false;
+        }
+        const distance = skyViewPinchDistanceFromPointers();
+        if (!(distance > 0.0)) {
+          return false;
+        }
+        releaseSkyViewDragPointerCapture();
+        skyViewDragState = null;
+        skyViewPinchState = {
+          previousDistance: distance,
+          moved: false,
+        };
+        canvasPointerDownInfo = null;
+        controls.enabled = false;
+        setSkyDomeBackgroundCameraActive(true);
+        document.body.style.userSelect = "none";
+        if (typeof canvas.setPointerCapture === "function" && event.pointerId !== undefined) {
+          try {
+            canvas.setPointerCapture(event.pointerId);
+          } catch (_err) {
+          }
+        }
+        stopPointerEvent(event);
+        return true;
+      }
+
+      function updateSkyViewTouchPinch(event) {
+        if (!skyViewPinchState || !event || event.pointerType !== "touch") {
+          return false;
+        }
+        if (skyViewTouchPointers.has(event.pointerId)) {
+          skyViewTouchPointers.set(event.pointerId, {
+            x: Number(event.clientX) || 0.0,
+            y: Number(event.clientY) || 0.0,
+          });
+        }
+        const nextDistance = skyViewPinchDistanceFromPointers();
+        if (nextDistance > 0.0 && skyViewPinchState.previousDistance > 0.0) {
+          const zoomFactor = skyViewPinchState.previousDistance / nextDistance;
+          if (setCameraFovFromZoomFactor(zoomFactor)) {
+            skyViewPinchState.moved = true;
+          }
+          skyViewPinchState.previousDistance = nextDistance;
+        }
+        tooltipEl.style.display = "none";
+        stopPointerEvent(event);
+        return true;
+      }
+
+      function finishSkyViewTouchPinch(event) {
+        const wasActive = Boolean(skyViewPinchState);
+        if (event && event.pointerType === "touch") {
+          skyViewTouchPointers.delete(event.pointerId);
+        }
+        if (!wasActive) {
+          return false;
+        }
+        if (typeof canvas.releasePointerCapture === "function" && event && event.pointerId !== undefined) {
+          try {
+            canvas.releasePointerCapture(event.pointerId);
+          } catch (_err) {
+          }
+        }
+        if (skyViewTouchPointers.size >= 2) {
+          skyViewPinchState.previousDistance = skyViewPinchDistanceFromPointers();
+          stopPointerEvent(event);
+          return true;
+        }
+        skyViewPinchState = null;
+        controls.enabled = cameraViewMode !== "earth";
+        setSkyDomeBackgroundCameraActive(false);
+        document.body.style.userSelect = "";
+        suppressNextCanvasClick = true;
+        stopPointerEvent(event);
+        return true;
+      }
+
       function stopPointerEvent(event) {
         if (!event) {
           return;
@@ -1566,6 +1688,66 @@ THREEJS_VIEWER_RUNTIME_JS = """
           if (typeof setSkyControlsDrawerOpen === "function") {
             setSkyControlsDrawerOpen(false);
           }
+        }
+      }
+
+      function ovizNativeFullscreenElement() {
+        return document.fullscreenElement || document.webkitFullscreenElement || null;
+      }
+
+      function ovizNativeFullscreenAvailable() {
+        return Boolean(
+          root
+          && (
+            typeof root.requestFullscreen === "function"
+            || typeof root.webkitRequestFullscreen === "function"
+          )
+          && (
+            document.fullscreenEnabled !== false
+            || document.webkitFullscreenEnabled !== false
+            || typeof root.webkitRequestFullscreen === "function"
+          )
+        );
+      }
+
+      function syncOvizFullscreenButton() {
+        if (!fullscreenButtonEl) {
+          return;
+        }
+        nativeFullscreenEnabled = ovizNativeFullscreenAvailable();
+        const active = ovizNativeFullscreenElement() === root;
+        root.dataset.fullscreen = active ? "true" : "false";
+        fullscreenButtonEl.disabled = !nativeFullscreenEnabled;
+        fullscreenButtonEl.title = nativeFullscreenEnabled
+          ? (active ? "Exit fullscreen" : "Enter fullscreen")
+          : "Native fullscreen is not available in this browser";
+        fullscreenButtonEl.setAttribute("aria-label", active ? "Exit fullscreen" : "Enter fullscreen");
+        fullscreenButtonEl.setAttribute("aria-pressed", active ? "true" : "false");
+      }
+
+      async function toggleOvizNativeFullscreen() {
+        if (!fullscreenButtonEl || !nativeFullscreenEnabled) {
+          syncOvizFullscreenButton();
+          return;
+        }
+        const active = ovizNativeFullscreenElement() === root;
+        try {
+          if (active) {
+            if (typeof document.exitFullscreen === "function") {
+              await document.exitFullscreen();
+            } else if (typeof document.webkitExitFullscreen === "function") {
+              document.webkitExitFullscreen();
+            }
+          } else if (typeof root.requestFullscreen === "function") {
+            await root.requestFullscreen();
+          } else if (typeof root.webkitRequestFullscreen === "function") {
+            root.webkitRequestFullscreen();
+          }
+        } catch (_err) {
+          fullscreenButtonEl.title = "Fullscreen request was blocked by this browser";
+        } finally {
+          syncOvizFullscreenButton();
+          focusViewer();
         }
       }
 

@@ -977,7 +977,60 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
         const dx = Number(event.clientX) - Number(canvasPointerDownInfo.x);
         const dy = Number(event.clientY) - Number(canvasPointerDownInfo.y);
-        return (dx * dx + dy * dy) > 16.0;
+        const dragThresholdSquared = canvasPointerDownInfo.pointerType === "touch" ? 144.0 : 16.0;
+        return (dx * dx + dy * dy) > dragThresholdSquared;
+      }
+
+      function showClusterInfoTooltipFromPointerEvent(event) {
+        const hitObject = pickSprite(event);
+        const clickedSelectionKey = hitObject && hitObject.userData
+          ? normalizeMemberKey(hitObject.userData.selectionKey || normalizedSelectionKeyFor(hitObject.userData.selection))
+          : "";
+        if (!clickedSelectionKey || !showClusterInfoTooltip(hitObject)) {
+          hideClusterInfoTooltip();
+          setLocalHoveredClusterKey("");
+          return false;
+        }
+        setLocalHoveredClusterKey(clickedSelectionKey);
+        return true;
+      }
+
+      function handleCanvasTouchTap(event) {
+        if (!canvasPointerDownInfo || canvasPointerDownInfo.pointerType !== "touch") {
+          return false;
+        }
+        if (!event || event.type === "pointercancel" || event.pointerType !== "touch") {
+          canvasPointerDownInfo = null;
+          return false;
+        }
+        if (
+          canvasPointerDownInfo.pointerId !== undefined
+          && event.pointerId !== undefined
+          && canvasPointerDownInfo.pointerId !== event.pointerId
+        ) {
+          return false;
+        }
+        if (canvasClickWasDrag(event)) {
+          canvasPointerDownInfo = null;
+          return false;
+        }
+        canvasPointerDownInfo = null;
+        if (
+          minimalModeEnabled
+          || widgetPointerState
+          || lassoState
+          || lassoArmed
+          || selectionBoxPointerState
+          || manualLabelPointerState
+          || skyViewDragState
+          || skyViewPinchState
+        ) {
+          return false;
+        }
+        showClusterInfoTooltipFromPointerEvent(event);
+        suppressNextCanvasClick = true;
+        stopPointerEvent(event);
+        return true;
       }
 
       function onCanvasClick(event) {
@@ -996,16 +1049,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           setLocalHoveredClusterKey("");
           return;
         }
-        const hitObject = pickSprite(event);
-        const clickedSelectionKey = hitObject && hitObject.userData
-          ? normalizeMemberKey(hitObject.userData.selectionKey || normalizedSelectionKeyFor(hitObject.userData.selection))
-          : "";
-        if (!clickedSelectionKey || !showClusterInfoTooltip(hitObject)) {
-          hideClusterInfoTooltip();
-          setLocalHoveredClusterKey("");
-          return;
-        }
-        setLocalHoveredClusterKey(clickedSelectionKey);
+        showClusterInfoTooltipFromPointerEvent(event);
       }
 
       function onCanvasDoubleClick(event) {
