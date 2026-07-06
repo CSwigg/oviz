@@ -15,6 +15,7 @@ from oviz.threejs_runtime_ar import THREEJS_AR_RUNTIME_JS
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not available")
 def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     script = f"""
+    (async () => {{
     const sceneSpec = {{ initial_frame_index: 0 }};
     const frameSpecs = [
       {{
@@ -63,9 +64,42 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     let currentSelection = null;
     let currentSelections = [{{ cluster_name: "A", trace_name: "Trace A" }}];
     let selectedClusterKeys = new Set(["a"]);
+    let currentLassoSelectionMask = null;
     let minimalModeEnabled = false;
     let ovizTestCoordsys = "galactic";
+    let activeVolumeKey = "volume-0";
+    const volumeLayers = [{{
+      key: "volume-0",
+      state_key: "volume-0",
+      name: "Test Volume",
+      state_name: "Test Volume",
+      shape: {{ x: 2, y: 2, z: 1 }},
+      bounds: {{ x: [0, 2], y: [0, 2], z: [0, 1] }},
+      data_encoding: "uint8",
+      colormap_options: [{{ name: "test", lut_b64: "" }}],
+    }}];
+    const volumeStateByKey = {{
+      "volume-0": {{
+        visible: true,
+        vmin: 0,
+        vmax: 1,
+        opacity: 0.4,
+        stretch: "linear",
+        colormap: "test",
+      }},
+    }};
+    const legendState = {{ "volume-0": true }};
+    const volumeScalarDataCache = new Map();
+    const volumeScalarDataPendingCache = new Map();
+    const plotGroup = {{ position: {{ x: 0, y: 0, z: 0 }} }};
     const THREE = {{
+      Vector3: class {{
+        constructor(x = 0, y = 0, z = 0) {{
+          this.x = x;
+          this.y = y;
+          this.z = z;
+        }}
+      }},
       Color: class {{
         constructor(value) {{
           this.value = value;
@@ -119,6 +153,55 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     function galacticDegFromIcrsDeg(raDeg, decDeg) {{
       return {{ l: Number(raDeg), b: Number(decDeg) }};
     }}
+    function hasActiveLassoSelectionMask() {{
+      return Boolean(currentLassoSelectionMask);
+    }}
+    function pointInsideProjectedLassoMask(worldX, _worldY, _worldZ, _mask) {{
+      return Number(worldX) > 0;
+    }}
+    function activeVolumeLassoSelectionMask() {{
+      return currentLassoSelectionMask;
+    }}
+    function volumeStateKeyForLayer(layer) {{
+      return String((layer && (layer.state_key || layer.key)) || "");
+    }}
+    function volumeStateNameForLayer(layer) {{
+      return String((layer && (layer.state_name || layer.name)) || "");
+    }}
+    function volumeBaseNameForLayer(layer) {{
+      return volumeStateNameForLayer(layer);
+    }}
+    function frameVolumeLayers(_frame) {{
+      return volumeLayers;
+    }}
+    function frameVolumeLayerForStateKey(stateKey, _frame) {{
+      return volumeLayers.find((layer) => volumeStateKeyForLayer(layer) === String(stateKey)) || null;
+    }}
+    function volumeLayerForKey(layerKey) {{
+      return frameVolumeLayerForStateKey(layerKey, null)
+        || volumeLayers.find((layer) => String(layer.key) === String(layerKey))
+        || null;
+    }}
+    function volumeVisibleForFrame(_layer, state, _frame) {{
+      return state && state.visible !== false;
+    }}
+    function volumeScalarArrayFor(_layer) {{
+      return new Uint8Array([0, 255, 128, 64]);
+    }}
+    function normalizedVolumeWindowFor(_layer, _state) {{
+      return {{ low: 0.0, high: 1.0 }};
+    }}
+    function volumeColormapOptionFor(layer, _colormapName) {{
+      return layer.colormap_options[0];
+    }}
+    function volumeColorBytesForOption(_option) {{
+      return new Uint8Array([
+        0, 0, 0, 255,
+        64, 64, 180, 255,
+        180, 120, 64, 255,
+        255, 255, 255, 255,
+      ]);
+    }}
     function focusViewer() {{}}
 
     {THREEJS_AR_RUNTIME_JS}
@@ -135,11 +218,19 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     const lat90 = ovizArSkyDirectionForLonLatDeg(0, 90, 1);
     ovizTestCoordsys = "icrs";
     const icrsPoint = ovizArSkyDirectionForPoint({{ ra: 90, dec: 0, l: 0, b: 90 }}, 1);
+    const arVector = ovizArVectorFromPoint(
+      {{ x: 1, y: 2, z: 3 }},
+      {{ center: {{ x: 0, y: 0, z: 0 }}, scale: 1 }}
+    );
     selectedClusterKeys = new Set();
     currentSelections = [];
     currentSelection = null;
     const emptySnapshot = collectOvizArSnapshot("3d");
     renderArSnapshotButtonState();
+    currentLassoSelectionMask = {{ mask: true }};
+    const maskOnlySnapshot = collectOvizArSnapshot("3d");
+    const volumeResult = await ovizArCollectVolumeSamples(maskOnlySnapshot, {{ maxSamples: 3, scanTarget: 100 }});
+    currentLassoSelectionMask = null;
     const material = {{ uuid: "mat-1", color: null, map: undefined, normalMap: undefined }};
     normalizeOvizArSceneForUSDZ({{
       traverse(callback) {{
@@ -159,8 +250,14 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
       lon90,
       lat90,
       icrsPoint,
+      arVector,
       emptyPointCount: emptySnapshot.points.length,
       emptySelectionMode: emptySnapshot.selectionMode,
+      maskOnlyPointCount: maskOnlySnapshot.points.length,
+      maskOnlySelectionMode: maskOnlySnapshot.selectionMode,
+      volumeSampleCount: volumeResult.samples.length,
+      firstVolumeSample: volumeResult.samples[0],
+      volumeLayerCount: volumeResult.layers.length,
       emptyCanExport: ovizArCanExportSelection(),
       selectedButtonState,
       emptyButtonState: {{
@@ -181,6 +278,10 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
         metalness: material.metalness,
       }},
     }}));
+    }})().catch((err) => {{
+      console.error(err && err.stack ? err.stack : err);
+      process.exit(1);
+    }});
     """
     result = subprocess.run(
         ["node"],
@@ -200,6 +301,14 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     assert payload["trailPointCount"] == 2
     assert payload["emptyPointCount"] == 1
     assert payload["emptySelectionMode"] == "present-day-scene"
+    assert payload["maskOnlyPointCount"] == 1
+    assert payload["maskOnlySelectionMode"] == "volume-lasso"
+    assert payload["volumeSampleCount"] == 3
+    assert payload["volumeLayerCount"] == 1
+    assert payload["firstVolumeSample"]["x"] == pytest.approx(1.5)
+    assert payload["firstVolumeSample"]["y"] == pytest.approx(0.5)
+    assert payload["firstVolumeSample"]["z"] == pytest.approx(0.5)
+    assert payload["arVector"] == {"x": 1, "y": 3, "z": 2}
     assert payload["emptyCanExport"] is True
     assert payload["selectedButtonState"]["disabled"] is False
     assert payload["selectedButtonState"]["hasSelection"] == "true"
