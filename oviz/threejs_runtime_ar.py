@@ -9,6 +9,7 @@ THREEJS_AR_RUNTIME_JS = r"""
       const OVIZ_AR_VOLUME_MIN_STRETCHED_VALUE = 0.055;
       const OVIZ_AR_MIN_USDZ_BYTES = 1024;
       const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v1";
+      const OVIZ_AR_QUICKLOOK_WORKER_VERSION = "20260706_ar_handoff_v2";
       const OVIZ_AR_SKY_TEXTURE_HIGH = { width: 4096, height: 2048 };
       const OVIZ_AR_SKY_TEXTURE_LOW = { width: 2048, height: 1024 };
       let ovizArDialogEl = null;
@@ -1163,7 +1164,9 @@ THREEJS_AR_RUNTIME_JS = r"""
       }
 
       function ovizArQuickLookWorkerUrl() {
-        return new URL("oviz-ar-quicklook-sw.js", window.location.href).href;
+        const url = new URL("oviz-ar-quicklook-sw.js", window.location.href);
+        url.searchParams.set("v", OVIZ_AR_QUICKLOOK_WORKER_VERSION);
+        return url.href;
       }
 
       function ovizArQuickLookScopeUrl() {
