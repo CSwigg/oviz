@@ -16,7 +16,8 @@ MAX_RAW_SCENE_SIZE_BYTES = 64 * 1024 * 1024
 EXPECTED_FRAME_TIMES = [float(value) for value in range(-120, 1)]
 MAX_BACKGROUND_POINTS = 500
 MAX_BLUE_CLUSTER_POINTS = 650
-MAX_VOLUME_AXIS_PIXELS = 64
+MAX_MOBILE_VOLUME_AXIS_PIXELS = 64
+MIN_DESKTOP_VOLUME_AXIS_PIXELS = 256
 
 
 def _read_scene_spec(path: Path):
@@ -92,14 +93,45 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert len(first_frame_traces["Clusters (< 60 Myr)"]["points"]) >= 600
     assert len(first_frame_traces["Clusters (< 15 Myr)"]["points"]) >= 400
 
-    for widget_key in ("sky_panel", "age_kde", "cluster_filter", "dendrogram"):
+    sky_panel = scene_spec["sky_panel"]
+    assert sky_panel["enabled"] is True
+    assert len(sky_panel.get("members_by_cluster", {})) > 1000
+    assert scene_spec["sky_dome"]["enabled"] is True
+    assert scene_spec["sky_dome"]["source"] == "aladin"
+    assert scene_spec["sky_dome"]["background_mode"] == "live_aladin"
+
+    for widget_key in ("age_kde", "cluster_filter", "dendrogram"):
         assert scene_spec[widget_key]["enabled"] is False
 
     volumes = scene_spec["volumes"]["layers"]
-    assert {volume["state_key"] for volume in volumes} == {"volume-0", "vergely-dust"}
-    for volume in volumes:
-        shape = volume["shape"]
-        assert max(int(shape["x"]), int(shape["y"]), int(shape["z"])) <= MAX_VOLUME_AXIS_PIXELS
+    assert {volume["state_key"] for volume in volumes} == {
+        "edenhofer-dust-desktop",
+        "edenhofer-dust-mobile",
+    }
+    assert "vergely" not in json.dumps(scene_spec["volumes"], separators=(",", ":")).lower()
+    volume_by_key = {volume["state_key"]: volume for volume in volumes}
+    desktop_volume = volume_by_key["edenhofer-dust-desktop"]
+    mobile_volume = volume_by_key["edenhofer-dust-mobile"]
+    assert desktop_volume["variant_group"] == "edenhofer-dust-resolution"
+    assert mobile_volume["variant_group"] == desktop_volume["variant_group"]
+    assert desktop_volume["base_state_name"] == "Edenhofer+2024 Dust"
+    assert mobile_volume["base_state_name"] == desktop_volume["base_state_name"]
+    assert desktop_volume["variant_order"] < mobile_volume["variant_order"]
+    assert desktop_volume["data_encoding"] == "png_atlas_uint8"
+    assert mobile_volume["data_encoding"] == "png_atlas_uint8"
+    desktop_shape = desktop_volume["shape"]
+    mobile_shape = mobile_volume["shape"]
+    assert max(int(desktop_shape["x"]), int(desktop_shape["y"])) >= MIN_DESKTOP_VOLUME_AXIS_PIXELS
+    assert max(int(mobile_shape["x"]), int(mobile_shape["y"]), int(mobile_shape["z"])) <= MAX_MOBILE_VOLUME_AXIS_PIXELS
+    assert int(desktop_shape["x"]) > int(mobile_shape["x"])
+    assert desktop_volume["visible"] is True
+    assert mobile_volume["visible"] is False
+
+    assert initial_state["active_volume_key"] == "edenhofer-dust-desktop"
+    assert initial_state["mobile_active_volume_key"] == "edenhofer-dust-mobile"
+    assert initial_state["mobile_defer_volumes"] is False
+    assert initial_state["volume_state_by_key"]["edenhofer-dust-desktop"]["visible"] is True
+    assert initial_state["volume_state_by_key"]["edenhofer-dust-mobile"]["visible"] is False
 
     assert 'data-mobile="false"' in html
     assert "ovizRuntimeLooksMobile" in html
@@ -112,6 +144,8 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "const narrowViewport = Math.min(viewportWidth, viewportHeight) <= 760;" in html
     assert "return Boolean(isiPhoneLike || isAndroidPhone || (coarsePointer && narrowViewport));" in html
     assert "mobileVolumesDeferred" in html
+    assert "mobile_active_volume_key" in html
+    assert "setExclusiveVolumeVariantSelection(activeVolumeKey)" in html
     assert "oviz-three-mobile-sky-view" in html
     assert "oviz-three-mobile-lasso" in html
     assert "oviz-three-mobile-legend" in html

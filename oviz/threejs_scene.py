@@ -781,7 +781,7 @@ def build_threejs_scene_spec(
     mobile_mode = bool(normalized_initial_state.get("mobile_mode_enabled"))
 
     default_sky_catalog = {}
-    if getattr(plot, "enable_sky_panel", False) and frame_specs and not compact_widget_payload:
+    if getattr(plot, "enable_sky_panel", False) and frame_specs:
         default_sky_catalog = catalog_from_frame_spec(frame_specs[initial_frame_index])
     sky_dome = _sky_dome_config(
         plot,
@@ -942,7 +942,7 @@ def build_threejs_scene_spec(
         "image_planes": image_planes,
         "sky_panel": (
             {"enabled": False}
-            if minimal_mode or compact_widget_payload
+            if minimal_mode
             else plot._build_threejs_sky_panel_spec(default_sky_catalog)
         ),
         "sky_dome": {"enabled": False} if minimal_mode else sky_dome,

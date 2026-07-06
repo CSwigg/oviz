@@ -3383,6 +3383,22 @@ def _threejs_volume_state_key(volume_cfg, fallback_key):
     return candidate or str(fallback_key)
 
 
+def _threejs_volume_variant_metadata(volume_cfg):
+    metadata = {}
+    for source_key in ('variant_group', 'variant_label', 'base_state_name'):
+        value = str(volume_cfg.get(source_key) or '').strip()
+        if value:
+            metadata[source_key] = value
+    if volume_cfg.get('variant_order') is not None:
+        try:
+            variant_order = float(volume_cfg.get('variant_order'))
+        except (TypeError, ValueError):
+            variant_order = None
+        if variant_order is not None and np.isfinite(variant_order):
+            metadata['variant_order'] = int(variant_order) if variant_order.is_integer() else float(variant_order)
+    return metadata
+
+
 def _coerce_threejs_volume_bound_offset(bound_offset):
     if isinstance(bound_offset, dict):
         source = bound_offset
@@ -3547,6 +3563,7 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
         'key': key,
         'state_key': state_key,
         'state_name': state_name,
+        **_threejs_volume_variant_metadata(volume_cfg),
         'time_myr': time_myr,
         'name': name,
         'path': '<inline>',
@@ -3831,6 +3848,7 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         'key': key,
         'state_key': state_key,
         'state_name': state_name,
+        **_threejs_volume_variant_metadata(volume_cfg),
         'time_myr': time_myr,
         'name': name,
         'path': str(path),

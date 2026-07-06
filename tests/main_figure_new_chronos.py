@@ -114,6 +114,9 @@ MOBILE_SAFE_TIMESTEP_MYR = 1
 MOBILE_SAFE_DUST_MAX_RESOLUTION = 64
 MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP = 64
 MOBILE_SAFE_DUST_SAMPLES = 40
+MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION = MAIN_FIGURE_DUST_MAX_RESOLUTION
+MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION_CAP = MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP
+MOBILE_SAFE_DESKTOP_DUST_SAMPLES = MAIN_FIGURE_DUST_SAMPLES
 MOBILE_SAFE_VERGELY_MAX_RESOLUTION = 64
 MOBILE_SAFE_VERGELY_MAX_RESOLUTION_CAP = 64
 MOBILE_SAFE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION = 48
@@ -718,6 +721,46 @@ def _build_vergely_dust_volumes_for_main_figure():
 
 
 vergely_dust_volumes = _build_vergely_dust_volumes_for_main_figure()
+""".strip()
+
+
+def build_adaptive_edenhofer_volume_source_block() -> str:
+    return f"""
+edenhofer_volume_desktop = dict(edenhofer_volume)
+edenhofer_volume_desktop.update({{
+    "key": "edenhofer-dust-desktop",
+    "state_key": "edenhofer-dust-desktop",
+    "state_name": "Edenhofer+2024 Dust",
+    "base_state_name": "Edenhofer+2024 Dust",
+    "name": "Edenhofer+2024 Dust (desktop)",
+    "variant_group": "edenhofer-dust-resolution",
+    "variant_label": "Desktop high-res",
+    "variant_order": 0,
+    "max_resolution": {int(MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION)},
+    "max_resolution_cap": {int(MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION_CAP)},
+    "sky_overlay_max_resolution": {int(MOBILE_SAFE_DESKTOP_DUST_MAX_RESOLUTION)},
+    "data_encoding": "png_atlas_uint8",
+    "samples": {int(MOBILE_SAFE_DESKTOP_DUST_SAMPLES)},
+    "visible": True,
+}})
+edenhofer_volume_mobile = dict(edenhofer_volume)
+edenhofer_volume_mobile.update({{
+    "key": "edenhofer-dust-mobile",
+    "state_key": "edenhofer-dust-mobile",
+    "state_name": "Edenhofer+2024 Dust",
+    "base_state_name": "Edenhofer+2024 Dust",
+    "name": "Edenhofer+2024 Dust (mobile)",
+    "variant_group": "edenhofer-dust-resolution",
+    "variant_label": "Mobile low-res",
+    "variant_order": 1,
+    "max_resolution": {int(MOBILE_SAFE_DUST_MAX_RESOLUTION)},
+    "max_resolution_cap": {int(MOBILE_SAFE_DUST_MAX_RESOLUTION_CAP)},
+    "sky_overlay_max_resolution": {int(MOBILE_SAFE_DUST_MAX_RESOLUTION)},
+    "data_encoding": "png_atlas_uint8",
+    "samples": {int(MOBILE_SAFE_DUST_SAMPLES)},
+    "visible": False,
+}})
+edenhofer_volumes = [edenhofer_volume_desktop, edenhofer_volume_mobile]
 """.strip()
 
 
@@ -1610,15 +1653,27 @@ def patch_script_source(
             if mobile_safe_mode
             else GALACTIC_PLANE_IMAGE_PATH
         )
+        if mobile_safe_mode:
+            volume_initial_state_bits = [
+                "'active_volume_key': 'edenhofer-dust-desktop'",
+                "'mobile_active_volume_key': 'edenhofer-dust-mobile'",
+                "'mobile_defer_volumes': False",
+                "'legend_state': {'edenhofer-dust-desktop': True, 'edenhofer-dust-mobile': False}",
+                "'volume_state_by_key': {'edenhofer-dust-desktop': {'visible': True}, 'edenhofer-dust-mobile': {'visible': False}}",
+            ]
+        else:
+            volume_initial_state_bits = [
+                "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
+                "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
+                "'volume_state_by_key': ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}})",
+            ]
         initial_state_bits = [
             "'current_group': 'Clusters'",
             "'click_selection_enabled': False",
             f"'compact_payload_enabled': {bool(compact_payload)!r}",
             f"'compact_widget_payload_enabled': {bool(mobile_safe_mode)!r}",
             f"'scene_float_precision': {1 if mobile_safe_mode else 2}",
-            "'active_volume_key': ('vergely-dust' if vergely_dust_volumes else ('supernova-density' if supernova_volumes else 'volume-0'))",
-            "'legend_state': ({'volume-0': True, **({'supernova-density': False} if supernova_volumes else {}), 'vergely-dust': True} if vergely_dust_volumes else ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True}))",
-            "'volume_state_by_key': ({'volume-0': {'visible': True}, **({'supernova-density': {'visible': False}} if supernova_volumes else {}), 'vergely-dust': {'visible': True}} if vergely_dust_volumes else ({'volume-0': {'visible': False}, 'supernova-density': {'visible': True}} if supernova_volumes else {'volume-0': {'visible': True}}))",
+            *volume_initial_state_bits,
             "'galaxy_image': True",
             f"'galaxy_image_path': {str(galaxy_image_path)!r}",
             "'galaxy_image_size_pc': 40000.0",
@@ -1839,20 +1894,25 @@ trace_groupings['Spiral Arms'] = ['Sun', *spiral_arm_trace_names]
         if inserted_supernova != 1:
             raise RuntimeError("Could not inject supernova volume helper block.")
 
-    if "vergely_dust_volumes = _build_vergely_dust_volumes_for_main_figure()" not in source:
-        vergely_block = build_vergely_dust_volume_source_block(mobile_safe_mode=mobile_safe_mode)
-        source, inserted_vergely = re.subn(
+    if mobile_safe_mode and "edenhofer_volumes = [edenhofer_volume_desktop, edenhofer_volume_mobile]" not in source:
+        edenhofer_variant_block = build_adaptive_edenhofer_volume_source_block()
+        source, inserted_edenhofer_variants = re.subn(
             r"(?m)^(fig3d\s*=\s*plot_3d\.make_plot\()",
-            vergely_block + "\n\n" + r"\1",
+            edenhofer_variant_block + "\n\n" + r"\1",
             source,
             count=1,
         )
-        if inserted_vergely != 1:
-            raise RuntimeError("Could not inject Vergely dust volume helper block.")
+        if inserted_edenhofer_variants != 1:
+            raise RuntimeError("Could not inject adaptive Edenhofer volume helper block.")
 
+    volume_list_source = (
+        "volumes=[*edenhofer_volumes, *supernova_volumes]"
+        if mobile_safe_mode
+        else "volumes=[edenhofer_volume, *supernova_volumes]"
+    )
     source, replaced_supernova_volumes = re.subn(
         r"volumes\s*=\s*\[\s*edenhofer_volume\s*,\s*mccallum_ne\s*\]",
-        "volumes=[edenhofer_volume, *supernova_volumes, *vergely_dust_volumes]",
+        volume_list_source,
         source,
         count=1,
     )

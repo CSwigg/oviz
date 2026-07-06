@@ -8463,6 +8463,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             }
           });
         }
+        const mobileActiveVolumeKey = String(initialState.mobile_active_volume_key || "").trim();
+        if (mobileModeEnabled && mobileActiveVolumeKey && volumeStateKeySet.has(mobileActiveVolumeKey)) {
+          activeVolumeKey = mobileActiveVolumeKey;
+          setExclusiveVolumeVariantSelection(activeVolumeKey);
+        }
         const mobileDeferVolumes = mobileModeEnabled && initialState.mobile_defer_volumes !== false;
         if (mobileDeferVolumes) {
           volumeStateKeys.forEach((stateKey) => {
@@ -12027,7 +12032,9 @@ __SKY_RUNTIME_JS__
           if (!state) {
             return;
           }
-          state.visible = String(groupStateKey) === targetStateKey;
+          const selected = String(groupStateKey) === targetStateKey;
+          state.visible = selected;
+          legendState[String(groupStateKey)] = selected;
         });
       }
 
