@@ -1,10 +1,10 @@
 THREEJS_AR_RUNTIME_JS = r"""
-      const OVIZ_AR_MAX_POINTS = 320;
-      const OVIZ_AR_MAX_LABELS = 36;
-      const OVIZ_AR_MAX_TRAIL_CLUSTERS = 48;
-      const OVIZ_AR_MAX_TRAIL_POINTS_PER_CLUSTER = 32;
-      const OVIZ_AR_MAX_VOLUME_SAMPLES = 1200;
-      const OVIZ_AR_VOLUME_SCAN_TARGET = 180000;
+      const OVIZ_AR_MAX_POINTS = 240;
+      const OVIZ_AR_MAX_LABELS = 24;
+      const OVIZ_AR_MAX_TRAIL_CLUSTERS = 24;
+      const OVIZ_AR_MAX_TRAIL_POINTS_PER_CLUSTER = 16;
+      const OVIZ_AR_MAX_VOLUME_SAMPLES = 450;
+      const OVIZ_AR_VOLUME_SCAN_TARGET = 120000;
       const OVIZ_AR_VOLUME_COLOR_BINS = 8;
       const OVIZ_AR_VOLUME_MIN_STRETCHED_VALUE = 0.055;
       const OVIZ_AR_MIN_USDZ_BYTES = 1024;
@@ -1206,6 +1206,28 @@ THREEJS_AR_RUNTIME_JS = r"""
         });
       }
 
+      function ovizArWithTimeout(promise, timeoutMs, message) {
+        return new Promise((resolve, reject) => {
+          let settled = false;
+          const finish = (callback, value) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            window.clearTimeout(timer);
+            callback(value);
+          };
+          const timer = window.setTimeout(
+            () => finish(reject, new Error(message || "Timed out.")),
+            Math.max(1, Number(timeoutMs) || 1)
+          );
+          Promise.resolve(promise).then(
+            (value) => finish(resolve, value),
+            (err) => finish(reject, err)
+          );
+        });
+      }
+
       async function ovizArPrepareQuickLookAsset(blob, filename) {
         if (!ovizArHostedQuickLookAvailable()) {
           throw new Error("Hosted Quick Look handoff is unavailable.");
@@ -1214,9 +1236,13 @@ THREEJS_AR_RUNTIME_JS = r"""
         if (byteLength < OVIZ_AR_MIN_USDZ_BYTES) {
           throw new Error(`USDZ package is too small for Quick Look (${ovizArFormatByteSize(byteLength)}).`);
         }
-        const registration = await navigator.serviceWorker.register(
-          ovizArQuickLookWorkerUrl(),
-          { scope: ovizArQuickLookScopeUrl() }
+        const registration = await ovizArWithTimeout(
+          navigator.serviceWorker.register(
+            ovizArQuickLookWorkerUrl(),
+            { scope: ovizArQuickLookScopeUrl() }
+          ),
+          2500,
+          "Quick Look handoff worker did not register in time."
         );
         if (registration && typeof registration.update === "function") {
           try {
@@ -1225,23 +1251,38 @@ THREEJS_AR_RUNTIME_JS = r"""
             // A stale but active worker is still usable for this short-lived cache handoff.
           }
         }
-        await navigator.serviceWorker.ready;
-        const controlled = await ovizArWaitForServiceWorkerControl();
-        if (!controlled) {
-          throw new Error("Quick Look handoff worker is not controlling this page yet.");
+        try {
+          await ovizArWithTimeout(
+            navigator.serviceWorker.ready,
+            2500,
+            "Quick Look handoff worker did not become ready in time."
+          );
+        } catch (err) {
+          if (!registration || !registration.active) {
+            throw err;
+          }
         }
         const assetUrl = ovizArQuickLookAssetUrl(filename);
-        const cache = await window.caches.open(OVIZ_AR_QUICKLOOK_CACHE);
+        const cache = await ovizArWithTimeout(
+          window.caches.open(OVIZ_AR_QUICKLOOK_CACHE),
+          2000,
+          "Quick Look cache did not open in time."
+        );
         const safeFilename = String(filename || "oviz_ar_snapshot.usdz").replace(/"/g, "");
-        await cache.put(assetUrl, new Response(blob, {
-          headers: {
-            "Content-Type": "model/vnd.usdz+zip",
-            "Content-Disposition": `inline; filename="${safeFilename}"`,
-            "Cache-Control": "no-store",
-            "Accept-Ranges": "bytes",
-            "X-Oviz-AR-Bytes": String(byteLength),
-          },
-        }));
+        await ovizArWithTimeout(
+          cache.put(assetUrl, new Response(blob, {
+            headers: {
+              "Content-Type": "model/vnd.usdz+zip",
+              "Content-Disposition": `inline; filename="${safeFilename}"`,
+              "Cache-Control": "no-store",
+              "Accept-Ranges": "bytes",
+              "X-Oviz-AR-Bytes": String(byteLength),
+            },
+          })),
+          3000,
+          "Quick Look package did not stage in time."
+        );
+        ovizArWaitForServiceWorkerControl(1000).catch(() => false);
         return assetUrl;
       }
 
@@ -1289,18 +1330,14 @@ THREEJS_AR_RUNTIME_JS = r"""
         const hiddenLink = dialog.querySelector(".oviz-three-ar-hidden-link");
         const openButton = dialog.querySelector(".oviz-three-ar-open-link");
         const downloadLink = dialog.querySelector(".oviz-three-ar-download");
+        const quickLookHref = ovizArQuickLookUrl || ovizArObjectUrl;
         if (hiddenLink) {
-          if (ovizArQuickLookUrl) {
-            hiddenLink.href = ovizArQuickLookUrl;
-            hiddenLink.removeAttribute("download");
-          } else {
-            hiddenLink.removeAttribute("href");
-            hiddenLink.removeAttribute("download");
-          }
+          hiddenLink.href = quickLookHref;
+          hiddenLink.removeAttribute("download");
         }
         if (openButton) {
-          openButton.hidden = !ovizArQuickLookUrl;
-          openButton.disabled = !ovizArQuickLookUrl;
+          openButton.hidden = false;
+          openButton.disabled = false;
         }
         if (downloadLink) {
           downloadLink.hidden = false;
@@ -1313,7 +1350,7 @@ THREEJS_AR_RUNTIME_JS = r"""
         let statusMessage = `${baseMessage} (${sizeText})`;
         let tone = canOpenQuickLook ? "ready" : "warn";
         if (ovizArQuickLookAvailable() && !ovizArQuickLookUrl) {
-          statusMessage = `${baseMessage} (${sizeText}). Direct AR handoff is unavailable here; use Download USDZ.`;
+          statusMessage = `${baseMessage} (${sizeText}). Opening with direct AR fallback; tap Open AR Snapshot if it does not appear.`;
           if (quickLookError) {
             statusMessage += ` ${quickLookError}`;
           }
@@ -1324,7 +1361,7 @@ THREEJS_AR_RUNTIME_JS = r"""
           statusMessage,
           tone
         );
-        if (canOpenQuickLook && hiddenLink) {
+        if (ovizArQuickLookAvailable() && hiddenLink && quickLookHref) {
           window.setTimeout(() => {
             try {
               hiddenLink.click();
