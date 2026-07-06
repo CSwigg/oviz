@@ -6,6 +6,9 @@ from __future__ import annotations
 import argparse
 import shutil
 import subprocess
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -16,6 +19,9 @@ DEFAULT_SOURCE_HTML = REPO_ROOT / "tests" / "main_figure_chronos_july4.html"
 DEFAULT_WEBSITE_DIR = Path.home() / "Desktop" / "astro_research" / "cam_website"
 DEFAULT_TARGET_DIR = DEFAULT_WEBSITE_DIR / "oviz_figures"
 DEFAULT_MAX_SIZE_MB = 25
+DEFAULT_VERIFY_ATTEMPTS = 6
+DEFAULT_VERIFY_DELAY_SECONDS = 5.0
+DEFAULT_VERIFY_TIMEOUT_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
@@ -30,6 +36,10 @@ class UploadPlan:
     push: bool
     dry_run: bool
     public_url: str | None
+    verify_url: bool
+    verify_attempts: int
+    verify_delay_seconds: float
+    verify_timeout_seconds: float
 
 
 def _max_size_bytes(max_size_mb: float) -> int:
@@ -130,6 +140,10 @@ def build_upload_plan(
     remote_url: str | None = None,
     push: bool = True,
     dry_run: bool = False,
+    verify_url: bool = False,
+    verify_attempts: int = DEFAULT_VERIFY_ATTEMPTS,
+    verify_delay_seconds: float = DEFAULT_VERIFY_DELAY_SECONDS,
+    verify_timeout_seconds: float = DEFAULT_VERIFY_TIMEOUT_SECONDS,
 ) -> UploadPlan:
     source = source_html.expanduser().resolve()
     website_dir = website_dir.expanduser().resolve()
@@ -140,6 +154,9 @@ def build_upload_plan(
     git_path = _git_relative_path(destination, website_dir)
     message = commit_message or f"Upload Oviz figure {destination.name}"
     base_url = public_base_url or _github_pages_base_url(remote_url or _origin_remote_url(website_dir))
+    public_url = _public_url(base_url, git_path)
+    if verify_url and not public_url:
+        raise ValueError("Cannot verify the public URL because no GitHub Pages URL could be derived.")
     return UploadPlan(
         source=source,
         destination=destination,
@@ -150,7 +167,11 @@ def build_upload_plan(
         commit_message=message,
         push=push,
         dry_run=dry_run,
-        public_url=_public_url(base_url, git_path),
+        public_url=public_url,
+        verify_url=bool(verify_url),
+        verify_attempts=max(int(verify_attempts), 1),
+        verify_delay_seconds=max(float(verify_delay_seconds), 0.0),
+        verify_timeout_seconds=max(float(verify_timeout_seconds), 0.1),
     )
 
 
@@ -160,6 +181,39 @@ def _run_git(website_dir: Path, args: list[str], *, dry_run: bool) -> None:
         print(f"DRY-RUN: cd {website_dir} && {' '.join(command)}")
         return
     subprocess.run(command, cwd=website_dir, check=True)
+
+
+def verify_public_url(
+    url: str,
+    *,
+    attempts: int = DEFAULT_VERIFY_ATTEMPTS,
+    delay_seconds: float = DEFAULT_VERIFY_DELAY_SECONDS,
+    timeout_seconds: float = DEFAULT_VERIFY_TIMEOUT_SECONDS,
+) -> None:
+    last_error: Exception | None = None
+    attempts = max(int(attempts), 1)
+    for attempt in range(1, attempts + 1):
+        request = urllib.request.Request(
+            url,
+            method="GET",
+            headers={
+                "Range": "bytes=0-2047",
+                "User-Agent": "oviz-upload-helper/1.0",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=max(float(timeout_seconds), 0.1)) as response:
+                status = int(getattr(response, "status", 200))
+                content_type = str(response.headers.get("Content-Type", "")).lower()
+                if status in {200, 206} and ("html" in content_type or not content_type):
+                    print(f"Verified URL: {url}")
+                    return
+                last_error = RuntimeError(f"unexpected HTTP {status} with Content-Type {content_type!r}")
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last_error = exc
+        if attempt < attempts and delay_seconds > 0:
+            time.sleep(float(delay_seconds))
+    raise RuntimeError(f"Could not verify public URL after {attempts} attempts: {url}") from last_error
 
 
 def upload_oviz_figure(plan: UploadPlan) -> None:
@@ -179,6 +233,16 @@ def upload_oviz_figure(plan: UploadPlan) -> None:
     _run_git(plan.website_dir, ["commit", "-m", plan.commit_message, "--", plan.git_path], dry_run=plan.dry_run)
     if plan.push:
         _run_git(plan.website_dir, ["push"], dry_run=plan.dry_run)
+    if plan.verify_url and plan.public_url:
+        if plan.dry_run:
+            print(f"DRY-RUN: would verify {plan.public_url}")
+        else:
+            verify_public_url(
+                plan.public_url,
+                attempts=plan.verify_attempts,
+                delay_seconds=plan.verify_delay_seconds,
+                timeout_seconds=plan.verify_timeout_seconds,
+            )
 
 
 def parse_args() -> argparse.Namespace:
@@ -229,6 +293,29 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print the copy/git actions without changing files or running git.",
     )
+    parser.add_argument(
+        "--verify-url",
+        action="store_true",
+        help="After publishing, verify that the derived public URL serves an HTML response.",
+    )
+    parser.add_argument(
+        "--verify-attempts",
+        type=int,
+        default=DEFAULT_VERIFY_ATTEMPTS,
+        help="Number of public URL verification attempts.",
+    )
+    parser.add_argument(
+        "--verify-delay-seconds",
+        type=float,
+        default=DEFAULT_VERIFY_DELAY_SECONDS,
+        help="Delay between public URL verification attempts.",
+    )
+    parser.add_argument(
+        "--verify-timeout-seconds",
+        type=float,
+        default=DEFAULT_VERIFY_TIMEOUT_SECONDS,
+        help="Per-request public URL verification timeout.",
+    )
     return parser.parse_args()
 
 
@@ -244,6 +331,10 @@ def main() -> None:
         public_base_url=args.public_base_url,
         push=not bool(args.no_push),
         dry_run=bool(args.dry_run),
+        verify_url=bool(args.verify_url),
+        verify_attempts=int(args.verify_attempts),
+        verify_delay_seconds=float(args.verify_delay_seconds),
+        verify_timeout_seconds=float(args.verify_timeout_seconds),
     )
     upload_oviz_figure(plan)
 
