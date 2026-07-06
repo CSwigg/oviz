@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import zipfile
 from pathlib import Path
 
 from main_figure_new_chronos import run_main_figure
@@ -14,6 +15,17 @@ JULY4_CHRONOS_RESULTS_PATH = Path(
     "parsec_allhunt_46w_500b_5000s_dustav_12gyr_linearage_192shards/cluster_results.csv"
 )
 DEFAULT_OUTPUT_HTML = Path(__file__).resolve().with_suffix(".html")
+
+
+def write_zip_copy(html_path: Path, zip_path: Path | None = None) -> Path:
+    html_path = Path(html_path).expanduser().resolve()
+    zip_path = Path(zip_path or html_path.with_suffix(".zip")).expanduser().resolve()
+    if not html_path.exists() or not html_path.is_file():
+        raise FileNotFoundError(f"Missing HTML artifact to zip: {html_path}")
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        archive.write(html_path, arcname=html_path.name)
+    return zip_path
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,6 +56,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Keep repeated per-frame hover, selection, and motion metadata in the HTML.",
     )
+    parser.add_argument(
+        "--zip-output",
+        type=Path,
+        default=None,
+        help="Optional zip path for a shareable copy. Defaults to OUTPUT_HTML with a .zip suffix.",
+    )
+    parser.add_argument(
+        "--no-zip",
+        action="store_true",
+        help="Do not write the shareable zip copy after rendering.",
+    )
     return parser.parse_args()
 
 
@@ -61,6 +84,9 @@ def main() -> None:
         website_output_html=None,
     )
     print(f"Wrote {output_html}")
+    if not args.no_zip:
+        zip_path = write_zip_copy(output_html, args.zip_output)
+        print(f"Wrote {zip_path}")
 
 
 if __name__ == "__main__":
