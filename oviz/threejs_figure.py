@@ -2772,7 +2772,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-earth-view-toggle {
         position: absolute;
-        right: 18px;
+        right: calc(env(safe-area-inset-right, 0px) + 72px);
         bottom: 18px;
         z-index: 7;
         min-width: 104px;
@@ -4309,7 +4309,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           width: min(calc(100vw - 20px), 620px);
         }
         #__ROOT_ID__ .oviz-three-earth-view-toggle {
-          right: 12px;
+          right: calc(env(safe-area-inset-right, 0px) + 66px);
           bottom: 68px;
           min-width: 96px;
           height: 32px;

@@ -303,6 +303,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn(">View: 3D<", html)
         self.assertIn("Current view: 3D. Click or press V to enter Sky view.", html)
         self.assertIn("oviz-three-earth-view-toggle", html)
+        self.assertIn("right: calc(env(safe-area-inset-right, 0px) + 72px);", html)
+        self.assertIn("right: calc(env(safe-area-inset-right, 0px) + 66px);", html)
         self.assertIn("Reset camera", html)
         self.assertIn("oviz-three-scale-bar", html)
         self.assertIn("oviz-three-save-state", html)
