@@ -13,10 +13,10 @@ import pytest
 ARTIFACT_HTML = Path(__file__).with_name("main_figure_chronos_july4.html")
 MAX_HTML_SIZE_BYTES = 100 * 1024 * 1024
 MAX_RAW_SCENE_SIZE_BYTES = 220 * 1024 * 1024
+MAX_IMAGE_PLANES_SIZE_BYTES = 5 * 1024 * 1024
 EXPECTED_FRAME_TIMES = [float(value) for value in range(-120, 1)]
 MAX_BACKGROUND_POINTS = 500
 MAX_BLUE_CLUSTER_POINTS = 650
-MAX_MOBILE_VOLUME_AXIS_PIXELS = 64
 MIN_DESKTOP_VOLUME_AXIS_PIXELS = 256
 
 
@@ -63,7 +63,8 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
 
     assert ARTIFACT_HTML.stat().st_size <= MAX_HTML_SIZE_BYTES
     assert len(raw_scene) <= MAX_RAW_SCENE_SIZE_BYTES
-    assert len(json.dumps(scene_spec["image_planes"], separators=(",", ":"))) <= 512 * 1024
+    image_planes_size = len(json.dumps(scene_spec["image_planes"], separators=(",", ":")))
+    assert 512 * 1024 < image_planes_size <= MAX_IMAGE_PLANES_SIZE_BYTES
 
     assert scene_spec["mobile"]["enabled"] is False
     initial_state = scene_spec["initial_state"]
@@ -104,36 +105,26 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
         assert scene_spec[widget_key]["enabled"] is False
 
     volumes = scene_spec["volumes"]["layers"]
-    assert {volume["state_key"] for volume in volumes} == {
-        "edenhofer-dust-desktop",
-        "edenhofer-dust-mobile",
-    }
+    assert len(volumes) == 1
     assert "vergely" not in json.dumps(scene_spec["volumes"], separators=(",", ":")).lower()
-    volume_by_key = {volume["state_key"]: volume for volume in volumes}
-    desktop_volume = volume_by_key["edenhofer-dust-desktop"]
-    mobile_volume = volume_by_key["edenhofer-dust-mobile"]
-    assert desktop_volume["variant_group"] == "edenhofer-dust-resolution"
-    assert mobile_volume["variant_group"] == desktop_volume["variant_group"]
-    assert desktop_volume["base_state_name"] == "Edenhofer+2024 Dust"
-    assert mobile_volume["base_state_name"] == desktop_volume["base_state_name"]
-    assert desktop_volume["variant_order"] < mobile_volume["variant_order"]
-    assert desktop_volume["data_encoding"] == "uint8"
-    assert desktop_volume.get("data_atlas_tiles") is None
-    assert mobile_volume["data_encoding"] == "png_atlas_uint8"
-    assert mobile_volume.get("data_atlas_tiles")
-    desktop_shape = desktop_volume["shape"]
-    mobile_shape = mobile_volume["shape"]
-    assert max(int(desktop_shape["x"]), int(desktop_shape["y"])) >= MIN_DESKTOP_VOLUME_AXIS_PIXELS
-    assert max(int(mobile_shape["x"]), int(mobile_shape["y"]), int(mobile_shape["z"])) <= MAX_MOBILE_VOLUME_AXIS_PIXELS
-    assert int(desktop_shape["x"]) > int(mobile_shape["x"])
-    assert desktop_volume["visible"] is True
-    assert mobile_volume["visible"] is False
+    edenhofer_volume = volumes[0]
+    assert edenhofer_volume["name"] == "Edenhofer+2024 Dust"
+    assert edenhofer_volume["data_encoding"] == "uint8"
+    assert edenhofer_volume.get("data_atlas_tiles") is None
+    assert max(int(value) for value in edenhofer_volume["shape"].values()) >= MIN_DESKTOP_VOLUME_AXIS_PIXELS
+    assert edenhofer_volume["visible"] is True
+    assert edenhofer_volume["default_controls"]["opacity"] == 1.0
+    assert edenhofer_volume["ar_proxy"]["method"] == "block_max"
+    assert max(int(value) for value in edenhofer_volume["ar_proxy"]["shape"].values()) <= 64
+    assert edenhofer_volume["ar_proxy"]["data_b64"]
 
-    assert initial_state["active_volume_key"] == "edenhofer-dust-desktop"
-    assert initial_state["mobile_active_volume_key"] == "edenhofer-dust-mobile"
+    assert initial_state["active_volume_key"] == edenhofer_volume["state_key"]
+    assert not initial_state.get("mobile_active_volume_key")
     assert initial_state["mobile_defer_volumes"] is False
-    assert initial_state["volume_state_by_key"]["edenhofer-dust-desktop"]["visible"] is True
-    assert initial_state["volume_state_by_key"]["edenhofer-dust-mobile"]["visible"] is False
+    assert initial_state["volume_state_by_key"][edenhofer_volume["state_key"]] == {
+        "visible": True,
+        "opacity": 1.0,
+    }
 
     assert 'data-mobile="false"' in html
     assert "ovizRuntimeLooksMobile" in html
@@ -160,11 +151,12 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "const OVIZ_AR_SKY_TEXTURE_LOW = { width: 2048, height: 1024 };" in html
     assert "function buildOvizArSkyDomeScene" in html
     assert "skyDomeHips2FitsUrl(width, height)" in html
-    assert "function loadOvizUSDZExporter" in html
-    assert "function loadOvizFflateGlobal" in html
-    assert "examples/js/libs/fflate.min.js" in html
-    assert "function normalizeOvizArMaterialForUSDZ" in html
-    assert 'const textureSlots = ["map", "normalMap", "aoMap", "roughnessMap", "metalnessMap", "emissiveMap"];' in html
+    assert "function ovizArSkyTextureUrl" in html
+    assert "class OvizUSDZExporter" in html
+    assert "function ovizUsdZWriteStoredZip" in html
+    assert "function ovizArVolumeSampleSource" in html
+    assert "examples/js/libs/fflate.min.js" not in html
+    assert "function loadOvizUSDZExporter" not in html
     assert "No selection; exporting a capped t=0 Myr scene snapshot." in html
     assert "USDZExporter" in html
     assert 'rel="ar"' in html

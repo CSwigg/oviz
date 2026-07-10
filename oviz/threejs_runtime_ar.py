@@ -1,15 +1,19 @@
-THREEJS_AR_RUNTIME_JS = r"""
+from .threejs_runtime_usdz import THREEJS_AR_USDZ_RUNTIME_JS
+
+
+THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
       const OVIZ_AR_MAX_POINTS = 240;
       const OVIZ_AR_MAX_LABELS = 24;
       const OVIZ_AR_MAX_TRAIL_CLUSTERS = 24;
       const OVIZ_AR_MAX_TRAIL_POINTS_PER_CLUSTER = 16;
-      const OVIZ_AR_MAX_VOLUME_SAMPLES = 450;
+      const OVIZ_AR_MAX_VOLUME_SAMPLES = 900;
       const OVIZ_AR_VOLUME_SCAN_TARGET = 120000;
       const OVIZ_AR_VOLUME_COLOR_BINS = 8;
-      const OVIZ_AR_VOLUME_MIN_STRETCHED_VALUE = 0.055;
+      const OVIZ_AR_VOLUME_MIN_STRETCHED_VALUE = 0.02;
+      const OVIZ_AR_VOLUME_BUCKET_SAMPLES = 2;
       const OVIZ_AR_MIN_USDZ_BYTES = 1024;
-      const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v1";
-      const OVIZ_AR_QUICKLOOK_WORKER_VERSION = "20260706_ar_handoff_v2";
+      const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v2";
+      const OVIZ_AR_QUICKLOOK_WORKER_VERSION = "20260710_valid_usdz_v3";
       const OVIZ_AR_SKY_TEXTURE_HIGH = { width: 4096, height: 2048 };
       const OVIZ_AR_SKY_TEXTURE_LOW = { width: 2048, height: 1024 };
       let ovizArDialogEl = null;
@@ -110,7 +114,7 @@ THREEJS_AR_RUNTIME_JS = r"""
         mobileArButtonEl.setAttribute("aria-expanded", mobileArButtonEl.dataset.active === "true" ? "true" : "false");
         mobileArButtonEl.title = selectedCount
           ? `Export ${selectedCount} selected cluster${selectedCount === 1 ? "" : "s"} to AR Quick Look`
-          : "Open AR export options. Select clusters before exporting.";
+          : "Open AR export options for the present-day scene.";
       }
 
       function ovizArSelectionLabel(selection, fallback = "Cluster") {
@@ -290,6 +294,82 @@ THREEJS_AR_RUNTIME_JS = r"""
         return trails;
       }
 
+      function ovizArPointInsideVolumeBounds(point, layer) {
+        const bounds = layer && layer.bounds ? layer.bounds : {};
+        return ["x", "y", "z"].every((axis) => {
+          const axisBounds = Array.isArray(bounds[axis]) ? bounds[axis] : null;
+          const value = ovizArFiniteNumber(point && point[axis]);
+          if (!axisBounds || axisBounds.length < 2 || !Number.isFinite(value)) {
+            return false;
+          }
+          const low = Math.min(ovizArFiniteNumber(axisBounds[0], 0.0), ovizArFiniteNumber(axisBounds[1], 0.0));
+          const high = Math.max(ovizArFiniteNumber(axisBounds[0], 0.0), ovizArFiniteNumber(axisBounds[1], 0.0));
+          return value >= low && value <= high;
+        });
+      }
+
+      function ovizArStringHash(value) {
+        const text = String(value || "");
+        let hash = 2166136261;
+        for (let index = 0; index < text.length; index += 1) {
+          hash ^= text.charCodeAt(index);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      function ovizArRepresentativePoints(points, maxPoints) {
+        const source = Array.isArray(points) ? points : [];
+        const cap = Math.max(1, Math.round(Number(maxPoints) || 1));
+        if (source.length <= cap) {
+          return source.slice();
+        }
+        const bounds = {
+          x: [Infinity, -Infinity],
+          y: [Infinity, -Infinity],
+          z: [Infinity, -Infinity],
+        };
+        source.forEach((point) => {
+          ["x", "y", "z"].forEach((axis) => {
+            const value = ovizArFiniteNumber(point && point[axis], 0.0);
+            bounds[axis][0] = Math.min(bounds[axis][0], value);
+            bounds[axis][1] = Math.max(bounds[axis][1], value);
+          });
+        });
+        const cellsPerAxis = Math.max(2, Math.ceil(Math.cbrt(cap * 1.5)));
+        const cellWinners = new Map();
+        source.forEach((point) => {
+          const indices = ["x", "y", "z"].map((axis) => {
+            const span = Math.max(bounds[axis][1] - bounds[axis][0], 1e-9);
+            const normalized = (ovizArFiniteNumber(point && point[axis], bounds[axis][0]) - bounds[axis][0]) / span;
+            return Math.max(0, Math.min(cellsPerAxis - 1, Math.floor(normalized * cellsPerAxis)));
+          });
+          const cellKey = indices.join(":");
+          const incumbent = cellWinners.get(cellKey);
+          const pointStars = ovizArFiniteNumber(point && point.nStars, -Infinity);
+          const incumbentStars = ovizArFiniteNumber(incumbent && incumbent.nStars, -Infinity);
+          if (
+            !incumbent
+            || pointStars > incumbentStars
+            || (pointStars === incumbentStars && ovizArStringHash(point.key) < ovizArStringHash(incumbent.key))
+          ) {
+            cellWinners.set(cellKey, point);
+          }
+        });
+        const selected = Array.from(cellWinners.values())
+          .sort((left, right) => ovizArStringHash(left.key) - ovizArStringHash(right.key));
+        if (selected.length >= cap) {
+          return selected.slice(0, cap);
+        }
+        const selectedKeys = new Set(selected.map((point) => point.key));
+        source
+          .filter((point) => !selectedKeys.has(point.key))
+          .sort((left, right) => ovizArStringHash(left.key) - ovizArStringHash(right.key))
+          .slice(0, cap - selected.length)
+          .forEach((point) => selected.push(point));
+        return selected;
+      }
+
       function collectOvizArSnapshot(mode = "3d") {
         const selectedKeys = ovizArSelectedClusterKeys();
         const selectionMask = ovizArActiveSelectionMask();
@@ -299,6 +379,11 @@ THREEJS_AR_RUNTIME_JS = r"""
         const frame = ovizArPresentFrame();
         const points = [];
         const seen = new Set();
+        const visibleVolumeLayers = (
+          String(mode || "3d") !== "sky"
+          && selectedKeys.size === 0
+          && !selectionMask
+        ) ? ovizArVolumeLayersForSnapshot(frame) : [];
         if (frame) {
           const traces = Array.isArray(frame.traces) ? frame.traces : [];
           traces.forEach((trace) => {
@@ -321,12 +406,18 @@ THREEJS_AR_RUNTIME_JS = r"""
               if (maskOnlySelection && !ovizArPointInsideProjectedMask(record, selectionMask)) {
                 return;
               }
+              if (
+                visibleVolumeLayers.length
+                && !visibleVolumeLayers.some((layer) => ovizArPointInsideVolumeBounds(record, layer))
+              ) {
+                return;
+              }
               seen.add(key);
               points.push(record);
             });
           });
         }
-        const cappedPoints = points.slice(0, OVIZ_AR_MAX_POINTS);
+        const cappedPoints = ovizArRepresentativePoints(points, OVIZ_AR_MAX_POINTS);
         const includedKeys = new Set(cappedPoints.map((point) => point.key));
         return {
           mode: String(mode || "3d"),
@@ -343,38 +434,61 @@ THREEJS_AR_RUNTIME_JS = r"""
         };
       }
 
-      function ovizArSceneCenter(points) {
-        const source = Array.isArray(points) ? points : [];
-        if (!source.length) {
-          return { x: 0.0, y: 0.0, z: 0.0 };
-        }
-        const sum = source.reduce((acc, point) => ({
-          x: acc.x + ovizArFiniteNumber(point.x, 0.0),
-          y: acc.y + ovizArFiniteNumber(point.y, 0.0),
-          z: acc.z + ovizArFiniteNumber(point.z, 0.0),
-        }), { x: 0.0, y: 0.0, z: 0.0 });
-        return {
-          x: sum.x / source.length,
-          y: sum.y / source.length,
-          z: sum.z / source.length,
-        };
+      function ovizArVolumeBoundsPoints(layers) {
+        const points = [];
+        (Array.isArray(layers) ? layers : []).forEach((layer) => {
+          const bounds = layer && layer.bounds ? layer.bounds : {};
+          const x = Array.isArray(bounds.x) ? bounds.x.map(Number) : [];
+          const y = Array.isArray(bounds.y) ? bounds.y.map(Number) : [];
+          const z = Array.isArray(bounds.z) ? bounds.z.map(Number) : [];
+          if (x.length < 2 || y.length < 2 || z.length < 2 || !x.concat(y, z).every(Number.isFinite)) {
+            return;
+          }
+          [x[0], x[1]].forEach((xValue) => {
+            [y[0], y[1]].forEach((yValue) => {
+              [z[0], z[1]].forEach((zValue) => points.push({ x: xValue, y: yValue, z: zValue }));
+            });
+          });
+        });
+        return points;
       }
 
-      function ovizArSceneTransform(points, targetRadiusMeters = 0.75) {
-        const center = ovizArSceneCenter(points);
-        let maxDistance = 1.0;
-        (Array.isArray(points) ? points : []).forEach((point) => {
-          const dx = ovizArFiniteNumber(point.x, center.x) - center.x;
-          const dy = ovizArFiniteNumber(point.y, center.y) - center.y;
-          const dz = ovizArFiniteNumber(point.z, center.z) - center.z;
-          const distance = Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
-          if (Number.isFinite(distance)) {
-            maxDistance = Math.max(maxDistance, distance);
+      function ovizArSceneTransform(points, targetRadiusMeters = 0.75, volumeLayers = []) {
+        const source = (Array.isArray(points) ? points : []).concat(ovizArVolumeBoundsPoints(volumeLayers));
+        const bounds = {
+          x: [Infinity, -Infinity],
+          y: [Infinity, -Infinity],
+          z: [Infinity, -Infinity],
+        };
+        source.forEach((point) => {
+          ["x", "y", "z"].forEach((axis) => {
+            const value = ovizArFiniteNumber(point && point[axis]);
+            if (Number.isFinite(value)) {
+              bounds[axis][0] = Math.min(bounds[axis][0], value);
+              bounds[axis][1] = Math.max(bounds[axis][1], value);
+            }
+          });
+        });
+        ["x", "y", "z"].forEach((axis) => {
+          if (!bounds[axis].every(Number.isFinite)) {
+            bounds[axis] = [-0.5, 0.5];
           }
         });
+        const center = {
+          x: 0.5 * (bounds.x[0] + bounds.x[1]),
+          y: 0.5 * (bounds.y[0] + bounds.y[1]),
+          z: 0.5 * (bounds.z[0] + bounds.z[1]),
+        };
+        const halfX = 0.5 * Math.max(bounds.x[1] - bounds.x[0], 1e-6);
+        const halfY = 0.5 * Math.max(bounds.y[1] - bounds.y[0], 1e-6);
+        const halfZ = 0.5 * Math.max(bounds.z[1] - bounds.z[0], 1e-6);
+        const maxDistance = Math.max(Math.sqrt((halfX * halfX) + (halfY * halfY) + (halfZ * halfZ)), 1e-6);
+        const scale = targetRadiusMeters / maxDistance;
         return {
+          bounds,
           center,
-          scale: targetRadiusMeters / maxDistance,
+          scale,
+          yOffset: 0.045 - ((bounds.z[0] - center.z) * scale),
         };
       }
 
@@ -384,7 +498,7 @@ THREEJS_AR_RUNTIME_JS = r"""
         const x = (ovizArFiniteNumber(point && point.x, 0.0) - center.x) * scale;
         const y = (ovizArFiniteNumber(point && point.y, 0.0) - center.y) * scale;
         const z = (ovizArFiniteNumber(point && point.z, 0.0) - center.z) * scale;
-        return new THREE.Vector3(x, z, y);
+        return new THREE.Vector3(x, z + ovizArFiniteNumber(transform && transform.yOffset, 0.0), -y);
       }
 
       function ovizArColor(value, fallback = "#ffffff") {
@@ -419,7 +533,7 @@ THREEJS_AR_RUNTIME_JS = r"""
         return texture;
       }
 
-      function ovizArAddLabelPlane(group, label, position, color, index) {
+      function ovizArAddLabelPlane(group, label, position, color, index, planeGeometry = null) {
         const texture = ovizArCreateLabelTexture(label, color);
         const material = new THREE.MeshBasicMaterial({
           map: texture,
@@ -427,20 +541,23 @@ THREEJS_AR_RUNTIME_JS = r"""
           side: THREE.DoubleSide,
           depthWrite: false,
         });
-        const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.085), material);
+        const geometry = planeGeometry || new THREE.PlaneGeometry(0.34, 0.085);
+        geometry.userData = geometry.userData || {};
+        geometry.userData.ovizArDoubleSided = true;
+        const plane = new THREE.Mesh(geometry, material);
         plane.position.copy(position).add(new THREE.Vector3(0.05, 0.06 + ((index % 3) * 0.025), 0.035));
         plane.rotation.set(-0.35, 0.15, 0.0);
         plane.userData.ovizArLabel = true;
         group.add(plane);
       }
 
-      function ovizArAddCylinderBetween(group, start, end, radius, material) {
+      function ovizArAddCylinderBetween(group, start, end, radius, material, cylinderGeometry = null) {
         const delta = new THREE.Vector3().subVectors(end, start);
         const length = delta.length();
         if (!(length > 1e-6)) {
           return;
         }
-        const geometry = new THREE.CylinderGeometry(radius, radius, 1.0, 8, 1, false);
+        const geometry = cylinderGeometry || new THREE.CylinderGeometry(radius, radius, 1.0, 8, 1, false);
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.copy(start).add(end).multiplyScalar(0.5);
         mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize());
@@ -616,6 +733,45 @@ THREEJS_AR_RUNTIME_JS = r"""
         };
       }
 
+      function ovizArVolumeSampleSource(layer, scalarData) {
+        const proxy = layer && layer.ar_proxy && typeof layer.ar_proxy === "object" ? layer.ar_proxy : null;
+        const proxyShape = proxy && proxy.shape ? proxy.shape : {};
+        const proxyNx = Math.max(0, Math.round(Number(proxyShape.x) || 0));
+        const proxyNy = Math.max(0, Math.round(Number(proxyShape.y) || 0));
+        const proxyNz = Math.max(0, Math.round(Number(proxyShape.z) || 0));
+        if (
+          proxy
+          && String(proxy.data_encoding || "uint8") === "uint8"
+          && proxy.data_b64
+          && proxyNx * proxyNy * proxyNz > 0
+          && typeof base64ToUint8Array === "function"
+        ) {
+          const proxyData = base64ToUint8Array(proxy.data_b64);
+          if (proxyData && proxyData.length >= proxyNx * proxyNy * proxyNz) {
+            return {
+              data: proxyData,
+              nx: proxyNx,
+              ny: proxyNy,
+              nz: proxyNz,
+              stride: 1,
+              kind: "block-max proxy",
+            };
+          }
+        }
+        const shape = layer && layer.shape ? layer.shape : {};
+        const nx = Math.max(1, Math.round(Number(shape.x) || 0));
+        const ny = Math.max(1, Math.round(Number(shape.y) || 0));
+        const nz = Math.max(1, Math.round(Number(shape.z) || 0));
+        return {
+          data: scalarData,
+          nx,
+          ny,
+          nz,
+          stride: Math.max(1, Math.ceil(Math.cbrt((nx * ny * nz) / OVIZ_AR_VOLUME_SCAN_TARGET))),
+          kind: "volume fallback",
+        };
+      }
+
       async function ovizArCollectVolumeSamples(snapshot, options = {}) {
         const frame = ovizArPresentFrame();
         const layers = ovizArVolumeLayersForSnapshot(frame);
@@ -625,19 +781,27 @@ THREEJS_AR_RUNTIME_JS = r"""
           typeof activeVolumeLassoSelectionMask === "function"
           && activeVolumeLassoSelectionMask()
         ) || (snapshot && snapshot.hasLassoMask ? ovizArActiveSelectionMask() : null);
-        const samples = [];
+        const candidateBuckets = new Map();
         const layerSummaries = [];
+        const bucketAxisCount = Math.max(2, Math.ceil(Math.cbrt(maxSamples * 0.85)));
 
-        for (const layer of layers) {
+        for (let layerIndex = 0; layerIndex < layers.length; layerIndex += 1) {
+          const layer = layers[layerIndex];
           const state = ovizArVolumeStateForLayer(layer);
-          const scalarData = await ovizArVolumeScalarArrayFor(layer);
-          if (!state || !scalarData || !scalarData.length) {
+          if (!state) {
             continue;
           }
-          const shape = layer.shape || {};
-          const nx = Math.max(1, Math.round(Number(shape.x) || 0));
-          const ny = Math.max(1, Math.round(Number(shape.y) || 0));
-          const nz = Math.max(1, Math.round(Number(shape.z) || 0));
+          let source = ovizArVolumeSampleSource(layer, null);
+          if (!source.data || !source.data.length) {
+            const scalarData = await ovizArVolumeScalarArrayFor(layer);
+            source = ovizArVolumeSampleSource(layer, scalarData);
+          }
+          if (!source.data || !source.data.length) {
+            continue;
+          }
+          const nx = source.nx;
+          const ny = source.ny;
+          const nz = source.nz;
           const totalVoxels = nx * ny * nz;
           if (!(totalVoxels > 0)) {
             continue;
@@ -651,7 +815,9 @@ THREEJS_AR_RUNTIME_JS = r"""
           const low = Math.min(Math.max(ovizArFiniteNumber(windowState.low, 0.0), 0.0), 1.0);
           const high = Math.min(Math.max(ovizArFiniteNumber(windowState.high, 1.0), 0.0), 1.0);
           const span = Math.max(high - low, 1e-6);
-          const stride = Math.max(1, Math.ceil(Math.cbrt(totalVoxels / scanTarget)));
+          const stride = source.kind === "block-max proxy"
+            ? 1
+            : Math.max(source.stride, Math.ceil(Math.cbrt(totalVoxels / scanTarget)));
           const layerName = typeof volumeBaseNameForLayer === "function"
             ? volumeBaseNameForLayer(layer)
             : String(layer.name || layer.key || "Volume");
@@ -661,7 +827,7 @@ THREEJS_AR_RUNTIME_JS = r"""
             for (let iy = 0; iy < ny; iy += stride) {
               for (let ix = 0; ix < nx; ix += stride) {
                 const dataIndex = (iz * ny * nx) + (iy * nx) + ix;
-                const normalizedValue = (Number(scalarData[dataIndex]) || 0) / 255.0;
+                const normalizedValue = (Number(source.data[dataIndex]) || 0) / 255.0;
                 if (!(normalizedValue > low)) {
                   continue;
                 }
@@ -680,7 +846,7 @@ THREEJS_AR_RUNTIME_JS = r"""
                 );
                 const colorIndex = Math.max(
                   0,
-                  Math.min(lutSamples - 1, Math.round(stretchedValue * (lutSamples - 1)))
+                  Math.min(lutSamples - 1, Math.round((colorBin / Math.max(OVIZ_AR_VOLUME_COLOR_BINS - 1, 1)) * (lutSamples - 1)))
                 ) * 4;
                 const sample = {
                   key: String(layer.key || layerName),
@@ -688,13 +854,23 @@ THREEJS_AR_RUNTIME_JS = r"""
                   x: position.x,
                   y: position.y,
                   z: position.z,
-                  sizePc: position.cellSizePc * stride * 1.12,
+                  sizePc: position.cellSizePc * stride * 0.82,
                   value: normalizedValue,
                   weight: stretchedValue * Math.max(ovizArFiniteNumber(state.opacity, 0.25), 0.08),
                   color: ovizArHexColorFromBytes(colorBytes, colorIndex),
                   colorBin,
                 };
-                samples.push(sample);
+                const bucketX = Math.min(bucketAxisCount - 1, Math.floor((ix / Math.max(nx, 1)) * bucketAxisCount));
+                const bucketY = Math.min(bucketAxisCount - 1, Math.floor((iy / Math.max(ny, 1)) * bucketAxisCount));
+                const bucketZ = Math.min(bucketAxisCount - 1, Math.floor((iz / Math.max(nz, 1)) * bucketAxisCount));
+                const bucketKey = `${layerIndex}:${bucketX}:${bucketY}:${bucketZ}`;
+                const bucket = candidateBuckets.get(bucketKey) || [];
+                bucket.push(sample);
+                bucket.sort((left, right) => ovizArFiniteNumber(right.weight, 0.0) - ovizArFiniteNumber(left.weight, 0.0));
+                if (bucket.length > OVIZ_AR_VOLUME_BUCKET_SAMPLES) {
+                  bucket.length = OVIZ_AR_VOLUME_BUCKET_SAMPLES;
+                }
+                candidateBuckets.set(bucketKey, bucket);
                 layerSampleCount += 1;
               }
             }
@@ -706,10 +882,13 @@ THREEJS_AR_RUNTIME_JS = r"""
               stateKey: typeof volumeStateKeyForLayer === "function" ? volumeStateKeyForLayer(layer) : String(layer.state_key || layer.key || ""),
               label: layerName || "Volume",
               samples: layerSampleCount,
+              source: source.kind,
             });
           }
         }
 
+        const samples = [];
+        candidateBuckets.forEach((bucket) => bucket.forEach((sample) => samples.push(sample)));
         samples.sort((left, right) => ovizArFiniteNumber(right.weight, 0.0) - ovizArFiniteNumber(left.weight, 0.0));
         const cappedSamples = samples.slice(0, maxSamples);
         return {
@@ -753,13 +932,13 @@ THREEJS_AR_RUNTIME_JS = r"""
         }
         const samplesByColor = new Map();
         samples.forEach((sample) => {
-          const color = String(sample.color || "#ffffff");
-          if (!samplesByColor.has(color)) {
-            samplesByColor.set(color, []);
+          const colorBin = Math.max(0, Math.min(OVIZ_AR_VOLUME_COLOR_BINS - 1, Math.round(Number(sample.colorBin) || 0)));
+          if (!samplesByColor.has(colorBin)) {
+            samplesByColor.set(colorBin, []);
           }
-          samplesByColor.get(color).push(sample);
+          samplesByColor.get(colorBin).push(sample);
         });
-        samplesByColor.forEach((colorSamples, color) => {
+        samplesByColor.forEach((colorSamples) => {
           const vertices = [];
           const indices = [];
           colorSamples.forEach((sample) => {
@@ -774,6 +953,12 @@ THREEJS_AR_RUNTIME_JS = r"""
           geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
           geometry.setIndex(indices);
           geometry.computeVertexNormals();
+          const representative = colorSamples.reduce((best, sample) => (
+            !best || ovizArFiniteNumber(sample.weight, 0.0) > ovizArFiniteNumber(best.weight, 0.0) ? sample : best
+          ), null);
+          const color = String((representative && representative.color) || "#ffffff");
+          const meanWeight = colorSamples.reduce((sum, sample) => sum + ovizArFiniteNumber(sample.weight, 0.0), 0.0)
+            / Math.max(colorSamples.length, 1);
           const material = new THREE.MeshStandardMaterial({
             color: ovizArColor(color, "#ffffff"),
             emissive: ovizArColor(color, "#ffffff"),
@@ -781,7 +966,7 @@ THREEJS_AR_RUNTIME_JS = r"""
             roughness: 0.82,
             metalness: 0.0,
             transparent: true,
-            opacity: 0.38,
+            opacity: Math.max(0.30, Math.min(0.72, 0.24 + (0.55 * meanWeight))),
           });
           const mesh = new THREE.Mesh(geometry, material);
           mesh.userData.ovizArVolumeProxy = true;
@@ -792,6 +977,7 @@ THREEJS_AR_RUNTIME_JS = r"""
       async function buildOvizAr3DScene(snapshot, options = {}) {
         const includeLabels = options.includeLabels !== false;
         const volumeResult = await ovizArCollectVolumeSamples(snapshot);
+        const volumeLayers = ovizArVolumeLayersForSnapshot(ovizArPresentFrame());
         const sceneAr = new THREE.Scene();
         sceneAr.add(new THREE.AmbientLight(0xffffff, 0.9));
         const light = new THREE.DirectionalLight(0xffffff, 0.7);
@@ -799,9 +985,13 @@ THREEJS_AR_RUNTIME_JS = r"""
         sceneAr.add(light);
         const group = new THREE.Group();
         sceneAr.add(group);
-        const transformPoints = (snapshot.points || []).concat(volumeResult.samples || []);
-        const transform = ovizArSceneTransform(transformPoints, 0.72);
+        const transform = ovizArSceneTransform(snapshot.points || [], 0.72, volumeLayers);
         const sphereGeometry = new THREE.SphereGeometry(0.026, 24, 16);
+        const trailGeometry = new THREE.CylinderGeometry(0.0045, 0.0045, 1.0, 8, 1, false);
+        const labelGeometry = new THREE.PlaneGeometry(0.34, 0.085);
+        labelGeometry.userData = labelGeometry.userData || {};
+        labelGeometry.userData.ovizArDoubleSided = true;
+        const markerMaterials = new Map();
         ovizArAddVolumeProxy(group, volumeResult.samples, transform);
         (snapshot.trails || []).forEach((trail) => {
           const trailPoints = Array.isArray(trail.points) ? trail.points : [];
@@ -819,18 +1009,22 @@ THREEJS_AR_RUNTIME_JS = r"""
           for (let index = 1; index < trailPoints.length; index += 1) {
             const start = ovizArVectorFromPoint(trailPoints[index - 1], transform);
             const end = ovizArVectorFromPoint(trailPoints[index], transform);
-            ovizArAddCylinderBetween(group, start, end, 0.0045, trailMaterial);
+            ovizArAddCylinderBetween(group, start, end, 0.0045, trailMaterial, trailGeometry);
           }
         });
         (snapshot.points || []).forEach((point, index) => {
           const color = ovizArColor(point.color, "#ffffff");
-          const material = new THREE.MeshStandardMaterial({
-            color,
-            emissive: color,
-            emissiveIntensity: 0.35,
-            roughness: 0.45,
-            metalness: 0.0,
-          });
+          const materialKey = String(point.color || "#ffffff").toLowerCase();
+          if (!markerMaterials.has(materialKey)) {
+            markerMaterials.set(materialKey, new THREE.MeshStandardMaterial({
+              color,
+              emissive: color,
+              emissiveIntensity: 0.35,
+              roughness: 0.45,
+              metalness: 0.0,
+            }));
+          }
+          const material = markerMaterials.get(materialKey);
           const marker = new THREE.Mesh(sphereGeometry, material);
           const position = ovizArVectorFromPoint(point, transform);
           const nStars = ovizArFiniteNumber(point.nStars, NaN);
@@ -842,7 +1036,7 @@ THREEJS_AR_RUNTIME_JS = r"""
           marker.userData.ovizArKey = point.key;
           group.add(marker);
           if (includeLabels && index < OVIZ_AR_MAX_LABELS) {
-            ovizArAddLabelPlane(group, point.label, position, point.color, index);
+            ovizArAddLabelPlane(group, point.label, position, point.color, index, labelGeometry);
           }
         });
         const base = new THREE.Mesh(
@@ -855,8 +1049,11 @@ THREEJS_AR_RUNTIME_JS = r"""
           })
         );
         base.rotation.x = -Math.PI / 2;
-        base.position.y = -0.04;
+        base.position.y = 0.006;
+        base.geometry.userData = base.geometry.userData || {};
+        base.geometry.userData.ovizArDoubleSided = true;
         group.add(base);
+        sceneAr.updateMatrixWorld(true);
         sceneAr.userData.ovizArSummary = {
           mode: "3d",
           pointCount: snapshot.points.length,
@@ -865,6 +1062,7 @@ THREEJS_AR_RUNTIME_JS = r"""
           volumeTruncated: volumeResult.truncated,
           presentTimeMyr: snapshot.presentTimeMyr,
           scalePcToMeters: transform.scale,
+          volumeSources: volumeResult.layers.map((layer) => layer.source).filter(Boolean),
         };
         return sceneAr;
       }
@@ -927,132 +1125,137 @@ THREEJS_AR_RUNTIME_JS = r"""
         });
       }
 
+      function ovizArSkyLayerForExport() {
+        if (typeof activeSkyLayer === "function") {
+          const layer = activeSkyLayer();
+          if (layer && layer.visible !== false && layer.survey) {
+            return layer;
+          }
+        }
+        if (typeof visibleSkyLayers === "function") {
+          const layers = visibleSkyLayers();
+          if (Array.isArray(layers) && layers.length && layers[0].survey) {
+            return layers[0];
+          }
+        }
+        return null;
+      }
+
+      function ovizArSkyTextureUrl(width, height) {
+        const baseUrl = skyDomeHips2FitsUrl(width, height);
+        const layer = ovizArSkyLayerForExport();
+        if (!layer || !layer.survey) {
+          return baseUrl;
+        }
+        const url = new URL(baseUrl);
+        url.searchParams.set("hips", String(layer.survey));
+        if (layer.stretch) {
+          url.searchParams.set("stretch", String(layer.stretch));
+        }
+        if (layer.cutMin !== "" && layer.cutMin != null) {
+          url.searchParams.set("min_cut", String(layer.cutMin));
+        } else {
+          url.searchParams.delete("min_cut");
+        }
+        if (layer.cutMax !== "" && layer.cutMax != null) {
+          url.searchParams.set("max_cut", String(layer.cutMax));
+        } else {
+          url.searchParams.delete("max_cut");
+        }
+        return url.href;
+      }
+
       async function ovizArLoadSkyTexture(target) {
         const width = Math.round(Number(target && target.width) || OVIZ_AR_SKY_TEXTURE_LOW.width);
         const height = Math.round(Number(target && target.height) || OVIZ_AR_SKY_TEXTURE_LOW.height);
-        const url = skyDomeHips2FitsUrl(width, height);
+        const url = ovizArSkyTextureUrl(width, height);
         const texture = await ovizArTextureLoaderLoad(url);
-        return { texture, width, height, url };
+        const layer = ovizArSkyLayerForExport();
+        return { texture, width, height, url, survey: layer && layer.survey ? String(layer.survey) : "" };
+      }
+
+      function ovizArInvertGeometryFaces(geometry) {
+        if (!geometry) {
+          return geometry;
+        }
+        const index = geometry.index;
+        if (index && index.array) {
+          for (let offset = 0; offset + 2 < index.array.length; offset += 3) {
+            const swap = index.array[offset + 1];
+            index.array[offset + 1] = index.array[offset + 2];
+            index.array[offset + 2] = swap;
+          }
+          index.needsUpdate = true;
+        }
+        const normal = geometry.attributes && geometry.attributes.normal;
+        if (normal) {
+          for (let offset = 0; offset < normal.count; offset += 1) {
+            normal.setXYZ(offset, -normal.getX(offset), -normal.getY(offset), -normal.getZ(offset));
+          }
+          normal.needsUpdate = true;
+        }
+        return geometry;
       }
 
       async function buildOvizArSkyDomeScene(snapshot, target = OVIZ_AR_SKY_TEXTURE_HIGH, options = {}) {
         const includeLabels = options.includeLabels === true;
         const loaded = await ovizArLoadSkyTexture(target);
         const radius = 1.45;
+        const centerY = radius + 0.04;
         const sceneAr = new THREE.Scene();
         sceneAr.add(new THREE.AmbientLight(0xffffff, 1.0));
-        const domeGeometry = new THREE.SphereGeometry(radius, 96, 48);
-        const domeMaterial = new THREE.MeshBasicMaterial({
+        loaded.texture.userData = loaded.texture.userData || {};
+        loaded.texture.userData.ovizArTextureFormat = "jpeg";
+        const domeGeometry = ovizArInvertGeometryFaces(new THREE.SphereGeometry(radius, 96, 48));
+        const domeMaterial = new THREE.MeshStandardMaterial({
           map: loaded.texture,
-          side: THREE.BackSide,
+          roughness: 1.0,
+          metalness: 0.0,
         });
         const dome = new THREE.Mesh(domeGeometry, domeMaterial);
+        dome.position.y = centerY;
         sceneAr.add(dome);
         const markerGeometry = new THREE.SphereGeometry(0.018, 18, 12);
+        const markerMaterials = new Map();
+        const labelGeometry = new THREE.PlaneGeometry(0.34, 0.085);
+        labelGeometry.userData = labelGeometry.userData || {};
+        labelGeometry.userData.ovizArDoubleSided = true;
         (snapshot.points || []).forEach((point, index) => {
-          const direction = ovizArSkyDirectionForPoint(point, radius * 0.985);
+          const direction = ovizArSkyDirectionForPoint(point, radius * 0.965);
           if (!direction) {
             return;
           }
           const color = ovizArColor(point.color, "#ffffff");
-          const material = new THREE.MeshBasicMaterial({ color });
+          const materialKey = String(point.color || "#ffffff").toLowerCase();
+          if (!markerMaterials.has(materialKey)) {
+            markerMaterials.set(materialKey, new THREE.MeshStandardMaterial({
+              color,
+              emissive: color,
+              emissiveIntensity: 0.65,
+              roughness: 0.5,
+              metalness: 0.0,
+            }));
+          }
+          const material = markerMaterials.get(materialKey);
           const marker = new THREE.Mesh(markerGeometry, material);
-          marker.position.set(direction.x, direction.y, direction.z);
+          marker.position.set(direction.x, direction.y + centerY, direction.z);
           marker.userData.ovizArKey = point.key;
           sceneAr.add(marker);
           if (includeLabels && index < OVIZ_AR_MAX_LABELS) {
-            ovizArAddLabelPlane(sceneAr, point.label, marker.position, point.color, index);
+            ovizArAddLabelPlane(sceneAr, point.label, marker.position, point.color, index, labelGeometry);
           }
         });
+        sceneAr.updateMatrixWorld(true);
         sceneAr.userData.ovizArSummary = {
           mode: "sky",
           pointCount: snapshot.points.length,
           textureWidth: loaded.width,
           textureHeight: loaded.height,
           textureUrl: loaded.url,
+          survey: loaded.survey,
           coordsys: typeof skyDomeHips2FitsCoordsys === "function" ? skyDomeHips2FitsCoordsys() : "galactic",
         };
         return sceneAr;
-      }
-
-      function ovizArLoadScript(url) {
-        return new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = url;
-          script.async = true;
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-      }
-
-      async function loadOvizFflateGlobal() {
-        if (typeof window !== "undefined" && window.fflate && window.fflate.zipSync && window.fflate.strToU8) {
-          return window.fflate;
-        }
-        const urls = [
-          "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js",
-          "https://unpkg.com/three@0.128.0/examples/js/libs/fflate.min.js",
-        ];
-        let lastError = null;
-        for (const url of urls) {
-          try {
-            await ovizArLoadScript(url);
-            if (typeof window !== "undefined" && window.fflate && window.fflate.zipSync && window.fflate.strToU8) {
-              return window.fflate;
-            }
-          } catch (err) {
-            lastError = err;
-          }
-        }
-        throw lastError || new Error("fflate is unavailable for USDZ export.");
-      }
-
-      async function loadOvizUSDZExporter() {
-        if (THREE.USDZExporter) {
-          await loadOvizFflateGlobal();
-          return THREE.USDZExporter;
-        }
-        const legacyUrls = [
-          "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/USDZExporter.js",
-          "https://unpkg.com/three@0.128.0/examples/js/exporters/USDZExporter.js",
-        ];
-        let legacyDependencyLoaded = false;
-        try {
-          await loadOvizFflateGlobal();
-          legacyDependencyLoaded = true;
-        } catch (_err) {
-          legacyDependencyLoaded = false;
-        }
-        for (const url of legacyUrls) {
-          try {
-            if (!legacyDependencyLoaded) {
-              break;
-            }
-            await ovizArLoadScript(url);
-            if (THREE.USDZExporter) {
-              return THREE.USDZExporter;
-            }
-          } catch (_err) {
-            // Try the module exporter below.
-          }
-        }
-        const moduleUrls = [
-          "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/exporters/USDZExporter.js",
-          "https://unpkg.com/three@0.128.0/examples/jsm/exporters/USDZExporter.js",
-        ];
-        let lastError = null;
-        for (const url of moduleUrls) {
-          try {
-            const module = await import(url);
-            if (module && module.USDZExporter) {
-              return module.USDZExporter;
-            }
-          } catch (err) {
-            lastError = err;
-          }
-        }
-        throw lastError || new Error("USDZExporter is unavailable.");
       }
 
       function ovizArFormatByteSize(byteCount) {
@@ -1091,48 +1294,15 @@ THREEJS_AR_RUNTIME_JS = r"""
       }
 
       async function ovizArParseUsdZ(sceneAr) {
-        const USDZExporter = await loadOvizUSDZExporter();
-        const exporter = new USDZExporter();
-        normalizeOvizArSceneForUSDZ(sceneAr);
-        const result = await Promise.resolve(exporter.parse(sceneAr, { quickLookCompatible: true }));
+        const exporter = new OvizUSDZExporter();
+        if (sceneAr && typeof sceneAr.updateMatrixWorld === "function") {
+          sceneAr.updateMatrixWorld(true);
+        }
+        const result = await exporter.parse(sceneAr, {
+          maxTextureSize: OVIZ_AR_SKY_TEXTURE_HIGH.width,
+          jpegQuality: 0.88,
+        });
         return ovizArValidateUsdZArrayBuffer(await ovizArArrayBufferFromExporterResult(result));
-      }
-
-      function normalizeOvizArMaterialForUSDZ(material) {
-        if (!material || typeof material !== "object") {
-          return;
-        }
-        const textureSlots = ["map", "normalMap", "aoMap", "roughnessMap", "metalnessMap", "emissiveMap"];
-        textureSlots.forEach((slot) => {
-          if (material[slot] === undefined) {
-            material[slot] = null;
-          }
-        });
-        if (!material.color) {
-          material.color = new THREE.Color(0xffffff);
-        }
-        if (!material.emissive) {
-          material.emissive = new THREE.Color(0x000000);
-        }
-        if (material.roughness === undefined) {
-          material.roughness = 0.7;
-        }
-        if (material.metalness === undefined) {
-          material.metalness = 0.0;
-        }
-      }
-
-      function normalizeOvizArSceneForUSDZ(sceneAr) {
-        if (!sceneAr || typeof sceneAr.traverse !== "function") {
-          return;
-        }
-        sceneAr.traverse((object) => {
-          if (!object || !object.isMesh) {
-            return;
-          }
-          const materials = Array.isArray(object.material) ? object.material : [object.material];
-          materials.forEach(normalizeOvizArMaterialForUSDZ);
-        });
       }
 
       function ovizArClearObjectUrl() {
@@ -1268,6 +1438,8 @@ THREEJS_AR_RUNTIME_JS = r"""
           2000,
           "Quick Look cache did not open in time."
         );
+        const staleRequests = await cache.keys();
+        await Promise.all(staleRequests.map((request) => cache.delete(request)));
         const safeFilename = String(filename || "oviz_ar_snapshot.usdz").replace(/"/g, "");
         await ovizArWithTimeout(
           cache.put(assetUrl, new Response(blob, {
@@ -1282,7 +1454,10 @@ THREEJS_AR_RUNTIME_JS = r"""
           3000,
           "Quick Look package did not stage in time."
         );
-        ovizArWaitForServiceWorkerControl(1000).catch(() => false);
+        const controlled = await ovizArWaitForServiceWorkerControl(2500);
+        if (!controlled && !navigator.serviceWorker.controller) {
+          throw new Error("Quick Look handoff is not ready yet. Close and reopen the AR chooser once.");
+        }
         return assetUrl;
       }
 
@@ -1347,10 +1522,10 @@ THREEJS_AR_RUNTIME_JS = r"""
         const sizeText = ovizArFormatByteSize(byteLength);
         const baseMessage = message || (ovizArQuickLookAvailable() ? "AR snapshot is ready." : "USDZ snapshot is ready.");
         const canOpenQuickLook = Boolean(ovizArQuickLookAvailable() && ovizArQuickLookUrl);
-        let statusMessage = `${baseMessage} (${sizeText})`;
+        let statusMessage = `${baseMessage} (${sizeText}). Tap Open AR Snapshot.`;
         let tone = canOpenQuickLook ? "ready" : "warn";
         if (ovizArQuickLookAvailable() && !ovizArQuickLookUrl) {
-          statusMessage = `${baseMessage} (${sizeText}). Opening with direct AR fallback; tap Open AR Snapshot if it does not appear.`;
+          statusMessage = `${baseMessage} (${sizeText}). Tap Open AR Snapshot to use the direct AR fallback.`;
           if (quickLookError) {
             statusMessage += ` ${quickLookError}`;
           }
@@ -1361,15 +1536,6 @@ THREEJS_AR_RUNTIME_JS = r"""
           statusMessage,
           tone
         );
-        if (ovizArQuickLookAvailable() && hiddenLink && quickLookHref) {
-          window.setTimeout(() => {
-            try {
-              hiddenLink.click();
-            } catch (_err) {
-              // The explicit Open button remains available.
-            }
-          }, 80);
-        }
       }
 
       async function ovizArBuildAndExport(mode) {
@@ -1389,11 +1555,17 @@ THREEJS_AR_RUNTIME_JS = r"""
           let sceneAr = null;
           let arrayBuffer = null;
           if (mode === "sky") {
+            const primarySkyTarget = ovizArQuickLookAvailable()
+              ? OVIZ_AR_SKY_TEXTURE_LOW
+              : OVIZ_AR_SKY_TEXTURE_HIGH;
+            const fallbackSkyTarget = ovizArQuickLookAvailable()
+              ? { width: 1024, height: 512 }
+              : OVIZ_AR_SKY_TEXTURE_LOW;
             try {
-              sceneAr = await buildOvizArSkyDomeScene(snapshot, OVIZ_AR_SKY_TEXTURE_HIGH, { includeLabels: false });
+              sceneAr = await buildOvizArSkyDomeScene(snapshot, primarySkyTarget, { includeLabels: false });
               arrayBuffer = await ovizArParseUsdZ(sceneAr);
             } catch (_err) {
-              sceneAr = await buildOvizArSkyDomeScene(snapshot, OVIZ_AR_SKY_TEXTURE_LOW, { includeLabels: false });
+              sceneAr = await buildOvizArSkyDomeScene(snapshot, fallbackSkyTarget, { includeLabels: false });
               arrayBuffer = await ovizArParseUsdZ(sceneAr);
             }
           } else {
@@ -1522,11 +1694,25 @@ THREEJS_AR_RUNTIME_JS = r"""
         renderArSnapshotButtonState();
         focusViewer();
       }
+
+      function ovizArWarmQuickLookWorker() {
+        if (!ovizArQuickLookAvailable() || !ovizArHostedQuickLookAvailable()) {
+          return;
+        }
+        navigator.serviceWorker.register(
+          ovizArQuickLookWorkerUrl(),
+          { scope: ovizArQuickLookScopeUrl() }
+        ).catch(() => null);
+      }
+
+      if (typeof window !== "undefined") {
+        window.setTimeout(ovizArWarmQuickLookWorker, 0);
+      }
 """.strip()
 
 
 THREEJS_AR_QUICKLOOK_SERVICE_WORKER_JS = r"""
-const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v1";
+const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v2";
 
 async function ovizArRangeResponse(request, response) {
   const range = request.headers.get("range");

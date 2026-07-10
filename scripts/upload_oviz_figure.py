@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -13,8 +14,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from oviz.threejs_runtime_ar import THREEJS_AR_QUICKLOOK_SERVICE_WORKER_JS
+
+
 DEFAULT_SOURCE_HTML = REPO_ROOT / "tests" / "main_figure_chronos_july4.html"
 DEFAULT_WEBSITE_DIR = Path.home() / "Desktop" / "astro_research" / "cam_website"
 DEFAULT_TARGET_DIR = DEFAULT_WEBSITE_DIR / "oviz_figures"
@@ -22,6 +28,7 @@ DEFAULT_MAX_SIZE_MB = 25
 DEFAULT_VERIFY_ATTEMPTS = 6
 DEFAULT_VERIFY_DELAY_SECONDS = 5.0
 DEFAULT_VERIFY_TIMEOUT_SECONDS = 10.0
+AR_QUICKLOOK_SERVICE_WORKER_NAME = "oviz-ar-quicklook-sw.js"
 
 
 @dataclass(frozen=True)
@@ -30,6 +37,8 @@ class UploadPlan:
     destination: Path
     website_dir: Path
     git_path: str
+    companion_destination: Path | None
+    companion_git_path: str | None
     size_bytes: int
     max_size_bytes: int
     commit_message: str
@@ -152,6 +161,13 @@ def build_upload_plan(
     size_bytes = _validate_source(source, max_size_bytes)
     destination = _destination_for(source, target_dir, output_name)
     git_path = _git_relative_path(destination, website_dir)
+    includes_ar_quicklook = b"oviz-ar-quicklook-sw.js" in source.read_bytes()
+    companion_destination = target_dir / AR_QUICKLOOK_SERVICE_WORKER_NAME if includes_ar_quicklook else None
+    companion_git_path = (
+        _git_relative_path(companion_destination, website_dir)
+        if companion_destination is not None
+        else None
+    )
     message = commit_message or f"Upload Oviz figure {destination.name}"
     base_url = public_base_url or _github_pages_base_url(remote_url or _origin_remote_url(website_dir))
     public_url = _public_url(base_url, git_path)
@@ -162,6 +178,8 @@ def build_upload_plan(
         destination=destination,
         website_dir=website_dir,
         git_path=git_path,
+        companion_destination=companion_destination,
+        companion_git_path=companion_git_path,
         size_bytes=size_bytes,
         max_size_bytes=max_size_bytes,
         commit_message=message,
@@ -223,14 +241,24 @@ def upload_oviz_figure(plan: UploadPlan) -> None:
     print(f"Size: {size_mb:.1f} MiB")
     if plan.public_url:
         print(f"Expected URL: {plan.public_url}")
+    if plan.companion_destination:
+        print(f"Quick Look worker: {plan.companion_destination}")
     if plan.dry_run:
         print("DRY-RUN: not copying or publishing")
     else:
         plan.destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(plan.source, plan.destination)
+        if plan.companion_destination:
+            plan.companion_destination.write_text(
+                THREEJS_AR_QUICKLOOK_SERVICE_WORKER_JS + "\n",
+                encoding="utf-8",
+            )
 
-    _run_git(plan.website_dir, ["add", "--", plan.git_path], dry_run=plan.dry_run)
-    _run_git(plan.website_dir, ["commit", "-m", plan.commit_message, "--", plan.git_path], dry_run=plan.dry_run)
+    git_paths = [plan.git_path]
+    if plan.companion_git_path:
+        git_paths.append(plan.companion_git_path)
+    _run_git(plan.website_dir, ["add", "--", *git_paths], dry_run=plan.dry_run)
+    _run_git(plan.website_dir, ["commit", "-m", plan.commit_message, "--", *git_paths], dry_run=plan.dry_run)
     if plan.push:
         _run_git(plan.website_dir, ["push"], dry_run=plan.dry_run)
     if plan.verify_url and plan.public_url:

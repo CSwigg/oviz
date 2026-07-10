@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from oviz import Layer, LayerCollection, Scene3D, galactic_lite_profile, website_background_profile  # noqa: E402
 from oviz.threejs_figure import ThreeJSFigure  # noqa: E402
 from oviz.threejs_scene import _compact_threejs_frame_payloads  # noqa: E402
-from oviz.viz import Animate3D  # noqa: E402
+from oviz.viz import Animate3D, _build_threejs_volume_ar_proxy  # noqa: E402
 
 
 class _FakeCluster:
@@ -699,19 +699,21 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('mobileArButtonEl.dataset.hasSelection = selectedCount > 0 ? "true" : "false";', html)
         self.assertIn("const OVIZ_AR_MAX_POINTS = 240;", html)
         self.assertIn("const OVIZ_AR_MAX_LABELS = 24;", html)
-        self.assertIn("const OVIZ_AR_MAX_VOLUME_SAMPLES = 450;", html)
+        self.assertIn("const OVIZ_AR_MAX_VOLUME_SAMPLES = 900;", html)
         self.assertIn("function ovizArWithTimeout", html)
         self.assertIn("hiddenLink.href = quickLookHref;", html)
-        self.assertIn("Opening with direct AR fallback", html)
+        self.assertIn("Tap Open AR Snapshot to use the direct AR fallback", html)
         self.assertIn("const OVIZ_AR_SKY_TEXTURE_HIGH = { width: 4096, height: 2048 };", html)
         self.assertIn("const OVIZ_AR_SKY_TEXTURE_LOW = { width: 2048, height: 1024 };", html)
         self.assertIn("function buildOvizArSkyDomeScene", html)
         self.assertIn("skyDomeHips2FitsUrl(width, height)", html)
-        self.assertIn("function loadOvizUSDZExporter", html)
-        self.assertIn("function loadOvizFflateGlobal", html)
-        self.assertIn("examples/js/libs/fflate.min.js", html)
-        self.assertIn("function normalizeOvizArMaterialForUSDZ", html)
-        self.assertIn('const textureSlots = ["map", "normalMap", "aoMap", "roughnessMap", "metalnessMap", "emissiveMap"];', html)
+        self.assertIn("function ovizArSkyTextureUrl", html)
+        self.assertIn("class OvizUSDZExporter", html)
+        self.assertIn("function ovizUsdZWriteStoredZip", html)
+        self.assertIn("function ovizArVolumeSampleSource", html)
+        self.assertIn('kind: "block-max proxy"', html)
+        self.assertNotIn("examples/js/libs/fflate.min.js", html)
+        self.assertNotIn("function loadOvizUSDZExporter", html)
         self.assertIn("No selection; exporting a capped t=0 Myr scene snapshot.", html)
         self.assertIn("USDZExporter", html)
         self.assertIn('rel="ar"', html)
@@ -2175,6 +2177,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(layer["default_controls"]["colormap"], "gist_heat_r")
         self.assertTrue(layer["legend_color"])
         self.assertTrue(layer["data_b64"])
+        self.assertEqual(layer["ar_proxy"]["method"], "block_max")
+        self.assertEqual(layer["ar_proxy"]["shape"], {"x": 5, "y": 4, "z": 3})
+        self.assertTrue(layer["ar_proxy"]["data_b64"])
         self.assertTrue(layer["sky_overlay_data_b64"])
         self.assertEqual(layer["sky_overlay_data_encoding"], "png_atlas_uint8")
         self.assertEqual(layer["sky_overlay_atlas_tiles"]["x"], 2)
@@ -2210,6 +2215,23 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('vmaxInput.addEventListener("input"', html)
         self.assertNotIn('vminInput.step = "any"', html)
         self.assertNotIn('vmaxInput.step = "any"', html)
+
+    def test_threejs_ar_volume_proxy_preserves_sparse_voxels(self):
+        cube = np.zeros((65, 65, 65), dtype=np.float32)
+        cube[64, 64, 64] = 10.0
+
+        proxy = _build_threejs_volume_ar_proxy(
+            cube,
+            data_min=0.0,
+            data_max=10.0,
+            volume_cfg={"ar_proxy_max_resolution": 64},
+        )
+
+        self.assertEqual(proxy["method"], "block_max")
+        self.assertEqual(proxy["shape"], {"x": 33, "y": 33, "z": 33})
+        values = np.frombuffer(base64.b64decode(proxy["data_b64"]), dtype=np.uint8)
+        self.assertEqual(values.size, 33 * 33 * 33)
+        self.assertEqual(int(values.max()), 255)
 
     def test_threejs_renderer_volume_clip_bounds_crop_source_cube(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")

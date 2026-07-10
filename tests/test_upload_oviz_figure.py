@@ -125,6 +125,48 @@ def test_upload_oviz_figure_copies_and_runs_scoped_git_commands(tmp_path, monkey
     ]
 
 
+def test_upload_oviz_figure_publishes_quicklook_worker_with_ar_html(tmp_path, monkeypatch):
+    module = _load_upload_module()
+    source = _write_html(
+        tmp_path / "figure.html",
+        '<html><script>new URL("oviz-ar-quicklook-sw.js", location.href)</script></html>',
+    )
+    website_dir = tmp_path / "cam_website"
+    plan = module.build_upload_plan(source, website_dir=website_dir, push=False)
+    commands = []
+
+    def fake_run(command, *, cwd, check):
+        commands.append((command, Path(cwd), check))
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    module.upload_oviz_figure(plan)
+
+    assert plan.companion_destination is not None
+    assert plan.companion_destination.name == "oviz-ar-quicklook-sw.js"
+    assert "oviz-ar-quicklook-v2" in plan.companion_destination.read_text(encoding="utf-8")
+    assert commands == [
+        (
+            ["git", "add", "--", "oviz_figures/figure.html", "oviz_figures/oviz-ar-quicklook-sw.js"],
+            website_dir.resolve(),
+            True,
+        ),
+        (
+            [
+                "git",
+                "commit",
+                "-m",
+                "Upload Oviz figure figure.html",
+                "--",
+                "oviz_figures/figure.html",
+                "oviz_figures/oviz-ar-quicklook-sw.js",
+            ],
+            website_dir.resolve(),
+            True,
+        ),
+    ]
+
+
 def test_upload_oviz_figure_dry_run_does_not_copy_or_call_subprocess(tmp_path, monkeypatch):
     module = _load_upload_module()
     source = _write_html(tmp_path / "figure.html")

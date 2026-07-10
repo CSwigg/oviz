@@ -1,4 +1,4 @@
-const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v1";
+const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v2";
 
 async function ovizArRangeResponse(request, response) {
   const range = request.headers.get("range");

@@ -74,8 +74,14 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
       name: "Test Volume",
       state_name: "Test Volume",
       shape: {{ x: 2, y: 2, z: 1 }},
-      bounds: {{ x: [0, 2], y: [0, 2], z: [0, 1] }},
+      bounds: {{ x: [0, 10], y: [0, 10], z: [0, 10] }},
       data_encoding: "uint8",
+      ar_proxy: {{
+        data_b64: "AP+AQA==",
+        data_encoding: "uint8",
+        shape: {{ x: 2, y: 2, z: 1 }},
+        method: "block_max",
+      }},
       colormap_options: [{{ name: "test", lut_b64: "" }}],
     }}];
     const volumeStateByKey = {{
@@ -119,6 +125,7 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
       }},
     }};
     const root = {{ appendChild: () => {{}} }};
+    let scalarReadCount = 0;
 
     function normalizeMemberKey(value) {{
       return String(value || "").trim().toLowerCase().replace(/\\s+/g, "_");
@@ -140,6 +147,12 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     }}
     function skyDomeHips2FitsCoordsys() {{
       return ovizTestCoordsys;
+    }}
+    function skyDomeHips2FitsUrl(width, height) {{
+      return `https://example.test/hips2fits?hips=P%2FPLANCK&width=${{width}}&height=${{height}}&min_cut=1`;
+    }}
+    function activeSkyLayer() {{
+      return {{ survey: "P/Mellinger/color", visible: true, stretch: "linear", cutMin: "", cutMax: "" }};
     }}
     function normalizeSkyLongitude(value) {{
       let lon = Number(value) || 0;
@@ -186,7 +199,11 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
       return state && state.visible !== false;
     }}
     function volumeScalarArrayFor(_layer) {{
-      return new Uint8Array([0, 255, 128, 64]);
+      scalarReadCount += 1;
+      throw new Error("full volume data should not be read when an AR proxy exists");
+    }}
+    function base64ToUint8Array(encoded) {{
+      return new Uint8Array(Buffer.from(String(encoded || ""), "base64"));
     }}
     function normalizedVolumeWindowFor(_layer, _state) {{
       return {{ low: 0.0, high: 1.0 }};
@@ -218,6 +235,7 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     const lat90 = ovizArSkyDirectionForLonLatDeg(0, 90, 1);
     ovizTestCoordsys = "icrs";
     const icrsPoint = ovizArSkyDirectionForPoint({{ ra: 90, dec: 0, l: 0, b: 90 }}, 1);
+    const activeSkyUrl = ovizArSkyTextureUrl(2048, 1024);
     const arVector = ovizArVectorFromPoint(
       {{ x: 1, y: 2, z: 3 }},
       {{ center: {{ x: 0, y: 0, z: 0 }}, scale: 1 }}
@@ -231,12 +249,6 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     const maskOnlySnapshot = collectOvizArSnapshot("3d");
     const volumeResult = await ovizArCollectVolumeSamples(maskOnlySnapshot, {{ maxSamples: 3, scanTarget: 100 }});
     currentLassoSelectionMask = null;
-    const material = {{ uuid: "mat-1", color: null, map: undefined, normalMap: undefined }};
-    normalizeOvizArSceneForUSDZ({{
-      traverse(callback) {{
-        callback({{ isMesh: true, material }});
-      }},
-    }});
     const sourceBuffer = new Uint8Array([0, 1, 2, 3, 4, 5]).buffer;
     const slicedViewBuffer = await ovizArArrayBufferFromExporterResult(new Uint8Array(sourceBuffer, 2, 3));
     const validUsdZBuffer = ovizArValidateUsdZArrayBuffer(new ArrayBuffer(OVIZ_AR_MIN_USDZ_BYTES + 32));
@@ -246,6 +258,14 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     }} catch (err) {{
       emptyUsdZError = err && err.message ? String(err.message) : String(err);
     }}
+    const zipBytes = ovizUsdZWriteStoredZip([{{
+      name: "model.usda",
+      data: new TextEncoder().encode("#usda 1.0\\n"),
+    }}]);
+    const zipView = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
+    const zipNameLength = zipView.getUint16(26, true);
+    const zipExtraLength = zipView.getUint16(28, true);
+    const zipDataOffset = 30 + zipNameLength + zipExtraLength;
 
     process.stdout.write(JSON.stringify({{
       presentTimeMyr: snapshot.presentTimeMyr,
@@ -259,6 +279,7 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
       lon90,
       lat90,
       icrsPoint,
+      activeSkyUrl,
       arVector,
       emptyPointCount: emptySnapshot.points.length,
       emptySelectionMode: emptySnapshot.selectionMode,
@@ -267,6 +288,7 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
       volumeSampleCount: volumeResult.samples.length,
       firstVolumeSample: volumeResult.samples[0],
       volumeLayerCount: volumeResult.layers.length,
+      scalarReadCount,
       emptyCanExport: ovizArCanExportSelection(),
       selectedButtonState,
       emptyButtonState: {{
@@ -274,18 +296,8 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
         hasSelection: mobileArButtonEl.dataset.hasSelection,
         title: mobileArButtonEl.title,
       }},
-      materialState: {{
-        mapIsNull: material.map === null,
-        normalMapIsNull: material.normalMap === null,
-        aoMapIsNull: material.aoMap === null,
-        roughnessMapIsNull: material.roughnessMap === null,
-        metalnessMapIsNull: material.metalnessMap === null,
-        emissiveMapIsNull: material.emissiveMap === null,
-        hasColor: Boolean(material.color),
-        hasEmissive: Boolean(material.emissive),
-        roughness: material.roughness,
-        metalness: material.metalness,
-      }},
+      zipSignature: zipView.getUint32(0, true),
+      zipDataOffset,
       slicedViewBytes: Array.from(new Uint8Array(slicedViewBuffer)),
       validUsdZBytes: validUsdZBuffer.byteLength,
       emptyUsdZError,
@@ -317,28 +329,19 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     assert payload["maskOnlySelectionMode"] == "volume-lasso"
     assert payload["volumeSampleCount"] == 3
     assert payload["volumeLayerCount"] == 1
-    assert payload["firstVolumeSample"]["x"] == pytest.approx(1.5)
-    assert payload["firstVolumeSample"]["y"] == pytest.approx(0.5)
-    assert payload["firstVolumeSample"]["z"] == pytest.approx(0.5)
-    assert payload["arVector"] == {"x": 1, "y": 3, "z": 2}
+    assert payload["scalarReadCount"] == 0
+    assert payload["firstVolumeSample"]["x"] == pytest.approx(7.5)
+    assert payload["firstVolumeSample"]["y"] == pytest.approx(2.5)
+    assert payload["firstVolumeSample"]["z"] == pytest.approx(5.0)
+    assert payload["arVector"] == {"x": 1, "y": 3, "z": -2}
     assert payload["emptyCanExport"] is True
     assert payload["selectedButtonState"]["disabled"] is False
     assert payload["selectedButtonState"]["hasSelection"] == "true"
     assert payload["emptyButtonState"]["disabled"] is False
     assert payload["emptyButtonState"]["hasSelection"] == "false"
-    assert "Select clusters before exporting" in payload["emptyButtonState"]["title"]
-    assert payload["materialState"] == {
-        "mapIsNull": True,
-        "normalMapIsNull": True,
-        "aoMapIsNull": True,
-        "roughnessMapIsNull": True,
-        "metalnessMapIsNull": True,
-        "emissiveMapIsNull": True,
-        "hasColor": True,
-        "hasEmissive": True,
-        "roughness": 0.7,
-        "metalness": 0,
-    }
+    assert "present-day scene" in payload["emptyButtonState"]["title"]
+    assert payload["zipSignature"] == 0x04034B50
+    assert payload["zipDataOffset"] % 64 == 0
     assert payload["slicedViewBytes"] == [2, 3, 4]
     assert payload["validUsdZBytes"] > 1024
     assert "empty or incomplete" in payload["emptyUsdZError"]
@@ -350,3 +353,16 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     assert payload["lon90"]["z"] == pytest.approx(1)
     assert payload["lat90"]["y"] == pytest.approx(1)
     assert payload["icrsPoint"]["z"] == pytest.approx(1)
+    assert "hips=P%2FMellinger%2Fcolor" in payload["activeSkyUrl"]
+    assert "width=2048" in payload["activeSkyUrl"]
+    assert "min_cut" not in payload["activeSkyUrl"]
+
+
+def test_ar_runtime_uses_self_contained_usdz_exporter():
+    assert "class OvizUSDZExporter" in THREEJS_AR_RUNTIME_JS
+    assert "defaultPrim = \"${defaultPrim}\"" in THREEJS_AR_RUNTIME_JS
+    assert 'prepend apiSchemas = ["MaterialBindingAPI"]' in THREEJS_AR_RUNTIME_JS
+    assert "sceneAr.updateMatrixWorld(true)" in THREEJS_AR_RUNTIME_JS
+    assert 'string inputs:varname = "st"' in THREEJS_AR_RUNTIME_JS
+    assert "fflate" not in THREEJS_AR_RUNTIME_JS
+    assert "examples/js/exporters/USDZExporter.js" not in THREEJS_AR_RUNTIME_JS

@@ -203,6 +203,7 @@ DEFAULT_THREEJS_VOLUME_COLORMAPS = (
 DEFAULT_THREEJS_TRACE_COLORMAP = 'turbo'
 DEFAULT_THREEJS_VOLUME_SAMPLE_STEPS = 100
 DEFAULT_THREEJS_VOLUME_MAX_RESOLUTION_CAP = 512
+DEFAULT_THREEJS_AR_VOLUME_MAX_RESOLUTION = 64
 
 class Animate3D:
     """
@@ -3451,6 +3452,61 @@ def _threejs_volume_max_resolution_cap(volume_cfg, data_shape_zyx, *, minimum):
     )
 
 
+def _build_threejs_volume_ar_proxy(sampled_data, data_min, data_max, volume_cfg):
+    if volume_cfg.get('ar_proxy_enabled') is False:
+        return None
+
+    source = np.asarray(sampled_data, dtype=np.float32)
+    if source.ndim != 3 or source.size == 0:
+        return None
+
+    max_resolution = int(
+        np.clip(
+            _coerce_float(
+                volume_cfg.get('ar_proxy_max_resolution'),
+                DEFAULT_THREEJS_AR_VOLUME_MAX_RESOLUTION,
+            ),
+            8,
+            96,
+        )
+    )
+    source_shape = tuple(int(value) for value in source.shape)
+    steps = tuple(max(1, int(np.ceil(value / max_resolution))) for value in source_shape)
+    pooled = source
+    for axis, step in enumerate(steps):
+        if step <= 1:
+            continue
+        indices = np.arange(0, pooled.shape[axis], step, dtype=np.intp)
+        pooled = np.fmax.reduceat(pooled, indices, axis=axis)
+
+    finite_mask = np.isfinite(pooled)
+    quantized = np.zeros(pooled.shape, dtype=np.uint8)
+    if np.any(finite_mask):
+        if data_max > data_min:
+            normalized = np.zeros(pooled.shape, dtype=np.float32)
+            normalized[finite_mask] = (pooled[finite_mask] - data_min) / (data_max - data_min)
+            np.clip(normalized, 0.0, 1.0, out=normalized)
+            quantized[finite_mask] = np.rint(normalized[finite_mask] * 255.0).astype(np.uint8)
+        else:
+            quantized[finite_mask] = 255
+
+    return {
+        'data_b64': base64.b64encode(np.ascontiguousarray(quantized).tobytes(order='C')).decode('ascii'),
+        'data_encoding': 'uint8',
+        'shape': {
+            'x': int(quantized.shape[2]),
+            'y': int(quantized.shape[1]),
+            'z': int(quantized.shape[0]),
+        },
+        'downsample_step': {
+            'x': float(source_shape[2]) / float(quantized.shape[2]),
+            'y': float(source_shape[1]) / float(quantized.shape[1]),
+            'z': float(source_shape[0]) / float(quantized.shape[0]),
+        },
+        'method': 'block_max',
+    }
+
+
 def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, index=0):
     center_offset = center_offset or {'x': 0.0, 'y': 0.0, 'z': 0.0}
     data = volume_cfg.get('data')
@@ -3558,6 +3614,7 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
         volume_cfg.get('colormap', 'inferno'),
         opacity_function=opacity_function,
     )
+    ar_proxy = _build_threejs_volume_ar_proxy(sampled, data_min, data_max, volume_cfg)
 
     return {
         'key': key,
@@ -3570,6 +3627,7 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
         'hdu': 'inline',
         'data_b64': _encode_sampled_uint8(sampled),
         'data_encoding': 'uint8',
+        'ar_proxy': ar_proxy,
         'shape': {
             'x': int(sampled.shape[2]),
             'y': int(sampled.shape[1]),
@@ -3836,6 +3894,7 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         volume_cfg.get('colormap', 'inferno'),
         opacity_function=opacity_function,
     )
+    ar_proxy = _build_threejs_volume_ar_proxy(sampled, data_min, data_max, volume_cfg)
     name = str(volume_cfg.get('name') or str(path).rsplit('/', 1)[-1].rsplit('.', 1)[0] or f'Volume {index + 1}')
     value_unit = str(volume_cfg.get('unit_label') or header.get('BUNIT') or '').strip()
 
@@ -3856,6 +3915,7 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         'data_b64': data_b64,
         'data_encoding': data_encoding,
         'data_atlas_tiles': data_atlas_tiles,
+        'ar_proxy': ar_proxy,
         'shape': {
             'x': int(sampled.shape[2]),
             'y': int(sampled.shape[1]),
