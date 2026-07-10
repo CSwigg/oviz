@@ -120,6 +120,7 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
 
     assert initial_state["active_volume_key"] == edenhofer_volume["state_key"]
     assert not initial_state.get("mobile_active_volume_key")
+    assert scene_spec["ar"] == {"enabled": False}
     assert initial_state["mobile_defer_volumes"] is False
     assert initial_state["volume_state_by_key"][edenhofer_volume["state_key"]] == {
         "visible": True,
@@ -141,32 +142,14 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "setExclusiveVolumeVariantSelection(activeVolumeKey)" in html
     assert "oviz-three-mobile-sky-view" in html
     assert "oviz-three-mobile-lasso" in html
-    assert "oviz-three-mobile-ar" in html
-    assert 'class="oviz-three-mobile-ar" type="button" title="Open AR export options"' in html
-    assert 'class="oviz-three-mobile-ar" type="button" title="Open AR export options" aria-haspopup="dialog" aria-expanded="false" data-has-selection="false" disabled' not in html
+    assert 'data-ar-enabled="false"' in html
+    assert '<button class="oviz-three-mobile-ar"' not in html
     assert "oviz-three-mobile-legend" in html
-    assert "function collectOvizArSnapshot" in html
-    assert "function ovizArPresentFrameIndex" in html
-    assert "const OVIZ_AR_SKY_TEXTURE_HIGH = { width: 4096, height: 2048 };" in html
-    assert "const OVIZ_AR_SKY_TEXTURE_LOW = { width: 2048, height: 1024 };" in html
-    assert "function buildOvizArSkyDomeScene" in html
-    assert "skyDomeHips2FitsUrl(width, height)" in html
-    assert "function ovizArSkyTextureUrl" in html
-    assert "class OvizUSDZExporter" in html
-    assert "function ovizUsdZWriteStoredZip" in html
-    assert "function ovizArVolumeSampleSource" in html
-    assert "function ovizArCreateVolumeCloudTexture" in html
-    assert "function ovizArAppendCloudletGeometry" in html
-    assert 'volumeRepresentation: "soft-gaussian-cloudlets"' in html
-    assert "new THREE.SphereGeometry(0.0085, 16, 10)" in html
-    assert "ovizArAppendBoxGeometry" not in html
-    assert "ovizArCollectOrbitTrails" not in html
-    assert "ovizArCreateLabelTexture" not in html
-    assert "examples/js/libs/fflate.min.js" not in html
-    assert "function loadOvizUSDZExporter" not in html
-    assert "No selection; exporting a capped t=0 Myr scene snapshot." in html
-    assert "USDZExporter" in html
-    assert 'rel="ar"' in html
+    assert "function collectOvizArSnapshot" not in html
+    assert "function ovizArPresentFrameIndex" not in html
+    assert "function buildOvizArSkyDomeScene" not in html
+    assert "class OvizUSDZExporter" not in html
+    assert 'rel="ar"' not in html
 
 
 @pytest.mark.skipif(not ARTIFACT_HTML.exists(), reason="main_figure_chronos_july4.html has not been generated")

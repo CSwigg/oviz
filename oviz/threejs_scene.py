@@ -899,6 +899,9 @@ def build_threejs_scene_spec(
         "mobile": {
             "enabled": mobile_mode,
         },
+        "ar": {
+            "enabled": bool(initial_state.get("ar_enabled", False)) and not minimal_mode,
+        },
         "timeline": {
             "enabled": bool(_timeline_enabled(plot, frame_specs)),
             "frame_count": len(frame_specs),

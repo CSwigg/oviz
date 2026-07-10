@@ -147,6 +147,7 @@ def render_threejs_html(
     html_template: str,
     topbar_html: str,
     minimal_topbar_html: str,
+    ar_button_html: str,
     shell_html: str,
     legend_runtime_js: str,
     widget_runtime_js: str,
@@ -176,6 +177,7 @@ def render_threejs_html(
         or (scene_spec.get("mobile") or {}).get("enabled")
     )
     galactic_simple = bool((scene_spec.get("galactic_simple") or {}).get("enabled"))
+    ar_enabled = bool((scene_spec.get("ar") or {}).get("enabled")) and not minimal_mode
 
     html = html_template.replace("__ROOT_ID__", root_id)
     html = html.replace("__WIDTH_PX__", str(width))
@@ -193,15 +195,23 @@ def render_threejs_html(
         'data-galactic-simple="true"' if galactic_simple else 'data-galactic-simple="false"',
     )
     html = html.replace(
+        "__ROOT_AR_ATTR__",
+        'data-ar-enabled="true"' if ar_enabled else 'data-ar-enabled="false"',
+    )
+    html = html.replace(
         "__TOPBAR_HTML__",
         minimal_topbar_html if minimal_mode else topbar_html,
+    )
+    html = html.replace(
+        "          __AR_BUTTON_HTML__\n",
+        f"          {ar_button_html}\n" if ar_enabled else "",
     )
     html = html.replace("__SHELL_HTML__", shell_html)
     html = html.replace("__LEGEND_RUNTIME_JS__", legend_runtime_js)
     html = html.replace("__WIDGET_RUNTIME_JS__", widget_runtime_js)
     html = html.replace("__WIDGET_CONTENT_RUNTIME_JS__", widget_content_runtime_js)
     html = html.replace("__INTERACTION_RUNTIME_JS__", interaction_runtime_js)
-    html = html.replace("__AR_RUNTIME_JS__", "" if minimal_mode else ar_runtime_js)
+    html = html.replace("__AR_RUNTIME_JS__", ar_runtime_js if ar_enabled else "")
     html = html.replace("__SCENE_RUNTIME_JS__", scene_runtime_js)
     html = html.replace("__SKY_RUNTIME_JS__", sky_runtime_js)
     html = html.replace("__VIEWER_RUNTIME_JS__", viewer_runtime_js)

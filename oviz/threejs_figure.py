@@ -24,6 +24,11 @@ from .threejs_runtime_widget_content import THREEJS_WIDGET_CONTENT_RUNTIME_JS
 from .threejs_runtime_widgets import THREEJS_WIDGET_RUNTIME_JS
 
 
+_THREEJS_AR_BUTTON_HTML = (
+    '<button class="oviz-three-mobile-ar" type="button" title="Open AR export options" '
+    'aria-haspopup="dialog" aria-expanded="false" data-has-selection="false">AR</button>'
+)
+
 _THREEJS_TOPBAR_HTML = """
       <div class="oviz-three-topbar">
         <div class="oviz-three-topbar-brand">
@@ -172,7 +177,7 @@ _THREEJS_TOPBAR_HTML = """
           <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
           <button class="oviz-three-mobile-sky-view" type="button" title="Switch between 3D and Sky view" aria-pressed="false">Sky</button>
           <button class="oviz-three-mobile-lasso" type="button" title="Arm lasso selection for touch input" aria-pressed="false">Lasso</button>
-          <button class="oviz-three-mobile-ar" type="button" title="Open AR export options" aria-haspopup="dialog" aria-expanded="false" data-has-selection="false">AR</button>
+          __AR_BUTTON_HTML__
           <button class="oviz-three-mobile-legend" type="button" title="Show or hide the legend" aria-expanded="false">Legend</button>
           <button class="oviz-three-reset-camera-view" type="button" title="Reset the camera to the initial 3D view">Reset Camera</button>
           <button class="oviz-three-reset-selection" type="button" title="Clear the current lasso and cluster selection">Reset Selection</button>
@@ -5021,7 +5026,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
     </style>
   </head>
   <body>
-    <div id="__ROOT_ID__" tabindex="0" data-zen="false" __ROOT_MINIMAL_ATTR__ __ROOT_MOBILE_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__>
+    <div id="__ROOT_ID__" tabindex="0" data-zen="false" __ROOT_MINIMAL_ATTR__ __ROOT_MOBILE_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__ __ROOT_AR_ATTR__>
       __TOPBAR_HTML__
       <button class="oviz-three-earth-view-toggle" type="button" title="Current view: 3D. Click or press V to enter Sky view." aria-pressed="false" aria-label="Current view: 3D. Switch to Sky View.">View: 3D</button>
       <button class="oviz-three-fullscreen" type="button" title="Enter fullscreen" aria-label="Enter fullscreen">
@@ -16988,6 +16993,7 @@ class ThreeJSFigure:
             html_template=_THREEJS_HTML_TEMPLATE,
             topbar_html=_THREEJS_TOPBAR_HTML,
             minimal_topbar_html=_THREEJS_MINIMAL_TOPBAR_HTML,
+            ar_button_html=_THREEJS_AR_BUTTON_HTML,
             shell_html=THREEJS_SHELL_HTML,
             legend_runtime_js=THREEJS_LEGEND_RUNTIME_JS,
             widget_runtime_js=THREEJS_WIDGET_RUNTIME_JS,
