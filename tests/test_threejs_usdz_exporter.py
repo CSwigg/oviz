@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 import textwrap
@@ -7,6 +8,39 @@ from pathlib import Path
 import pytest
 
 from oviz.threejs_runtime_ar import THREEJS_AR_RUNTIME_JS
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not available")
+def test_oviz_usdz_texture_material_preserves_tint_and_opacity():
+    script = f"""
+    {THREEJS_AR_RUNTIME_JS}
+    const textures = new Map();
+    const materialText = ovizUsdZMaterial({{
+      id: 4,
+      color: {{ r: 0.2, g: 0.6, b: 0.9 }},
+      emissive: {{ r: 0, g: 0, b: 0 }},
+      emissiveIntensity: 1,
+      opacity: 0.35,
+      roughness: 0.5,
+      metalness: 0,
+      transparent: true,
+      map: {{ id: 11, flipY: true, userData: {{}} }},
+    }}, textures);
+    process.stdout.write(JSON.stringify({{ materialText, textureCount: textures.size }}));
+    """
+    result = subprocess.run(
+        ["node"],
+        input=textwrap.dedent(script),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["textureCount"] == 1
+    assert "color3f inputs:diffuseColor.connect" in payload["materialText"]
+    assert "float inputs:opacity.connect" in payload["materialText"]
+    assert "float4 inputs:scale = (0.2000000, 0.6000000, 0.9000000, 0.3500000)" in payload["materialText"]
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not available")
@@ -109,13 +143,31 @@ def test_oviz_usdz_exporter_passes_apple_arkit_checker(tmp_path):
     script = f"""
     const fs = require("fs");
     {THREEJS_AR_RUNTIME_JS}
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgQIAiS7nWQAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    globalThis.document = {{
+      createElement() {{
+        return {{
+          width: 1,
+          height: 1,
+          getContext() {{
+            return {{ translate() {{}}, scale() {{}}, drawImage() {{}} }};
+          }},
+          toBlob(callback) {{ callback(new Blob([pngBytes], {{ type: "image/png" }})); }},
+        }};
+      }},
+    }};
     const position = {{ count: 3, getX(i) {{ return [0, 1, 0][i]; }}, getY(i) {{ return [0, 0, 1][i]; }}, getZ() {{ return 0; }} }};
     const normal = {{ count: 3, getX() {{ return 0; }}, getY() {{ return 0; }}, getZ() {{ return 1; }} }};
+    const uv = {{ count: 3, getX(i) {{ return [0, 1, 0][i]; }}, getY(i) {{ return [0, 0, 1][i]; }} }};
+    const texture = {{ id: 9, flipY: true, image: {{ width: 1, height: 1 }}, userData: {{}} }};
     const mesh = {{
       id: 1,
       isMesh: true,
-      geometry: {{ id: 1, userData: {{}}, attributes: {{ position, normal }}, index: {{ count: 3, getX(i) {{ return i; }} }} }},
-      material: {{ id: 1, color: {{ r: 1, g: 0, b: 0 }}, emissive: {{ r: 0, g: 0, b: 0 }}, opacity: 1, roughness: 0.5, metalness: 0, map: null }},
+      geometry: {{ id: 1, userData: {{ ovizArDoubleSided: true }}, attributes: {{ position, normal, uv }}, index: {{ count: 3, getX(i) {{ return i; }} }} }},
+      material: {{ id: 1, color: {{ r: 1, g: 0.4, b: 0.2 }}, emissive: {{ r: 0.1, g: 0.04, b: 0.02 }}, emissiveIntensity: 0.2, opacity: 0.18, transparent: true, roughness: 0.9, metalness: 0, map: texture }},
       matrixWorld: {{ elements: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.1, 0.2, 0.3, 1] }},
     }};
     const scene = {{ updateMatrixWorld() {{}}, traverseVisible(callback) {{ callback(mesh); }} }};
@@ -125,6 +177,14 @@ def test_oviz_usdz_exporter_passes_apple_arkit_checker(tmp_path):
     }})().catch((error) => {{ console.error(error); process.exit(1); }});
     """
     subprocess.run(["node"], input=textwrap.dedent(script), text=True, capture_output=True, check=True)
+
+    with zipfile.ZipFile(output_path) as archive:
+        assert "textures/Texture_9_f.png" in archive.namelist()
+        model = archive.read("model.usda").decode("utf-8")
+        assert "float4 inputs:scale = (1.000000, 0.4000000, 0.2000000, 0.1800000)" in model
+        geometry = archive.read("geometries/Geometry_1.usda").decode("utf-8")
+        assert "bool doubleSided = 1" in geometry
+        assert "primvars:st" in geometry
 
     result = subprocess.run(
         ["/usr/bin/usdchecker", "--arkit", str(output_path)],

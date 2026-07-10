@@ -274,7 +274,7 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
       firstX: snapshot.points[0].x,
       firstY: snapshot.points[0].y,
       firstZ: snapshot.points[0].z,
-      trailPointCount: snapshot.trails[0].points.length,
+      trailCount: snapshot.trails.length,
       lon0,
       lon90,
       lat90,
@@ -322,7 +322,7 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     assert payload["firstX"] == 5
     assert payload["firstY"] == 6
     assert payload["firstZ"] == 7
-    assert payload["trailPointCount"] == 2
+    assert payload["trailCount"] == 0
     assert payload["emptyPointCount"] == 1
     assert payload["emptySelectionMode"] == "present-day-scene"
     assert payload["maskOnlyPointCount"] == 1
@@ -333,6 +333,9 @@ def test_ar_snapshot_uses_present_day_selection_and_sky_directions():
     assert payload["firstVolumeSample"]["x"] == pytest.approx(7.5)
     assert payload["firstVolumeSample"]["y"] == pytest.approx(2.5)
     assert payload["firstVolumeSample"]["z"] == pytest.approx(5.0)
+    assert payload["firstVolumeSample"]["sizeXPc"] == pytest.approx(7.5)
+    assert payload["firstVolumeSample"]["sizeYPc"] == pytest.approx(7.5)
+    assert payload["firstVolumeSample"]["sizeZPc"] == pytest.approx(15.0)
     assert payload["arVector"] == {"x": 1, "y": 3, "z": -2}
     assert payload["emptyCanExport"] is True
     assert payload["selectedButtonState"]["disabled"] is False
@@ -364,5 +367,14 @@ def test_ar_runtime_uses_self_contained_usdz_exporter():
     assert 'prepend apiSchemas = ["MaterialBindingAPI"]' in THREEJS_AR_RUNTIME_JS
     assert "sceneAr.updateMatrixWorld(true)" in THREEJS_AR_RUNTIME_JS
     assert 'string inputs:varname = "st"' in THREEJS_AR_RUNTIME_JS
+    assert "float4 inputs:scale" in THREEJS_AR_RUNTIME_JS
+    assert "function ovizArCreateVolumeCloudTexture" in THREEJS_AR_RUNTIME_JS
+    assert "function ovizArAppendCloudletGeometry" in THREEJS_AR_RUNTIME_JS
+    assert 'volumeRepresentation: "soft-gaussian-cloudlets"' in THREEJS_AR_RUNTIME_JS
+    assert "new THREE.SphereGeometry(0.0085, 16, 10)" in THREEJS_AR_RUNTIME_JS
+    assert "new THREE.SphereGeometry(0.010, 16, 10)" in THREEJS_AR_RUNTIME_JS
+    assert "ovizArAppendBoxGeometry" not in THREEJS_AR_RUNTIME_JS
+    assert "ovizArCollectOrbitTrails" not in THREEJS_AR_RUNTIME_JS
+    assert "ovizArCreateLabelTexture" not in THREEJS_AR_RUNTIME_JS
     assert "fflate" not in THREEJS_AR_RUNTIME_JS
     assert "examples/js/exporters/USDZExporter.js" not in THREEJS_AR_RUNTIME_JS

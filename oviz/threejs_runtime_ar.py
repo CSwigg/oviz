@@ -3,9 +3,6 @@ from .threejs_runtime_usdz import THREEJS_AR_USDZ_RUNTIME_JS
 
 THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
       const OVIZ_AR_MAX_POINTS = 240;
-      const OVIZ_AR_MAX_LABELS = 24;
-      const OVIZ_AR_MAX_TRAIL_CLUSTERS = 24;
-      const OVIZ_AR_MAX_TRAIL_POINTS_PER_CLUSTER = 16;
       const OVIZ_AR_MAX_VOLUME_SAMPLES = 900;
       const OVIZ_AR_VOLUME_SCAN_TARGET = 120000;
       const OVIZ_AR_VOLUME_COLOR_BINS = 8;
@@ -13,7 +10,7 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
       const OVIZ_AR_VOLUME_BUCKET_SAMPLES = 2;
       const OVIZ_AR_MIN_USDZ_BYTES = 1024;
       const OVIZ_AR_QUICKLOOK_CACHE = "oviz-ar-quicklook-v2";
-      const OVIZ_AR_QUICKLOOK_WORKER_VERSION = "20260710_valid_usdz_v3";
+      const OVIZ_AR_QUICKLOOK_WORKER_VERSION = "20260710_soft_volume_v4";
       const OVIZ_AR_SKY_TEXTURE_HIGH = { width: 4096, height: 2048 };
       const OVIZ_AR_SKY_TEXTURE_LOW = { width: 2048, height: 1024 };
       let ovizArDialogEl = null;
@@ -223,77 +220,6 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         };
       }
 
-      function ovizArDownsampleTrail(points, maxPoints) {
-        const source = Array.isArray(points) ? points : [];
-        const safeMax = Math.max(Math.round(Number(maxPoints) || 0), 2);
-        if (source.length <= safeMax) {
-          return source.slice();
-        }
-        const selected = [];
-        const used = new Set();
-        for (let index = 0; index < safeMax; index += 1) {
-          const sourceIndex = Math.round(index * (source.length - 1) / (safeMax - 1));
-          if (!used.has(sourceIndex)) {
-            used.add(sourceIndex);
-            selected.push(source[sourceIndex]);
-          }
-        }
-        return selected;
-      }
-
-      function ovizArCollectOrbitTrails(selectedKeys) {
-        const allowedKeys = new Set(Array.from(selectedKeys || []).slice(0, OVIZ_AR_MAX_TRAIL_CLUSTERS));
-        const byKey = new Map();
-        const seenTimeByKey = new Map();
-        (Array.isArray(frameSpecs) ? frameSpecs : []).forEach((frame, frameIndex) => {
-          const traces = frame && Array.isArray(frame.traces) ? frame.traces : [];
-          traces.forEach((trace) => {
-            const points = trace && Array.isArray(trace.points) ? trace.points : [];
-            points.forEach((point) => {
-              const selection = selectionForPoint(point, trace);
-              const key = selection ? normalizedSelectionKeyFor(selection) : "";
-              if (!key || !allowedKeys.has(key)) {
-                return;
-              }
-              const coords = ovizArPointCoordinates(point, selection);
-              if (!coords) {
-                return;
-              }
-              if (!byKey.has(key)) {
-                byKey.set(key, []);
-                seenTimeByKey.set(key, new Set());
-              }
-              const timeMyr = ovizArFiniteNumber(frame && frame.time, frameIndex);
-              const timeKey = Number.isFinite(timeMyr) ? timeMyr.toFixed(9) : String(frameIndex);
-              if (seenTimeByKey.get(key).has(timeKey)) {
-                return;
-              }
-              seenTimeByKey.get(key).add(timeKey);
-              byKey.get(key).push({
-                x: coords.x,
-                y: coords.y,
-                z: coords.z,
-                timeMyr,
-                color: ovizArPointColor(point, trace, selection),
-              });
-            });
-          });
-        });
-        const trails = [];
-        byKey.forEach((points, key) => {
-          const ordered = points
-            .slice()
-            .sort((left, right) => ovizArFiniteNumber(left.timeMyr, 0.0) - ovizArFiniteNumber(right.timeMyr, 0.0));
-          if (ordered.length >= 2) {
-            trails.push({
-              key,
-              points: ovizArDownsampleTrail(ordered, OVIZ_AR_MAX_TRAIL_POINTS_PER_CLUSTER),
-            });
-          }
-        });
-        return trails;
-      }
-
       function ovizArPointInsideVolumeBounds(point, layer) {
         const bounds = layer && layer.bounds ? layer.bounds : {};
         return ["x", "y", "z"].every((axis) => {
@@ -418,7 +344,6 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
           });
         }
         const cappedPoints = ovizArRepresentativePoints(points, OVIZ_AR_MAX_POINTS);
-        const includedKeys = new Set(cappedPoints.map((point) => point.key));
         return {
           mode: String(mode || "3d"),
           selectionMode: selectedKeys.size > 0 ? "selection" : (maskOnlySelection ? "volume-lasso" : "present-day-scene"),
@@ -427,9 +352,8 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
           presentFrameIndex: frameIndex,
           presentTimeMyr: ovizArFiniteNumber(frame && frame.time, 0.0),
           points: cappedPoints,
-          trails: ovizArCollectOrbitTrails(includedKeys),
+          trails: [],
           pointLimit: OVIZ_AR_MAX_POINTS,
-          labelLimit: OVIZ_AR_MAX_LABELS,
           truncated: points.length > cappedPoints.length,
         };
       }
@@ -507,62 +431,6 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         } catch (_err) {
           return new THREE.Color(fallback);
         }
-      }
-
-      function ovizArCreateLabelTexture(label, color) {
-        const canvasEl = document.createElement("canvas");
-        canvasEl.width = 512;
-        canvasEl.height = 128;
-        const ctx = canvasEl.getContext("2d");
-        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-        ctx.font = "700 42px Helvetica, Arial, sans-serif";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
-        ctx.fillRect(0, 18, canvasEl.width, 92);
-        ctx.strokeStyle = String(color || "#ffffff");
-        ctx.lineWidth = 5;
-        ctx.strokeRect(2.5, 20.5, canvasEl.width - 5, 87);
-        ctx.fillStyle = "#ffffff";
-        const text = String(label || "Cluster").slice(0, 32);
-        ctx.fillText(text, 28, 64, canvasEl.width - 56);
-        const texture = new THREE.CanvasTexture(canvasEl);
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.generateMipmaps = false;
-        texture.needsUpdate = true;
-        return texture;
-      }
-
-      function ovizArAddLabelPlane(group, label, position, color, index, planeGeometry = null) {
-        const texture = ovizArCreateLabelTexture(label, color);
-        const material = new THREE.MeshBasicMaterial({
-          map: texture,
-          transparent: true,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        });
-        const geometry = planeGeometry || new THREE.PlaneGeometry(0.34, 0.085);
-        geometry.userData = geometry.userData || {};
-        geometry.userData.ovizArDoubleSided = true;
-        const plane = new THREE.Mesh(geometry, material);
-        plane.position.copy(position).add(new THREE.Vector3(0.05, 0.06 + ((index % 3) * 0.025), 0.035));
-        plane.rotation.set(-0.35, 0.15, 0.0);
-        plane.userData.ovizArLabel = true;
-        group.add(plane);
-      }
-
-      function ovizArAddCylinderBetween(group, start, end, radius, material, cylinderGeometry = null) {
-        const delta = new THREE.Vector3().subVectors(end, start);
-        const length = delta.length();
-        if (!(length > 1e-6)) {
-          return;
-        }
-        const geometry = cylinderGeometry || new THREE.CylinderGeometry(radius, radius, 1.0, 8, 1, false);
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.copy(start).add(end).multiplyScalar(0.5);
-        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.clone().normalize());
-        mesh.scale.set(1.0, length, 1.0);
-        group.add(mesh);
       }
 
       function ovizArVolumeStateForLayer(layer) {
@@ -718,18 +586,16 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         const xSpan = ovizArFiniteNumber(xBounds[1], 0.5) - ovizArFiniteNumber(xBounds[0], -0.5);
         const ySpan = ovizArFiniteNumber(yBounds[1], 0.5) - ovizArFiniteNumber(yBounds[0], -0.5);
         const zSpan = ovizArFiniteNumber(zBounds[1], 0.5) - ovizArFiniteNumber(zBounds[0], -0.5);
+        const cellSizeXPc = Math.max(1e-6, Math.abs(xSpan / Math.max(nx, 1)));
+        const cellSizeYPc = Math.max(1e-6, Math.abs(ySpan / Math.max(ny, 1)));
+        const cellSizeZPc = Math.max(1e-6, Math.abs(zSpan / Math.max(nz, 1)));
         return {
           x: ovizArFiniteNumber(xBounds[0], -0.5) + ((ix + 0.5) / Math.max(nx, 1)) * xSpan,
           y: ovizArFiniteNumber(yBounds[0], -0.5) + ((iy + 0.5) / Math.max(ny, 1)) * ySpan,
           z: ovizArFiniteNumber(zBounds[0], -0.5) + ((iz + 0.5) / Math.max(nz, 1)) * zSpan,
-          cellSizePc: Math.max(
-            1e-6,
-            Math.min(
-              Math.abs(xSpan / Math.max(nx, 1)),
-              Math.abs(ySpan / Math.max(ny, 1)),
-              Math.abs(zSpan / Math.max(nz, 1))
-            )
-          ),
+          cellSizeXPc,
+          cellSizeYPc,
+          cellSizeZPc,
         };
       }
 
@@ -854,7 +720,9 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
                   x: position.x,
                   y: position.y,
                   z: position.z,
-                  sizePc: position.cellSizePc * stride * 0.82,
+                  sizeXPc: position.cellSizeXPc * Math.max(stride * 1.5, (nx / bucketAxisCount) * 1.35),
+                  sizeYPc: position.cellSizeYPc * Math.max(stride * 1.5, (ny / bucketAxisCount) * 1.35),
+                  sizeZPc: position.cellSizeZPc * Math.max(stride * 1.5, (nz / bucketAxisCount) * 1.35),
                   value: normalizedValue,
                   weight: stretchedValue * Math.max(ovizArFiniteNumber(state.opacity, 0.25), 0.08),
                   color: ovizArHexColorFromBytes(colorBytes, colorIndex),
@@ -888,8 +756,16 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         }
 
         const samples = [];
-        candidateBuckets.forEach((bucket) => bucket.forEach((sample) => samples.push(sample)));
-        samples.sort((left, right) => ovizArFiniteNumber(right.weight, 0.0) - ovizArFiniteNumber(left.weight, 0.0));
+        for (let rank = 0; rank < OVIZ_AR_VOLUME_BUCKET_SAMPLES; rank += 1) {
+          const rankedSamples = [];
+          candidateBuckets.forEach((bucket) => {
+            if (bucket[rank]) {
+              rankedSamples.push(bucket[rank]);
+            }
+          });
+          rankedSamples.sort((left, right) => ovizArFiniteNumber(right.weight, 0.0) - ovizArFiniteNumber(left.weight, 0.0));
+          rankedSamples.forEach((sample) => samples.push(sample));
+        }
         const cappedSamples = samples.slice(0, maxSamples);
         return {
           samples: cappedSamples,
@@ -899,30 +775,68 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         };
       }
 
-      function ovizArAppendBoxGeometry(vertices, indices, center, size) {
+      function ovizArCreateVolumeCloudTexture() {
+        const canvasEl = document.createElement("canvas");
+        canvasEl.width = 64;
+        canvasEl.height = 64;
+        const context = canvasEl.getContext("2d", { alpha: true });
+        if (!context) {
+          throw new Error("AR volume texture canvas is unavailable.");
+        }
+        context.clearRect(0, 0, canvasEl.width, canvasEl.height);
+        const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 31.5);
+        gradient.addColorStop(0.0, "rgba(255, 255, 255, 1.0)");
+        gradient.addColorStop(0.34, "rgba(255, 255, 255, 0.82)");
+        gradient.addColorStop(0.68, "rgba(255, 255, 255, 0.26)");
+        gradient.addColorStop(1.0, "rgba(255, 255, 255, 0.0)");
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, canvasEl.width, canvasEl.height);
+        const texture = new THREE.CanvasTexture(canvasEl);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
+        return texture;
+      }
+
+      function ovizArAppendCloudQuad(vertices, normals, uvs, indices, corners, normal) {
+        const baseIndex = vertices.length / 3;
+        corners.forEach((corner) => {
+          vertices.push(corner[0], corner[1], corner[2]);
+          normals.push(normal[0], normal[1], normal[2]);
+        });
+        uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+        indices.push(
+          baseIndex, baseIndex + 1, baseIndex + 2,
+          baseIndex, baseIndex + 2, baseIndex + 3
+        );
+      }
+
+      function ovizArAppendCloudletGeometry(vertices, normals, uvs, indices, center, size) {
         const cx = ovizArFiniteNumber(center && center.x, 0.0);
         const cy = ovizArFiniteNumber(center && center.y, 0.0);
         const cz = ovizArFiniteNumber(center && center.z, 0.0);
-        const half = Math.max(ovizArFiniteNumber(size, 0.01), 1e-5) * 0.5;
-        const baseIndex = vertices.length / 3;
-        [
-          [cx - half, cy - half, cz - half],
-          [cx + half, cy - half, cz - half],
-          [cx + half, cy + half, cz - half],
-          [cx - half, cy + half, cz - half],
-          [cx - half, cy - half, cz + half],
-          [cx + half, cy - half, cz + half],
-          [cx + half, cy + half, cz + half],
-          [cx - half, cy + half, cz + half],
-        ].forEach((vertex) => vertices.push(vertex[0], vertex[1], vertex[2]));
-        [
-          0, 1, 2, 0, 2, 3,
-          4, 6, 5, 4, 7, 6,
-          0, 4, 5, 0, 5, 1,
-          1, 5, 6, 1, 6, 2,
-          2, 6, 7, 2, 7, 3,
-          3, 7, 4, 3, 4, 0,
-        ].forEach((index) => indices.push(baseIndex + index));
+        const halfX = Math.max(ovizArFiniteNumber(size && size.x, 0.01), 1e-5) * 0.5;
+        const halfY = Math.max(ovizArFiniteNumber(size && size.y, 0.01), 1e-5) * 0.5;
+        const halfZ = Math.max(ovizArFiniteNumber(size && size.z, 0.01), 1e-5) * 0.5;
+        ovizArAppendCloudQuad(vertices, normals, uvs, indices, [
+          [cx - halfX, cy - halfY, cz],
+          [cx + halfX, cy - halfY, cz],
+          [cx + halfX, cy + halfY, cz],
+          [cx - halfX, cy + halfY, cz],
+        ], [0, 0, 1]);
+        ovizArAppendCloudQuad(vertices, normals, uvs, indices, [
+          [cx - halfX, cy, cz - halfZ],
+          [cx + halfX, cy, cz - halfZ],
+          [cx + halfX, cy, cz + halfZ],
+          [cx - halfX, cy, cz + halfZ],
+        ], [0, 1, 0]);
+        ovizArAppendCloudQuad(vertices, normals, uvs, indices, [
+          [cx, cy - halfY, cz - halfZ],
+          [cx, cy - halfY, cz + halfZ],
+          [cx, cy + halfY, cz + halfZ],
+          [cx, cy + halfY, cz - halfZ],
+        ], [1, 0, 0]);
       }
 
       function ovizArAddVolumeProxy(group, volumeSamples, transform) {
@@ -930,6 +844,7 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         if (!samples.length) {
           return;
         }
+        const cloudTexture = ovizArCreateVolumeCloudTexture();
         const samplesByColor = new Map();
         samples.forEach((sample) => {
           const colorBin = Math.max(0, Math.min(OVIZ_AR_VOLUME_COLOR_BINS - 1, Math.round(Number(sample.colorBin) || 0)));
@@ -940,19 +855,29 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         });
         samplesByColor.forEach((colorSamples) => {
           const vertices = [];
+          const normals = [];
+          const uvs = [];
           const indices = [];
           colorSamples.forEach((sample) => {
             const center = ovizArVectorFromPoint(sample, transform);
-            const size = Math.max(0.006, Math.min(0.045, ovizArFiniteNumber(sample.sizePc, 1.0) * ovizArFiniteNumber(transform && transform.scale, 1.0)));
-            ovizArAppendBoxGeometry(vertices, indices, center, size);
+            const scale = ovizArFiniteNumber(transform && transform.scale, 1.0);
+            const size = {
+              x: Math.max(0.008, Math.min(0.18, ovizArFiniteNumber(sample.sizeXPc, 1.0) * scale)),
+              y: Math.max(0.006, Math.min(0.12, ovizArFiniteNumber(sample.sizeZPc, 1.0) * scale)),
+              z: Math.max(0.008, Math.min(0.18, ovizArFiniteNumber(sample.sizeYPc, 1.0) * scale)),
+            };
+            ovizArAppendCloudletGeometry(vertices, normals, uvs, indices, center, size);
           });
           if (!vertices.length || !indices.length) {
             return;
           }
           const geometry = new THREE.BufferGeometry();
           geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+          geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+          geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
           geometry.setIndex(indices);
-          geometry.computeVertexNormals();
+          geometry.userData = geometry.userData || {};
+          geometry.userData.ovizArDoubleSided = true;
           const representative = colorSamples.reduce((best, sample) => (
             !best || ovizArFiniteNumber(sample.weight, 0.0) > ovizArFiniteNumber(best.weight, 0.0) ? sample : best
           ), null);
@@ -960,13 +885,16 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
           const meanWeight = colorSamples.reduce((sum, sample) => sum + ovizArFiniteNumber(sample.weight, 0.0), 0.0)
             / Math.max(colorSamples.length, 1);
           const material = new THREE.MeshStandardMaterial({
+            map: cloudTexture,
             color: ovizArColor(color, "#ffffff"),
             emissive: ovizArColor(color, "#ffffff"),
-            emissiveIntensity: 0.10,
-            roughness: 0.82,
+            emissiveIntensity: 0.20,
+            roughness: 0.90,
             metalness: 0.0,
             transparent: true,
-            opacity: Math.max(0.30, Math.min(0.72, 0.24 + (0.55 * meanWeight))),
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            opacity: Math.max(0.06, Math.min(0.24, 0.045 + (0.18 * Math.sqrt(Math.max(meanWeight, 0.0))))),
           });
           const mesh = new THREE.Mesh(geometry, material);
           mesh.userData.ovizArVolumeProxy = true;
@@ -974,8 +902,7 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         });
       }
 
-      async function buildOvizAr3DScene(snapshot, options = {}) {
-        const includeLabels = options.includeLabels !== false;
+      async function buildOvizAr3DScene(snapshot) {
         const volumeResult = await ovizArCollectVolumeSamples(snapshot);
         const volumeLayers = ovizArVolumeLayersForSnapshot(ovizArPresentFrame());
         const sceneAr = new THREE.Scene();
@@ -986,33 +913,10 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         const group = new THREE.Group();
         sceneAr.add(group);
         const transform = ovizArSceneTransform(snapshot.points || [], 0.72, volumeLayers);
-        const sphereGeometry = new THREE.SphereGeometry(0.026, 24, 16);
-        const trailGeometry = new THREE.CylinderGeometry(0.0045, 0.0045, 1.0, 8, 1, false);
-        const labelGeometry = new THREE.PlaneGeometry(0.34, 0.085);
-        labelGeometry.userData = labelGeometry.userData || {};
-        labelGeometry.userData.ovizArDoubleSided = true;
+        const sphereGeometry = new THREE.SphereGeometry(0.0085, 16, 10);
         const markerMaterials = new Map();
         ovizArAddVolumeProxy(group, volumeResult.samples, transform);
-        (snapshot.trails || []).forEach((trail) => {
-          const trailPoints = Array.isArray(trail.points) ? trail.points : [];
-          if (trailPoints.length < 2) {
-            return;
-          }
-          const trailColor = ovizArColor((trailPoints[trailPoints.length - 1] || {}).color, "#ffffff");
-          const trailMaterial = new THREE.MeshStandardMaterial({
-            color: trailColor,
-            roughness: 0.72,
-            metalness: 0.0,
-            transparent: true,
-            opacity: 0.58,
-          });
-          for (let index = 1; index < trailPoints.length; index += 1) {
-            const start = ovizArVectorFromPoint(trailPoints[index - 1], transform);
-            const end = ovizArVectorFromPoint(trailPoints[index], transform);
-            ovizArAddCylinderBetween(group, start, end, 0.0045, trailMaterial, trailGeometry);
-          }
-        });
-        (snapshot.points || []).forEach((point, index) => {
+        (snapshot.points || []).forEach((point) => {
           const color = ovizArColor(point.color, "#ffffff");
           const materialKey = String(point.color || "#ffffff").toLowerCase();
           if (!markerMaterials.has(materialKey)) {
@@ -1029,30 +933,13 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
           const position = ovizArVectorFromPoint(point, transform);
           const nStars = ovizArFiniteNumber(point.nStars, NaN);
           const sizeScale = Number.isFinite(nStars)
-            ? Math.max(0.85, Math.min(1.85, Math.sqrt(Math.max(nStars, 1.0)) / 8.0))
+            ? Math.max(0.72, Math.min(1.35, Math.sqrt(Math.max(nStars, 1.0)) / 12.0))
             : 1.0;
           marker.scale.setScalar(sizeScale);
           marker.position.copy(position);
           marker.userData.ovizArKey = point.key;
           group.add(marker);
-          if (includeLabels && index < OVIZ_AR_MAX_LABELS) {
-            ovizArAddLabelPlane(group, point.label, position, point.color, index, labelGeometry);
-          }
         });
-        const base = new THREE.Mesh(
-          new THREE.CircleGeometry(0.86, 96),
-          new THREE.MeshBasicMaterial({
-            color: 0x27313d,
-            transparent: true,
-            opacity: 0.18,
-            side: THREE.DoubleSide,
-          })
-        );
-        base.rotation.x = -Math.PI / 2;
-        base.position.y = 0.006;
-        base.geometry.userData = base.geometry.userData || {};
-        base.geometry.userData.ovizArDoubleSided = true;
-        group.add(base);
         sceneAr.updateMatrixWorld(true);
         sceneAr.userData.ovizArSummary = {
           mode: "3d",
@@ -1062,6 +949,7 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
           volumeTruncated: volumeResult.truncated,
           presentTimeMyr: snapshot.presentTimeMyr,
           scalePcToMeters: transform.scale,
+          volumeRepresentation: "soft-gaussian-cloudlets",
           volumeSources: volumeResult.layers.map((layer) => layer.source).filter(Boolean),
         };
         return sceneAr;
@@ -1197,8 +1085,7 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         return geometry;
       }
 
-      async function buildOvizArSkyDomeScene(snapshot, target = OVIZ_AR_SKY_TEXTURE_HIGH, options = {}) {
-        const includeLabels = options.includeLabels === true;
+      async function buildOvizArSkyDomeScene(snapshot, target = OVIZ_AR_SKY_TEXTURE_HIGH) {
         const loaded = await ovizArLoadSkyTexture(target);
         const radius = 1.45;
         const centerY = radius + 0.04;
@@ -1215,12 +1102,9 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
         const dome = new THREE.Mesh(domeGeometry, domeMaterial);
         dome.position.y = centerY;
         sceneAr.add(dome);
-        const markerGeometry = new THREE.SphereGeometry(0.018, 18, 12);
+        const markerGeometry = new THREE.SphereGeometry(0.010, 16, 10);
         const markerMaterials = new Map();
-        const labelGeometry = new THREE.PlaneGeometry(0.34, 0.085);
-        labelGeometry.userData = labelGeometry.userData || {};
-        labelGeometry.userData.ovizArDoubleSided = true;
-        (snapshot.points || []).forEach((point, index) => {
+        (snapshot.points || []).forEach((point) => {
           const direction = ovizArSkyDirectionForPoint(point, radius * 0.965);
           if (!direction) {
             return;
@@ -1241,9 +1125,6 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
           marker.position.set(direction.x, direction.y + centerY, direction.z);
           marker.userData.ovizArKey = point.key;
           sceneAr.add(marker);
-          if (includeLabels && index < OVIZ_AR_MAX_LABELS) {
-            ovizArAddLabelPlane(sceneAr, point.label, marker.position, point.color, index, labelGeometry);
-          }
         });
         sceneAr.updateMatrixWorld(true);
         sceneAr.userData.ovizArSummary = {
@@ -1562,26 +1443,18 @@ THREEJS_AR_RUNTIME_JS = THREEJS_AR_USDZ_RUNTIME_JS + "\n\n" + r"""
               ? { width: 1024, height: 512 }
               : OVIZ_AR_SKY_TEXTURE_LOW;
             try {
-              sceneAr = await buildOvizArSkyDomeScene(snapshot, primarySkyTarget, { includeLabels: false });
+              sceneAr = await buildOvizArSkyDomeScene(snapshot, primarySkyTarget);
               arrayBuffer = await ovizArParseUsdZ(sceneAr);
             } catch (_err) {
-              sceneAr = await buildOvizArSkyDomeScene(snapshot, fallbackSkyTarget, { includeLabels: false });
+              sceneAr = await buildOvizArSkyDomeScene(snapshot, fallbackSkyTarget);
               arrayBuffer = await ovizArParseUsdZ(sceneAr);
             }
           } else {
-            try {
-              sceneAr = await buildOvizAr3DScene(snapshot, { includeLabels: true });
-              if (!snapshot.points.length && !(Number((sceneAr.userData.ovizArSummary || {}).volumeSampleCount) > 0)) {
-                throw new Error("No volume samples survived AR downsampling.");
-              }
-              arrayBuffer = await ovizArParseUsdZ(sceneAr);
-            } catch (_err) {
-              sceneAr = await buildOvizAr3DScene(snapshot, { includeLabels: false });
-              if (!snapshot.points.length && !(Number((sceneAr.userData.ovizArSummary || {}).volumeSampleCount) > 0)) {
-                throw new Error("No volume samples survived AR downsampling.");
-              }
-              arrayBuffer = await ovizArParseUsdZ(sceneAr);
+            sceneAr = await buildOvizAr3DScene(snapshot);
+            if (!snapshot.points.length && !(Number((sceneAr.userData.ovizArSummary || {}).volumeSampleCount) > 0)) {
+              throw new Error("No volume samples survived AR downsampling.");
             }
+            arrayBuffer = await ovizArParseUsdZ(sceneAr);
           }
           const blob = new Blob([arrayBuffer], { type: "model/vnd.usdz+zip" });
           const pointText = `${snapshot.points.length} cluster${snapshot.points.length === 1 ? "" : "s"}`;

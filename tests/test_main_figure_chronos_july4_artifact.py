@@ -155,6 +155,13 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "class OvizUSDZExporter" in html
     assert "function ovizUsdZWriteStoredZip" in html
     assert "function ovizArVolumeSampleSource" in html
+    assert "function ovizArCreateVolumeCloudTexture" in html
+    assert "function ovizArAppendCloudletGeometry" in html
+    assert 'volumeRepresentation: "soft-gaussian-cloudlets"' in html
+    assert "new THREE.SphereGeometry(0.0085, 16, 10)" in html
+    assert "ovizArAppendBoxGeometry" not in html
+    assert "ovizArCollectOrbitTrails" not in html
+    assert "ovizArCreateLabelTexture" not in html
     assert "examples/js/libs/fflate.min.js" not in html
     assert "function loadOvizUSDZExporter" not in html
     assert "No selection; exporting a capped t=0 Myr scene snapshot." in html

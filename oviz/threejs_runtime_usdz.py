@@ -173,6 +173,7 @@ ${doubleSided}${primvars.length ? `${primvars.join("\n")}\n` : ""}    uniform to
       uniform token info:id = "UsdUVTexture"
       asset inputs:file = @textures/${textureName}.${extension}@
       float2 inputs:st.connect = </Materials/Material_${materialId}/PrimvarReader_diffuse.outputs:result>
+      float4 inputs:scale = (${ovizUsdZNumber(color.r)}, ${ovizUsdZNumber(color.g)}, ${ovizUsdZNumber(color.b)}, ${ovizUsdZNumber(safeOpacity)})
       token inputs:sourceColorSpace = "sRGB"
       token inputs:wrapS = "clamp"
       token inputs:wrapT = "clamp"
