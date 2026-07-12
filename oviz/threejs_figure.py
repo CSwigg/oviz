@@ -17,11 +17,13 @@ from .threejs_runtime_legend import THREEJS_LEGEND_RUNTIME_JS
 from .threejs_runtime_interactions import THREEJS_INTERACTION_RUNTIME_JS
 from .threejs_runtime_ar import THREEJS_AR_RUNTIME_JS
 from .threejs_runtime_actions import THREEJS_ACTION_RUNTIME_JS
+from .threejs_runtime_states import THREEJS_STATE_RUNTIME_JS
 from .threejs_runtime_scene import THREEJS_SCENE_RUNTIME_JS
 from .threejs_runtime_sky import THREEJS_SKY_RUNTIME_JS
 from .threejs_runtime_viewer import THREEJS_VIEWER_RUNTIME_JS
 from .threejs_runtime_widget_content import THREEJS_WIDGET_CONTENT_RUNTIME_JS
 from .threejs_runtime_widgets import THREEJS_WIDGET_RUNTIME_JS
+from .threejs_states import default_states_project_id, normalize_states_spec
 
 
 _THREEJS_AR_BUTTON_HTML = (
@@ -6368,7 +6370,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let canvasPointerDownInfo = null;
       const pressedKeys = new Set();
       let lastAnimationTimestamp = null;
-      const playbackIntervalMs = Math.max(Number(sceneSpec.playback_interval_ms) || 240, 80);
+      let playbackIntervalMs = Math.max(Number(sceneSpec.playback_interval_ms) || 240, 80);
       let clusterFilterParameterKey = String(clusterFilterSpec.default_parameter_key || "");
       const clusterFilterRangeStateByKey = {};
       let dendrogramTraceKey = String(dendrogramSpec.default_trace_key || "");
@@ -8346,15 +8348,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         renderBoxMetricsWidget();
       }
 
-      function restoreInitialLassoSelectionMask() {
+      function restoreLassoSelectionMask(savedMask) {
         if (minimalModeEnabled) {
           disposeLassoSelectionMask(currentLassoSelectionMask);
           currentLassoSelectionMask = null;
           return Promise.resolve();
         }
-        const savedMask = initialState && typeof initialState === "object"
-          ? initialState.lasso_selection_mask
-          : null;
         if (
           !savedMask
           || typeof savedMask !== "object"
@@ -8418,7 +8417,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         });
       }
 
-      function applyInitialStateSync() {
+      function restoreInitialLassoSelectionMask() {
+        return restoreLassoSelectionMask(
+          initialState && typeof initialState === "object"
+            ? initialState.lasso_selection_mask
+            : null
+        );
+      }
+
+      function applyViewerStateSyncInternal(initialState, options = {}) {
         resetLegendState(currentGroup);
         if (!initialState || typeof initialState !== "object") {
           if (minimalModeEnabled) {
@@ -8869,6 +8876,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           legendPanelOpen = initialState.legend_open;
         }
 
+        if (typeof restoreSkyLayerStateFromSnapshot === "function") {
+          restoreSkyLayerStateFromSnapshot(initialState, {
+            postToAladin: options.postSkyLayersToAladin !== false,
+          });
+        }
+
         if (minimalModeEnabled) {
           clickSelectionEnabled = false;
           lassoVolumeSelectionEnabled = false;
@@ -8893,11 +8906,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         applyGlobalControlState();
         clampClusterFilterRangeForParameter(activeClusterFilterParameterSpec());
         pruneSelectionsToActiveClusterFilter();
-        applyCameraViewMode();
+        applyCameraViewMode({ forceSkyBackground: options.forceSkyBackground !== false });
         applyThemePreset(activeThemeKey, { rerender: false, syncInput: false });
         renderSceneControls();
         setLegendPanelOpen(legendPanelOpen);
         setZenMode(zenModeEnabled);
+      }
+
+      function applyInitialStateSync() {
+        return applyViewerStateSyncInternal(initialState);
       }
 
       function captureWidgetState(widgetKey) {
@@ -8927,6 +8944,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return safeJsonClone({
           current_group: currentGroup,
           current_frame_index: currentFrameIndex,
+          current_frame_value: Number.isFinite(Number(displayedFrameValue))
+            ? Number(displayedFrameValue)
+            : Number(currentFrameIndex),
+          playback_state: {
+            direction: Number(playbackDirection) || 0,
+            interval_ms: Number(playbackIntervalMs) || 1000,
+          },
           manual_labels: manualLabels,
           active_manual_label_id: activeManualLabelId,
           legend_state: legendState,
@@ -9108,6 +9132,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       async function saveSceneStateToHtml() {
         const exportSceneSpec = safeJsonClone(sceneSpec, {});
         exportSceneSpec.initial_state = captureRuntimeState();
+        delete exportSceneSpec.states;
         exportSceneSpec.width = Math.max(root.clientWidth || sceneSpec.width || 900, 1);
         exportSceneSpec.height = Math.max(root.clientHeight || sceneSpec.height || 700, 1);
         const htmlText = await buildExportHtml(exportSceneSpec);
@@ -9550,8 +9575,30 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return overviewText;
       }
 
+      function initialAladinFrameSurvey() {
+        try {
+          if (typeof serializableSkyLayers === "function") {
+            const layers = serializableSkyLayers();
+            const baseLayer = layers.length ? layers[layers.length - 1] : null;
+            const survey = String(baseLayer && (baseLayer.survey || baseLayer.key) || "").trim();
+            if (survey) {
+              return survey;
+            }
+          }
+        } catch (_err) {
+        }
+        return String((skySpec && skySpec.survey) || "P/DSS2/color");
+      }
+
       function buildEmptySkySrcdoc() {
-        return buildAladinSrcdoc([], [], "overview", null);
+        return buildAladinSrcdoc(
+          [],
+          [],
+          "overview",
+          null,
+          false,
+          { survey: initialAladinFrameSurvey() }
+        );
       }
 
 __SKY_RUNTIME_JS__
@@ -10253,11 +10300,11 @@ __SKY_RUNTIME_JS__
           skyDomeSpec.layers,
         ];
         for (const candidate of candidates) {
-          if (Array.isArray(candidate) && candidate.length) {
+          if (Array.isArray(candidate)) {
             return uniqueSkyLayers(candidate);
           }
         }
-        return [];
+        return null;
       }
 
       function savedActiveSkyLayerKey() {
@@ -10276,8 +10323,9 @@ __SKY_RUNTIME_JS__
           return;
         }
         skyLayerStateInitialized = true;
-        skyLayerState = savedSkyLayers();
-        if (!skyLayerState.length && skyDomeControlsAvailable()) {
+        const restoredSkyLayers = savedSkyLayers();
+        skyLayerState = Array.isArray(restoredSkyLayers) ? restoredSkyLayers : [];
+        if (restoredSkyLayers === null && skyDomeControlsAvailable()) {
           skyLayerState = [skyLayerFromSurvey(defaultSkyLayerSurvey(), {
             opacity: skyDomeDefaultOpacity,
             visible: skyDomeDefaultEnabled,
@@ -10321,15 +10369,42 @@ __SKY_RUNTIME_JS__
         }));
       }
 
+      function restoreSkyLayerStateFromSnapshot(snapshot, options = {}) {
+        if (!snapshot || typeof snapshot !== "object" || !Array.isArray(snapshot.sky_layers)) {
+          return false;
+        }
+        const restoredLayers = uniqueSkyLayers(snapshot.sky_layers);
+        skyLayerState = restoredLayers;
+        skyLayerStateInitialized = true;
+        const requestedActiveKey = normalizeSkyLayerKey(snapshot.active_sky_layer_key || "");
+        activeSkyLayerKey = requestedActiveKey && skyLayerState.some((layer) => layer.key === requestedActiveKey)
+          ? requestedActiveKey
+          : (skyLayerState[0] ? skyLayerState[0].key : "");
+        renderSkyLayerList();
+        if (typeof updateSkyDomeCaptureFrame === "function") {
+          updateSkyDomeCaptureFrame();
+        }
+        if (options.postToAladin !== false) {
+          postSkyLayerStateToAladin();
+        }
+        return true;
+      }
+
       function postSkyLayerStateToAladin() {
         if (!skyDomeFrameEl || !skyDomeFrameEl.contentWindow) {
           return;
         }
         try {
+          const currentLayers = serializableSkyLayers();
+          const layers = typeof ovizResidentSkyLayers === "function"
+            ? ovizResidentSkyLayers(currentLayers)
+            : currentLayers;
           skyDomeFrameEl.contentWindow.postMessage({
             type: "oviz-sky-layer-state",
-            layers: serializableSkyLayers(),
+            layers,
+            residentStack: typeof ovizResidentSkyLayers === "function",
             activeKey: activeSkyLayerKey || "",
+            residentStack: skyDomeUsesAladinBackground(),
           }, "*");
         } catch (_err) {
         }
@@ -11041,7 +11116,7 @@ __SKY_RUNTIME_JS__
     <script src="https://aladin.u-strasbg.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"><\/script>
     <script>
       if (typeof A === "undefined") {
-        document.write('<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"><\\/script>');
+        document.write('<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"><' + '/script>');
       }
     <\/script>
     <script>
@@ -11065,13 +11140,28 @@ __SKY_RUNTIME_JS__
         let aladinInstance = null;
         let pendingSkyBackgroundView = null;
         let skyBackgroundViewAnimationFrame = 0;
+        let skyBackgroundViewPaintSerial = 0;
+        let skyBackgroundSemanticTransitionSerial = 0;
+        let skyBackgroundSemanticTransitionFrame = 0;
+        let activeSkyBackgroundSemanticTransition = null;
+        let pendingSkyBackgroundSemanticCompletion = null;
+        let currentSkyBackgroundView = null;
         let lastAppliedSkyBackgroundSignature = "";
         let activeImageSurvey = ${survey};
         let activeSkyLayerStackSignature = "";
+        let activeSkyLayerStackGeneration = 0;
+        let skyLayerOptionApplySerial = 0;
+        let residentSkyLayerState = [];
+        let skyLayerSemanticTransitionSerial = 0;
+        let skyLayerSemanticTransitionFrame = 0;
+        let skyLayerTransitionPaintSerial = 0;
+        let activeSkyLayerSemanticTransition = null;
+        let pendingSkyLayerSemanticCompletion = null;
         let activeSkyApertureLayerStackSignature = "";
         const managedSkyOverlayLayerNames = new Set();
         const managedSkyApertureOverlayLayerNames = new Set();
         const skyLayerCanvasScopes = new Map();
+        const latestSkyLayerStateByName = new Map();
         function normalizeClusterKey(value) {
           return String(value || "")
             .trim()
@@ -11264,15 +11354,69 @@ __SKY_RUNTIME_JS__
             favorites,
           }, "*");
         }
-        function applySkyBackgroundViewNow(data) {
-          if (!skyDomeBackgroundOnly || !aladinInstance || !data || typeof data !== "object") {
-            return;
+        function skyBackgroundAfterPaint(callback) {
+          const scheduleFrame = typeof window.requestAnimationFrame === "function"
+            ? (next) => window.requestAnimationFrame(next)
+            : (next) => window.setTimeout(next, 0);
+          scheduleFrame(() => scheduleFrame(() => {
+            if (typeof callback === "function") {
+              callback();
+            }
+          }));
+        }
+        function normalizeSkyBackgroundView(data, fallback = null) {
+          const source = data && typeof data === "object" ? data : {};
+          const previous = fallback && typeof fallback === "object" ? fallback : {};
+          const numericOrFallback = (key) => {
+            const sourceValue = source[key];
+            if (sourceValue !== null && sourceValue !== undefined && sourceValue !== "") {
+              const value = Number(sourceValue);
+              if (Number.isFinite(value)) {
+                return value;
+              }
+            }
+            const previousValue = previous[key];
+            if (previousValue !== null && previousValue !== undefined && previousValue !== "") {
+              const prior = Number(previousValue);
+              if (Number.isFinite(prior)) {
+                return prior;
+              }
+            }
+            return null;
+          };
+          const view = {
+            ra: numericOrFallback("ra"),
+            dec: numericOrFallback("dec"),
+            l: numericOrFallback("l"),
+            b: numericOrFallback("b"),
+            fovDeg: numericOrFallback("fovDeg"),
+          };
+          if (!Number.isFinite(view.fovDeg) || view.fovDeg <= 0.0) {
+            view.fovDeg = 90.0;
           }
-          const ra = Number(data.ra);
-          const dec = Number(data.dec);
-          const lDeg = Number(data.l);
-          const bDeg = Number(data.b);
-          const fovDeg = Number(data.fovDeg);
+          view.fovDeg = Math.min(Math.max(view.fovDeg, 0.05), 179.0);
+          return view;
+        }
+        function skyBackgroundViewSignature(view) {
+          const source = view || {};
+          return [
+            Number.isFinite(source.l) ? source.l.toFixed(5) : "",
+            Number.isFinite(source.b) ? source.b.toFixed(5) : "",
+            Number.isFinite(source.ra) ? source.ra.toFixed(5) : "",
+            Number.isFinite(source.dec) ? source.dec.toFixed(5) : "",
+            Number.isFinite(source.fovDeg) ? source.fovDeg.toFixed(3) : "",
+          ].join("|");
+        }
+        function applySkyBackgroundViewNow(data, options = {}) {
+          if (!skyDomeBackgroundOnly || !aladinInstance || !data || typeof data !== "object") {
+            return null;
+          }
+          const view = normalizeSkyBackgroundView(data, currentSkyBackgroundView);
+          const ra = Number(view.ra);
+          const dec = Number(view.dec);
+          const lDeg = Number(view.l);
+          const bDeg = Number(view.b);
+          const fovDeg = Number(view.fovDeg);
           const signature = [
             Number.isFinite(lDeg) ? lDeg.toFixed(5) : "",
             Number.isFinite(bDeg) ? bDeg.toFixed(5) : "",
@@ -11280,26 +11424,357 @@ __SKY_RUNTIME_JS__
             Number.isFinite(dec) ? dec.toFixed(5) : "",
             Number.isFinite(fovDeg) ? fovDeg.toFixed(3) : "",
           ].join("|");
-          if (signature === lastAppliedSkyBackgroundSignature) {
-            return;
+          if (signature === lastAppliedSkyBackgroundSignature && options.force !== true) {
+            currentSkyBackgroundView = view;
+            return view;
           }
           lastAppliedSkyBackgroundSignature = signature;
-          if (typeof aladinInstance.stopAnimation === "function") {
-            aladinInstance.stopAnimation();
-          }
-          if (Number.isFinite(fovDeg) && fovDeg > 0.0 && typeof aladinInstance.setFoV === "function") {
-            aladinInstance.setFoV(Math.min(Math.max(fovDeg, 0.05), 179.0));
-          }
-          if (Number.isFinite(lDeg) && Number.isFinite(bDeg) && typeof aladinInstance.gotoPosition === "function") {
+          const preferEquatorial = options && options.coordinateFrame === "equatorial";
+          if (preferEquatorial && Number.isFinite(ra) && Number.isFinite(dec) && typeof aladinInstance.gotoRaDec === "function") {
+            aladinInstance.gotoRaDec(ra, dec);
+          } else if (Number.isFinite(lDeg) && Number.isFinite(bDeg) && typeof aladinInstance.gotoPosition === "function") {
             aladinInstance.gotoPosition(lDeg, bDeg);
           } else if (Number.isFinite(ra) && Number.isFinite(dec) && typeof aladinInstance.gotoRaDec === "function") {
             aladinInstance.gotoRaDec(ra, dec);
           }
+          if (Number.isFinite(fovDeg) && fovDeg > 0.0 && typeof aladinInstance.setFoV === "function") {
+            aladinInstance.setFoV(Math.min(Math.max(fovDeg, 0.05), 179.0));
+          }
+          currentSkyBackgroundView = view;
+          return view;
+        }
+        function postSkyBackgroundViewAppliedAfterPaint(data, transition = null) {
+          const paintSerial = ++skyBackgroundViewPaintSerial;
+          skyBackgroundAfterPaint(() => {
+            if (paintSerial !== skyBackgroundViewPaintSerial) {
+              return;
+            }
+            if (transition && pendingSkyBackgroundSemanticCompletion !== transition) {
+              return;
+            }
+            if (window.parent && window.parent !== window && !transition && data && data.seq != null) {
+              window.parent.postMessage({
+                type: "oviz-aladin-sky-background-view-applied",
+                seq: data.seq,
+              }, "*");
+            }
+            if (window.parent && window.parent !== window && transition) {
+              window.parent.postMessage({
+                type: "oviz-aladin-sky-background-transition-complete",
+                transitionId: transition.transitionId,
+                seq: transition.seq,
+                cancelled: false,
+              }, "*");
+              pendingSkyBackgroundSemanticCompletion = null;
+            }
+          });
+        }
+        function skyBackgroundUnitVectorForLonLat(lDeg, bDeg) {
+          const lon = Number(lDeg) * Math.PI / 180.0;
+          const lat = Number(bDeg) * Math.PI / 180.0;
+          const cosLat = Math.cos(lat);
+          return {
+            x: cosLat * Math.cos(lon),
+            y: cosLat * Math.sin(lon),
+            z: Math.sin(lat),
+          };
+        }
+        function skyBackgroundNormalizeVector(vector) {
+          const length = Math.hypot(Number(vector.x), Number(vector.y), Number(vector.z));
+          if (!(length > 1e-12)) {
+            return { x: 1.0, y: 0.0, z: 0.0 };
+          }
+          return { x: vector.x / length, y: vector.y / length, z: vector.z / length };
+        }
+        function skyBackgroundSlerpDirection(fromVector, toVector, progress) {
+          const from = skyBackgroundNormalizeVector(fromVector);
+          const to = skyBackgroundNormalizeVector(toVector);
+          const dot = Math.min(Math.max((from.x * to.x) + (from.y * to.y) + (from.z * to.z), -1.0), 1.0);
+          if (dot > 0.9995) {
+            return skyBackgroundNormalizeVector({
+              x: from.x + ((to.x - from.x) * progress),
+              y: from.y + ((to.y - from.y) * progress),
+              z: from.z + ((to.z - from.z) * progress),
+            });
+          }
+          if (dot < -0.9995) {
+            const reference = Math.abs(from.z) < 0.9
+              ? { x: 0.0, y: 0.0, z: 1.0 }
+              : { x: 1.0, y: 0.0, z: 0.0 };
+            const orthogonal = skyBackgroundNormalizeVector({
+              x: (from.y * reference.z) - (from.z * reference.y),
+              y: (from.z * reference.x) - (from.x * reference.z),
+              z: (from.x * reference.y) - (from.y * reference.x),
+            });
+            const angle = Math.PI * progress;
+            return skyBackgroundNormalizeVector({
+              x: (from.x * Math.cos(angle)) + (orthogonal.x * Math.sin(angle)),
+              y: (from.y * Math.cos(angle)) + (orthogonal.y * Math.sin(angle)),
+              z: (from.z * Math.cos(angle)) + (orthogonal.z * Math.sin(angle)),
+            });
+          }
+          const theta = Math.acos(dot);
+          const sinTheta = Math.sin(theta);
+          const fromWeight = Math.sin((1.0 - progress) * theta) / sinTheta;
+          const toWeight = Math.sin(progress * theta) / sinTheta;
+          return skyBackgroundNormalizeVector({
+            x: (from.x * fromWeight) + (to.x * toWeight),
+            y: (from.y * fromWeight) + (to.y * toWeight),
+            z: (from.z * fromWeight) + (to.z * toWeight),
+          });
+        }
+        function skyBackgroundLonLatForUnitVector(vector) {
+          const direction = skyBackgroundNormalizeVector(vector);
+          let longitude = Math.atan2(direction.y, direction.x) * 180.0 / Math.PI;
+          if (longitude < 0.0) {
+            longitude += 360.0;
+          }
+          return {
+            l: longitude,
+            b: Math.asin(Math.min(Math.max(direction.z, -1.0), 1.0)) * 180.0 / Math.PI,
+          };
+        }
+        function skyBackgroundTransitionEasing(name, progress) {
+          const t = Math.min(Math.max(Number(progress) || 0.0, 0.0), 1.0);
+          const normalized = String(name || "easeInOutCubic").trim().toLowerCase();
+          if (normalized === "linear") {
+            return t;
+          }
+          if (normalized === "easeincubic") {
+            return t * t * t;
+          }
+          if (normalized === "easeoutcubic") {
+            return 1.0 - Math.pow(1.0 - t, 3.0);
+          }
+          return t < 0.5
+            ? 4.0 * t * t * t
+            : 1.0 - (Math.pow(-2.0 * t + 2.0, 3.0) / 2.0);
+        }
+        function skyBackgroundTransitionStartedAt(data, nowPerformanceMs) {
+          const parentEpochMs = Number(data && data.startedAtEpochMs);
+          if (!Number.isFinite(parentEpochMs)) {
+            return nowPerformanceMs;
+          }
+          const localTimeOrigin = (
+            typeof performance !== "undefined"
+            && Number.isFinite(Number(performance.timeOrigin))
+          )
+            ? Number(performance.timeOrigin)
+            : (Date.now() - nowPerformanceMs);
+          const elapsedMs = Math.max(0.0, (localTimeOrigin + nowPerformanceMs) - parentEpochMs);
+          return nowPerformanceMs - elapsedMs;
+        }
+        function postSkyBackgroundTransitionCancelled(transition, reason = "retargeted") {
+          if (!transition || !window.parent || window.parent === window) {
+            return;
+          }
+          window.parent.postMessage({
+            type: "oviz-aladin-sky-background-transition-complete",
+            transitionId: transition.transitionId,
+            seq: transition.seq,
+            cancelled: true,
+            reason,
+          }, "*");
+        }
+        function cancelSkyBackgroundSemanticTransition(reason = "retargeted", notify = true) {
+          skyBackgroundSemanticTransitionSerial += 1;
+          skyBackgroundViewPaintSerial += 1;
+          if (skyBackgroundSemanticTransitionFrame) {
+            window.cancelAnimationFrame(skyBackgroundSemanticTransitionFrame);
+            skyBackgroundSemanticTransitionFrame = 0;
+          }
+          const previous = activeSkyBackgroundSemanticTransition || pendingSkyBackgroundSemanticCompletion;
+          activeSkyBackgroundSemanticTransition = null;
+          pendingSkyBackgroundSemanticCompletion = null;
+          if (notify && previous) {
+            postSkyBackgroundTransitionCancelled(previous, reason);
+          }
+        }
+        function cancelSkyBackgroundSemanticTransitionFromParent(data) {
+          const transition = activeSkyBackgroundSemanticTransition || pendingSkyBackgroundSemanticCompletion;
+          if (!transition) {
+            return;
+          }
+          const requestedId = String((data && data.transitionId) || "");
+          if (requestedId && requestedId !== String(transition.transitionId || "")) {
+            return;
+          }
+          const requestedSeq = data && data.seq;
+          if (
+            requestedSeq !== null
+            && requestedSeq !== undefined
+            && String(requestedSeq) !== String(transition.seq)
+          ) {
+            return;
+          }
+          cancelSkyBackgroundSemanticTransition("parent-cancelled", true);
+        }
+        function startSkyBackgroundSemanticTransition(data) {
+          if (!skyDomeBackgroundOnly || !aladinInstance || !data || typeof data !== "object") {
+            return;
+          }
+          cancelSkyBackgroundSemanticTransition("retargeted", true);
+          pendingSkyBackgroundView = null;
+          if (skyBackgroundViewAnimationFrame) {
+            window.cancelAnimationFrame(skyBackgroundViewAnimationFrame);
+            skyBackgroundViewAnimationFrame = 0;
+          }
+          if (typeof aladinInstance.stopAnimation === "function") {
+            aladinInstance.stopAnimation();
+          }
+          const serial = ++skyBackgroundSemanticTransitionSerial;
+          const target = normalizeSkyBackgroundView(data, currentSkyBackgroundView);
+          const explicitStartData = {
+            ra: data.startRa,
+            dec: data.startDec,
+            l: data.startL,
+            b: data.startB,
+            fovDeg: data.startFovDeg,
+          };
+          const hasExplicitStart = [
+            data.startRa,
+            data.startDec,
+            data.startL,
+            data.startB,
+            data.startFovDeg,
+          ].some((value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)));
+          const start = normalizeSkyBackgroundView(
+            hasExplicitStart ? explicitStartData : (currentSkyBackgroundView || target),
+            currentSkyBackgroundView || target
+          );
+          const finiteCoordinate = (value) => (
+            value !== null
+            && value !== undefined
+            && value !== ""
+            && Number.isFinite(Number(value))
+          );
+          const hasExplicitGalacticStart = finiteCoordinate(data.startL) && finiteCoordinate(data.startB);
+          const hasExplicitEquatorialStart = finiteCoordinate(data.startRa) && finiteCoordinate(data.startDec);
+          const galacticCoordinatesAvailable = (
+            finiteCoordinate(start.l)
+            && finiteCoordinate(start.b)
+            && finiteCoordinate(target.l)
+            && finiteCoordinate(target.b)
+          );
+          const equatorialCoordinatesAvailable = (
+            finiteCoordinate(start.ra)
+            && finiteCoordinate(start.dec)
+            && finiteCoordinate(target.ra)
+            && finiteCoordinate(target.dec)
+          );
+          const useGalacticCoordinates = galacticCoordinatesAvailable && (
+            hasExplicitGalacticStart
+            || !hasExplicitEquatorialStart
+            || !equatorialCoordinatesAvailable
+          );
+          const startLongitude = useGalacticCoordinates ? start.l : start.ra;
+          const startLatitude = useGalacticCoordinates ? start.b : start.dec;
+          const targetLongitude = useGalacticCoordinates ? target.l : target.ra;
+          const targetLatitude = useGalacticCoordinates ? target.b : target.dec;
+          const startDirection = skyBackgroundUnitVectorForLonLat(startLongitude, startLatitude);
+          const targetDirection = skyBackgroundUnitVectorForLonLat(targetLongitude, targetLatitude);
+          const startTanHalfFov = Math.tan(Math.min(Math.max(start.fovDeg, 0.05), 179.0) * Math.PI / 360.0);
+          const targetTanHalfFov = Math.tan(Math.min(Math.max(target.fovDeg, 0.05), 179.0) * Math.PI / 360.0);
+          const transitionNow = (typeof performance !== "undefined" && performance.now)
+            ? performance.now()
+            : Date.now();
+          const transition = {
+            transitionId: String(data.transitionId || data.id || ("sky-transition-" + String(serial))),
+            seq: data.seq == null ? null : data.seq,
+            serial,
+            start,
+            target,
+            startDirection,
+            targetDirection,
+            startTanHalfFov,
+            targetTanHalfFov,
+            useGalacticCoordinates,
+            startedAt: skyBackgroundTransitionStartedAt(data, transitionNow),
+            durationMs: Math.max(Number(data.durationMs ?? data.duration_ms) || 0.0, 0.0),
+            easing: String(data.easing || "easeInOutCubic"),
+            lastProgressPostAt: -Infinity,
+          };
+          activeSkyBackgroundSemanticTransition = transition;
+          if (hasExplicitStart) {
+            applySkyBackgroundViewNow(start, {
+              force: true,
+              coordinateFrame: useGalacticCoordinates ? "galactic" : "equatorial",
+            });
+          }
+          const step = (timestampMs) => {
+            if (
+              serial !== skyBackgroundSemanticTransitionSerial
+              || transition !== activeSkyBackgroundSemanticTransition
+            ) {
+              return;
+            }
+            const now = Number(timestampMs) || ((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now());
+            const linear = transition.durationMs <= 0.0
+              ? 1.0
+              : Math.min(Math.max((now - transition.startedAt) / transition.durationMs, 0.0), 1.0);
+            const eased = skyBackgroundTransitionEasing(transition.easing, linear);
+            const direction = skyBackgroundSlerpDirection(startDirection, targetDirection, eased);
+            const lonLat = skyBackgroundLonLatForUnitVector(direction);
+            const tanHalfFov = startTanHalfFov + ((targetTanHalfFov - startTanHalfFov) * eased);
+            const fovDeg = 2.0 * Math.atan(Math.max(tanHalfFov, 1e-9)) * 180.0 / Math.PI;
+            if (
+              window.parent
+              && window.parent !== window
+              && (linear >= 1.0 || (now - transition.lastProgressPostAt) >= 75.0)
+            ) {
+              transition.lastProgressPostAt = now;
+              window.parent.postMessage({
+                type: "oviz-aladin-sky-background-transition-progress",
+                transitionId: transition.transitionId,
+                seq: transition.seq,
+                progress: linear,
+                coordinateFrame: useGalacticCoordinates ? "galactic" : "icrs",
+                l: useGalacticCoordinates ? lonLat.l : null,
+                b: useGalacticCoordinates ? lonLat.b : null,
+                ra: useGalacticCoordinates ? null : lonLat.l,
+                dec: useGalacticCoordinates ? null : lonLat.b,
+                fovDeg,
+              }, "*");
+            }
+            applySkyBackgroundViewNow(useGalacticCoordinates ? {
+              l: lonLat.l,
+              b: lonLat.b,
+              fovDeg,
+            } : {
+              ra: lonLat.l,
+              dec: lonLat.b,
+              fovDeg,
+            }, {
+              force: true,
+              coordinateFrame: useGalacticCoordinates ? "galactic" : "equatorial",
+            });
+            if (linear < 1.0) {
+              skyBackgroundSemanticTransitionFrame = window.requestAnimationFrame(step);
+              return;
+            }
+            skyBackgroundSemanticTransitionFrame = 0;
+            applySkyBackgroundViewNow(target, {
+              force: true,
+              coordinateFrame: useGalacticCoordinates ? "galactic" : "equatorial",
+            });
+            activeSkyBackgroundSemanticTransition = null;
+            pendingSkyBackgroundSemanticCompletion = transition;
+            postSkyBackgroundViewAppliedAfterPaint(
+              Object.assign({}, target, { seq: transition.seq }),
+              transition
+            );
+          };
+          skyBackgroundSemanticTransitionFrame = window.requestAnimationFrame(step);
         }
         function skyLayerNameFor(layer) {
           return "oviz-" + String((layer && layer.key) || (layer && layer.survey) || "layer")
             .replace(/[^a-zA-Z0-9_-]+/g, "-")
             .slice(0, 80);
+        }
+        function skyLayerIdentity(layer) {
+          return String((layer && (layer.key || layer.survey)) || "")
+            + ":"
+            + String((layer && (layer.survey || layer.key)) || "");
         }
         function normalizeSkyLayerStretch(value) {
           const normalized = String(value || "").trim().toLowerCase();
@@ -11338,6 +11813,7 @@ __SKY_RUNTIME_JS__
             }
           });
           managedSkyOverlayLayerNames.clear();
+          clearSkyLayerCanvasScope("main");
         }
         function removeManagedSkyApertureOverlays() {
           if (!aladinInstance) {
@@ -11424,11 +11900,20 @@ __SKY_RUNTIME_JS__
           targetCanvases.forEach((canvasEl) => markSkyLayerCanvas(canvasEl, layerName, scope));
           return targetCanvases.length > 0;
         }
-        function scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, scope) {
+        function scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, scope, expectedGeneration = null) {
           const before = beforeCanvases instanceof Set ? beforeCanvases : new Set(beforeCanvases || []);
           const delays = [0, 32, 120, 360, 1000];
           delays.forEach((delayMs) => {
-            window.setTimeout(() => tagSkyLayerCanvases(layerName, before, scope), delayMs);
+            window.setTimeout(() => {
+              if (
+                expectedGeneration !== null
+                && scope !== "aperture"
+                && expectedGeneration !== activeSkyLayerStackGeneration
+              ) {
+                return;
+              }
+              tagSkyLayerCanvases(layerName, before, scope);
+            }, delayMs);
           });
         }
         function imageLayerForName(layerName, isBase) {
@@ -11449,6 +11934,21 @@ __SKY_RUNTIME_JS__
           }
           return null;
         }
+        function applySkyImageLayerEffectiveOpacity(layerName, opacity, isBase) {
+          const imageLayer = imageLayerForName(layerName, isBase);
+          if (!imageLayer) {
+            return false;
+          }
+          const safeOpacity = Math.min(Math.max(Number(opacity) || 0.0, 0.0), 1.0);
+          if (typeof imageLayer.setOpacity === "function") {
+            imageLayer.setOpacity(safeOpacity);
+          } else if (typeof imageLayer.setAlpha === "function") {
+            imageLayer.setAlpha(safeOpacity);
+          } else if ("opacity" in imageLayer) {
+            imageLayer.opacity = safeOpacity;
+          }
+          return true;
+        }
         function applySkyImageLayerOptions(layerName, layer, isBase) {
           const imageLayer = imageLayerForName(layerName, isBase);
           if (!imageLayer) {
@@ -11456,13 +11956,7 @@ __SKY_RUNTIME_JS__
           }
           const opacity = Math.min(Math.max(Number(layer && layer.opacity), 0.0), 1.0);
           const visibleOpacity = layer && layer.visible === false ? 0.0 : opacity;
-          if (typeof imageLayer.setOpacity === "function") {
-            imageLayer.setOpacity(visibleOpacity);
-          } else if (typeof imageLayer.setAlpha === "function") {
-            imageLayer.setAlpha(visibleOpacity);
-          } else if ("opacity" in imageLayer) {
-            imageLayer.opacity = visibleOpacity;
-          }
+          applySkyImageLayerEffectiveOpacity(layerName, visibleOpacity, isBase);
           const stretch = normalizeSkyLayerStretch(layer && layer.stretch);
           const colormap = normalizeSkyLayerColormap(layer && layer.colormap);
           if (colormap && typeof imageLayer.setColormap === "function") {
@@ -11518,36 +12012,42 @@ __SKY_RUNTIME_JS__
           }
           return survey;
         }
-        function setOverlaySkyImageLayer(layerName, survey, layer, expectedSignature) {
+        function setOverlaySkyImageLayer(layerName, survey, layer, expectedSignature, expectedGeneration) {
           if (!aladinInstance || !survey || !layerName) {
-            return;
+            return Promise.resolve(false);
           }
           const beforeCanvases = new Set(skyLayerCanvasElements());
           const attachOverlay = (overlaySurvey) => {
-            if (!overlaySurvey || (expectedSignature && activeSkyLayerStackSignature !== expectedSignature)) {
-              return;
+            if (
+              !overlaySurvey
+              || (expectedSignature && activeSkyLayerStackSignature !== expectedSignature)
+              || (expectedGeneration !== undefined && expectedGeneration !== activeSkyLayerStackGeneration)
+            ) {
+              return false;
             }
             try {
+              const latestLayer = latestSkyLayerStateByName.get(layerName) || layer;
               if (typeof aladinInstance.addImageLayer === "function") {
                 aladinInstance.addImageLayer(overlaySurvey, layerName);
                 managedSkyOverlayLayerNames.add(layerName);
-                applySkyImageLayerOptions(layerName, layer, false);
-                scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, "main");
+                applySkyImageLayerOptions(layerName, latestLayer, false);
+                scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, "main", expectedGeneration);
               } else if (typeof aladinInstance.setOverlayImageLayer === "function") {
                 aladinInstance.setOverlayImageLayer(overlaySurvey, layerName);
                 managedSkyOverlayLayerNames.add(layerName);
-                applySkyImageLayerOptions(layerName, layer, false);
-                scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, "main");
+                applySkyImageLayerOptions(layerName, latestLayer, false);
+                scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, "main", expectedGeneration);
               }
+              return true;
             } catch (_err) {
+              return false;
             }
           };
           const overlaySurvey = skyImageSurveyObject(survey);
           if (overlaySurvey && typeof overlaySurvey.then === "function") {
-            overlaySurvey.then(attachOverlay).catch(() => {});
-            return;
+            return overlaySurvey.then(attachOverlay).catch(() => false);
           }
-          attachOverlay(overlaySurvey);
+          return Promise.resolve(attachOverlay(overlaySurvey));
         }
         function setApertureSkyImageLayer(layerName, survey, layer, expectedSignature) {
           if (!aladinInstance || !survey || !layerName) {
@@ -11635,6 +12135,7 @@ __SKY_RUNTIME_JS__
           if (!data || typeof data !== "object") {
             return;
           }
+          const optionApplySerial = ++skyLayerOptionApplySerial;
           const layers = (Array.isArray(data.layers) ? data.layers : [])
             .filter((layer) => layer && String(layer.survey || layer.key || "").trim());
           const residentStack = Boolean(data.residentStack);
@@ -11643,65 +12144,328 @@ __SKY_RUNTIME_JS__
             && Math.min(Math.max(Number(layer.opacity), 0.0), 1.0) > 0.0
           ));
           const stackLayers = residentStack
-            ? layers.filter((layer) => layer.visible !== false)
+            ? layers
             : visibleLayers;
-          const aladinEl = document.getElementById("aladin-lite-div");
-          if (!visibleLayers.length) {
-            if (aladinEl) {
-              aladinEl.style.opacity = "0";
+          if (residentStack && residentSkyLayerState.length) {
+            const requestedByIdentity = new Map(stackLayers.map((layer) => [skyLayerIdentity(layer), layer]));
+            const residentIdentities = new Set(residentSkyLayerState.map((layer) => skyLayerIdentity(layer)));
+            const requestedAlreadyResident = Array.from(requestedByIdentity.keys()).every((identity) => residentIdentities.has(identity));
+            if (requestedAlreadyResident) {
+              const resolvedStackLayers = residentSkyLayerState.map((residentLayer) => {
+                const requestedLayer = requestedByIdentity.get(skyLayerIdentity(residentLayer));
+                return requestedLayer || Object.assign({}, residentLayer, {
+                  opacity: 0.0,
+                  visible: true,
+                });
+              });
+              stackLayers.splice(0, stackLayers.length, ...resolvedStackLayers);
             }
+          }
+          const aladinEl = document.getElementById("aladin-lite-div");
+          latestSkyLayerStateByName.clear();
+          stackLayers.forEach((layer) => {
+            latestSkyLayerStateByName.set(skyLayerNameFor(layer), layer);
+          });
+          if (!stackLayers.length) {
+            if (aladinEl) aladinEl.style.opacity = "0";
+            activeSkyLayerStackGeneration += 1;
+            activeSkyLayerStackSignature = "";
+            residentSkyLayerState = [];
             removeManagedSkyOverlays();
             return;
           }
           if (aladinEl) {
-            aladinEl.style.opacity = "1";
+            aladinEl.style.opacity = visibleLayers.length ? "1" : "0";
           }
           const stackSignature = stackLayers
-            .map((layer) => String(layer.key || layer.survey) + ":" + String(layer.survey || layer.key))
+            .map((layer) => skyLayerIdentity(layer))
             .join("|");
+          residentSkyLayerState = residentStack
+            ? stackLayers.map((layer) => Object.assign({}, layer))
+            : [];
           const baseLayer = stackLayers[stackLayers.length - 1];
           const baseSurvey = String(baseLayer.survey || baseLayer.key || "").trim();
           if (stackSignature !== activeSkyLayerStackSignature) {
+            const stackGeneration = ++activeSkyLayerStackGeneration;
             activeSkyLayerStackSignature = stackSignature;
             removeManagedSkyOverlays();
             setBaseSkyImageLayer(baseSurvey);
+            let overlayAttachChain = Promise.resolve();
             for (let index = stackLayers.length - 2; index >= 0; index -= 1) {
               const layer = stackLayers[index];
-              setOverlaySkyImageLayer(
+              overlayAttachChain = overlayAttachChain.then(() => setOverlaySkyImageLayer(
                 skyLayerNameFor(layer),
                 String(layer.survey || layer.key || "").trim(),
                 layer,
-                stackSignature
-              );
+                stackSignature,
+                stackGeneration
+              ));
             }
           } else if (baseSurvey && baseSurvey !== activeImageSurvey) {
             setBaseSkyImageLayer(baseSurvey);
           }
-          applySkyImageLayerOptions("base", baseLayer, true);
-          for (let index = stackLayers.length - 2; index >= 0; index -= 1) {
-            const layer = stackLayers[index];
-            applySkyImageLayerOptions(skyLayerNameFor(layer), layer, false);
+          const optionsGeneration = activeSkyLayerStackGeneration;
+          const applyLatestOptions = () => {
+            if (
+              optionsGeneration !== activeSkyLayerStackGeneration
+              || optionApplySerial !== skyLayerOptionApplySerial
+            ) {
+              return;
+            }
+            applySkyImageLayerOptions("base", baseLayer, true);
+            for (let index = stackLayers.length - 2; index >= 0; index -= 1) {
+              const layer = stackLayers[index];
+              const layerName = skyLayerNameFor(layer);
+              applySkyImageLayerOptions(layerName, latestSkyLayerStateByName.get(layerName) || layer, false);
+            }
+          };
+          if (data.deferOptionRetries === false) {
+            applyLatestOptions();
+          } else {
+            [0, 32, 120, 360, 1000].forEach((delayMs) => window.setTimeout(applyLatestOptions, delayMs));
           }
         }
+        function normalizeSkyLayerTransitionLayers(rawLayers) {
+          const seen = new Set();
+          const layers = [];
+          (Array.isArray(rawLayers) ? rawLayers : []).forEach((rawLayer) => {
+            if (!rawLayer || !String(rawLayer.survey || rawLayer.key || "").trim()) {
+              return;
+            }
+            const layer = Object.assign({}, rawLayer);
+            const identity = skyLayerIdentity(layer);
+            if (!identity || seen.has(identity)) {
+              return;
+            }
+            seen.add(identity);
+            layers.push(layer);
+          });
+          return layers;
+        }
+        function effectiveSkyLayerOpacity(layer) {
+          if (!layer || layer.visible === false) {
+            return 0.0;
+          }
+          return Math.min(Math.max(Number(layer.opacity) || 0.0, 0.0), 1.0);
+        }
+        function captureResidentSkyLayers() {
+          return residentSkyLayerState.map((residentLayer) => {
+            const latest = latestSkyLayerStateByName.get(skyLayerNameFor(residentLayer));
+            return Object.assign({}, latest || residentLayer);
+          });
+        }
+        function buildResidentSkyLayerUnion(fromLayers, toLayers) {
+          const definitions = new Map();
+          [...fromLayers, ...toLayers, ...residentSkyLayerState].forEach((layer) => {
+            const identity = skyLayerIdentity(layer);
+            if (identity && !definitions.has(identity)) {
+              definitions.set(identity, Object.assign({}, layer));
+            }
+          });
+          toLayers.forEach((layer) => definitions.set(skyLayerIdentity(layer), Object.assign({}, layer)));
+          const unionIdentities = new Set(definitions.keys());
+          const existingOrder = residentSkyLayerState
+            .map((layer) => skyLayerIdentity(layer))
+            .filter((identity) => unionIdentities.has(identity));
+          const baseIdentity = existingOrder.length
+            ? existingOrder[existingOrder.length - 1]
+            : skyLayerIdentity(fromLayers[fromLayers.length - 1] || toLayers[toLayers.length - 1] || null);
+          const ordered = [];
+          const add = (layer) => {
+            const identity = skyLayerIdentity(layer);
+            if (identity && identity !== baseIdentity && !ordered.includes(identity)) {
+              ordered.push(identity);
+            }
+          };
+          existingOrder.forEach((identity) => add(definitions.get(identity)));
+          toLayers.forEach(add);
+          fromLayers.forEach(add);
+          if (baseIdentity && definitions.has(baseIdentity)) {
+            ordered.push(baseIdentity);
+          }
+          return ordered.map((identity) => definitions.get(identity)).filter(Boolean);
+        }
+        function postSkyLayerTransitionResult(transition, cancelled, reason = "") {
+          if (!transition || !window.parent || window.parent === window) {
+            return;
+          }
+          window.parent.postMessage({
+            type: "oviz-aladin-sky-layer-transition-complete",
+            transitionId: transition.transitionId,
+            seq: transition.seq,
+            cancelled: Boolean(cancelled),
+            reason: String(reason || ""),
+          }, "*");
+        }
+        function cancelSkyLayerSemanticTransition(reason = "retargeted", notify = true) {
+          skyLayerSemanticTransitionSerial += 1;
+          skyLayerTransitionPaintSerial += 1;
+          if (skyLayerSemanticTransitionFrame) {
+            window.cancelAnimationFrame(skyLayerSemanticTransitionFrame);
+            skyLayerSemanticTransitionFrame = 0;
+          }
+          const previous = activeSkyLayerSemanticTransition || pendingSkyLayerSemanticCompletion;
+          activeSkyLayerSemanticTransition = null;
+          pendingSkyLayerSemanticCompletion = null;
+          if (notify && previous) {
+            postSkyLayerTransitionResult(previous, true, reason);
+          }
+        }
+        function cancelSkyLayerSemanticTransitionFromParent(data) {
+          const active = activeSkyLayerSemanticTransition || pendingSkyLayerSemanticCompletion;
+          if (!active) {
+            return;
+          }
+          const requestedId = String((data && data.transitionId) || "");
+          if (requestedId && requestedId !== String(active.transitionId || "")) {
+            return;
+          }
+          const requestedSeq = data && data.seq;
+          if (requestedSeq !== null && requestedSeq !== undefined && String(requestedSeq) !== String(active.seq)) {
+            return;
+          }
+          cancelSkyLayerSemanticTransition("parent-cancelled", true);
+        }
+        function applySkyLayerTransitionFrame(transition, easedProgress, linearProgress, applyDiscreteStyle = false) {
+          let anyVisible = false;
+          transition.unionLayers.forEach((residentLayer, index) => {
+            const identity = skyLayerIdentity(residentLayer);
+            const fromLayer = transition.fromByIdentity.get(identity) || null;
+            const toLayer = transition.toByIdentity.get(identity) || null;
+            const opacity = effectiveSkyLayerOpacity(fromLayer)
+              + ((effectiveSkyLayerOpacity(toLayer) - effectiveSkyLayerOpacity(fromLayer)) * easedProgress);
+            const useTargetStyle = linearProgress >= 0.5;
+            const styleLayer = (useTargetStyle ? toLayer : fromLayer) || toLayer || fromLayer || residentLayer;
+            const liveLayer = Object.assign({}, residentLayer, styleLayer, {
+              key: residentLayer.key,
+              survey: residentLayer.survey,
+              opacity,
+              visible: true,
+            });
+            transition.unionLayers[index] = liveLayer;
+            residentSkyLayerState[index] = Object.assign({}, liveLayer);
+            const layerName = skyLayerNameFor(liveLayer);
+            latestSkyLayerStateByName.set(layerName, liveLayer);
+            const isBase = index === transition.unionLayers.length - 1;
+            if (applyDiscreteStyle) {
+              applySkyImageLayerOptions(isBase ? "base" : layerName, liveLayer, isBase);
+            } else {
+              applySkyImageLayerEffectiveOpacity(isBase ? "base" : layerName, opacity, isBase);
+            }
+            anyVisible = anyVisible || opacity > 0.0001;
+          });
+          const aladinEl = document.getElementById("aladin-lite-div");
+          if (aladinEl) {
+            aladinEl.style.opacity = anyVisible ? "1" : "0";
+          }
+        }
+        function finishSkyLayerSemanticTransitionAfterPaint(transition) {
+          const paintSerial = ++skyLayerTransitionPaintSerial;
+          pendingSkyLayerSemanticCompletion = transition;
+          skyBackgroundAfterPaint(() => {
+            if (
+              paintSerial !== skyLayerTransitionPaintSerial
+              || pendingSkyLayerSemanticCompletion !== transition
+            ) {
+              return;
+            }
+            pendingSkyLayerSemanticCompletion = null;
+            postSkyLayerTransitionResult(transition, false, "");
+          });
+        }
+        function startSkyLayerSemanticTransition(data) {
+          if (!skyDomeBackgroundOnly || !aladinInstance || !data || typeof data !== "object") {
+            return;
+          }
+          const wasRetargeting = Boolean(activeSkyLayerSemanticTransition || pendingSkyLayerSemanticCompletion);
+          const liveLayers = wasRetargeting ? captureResidentSkyLayers() : [];
+          cancelSkyLayerSemanticTransition("retargeted", true);
+          const serial = ++skyLayerSemanticTransitionSerial;
+          const requestedFromLayers = normalizeSkyLayerTransitionLayers(data.fromLayers);
+          const fromLayers = liveLayers.length ? liveLayers : requestedFromLayers;
+          const toLayers = normalizeSkyLayerTransitionLayers(data.toLayers);
+          const unionLayers = buildResidentSkyLayerUnion(fromLayers, toLayers);
+          const fromByIdentity = new Map(fromLayers.map((layer) => [skyLayerIdentity(layer), layer]));
+          const toByIdentity = new Map(toLayers.map((layer) => [skyLayerIdentity(layer), layer]));
+          const initialLayers = unionLayers.map((layer) => {
+            const fromLayer = fromByIdentity.get(skyLayerIdentity(layer));
+            return Object.assign({}, layer, fromLayer || {}, {
+              key: layer.key,
+              survey: layer.survey,
+              opacity: effectiveSkyLayerOpacity(fromLayer),
+              visible: true,
+            });
+          });
+          applySkyLayerState({
+            layers: initialLayers,
+            residentStack: true,
+            deferOptionRetries: false,
+          });
+          const transitionNow = (typeof performance !== "undefined" && performance.now)
+            ? performance.now()
+            : Date.now();
+          const transition = {
+            transitionId: String(data.transitionId || ("sky-layer-transition-" + String(serial))),
+            seq: data.seq == null ? null : data.seq,
+            serial,
+            durationMs: Math.max(Number(data.durationMs ?? data.duration_ms) || 0.0, 0.0),
+            easing: String(data.easing || "easeInOutCubic"),
+            startedAt: skyBackgroundTransitionStartedAt(data, transitionNow),
+            unionLayers: initialLayers.map((layer) => Object.assign({}, layer)),
+            fromByIdentity,
+            toByIdentity,
+            midpointApplied: false,
+          };
+          activeSkyLayerSemanticTransition = transition;
+          applySkyLayerTransitionFrame(transition, 0.0, 0.0, true);
+          const step = (timestampMs) => {
+            if (serial !== skyLayerSemanticTransitionSerial || activeSkyLayerSemanticTransition !== transition) {
+              return;
+            }
+            const now = Number(timestampMs) || ((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now());
+            const linear = transition.durationMs <= 0.0
+              ? 1.0
+              : Math.min(Math.max((now - transition.startedAt) / transition.durationMs, 0.0), 1.0);
+            const eased = skyBackgroundTransitionEasing(transition.easing, linear);
+            const crossedMidpoint = !transition.midpointApplied && linear >= 0.5;
+            if (crossedMidpoint) {
+              transition.midpointApplied = true;
+            }
+            applySkyLayerTransitionFrame(transition, eased, linear, crossedMidpoint || linear >= 1.0);
+            if (linear < 1.0) {
+              skyLayerSemanticTransitionFrame = window.requestAnimationFrame(step);
+              return;
+            }
+            skyLayerSemanticTransitionFrame = 0;
+            activeSkyLayerSemanticTransition = null;
+            finishSkyLayerSemanticTransitionAfterPaint(transition);
+          };
+          skyLayerSemanticTransitionFrame = window.requestAnimationFrame(step);
+        }
         function scheduleSkyBackgroundView(data) {
+          if (activeSkyBackgroundSemanticTransition || pendingSkyBackgroundSemanticCompletion) {
+            if (data && data.cancelSemanticTransition === true) {
+              cancelSkyBackgroundSemanticTransition("ordinary-view", true);
+            } else {
+              return;
+            }
+          }
+          // Keep only the newest parent camera pose until Aladin can paint it.
+          // Replaying every queued intermediate pose makes the iframe fall
+          // behind the Three.js traces and can expose cleared canvas frames.
           pendingSkyBackgroundView = data;
           if (skyBackgroundViewAnimationFrame) {
             return;
           }
-          const scheduleFrame = typeof window.requestAnimationFrame === "function"
-            ? (callback) => window.requestAnimationFrame(callback)
-            : (callback) => window.setTimeout(callback, 0);
-          skyBackgroundViewAnimationFrame = scheduleFrame(() => {
+          skyBackgroundViewAnimationFrame = window.requestAnimationFrame(() => {
             skyBackgroundViewAnimationFrame = 0;
-            const latestView = pendingSkyBackgroundView;
+            const nextView = pendingSkyBackgroundView;
             pendingSkyBackgroundView = null;
-            applySkyBackgroundViewNow(latestView);
-            if (window.parent && window.parent !== window && latestView && latestView.seq != null) {
-              window.parent.postMessage({
-                type: "oviz-aladin-sky-background-view-applied",
-                seq: latestView.seq,
-              }, "*");
+            if (!nextView) {
+              return;
             }
+            applySkyBackgroundViewNow(nextView);
+            postSkyBackgroundViewAppliedAfterPaint(nextView);
           });
         }
         function setHoveredClusterKey(clusterKey, emitToParent) {
@@ -11837,8 +12601,22 @@ __SKY_RUNTIME_JS__
               if (data.type === "oviz-sky-background-view") {
                 scheduleSkyBackgroundView(data);
               }
+              if (data.type === "oviz-sky-background-transition") {
+                startSkyBackgroundSemanticTransition(data);
+              }
+              if (data.type === "oviz-sky-background-transition-cancel") {
+                cancelSkyBackgroundSemanticTransitionFromParent(data);
+              }
               if (data.type === "oviz-sky-layer-state") {
-                applySkyLayerState(data);
+                if (!activeSkyLayerSemanticTransition && !pendingSkyLayerSemanticCompletion) {
+                  applySkyLayerState(data);
+                }
+              }
+              if (data.type === "oviz-sky-layer-transition") {
+                startSkyLayerSemanticTransition(data);
+              }
+              if (data.type === "oviz-sky-layer-transition-cancel") {
+                cancelSkyLayerSemanticTransitionFromParent(data);
               }
               if (data.type === "oviz-sky-aperture-layer-state") {
                 applySkyApertureLayerState(data);
@@ -11887,21 +12665,24 @@ __SKY_RUNTIME_JS__
           skyDomeCaptureFrameSignature = skyDomeUsesHips2Fits() ? "hips2fits" : "native-hips";
           return;
         }
-        const signature = JSON.stringify({
-          survey: skySpec.survey || "",
-          mode: skyDomeUsesAladinBackground() ? "aladin-background" : "snapshot",
-          projection: skyDomeSpec.projection || "MOL",
-          width: skyDomeSpec.capture_width_px || null,
-          height: skyDomeSpec.capture_height_px || null,
-          format: skyDomeSpec.capture_format || null,
-          quality: skyDomeSpec.capture_quality || null,
-        });
+        const liveAladinBackground = skyDomeUsesAladinBackground();
+        const signature = liveAladinBackground
+          ? "aladin-background-live-runtime-v2"
+          : JSON.stringify({
+            survey: skySpec.survey || "",
+            mode: "snapshot",
+            projection: skyDomeSpec.projection || "MOL",
+            width: skyDomeSpec.capture_width_px || null,
+            height: skyDomeSpec.capture_height_px || null,
+            format: skyDomeSpec.capture_format || null,
+            quality: skyDomeSpec.capture_quality || null,
+          });
         if (skyDomeCaptureFrameSignature === signature) {
           return;
         }
         skyDomeBackgroundFrameReady = false;
         skyDomeBackgroundViewSignature = "";
-        if (skyDomeUsesAladinBackground()) {
+        if (liveAladinBackground) {
           skyDomeFrameEl.style.width = "100%";
           skyDomeFrameEl.style.height = "100%";
         } else {
@@ -11910,7 +12691,14 @@ __SKY_RUNTIME_JS__
           skyDomeFrameEl.style.width = `${captureWidth}px`;
           skyDomeFrameEl.style.height = `${captureHeight}px`;
         }
-        skyDomeFrameEl.srcdoc = buildAladinSrcdoc([], [], "overview", null, true);
+        skyDomeFrameEl.srcdoc = buildAladinSrcdoc(
+          [],
+          [],
+          "overview",
+          null,
+          true,
+          { survey: initialAladinFrameSurvey() }
+        );
         ovizDebugUpdateSky({
           ready: false,
           lastSurvey: String(skySpec.survey || ""),
@@ -11933,7 +12721,14 @@ __SKY_RUNTIME_JS__
         const volumeOverlay = buildVolumeSkyImageOverlaySpec(mode);
         setSkyHoveredClusterKey("");
         lastSentSkyHoverClusterKey = null;
-        skyFrameEl.srcdoc = buildAladinSrcdoc(selectionsForPanel, payload, mode, volumeOverlay);
+        skyFrameEl.srcdoc = buildAladinSrcdoc(
+          selectionsForPanel,
+          payload,
+          mode,
+          volumeOverlay,
+          false,
+          { survey: initialAladinFrameSurvey() }
+        );
       }
 
       function updateSelectionUI() {
@@ -12033,6 +12828,20 @@ __SKY_RUNTIME_JS__
             return;
           }
           markSkyDomeBackgroundViewApplied(data.seq);
+        } else if (data.type === "oviz-aladin-sky-background-transition-complete") {
+          if (!fromSkyDomeCapture) {
+            return;
+          }
+          if (typeof markSkyDomeBackgroundTransitionComplete === "function") {
+            markSkyDomeBackgroundTransitionComplete(data.transitionId, data.seq, data.cancelled);
+          }
+        } else if (data.type === "oviz-aladin-sky-background-transition-progress") {
+          if (!fromSkyDomeCapture) {
+            return;
+          }
+          if (typeof markSkyDomeBackgroundTransitionProgress === "function") {
+            markSkyDomeBackgroundTransitionProgress(data);
+          }
         } else if (data.type === "oviz-aladin-sky-background-ready") {
           if (fromSkyApertureFrame) {
             markSkyApertureFrameReady(event.source, data.survey || "");
@@ -12054,6 +12863,9 @@ __SKY_RUNTIME_JS__
           }, "sky-background-ready");
           setSkyDomeSnapshotStatus("loaded", "");
           postSkyLayerStateToAladin();
+          if (typeof flushSkyDomeBackgroundProgrammaticTransition === "function") {
+            flushSkyDomeBackgroundProgrammaticTransition();
+          }
           updateSkyDomeBackgroundFrame(
             (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()
           );
@@ -15539,6 +16351,10 @@ __SKY_RUNTIME_JS__
         if (actionState) {
           return Boolean(actionState.visible);
         }
+        const stateTransitionState = stateTraceVisibilityState(trace);
+        if (stateTransitionState) {
+          return Boolean(stateTransitionState.visible);
+        }
         const defaults = groupDefaults(currentGroup);
         const mode = defaults[trace.key];
         if (mode === false || mode === undefined) {
@@ -16024,6 +16840,8 @@ __SCENE_RUNTIME_JS__
 __VIEWER_RUNTIME_JS__
 
 __ACTION_RUNTIME_JS__
+
+__STATE_RUNTIME_JS__
 
       function manualLabelHitFromEvent(event) {
         const hitObject = pickSprite(event);
@@ -16880,12 +17698,22 @@ __ACTION_RUNTIME_JS__
           : clampRange((now - lastAnimationTimestamp) / 1000.0, 0.0, 0.05);
         lastAnimationTimestamp = now;
         updateViewerActions(now);
+        updateOvizStateTransition(now);
         updateAnimatedFramePlayback(now);
         updateKeyboardMotion(deltaSeconds);
         updateGalacticSimpleDefaultOrbit(deltaSeconds);
         if (controls.enabled) {
           controls.update();
-        } else if (cameraViewMode === "earth" && !cameraTransitionAnimationFrame && !skyViewDragState) {
+        } else if (
+          cameraViewMode === "earth"
+          && !cameraTransitionAnimationFrame
+          && !skyViewDragState
+          && !(
+            typeof ovizStateTransition !== "undefined"
+            && ovizStateTransition
+            && ovizStateTransition.nativeViewTransition
+          )
+        ) {
           lockEarthViewCameraToTarget();
         }
         updateCameraResponsivePointSprites();
@@ -16921,6 +17749,7 @@ __ACTION_RUNTIME_JS__
       setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);
       initialActionViewState = captureCurrentActionViewState();
       syncActionButtons();
+      await initializeOvizStates();
       ovizStartupRecordPhase("sceneInitialize", ovizSceneInitializeStartMs);
       ovizStartupTiming.totalMs = ovizStartupRound(ovizStartupNow() - ovizStartupStartedAtMs, 1);
       ovizStartupMark("ready");
@@ -16970,6 +17799,10 @@ class ThreeJSFigure:
         scene_spec_compression_threshold_bytes: int | None = None,
     ):
         self.scene_spec = scene_spec
+        self.scene_spec["states"] = normalize_states_spec(
+            self.scene_spec.get("states"),
+            project_id=default_states_project_id(self.scene_spec),
+        )
         self._root_id = f"oviz-three-{uuid.uuid4().hex}"
         self.compress_scene_spec = compress_scene_spec
         self.scene_spec_compression_threshold_bytes = (
@@ -17004,6 +17837,7 @@ class ThreeJSFigure:
             sky_runtime_js=THREEJS_SKY_RUNTIME_JS,
             viewer_runtime_js=THREEJS_VIEWER_RUNTIME_JS,
             action_runtime_js=THREEJS_ACTION_RUNTIME_JS,
+            state_runtime_js=THREEJS_STATE_RUNTIME_JS,
             compress_scene_spec=(
                 self.compress_scene_spec
                 if compress_scene_spec is None

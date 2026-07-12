@@ -124,7 +124,10 @@ THREEJS_ACTION_RUNTIME_JS = """
 
       function traceVisibilityOpacityMultiplier(trace) {
         const state = actionTraceVisibilityState(trace);
-        return state ? clampRange(state.opacity, 0.0, 1.0) : 1.0;
+        const stateTransition = stateTraceVisibilityState(trace);
+        const actionOpacity = state ? clampRange(state.opacity, 0.0, 1.0) : 1.0;
+        const transitionOpacity = stateTransition ? clampRange(stateTransition.opacity, 0.0, 1.0) : 1.0;
+        return actionOpacity * transitionOpacity;
       }
 
       function renderActionBar() {

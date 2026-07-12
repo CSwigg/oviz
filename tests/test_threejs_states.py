@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+import json
+import re
+import unittest
+
+from oviz.threejs_figure import ThreeJSFigure
+from oviz.threejs_states import (
+    DEFAULT_STATE_TRANSITION,
+    deduplicate_state_assets,
+    normalize_states_spec,
+    normalize_transition,
+)
+from oviz.threejs_scene import _round_scene_floats
+
+
+class ThreeJSStatesSchemaTests(unittest.TestCase):
+    def test_compact_rounding_preserves_control_range_precision(self):
+        rounded = _round_scene_floats({"x": 1.234, "vmax": 0.07, "cut_max": 0.07123}, 1)
+
+        self.assertEqual(rounded["x"], 1.2)
+        self.assertEqual(rounded["vmax"], 0.07)
+        self.assertEqual(rounded["cut_max"], 0.0712)
+
+    def test_missing_states_gets_stable_project_schema(self):
+        scene = {"width": 640, "height": 480, "frames": [], "initial_state": {}}
+        figure = ThreeJSFigure(scene)
+
+        first = figure.to_dict()["states"]
+        second = figure.to_dict()["states"]
+
+        self.assertEqual(first["project_id"], second["project_id"])
+        self.assertEqual(first["schema_version"], 1)
+        self.assertEqual(first["default_mode"], "edit")
+        self.assertEqual(first["default_transition"], DEFAULT_STATE_TRANSITION)
+        self.assertEqual(first["items"], [])
+
+        same_scene = ThreeJSFigure({"width": 640, "height": 480, "frames": [], "initial_state": {}})
+        self.assertEqual(first["project_id"], same_scene.to_dict()["states"]["project_id"])
+
+    def test_normalization_preserves_order_and_repairs_duplicate_ids(self):
+        states = normalize_states_spec({
+            "project_id": "project-fixed",
+            "default_mode": "present",
+            "items": [
+                {"id": "same", "name": "First", "snapshot": {"current_frame_index": 1}},
+                {"id": "same", "name": "Second", "snapshot": {"current_frame_index": 2}},
+            ],
+        })
+
+        self.assertEqual([item["name"] for item in states["items"]], ["First", "Second"])
+        self.assertEqual(states["items"][0]["id"], "same")
+        self.assertNotEqual(states["items"][1]["id"], "same")
+        self.assertEqual(states["project_id"], "project-fixed")
+        self.assertEqual(states["default_mode"], "present")
+
+    def test_target_transition_override_is_normalized_independently(self):
+        states = normalize_states_spec({
+            "default_transition": {"duration_ms": 1400, "easing": "linear"},
+            "items": [
+                {"name": "Default", "snapshot": {}},
+                {"name": "Fast", "transition": {"duration_ms": 250, "easing": "easeOutCubic"}, "snapshot": {}},
+            ],
+        })
+
+        self.assertIsNone(states["items"][0]["transition"])
+        self.assertEqual(states["items"][1]["transition"], {"duration_ms": 250, "easing": "easeOutCubic"})
+        self.assertEqual(normalize_transition({"duration_ms": -10})["duration_ms"], 0)
+
+    def test_large_state_assets_are_content_addressed_and_deduplicated(self):
+        data_url = "data:image/png;base64," + ("A" * 5000)
+        compact, assets = deduplicate_state_assets({"one": data_url, "nested": [data_url]})
+
+        first_ref = compact["one"]["__oviz_asset_ref__"]
+        second_ref = compact["nested"][0]["__oviz_asset_ref__"]
+        self.assertEqual(first_ref, second_ref)
+        self.assertEqual(len(assets), 1)
+        self.assertEqual(assets[first_ref], data_url)
+
+
+class ThreeJSStatesRuntimeTests(unittest.TestCase):
+    def test_runtime_and_non_dom_api_are_embedded(self):
+        figure = ThreeJSFigure({"width": 640, "height": 480, "frames": [], "initial_state": {}})
+        html = figure.to_html(compress_scene_spec=False)
+
+        self.assertIn("const OVIZ_STATES_VERSION = 1", html)
+        self.assertIn("window.Oviz.get =", html)
+        self.assertIn('ovizStateEvent("states-ready"', html)
+        self.assertIn('ovizStateEvent("transition-progress"', html)
+        self.assertIn('data.source !== "oviz-command"', html)
+        self.assertIn("ovizSwapTransitionScene(transition, toFrame)", html)
+        self.assertIn("renderer.domElement.style.opacity", html)
+        self.assertIn("restoreSkyLayerStateFromSnapshot(initialState, {", html)
+        self.assertIn("postToAladin: options.postSkyLayersToAladin !== false", html)
+        self.assertIn('targetViewMode !== "earth"', html)
+        self.assertIn("lockEarthViewCameraToTarget()", html)
+        self.assertIn("viewFromEarth();", html)
+        self.assertIn("exitEarthView();", html)
+        self.assertIn("transition.nativeViewTransition", html)
+        self.assertIn("destinationCameraState", html)
+        self.assertIn("preApplyFovError", html)
+        self.assertIn("now - transition.lastProgressEventAt >= 100", html)
+        self.assertIn("root.dataset.stateTransitionMetrics", html)
+        self.assertNotIn("__STATE_RUNTIME_JS__", html)
+
+    def test_embedded_scene_state_schema_round_trips_to_payload(self):
+        scene = {
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {"current_frame_index": 0},
+            "states": {
+                "project_id": "project-roundtrip",
+                "default_mode": "present",
+                "items": [{
+                    "id": "state-one",
+                    "name": "One",
+                    "transition": {"duration_ms": 333, "easing": "linear"},
+                    "snapshot": {"current_frame_value": 0.25},
+                }],
+            },
+        }
+        html = ThreeJSFigure(scene).to_html(compress_scene_spec=False)
+        match = re.search(
+            r"/\*__SCENE_SPEC_START__\*/const sceneSpec = (.*?);/\*__SCENE_SPEC_END__\*/",
+            html,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        payload = json.loads(match.group(1))
+        self.assertEqual(payload["states"]["project_id"], "project-roundtrip")
+        self.assertEqual(payload["states"]["items"][0]["id"], "state-one")
+        self.assertEqual(payload["states"]["items"][0]["snapshot"]["current_frame_value"], 0.25)
+
+
+if __name__ == "__main__":
+    unittest.main()

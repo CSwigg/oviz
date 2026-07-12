@@ -2,6 +2,9 @@ from __future__ import annotations
 
 
 THREEJS_SKY_RUNTIME_JS = """
+      let skyDomeBackgroundProgrammaticTransition = null;
+      let skyDomeBackgroundProgrammaticTransitionSequence = 0;
+
       function normalizeMemberKey(value) {
         return String(value || "")
           .trim()
@@ -1116,12 +1119,11 @@ THREEJS_SKY_RUNTIME_JS = """
         return maxOpacity * Math.min(Math.max(Number(skyDomeViewOpacityScale) || 0.0, 0.0), 1.0);
       }
 
-      function skyDomeBackgroundViewForCamera() {
-        if (!camera || !canvas) {
+      function skyDomeBackgroundViewForDirection(directionValue, cameraFovValue) {
+        if (!canvas || !directionValue || !directionValue.lengthSq || directionValue.lengthSq() <= 1e-12) {
           return null;
         }
-        const direction = new THREE.Vector3();
-        camera.getWorldDirection(direction);
+        const direction = directionValue.clone().normalize();
         const galactic = volumeSkyGalacticLonLatDegFromCartesian(direction.x, direction.y, direction.z);
         if (!galactic) {
           return null;
@@ -1130,7 +1132,7 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!icrs) {
           return null;
         }
-        const cameraFovDeg = Math.min(Math.max(Number(camera.fov) || 60.0, 0.05), 120.0);
+        const cameraFovDeg = Math.min(Math.max(Number(cameraFovValue) || 60.0, 0.05), 120.0);
         const width = Math.max(Number(canvas && canvas.clientWidth) || 1.0, 1.0);
         const height = Math.max(Number(canvas && canvas.clientHeight) || 1.0, 1.0);
         const aspect = width / height;
@@ -1145,14 +1147,52 @@ THREEJS_SKY_RUNTIME_JS = """
           dec: Number(icrs.dec),
           fovDeg,
           cameraFovDeg,
+          direction,
         };
+      }
+
+      function skyDomeBackgroundViewForCamera() {
+        if (!camera || !canvas) {
+          return null;
+        }
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+        const cameraFovDeg = Math.min(Math.max(Number(camera.fov) || 60.0, 0.05), 120.0);
+        return skyDomeBackgroundViewForDirection(direction, cameraFovDeg);
+      }
+
+      function skyDomeBackgroundViewForCameraState(cameraState, cameraFovValue = null) {
+        if (!cameraState || typeof cameraState !== "object") {
+          return null;
+        }
+        const position = cameraState.position || {};
+        const target = cameraState.target || {};
+        const direction = new THREE.Vector3(
+          Number(target.x) - Number(position.x),
+          Number(target.y) - Number(position.y),
+          Number(target.z) - Number(position.z)
+        );
+        if (
+          !Number.isFinite(direction.x)
+          || !Number.isFinite(direction.y)
+          || !Number.isFinite(direction.z)
+          || direction.lengthSq() <= 1e-12
+        ) {
+          return null;
+        }
+        const stateFov = Number(cameraFovValue ?? cameraState.fov);
+        return skyDomeBackgroundViewForDirection(direction, stateFov);
       }
 
       function holdSkyDomeBackgroundForCameraMotion(holdMs = 500.0) {
         if (!skyDomeUsesAladinBackground()) {
           return;
         }
-        skyDomeBackgroundMotionHoldUntil = 0.0;
+        const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        skyDomeBackgroundMotionHoldUntil = Math.max(
+          Number(skyDomeBackgroundMotionHoldUntil) || 0.0,
+          now + Math.max(Number(holdMs) || 0.0, 0.0)
+        );
       }
 
       function setSkyDomeBackgroundCameraActive(active) {
@@ -1203,56 +1243,12 @@ THREEJS_SKY_RUNTIME_JS = """
         skyDomeFrameEl.style.transform = "";
       }
 
-      function skyBackgroundPredictiveTransformForAlignedView(alignedView, currentView = null) {
-        if (!camera || !canvas || !alignedView) {
-          return "";
-        }
-        const alignedDirection = alignedView.direction;
-        if (!(alignedDirection instanceof THREE.Vector3)) {
-          return "";
-        }
-        camera.updateMatrixWorld(true);
-        camera.updateProjectionMatrix();
-        const distance = Math.max(Number(sceneSpec.max_span) || 1.0, 1000.0);
-        const projected = alignedDirection.clone()
-          .multiplyScalar(distance)
-          .add(camera.position)
-          .project(camera);
-        if (
-          !Number.isFinite(projected.x)
-          || !Number.isFinite(projected.y)
-          || Math.abs(projected.x) > 3.0
-          || Math.abs(projected.y) > 3.0
-        ) {
-          return "";
-        }
-        const width = Math.max(Number(canvas && canvas.clientWidth) || 1.0, 1.0);
-        const height = Math.max(Number(canvas && canvas.clientHeight) || 1.0, 1.0);
-        const maxShiftX = width * 0.22;
-        const maxShiftY = height * 0.22;
-        const dx = Math.min(Math.max(projected.x * width * 0.5, -maxShiftX), maxShiftX);
-        const dy = Math.min(Math.max(-projected.y * height * 0.5, -maxShiftY), maxShiftY);
-        const alignedFov = Math.min(Math.max(Number(alignedView.fovDeg) || 1.0, 0.05), 179.0);
-        const currentFov = Math.min(Math.max(Number(currentView && currentView.fovDeg) || alignedFov, 0.05), 179.0);
-        const alignedTan = Math.max(Math.tan(THREE.MathUtils.degToRad(alignedFov * 0.5)), 1e-6);
-        const currentTan = Math.max(Math.tan(THREE.MathUtils.degToRad(currentFov * 0.5)), 1e-6);
-        const scale = Math.min(Math.max(alignedTan / currentTan, 0.55), 1.9);
-        if (Math.abs(dx) < 0.35 && Math.abs(dy) < 0.35 && Math.abs(scale - 1.0) < 0.002) {
-          return "";
-        }
-        return `translate3d(${dx.toFixed(2)}px, ${dy.toFixed(2)}px, 0) scale(${scale.toFixed(5)})`;
-      }
-
-      function updateSkyDomeBackgroundPredictiveTransform(currentView = null) {
-        if (!skyDomeFrameEl || !skyDomeUsesAladinBackground()) {
-          return;
-        }
-        const transform = skyBackgroundPredictiveTransformForAlignedView(skyDomeBackgroundAlignedView, currentView);
-        if (!transform || (!skyDomeBackgroundUserCameraActive && skyDomeBackgroundSentViews.size === 0)) {
-          clearSkyDomeBackgroundPredictiveTransform();
-          return;
-        }
-        skyDomeFrameEl.style.transform = transform;
+      function updateSkyDomeBackgroundPredictiveTransform(_currentView = null) {
+        // A CSS translate/scale cannot reproduce a spherical TAN projection.
+        // It also clips the iframe while panning, which makes the Aladin sky
+        // visibly drift relative to the Three.js traces. Keep the iframe fixed
+        // and synchronize its real celestial center and FoV instead.
+        clearSkyDomeBackgroundPredictiveTransform();
       }
 
       function recordSkyDomeBackgroundSentView(seq, view) {
@@ -1274,6 +1270,210 @@ THREEJS_SKY_RUNTIME_JS = """
         }
       }
 
+      function cancelSkyDomeBackgroundProgrammaticTransition(reason = "cancelled") {
+        const active = skyDomeBackgroundProgrammaticTransition;
+        if (!active) {
+          return false;
+        }
+        skyDomeBackgroundProgrammaticTransition = null;
+        if (active.sent && skyDomeFrameEl && skyDomeFrameEl.contentWindow) {
+          try {
+            skyDomeFrameEl.contentWindow.postMessage({
+              type: "oviz-sky-background-transition-cancel",
+              transitionId: active.id,
+              seq: active.seq,
+              reason: String(reason || "cancelled"),
+            }, "*");
+            skyDomeFrameEl.contentWindow.postMessage({
+              type: "oviz-sky-layer-transition-cancel",
+              transitionId: active.id,
+              reason: String(reason || "cancelled"),
+            }, "*");
+          } catch (_err) {
+          }
+        }
+        if (typeof active.resolve === "function") {
+          active.resolve({ cancelled: true, transitionId: active.id, reason: String(reason || "cancelled") });
+        }
+        if (root && root.dataset) {
+          root.dataset.skyDomeProgrammaticTransition = "";
+        }
+        skyDomeBackgroundSentViews.clear();
+        clearSkyDomeBackgroundPredictiveTransform();
+        return true;
+      }
+
+      function flushSkyDomeBackgroundProgrammaticTransition() {
+        const active = skyDomeBackgroundProgrammaticTransition;
+        if (
+          !active
+          || active.sent
+          || !skyDomeBackgroundFrameReady
+          || !skyDomeFrameEl
+          || !skyDomeFrameEl.contentWindow
+        ) {
+          return false;
+        }
+        active.sent = true;
+        try {
+          skyDomeFrameEl.contentWindow.postMessage({
+            type: "oviz-sky-background-transition",
+            transitionId: active.id,
+            seq: active.seq,
+            durationMs: active.durationMs,
+            easing: active.easing,
+            startedAtEpochMs: active.startedAtEpochMs,
+            ra: active.target.ra,
+            dec: active.target.dec,
+            l: active.target.l,
+            b: active.target.b,
+            fovDeg: active.target.fovDeg,
+            cameraFovDeg: active.target.cameraFovDeg,
+            startRa: active.start ? active.start.ra : null,
+            startDec: active.start ? active.start.dec : null,
+            startL: active.start ? active.start.l : null,
+            startB: active.start ? active.start.b : null,
+            startFovDeg: active.start ? active.start.fovDeg : null,
+          }, "*");
+          return true;
+        } catch (_err) {
+          active.sent = false;
+          return false;
+        }
+      }
+
+      function startSkyDomeBackgroundProgrammaticTransition(options = {}) {
+        cancelSkyDomeBackgroundProgrammaticTransition("retargeted");
+        const target = options.targetView || skyDomeBackgroundViewForCameraState(
+          options.destinationCameraState,
+          options.destinationCameraFov
+        );
+        if (!target) {
+          return Promise.resolve({ cancelled: true, reason: "missing-target-view" });
+        }
+        const start = options.startView || skyDomeBackgroundViewForCamera();
+        skyDomeBackgroundProgrammaticTransitionSequence += 1;
+        const id = String(options.transitionId || `sky-transition-${skyDomeBackgroundProgrammaticTransitionSequence}`);
+        const seq = skyDomeBackgroundProgrammaticTransitionSequence;
+        let resolvePromise;
+        const promise = new Promise((resolve) => {
+          resolvePromise = resolve;
+        });
+        skyDomeBackgroundProgrammaticTransition = {
+          id,
+          seq,
+          start,
+          target,
+          targetDirection: target.direction ? target.direction.clone() : null,
+          durationMs: Math.max(Number(options.durationMs) || 1200.0, 1.0),
+          easing: String(options.easing || "easeInOutCubic"),
+          startedAtEpochMs: Number.isFinite(Number(options.startedAtEpochMs))
+            ? Number(options.startedAtEpochMs)
+            : (
+              (typeof performance !== "undefined" && Number.isFinite(Number(performance.timeOrigin)))
+                ? Number(performance.timeOrigin) + performance.now()
+                : Date.now()
+            ),
+          sent: false,
+          completed: false,
+          resolve: resolvePromise,
+          promise,
+        };
+        if (root && root.dataset) {
+          root.dataset.skyDomeProgrammaticTransition = id;
+          root.dataset.skyDomeMotion = "programmatic";
+        }
+        clearSkyDomeBackgroundPredictiveTransform();
+        flushSkyDomeBackgroundProgrammaticTransition();
+        return promise;
+      }
+
+      function markSkyDomeBackgroundTransitionComplete(transitionId, seq, cancelled = false) {
+        const active = skyDomeBackgroundProgrammaticTransition;
+        if (
+          !active
+          || String(transitionId || "") !== active.id
+          || Math.round(Number(seq) || 0) !== active.seq
+          || active.completed
+        ) {
+          return false;
+        }
+        active.completed = true;
+        if (typeof active.resolve === "function") {
+          active.resolve({ cancelled: Boolean(cancelled), transitionId: active.id, seq: active.seq });
+        }
+        return true;
+      }
+
+      function markSkyDomeBackgroundTransitionProgress(data) {
+        const active = skyDomeBackgroundProgrammaticTransition;
+        if (
+          !active
+          || !data
+          || String(data.transitionId || "") !== active.id
+          || Math.round(Number(data.seq) || 0) !== active.seq
+        ) {
+          return false;
+        }
+        if (root && root.dataset) {
+          root.dataset.skyDomeProgrammaticActual = JSON.stringify({
+            progress: clampRange(Number(data.progress) || 0.0, 0.0, 1.0),
+            l: Number(data.l),
+            b: Number(data.b),
+            ra: Number(data.ra),
+            dec: Number(data.dec),
+            fovDeg: Number(data.fovDeg),
+            coordinateFrame: String(data.coordinateFrame || ""),
+          });
+        }
+        return true;
+      }
+
+      function finishSkyDomeBackgroundProgrammaticTransition(transitionId = "") {
+        const active = skyDomeBackgroundProgrammaticTransition;
+        if (!active || (transitionId && String(transitionId) !== active.id)) {
+          return false;
+        }
+        if (!active.completed && active.sent && skyDomeFrameEl && skyDomeFrameEl.contentWindow) {
+          try {
+            skyDomeFrameEl.contentWindow.postMessage({
+              type: "oviz-sky-background-transition-cancel",
+              transitionId: active.id,
+              seq: active.seq,
+              reason: "parent-finished",
+            }, "*");
+            skyDomeFrameEl.contentWindow.postMessage({
+              type: "oviz-sky-layer-transition-cancel",
+              transitionId: active.id,
+              reason: "parent-finished",
+            }, "*");
+          } catch (_err) {
+          }
+          if (typeof active.resolve === "function") {
+            active.resolve({ cancelled: true, forced: true, transitionId: active.id, seq: active.seq });
+          }
+        }
+        if (active.targetDirection) {
+          skyDomeBackgroundAlignedView = {
+            direction: active.targetDirection.clone(),
+            fovDeg: Number(active.target.fovDeg) || 0.0,
+            cameraFovDeg: Number(active.target.cameraFovDeg) || Number(active.target.fovDeg) || 0.0,
+          };
+        }
+        skyDomeBackgroundProgrammaticTransition = null;
+        skyDomeBackgroundSentViews.clear();
+        if (root && root.dataset) {
+          root.dataset.skyDomeProgrammaticTransition = "";
+          root.dataset.skyDomeMotion = "settled";
+        }
+        clearSkyDomeBackgroundPredictiveTransform();
+        updateSkyDomeBackgroundFrame(
+          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
+          { force: true }
+        );
+        return true;
+      }
+
       function markSkyDomeBackgroundViewApplied(seq) {
         const safeSeq = Math.round(Number(seq) || 0);
         const appliedView = skyDomeBackgroundSentViews.get(safeSeq);
@@ -1288,7 +1488,7 @@ THREEJS_SKY_RUNTIME_JS = """
         if (typeof ovizDebugTrackSkyViewApplied === "function") {
           ovizDebugTrackSkyViewApplied(safeSeq, Boolean(appliedView));
         }
-        updateSkyDomeBackgroundPredictiveTransform();
+        clearSkyDomeBackgroundPredictiveTransform();
       }
 
       function updateSkyDomeBackgroundFrame(timestampMs = 0.0, options = {}) {
@@ -1337,14 +1537,30 @@ THREEJS_SKY_RUNTIME_JS = """
             firstVisibleAtMs: now || ((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()),
           }, "sky-background-first-visible");
         }
-        updateSkyDomeBackgroundPredictiveTransform(view);
+        if (skyDomeBackgroundProgrammaticTransition) {
+          clearSkyDomeBackgroundPredictiveTransform();
+          if (root && root.dataset) {
+            root.dataset.skyDomeMotion = "programmatic";
+          }
+          flushSkyDomeBackgroundProgrammaticTransition();
+          return;
+        }
+        clearSkyDomeBackgroundPredictiveTransform();
         if (root && root.dataset) {
           root.dataset.skyDomeMotion = skyDomeBackgroundUserCameraActive ? "camera-moving" : "settled";
         }
         const forceUpdate = Boolean(options && options.force);
-        if (!forceUpdate && signature === skyDomeBackgroundViewSignature && (now - skyDomeBackgroundLastSentAt) < 500.0) {
+        // A settled Aladin view must stay settled. Re-sending an identical
+        // center/FOV periodically clears its canvas for no visual benefit and
+        // can expose a black repaint frame over otherwise aligned traces.
+        if (!forceUpdate && signature === skyDomeBackgroundViewSignature) {
           return;
         }
+        // Aladin redraws its spherical projection asynchronously.  Feeding it
+        // a new gotoPosition/setFoV pair every animation frame can overrun that
+        // renderer and expose partially cleared canvas tiles.  State camera
+        // transitions therefore use the same 50 ms cadence as the normal View
+        // transition; direct pointer motion remains at 16 ms for responsiveness.
         const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 16.0 : 50.0;
         if (!forceUpdate && (now - skyDomeBackgroundLastSentAt) < minUpdateIntervalMs) {
           return;

@@ -125,7 +125,15 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert initial_state["volume_state_by_key"][edenhofer_volume["state_key"]] == {
         "visible": True,
         "opacity": 1.0,
+        "stretch": "asinh",
+        "vmax": 0.07,
     }
+    planck_layer = next(
+        layer for layer in initial_state["sky_layers"]
+        if layer["survey"] == "P/PLANCK/R2/HFI/color"
+    )
+    assert planck_layer["stretch"] == "asinh"
+    assert planck_layer["cut_max"] == 0.07
 
     assert 'data-mobile="false"' in html
     assert "ovizRuntimeLooksMobile" in html

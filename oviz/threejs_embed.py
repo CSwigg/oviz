@@ -158,6 +158,7 @@ def render_threejs_html(
     sky_runtime_js: str,
     viewer_runtime_js: str,
     action_runtime_js: str,
+    state_runtime_js: str,
     compress_scene_spec: bool | str | None = "auto",
     scene_spec_compression_threshold_bytes: int | None = None,
 ) -> str:
@@ -216,6 +217,7 @@ def render_threejs_html(
     html = html.replace("__SKY_RUNTIME_JS__", sky_runtime_js)
     html = html.replace("__VIEWER_RUNTIME_JS__", viewer_runtime_js)
     html = html.replace("__ACTION_RUNTIME_JS__", action_runtime_js)
+    html = html.replace("__STATE_RUNTIME_JS__", state_runtime_js)
     scene_spec_expr, scene_spec_payload_metadata, scene_spec_payload_html = _scene_spec_payload(
         scene_spec,
         root_id=root_id,

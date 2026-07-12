@@ -16,17 +16,24 @@ def _lite_mode_enabled(plot) -> bool:
     )
 
 
-def _round_scene_floats(value, precision: int):
+_CONTROL_RANGE_KEYS = {"vmin", "vmax", "cut_min", "cut_max"}
+
+
+def _round_scene_floats(value, precision: int, *, field_name: str | None = None):
+    effective_precision = max(precision, 4) if field_name in _CONTROL_RANGE_KEYS else precision
     if isinstance(value, bool):
         return value
     if isinstance(value, (float, np.floating)):
         if np.isfinite(value):
-            return float(round(float(value), precision))
+            return float(round(float(value), effective_precision))
         return value
     if isinstance(value, list):
         return [_round_scene_floats(item, precision) for item in value]
     if isinstance(value, dict):
-        return {key: _round_scene_floats(item, precision) for key, item in value.items()}
+        return {
+            key: _round_scene_floats(item, precision, field_name=str(key))
+            for key, item in value.items()
+        }
     return value
 
 

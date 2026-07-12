@@ -356,7 +356,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
       }
 
-      function applyCameraViewMode() {
+      function applyCameraViewMode(options = {}) {
         const isEarthView = cameraViewMode === "earth";
         if (typeof axisGroup !== "undefined" && axisGroup) {
           axisGroup.visible = !isEarthView && axesVisible;
@@ -372,7 +372,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (typeof updateSkyDomeBackgroundFrame === "function") {
           updateSkyDomeBackgroundFrame(
             (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
-            { force: true }
+            { force: options.forceSkyBackground !== false }
           );
         }
         syncEarthViewToggleUi();
@@ -709,6 +709,50 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
       }
 
+      function cancelSkyViewTransitionAnimations(options = {}) {
+        skyViewTransitionSerial += 1;
+        cancelCameraTransition();
+        cancelSkyDomeOpacityAnimation();
+        if (
+          options.cancelBackground !== false
+          && typeof cancelSkyDomeBackgroundProgrammaticTransition === "function"
+        ) {
+          cancelSkyDomeBackgroundProgrammaticTransition(options.reason || "cancelled");
+        }
+        return skyViewTransitionSerial;
+      }
+
+      function slerpSkyViewDirection(startDirection, endDirection, progress) {
+        const start = startDirection.clone().normalize();
+        const end = endDirection.clone().normalize();
+        const t = clampRange(progress, 0.0, 1.0);
+        const dot = clampRange(start.dot(end), -1.0, 1.0);
+        if (dot > 0.9995) {
+          const blended = start.clone().lerp(end, t);
+          return blended.lengthSq() > 1e-12 ? blended.normalize() : end;
+        }
+        if (dot < -0.9995) {
+          const reference = Math.abs(start.z) < 0.9
+            ? new THREE.Vector3(0.0, 0.0, 1.0)
+            : new THREE.Vector3(0.0, 1.0, 0.0);
+          const axis = new THREE.Vector3().crossVectors(start, reference).normalize();
+          return start.clone().applyAxisAngle(axis, Math.PI * t).normalize();
+        }
+        const theta = Math.acos(dot);
+        const sinTheta = Math.sin(theta);
+        return start.clone()
+          .multiplyScalar(Math.sin((1.0 - t) * theta) / sinTheta)
+          .add(end.clone().multiplyScalar(Math.sin(t * theta) / sinTheta))
+          .normalize();
+      }
+
+      function interpolateCameraFovTangent(startFov, endFov, progress) {
+        const startTangent = Math.tan(THREE.MathUtils.degToRad(clampRange(startFov, 0.05, 120.0) * 0.5));
+        const endTangent = Math.tan(THREE.MathUtils.degToRad(clampRange(endFov, 0.05, 120.0) * 0.5));
+        const tangent = startTangent + ((endTangent - startTangent) * clampRange(progress, 0.0, 1.0));
+        return clampRange(THREE.MathUtils.radToDeg(2.0 * Math.atan(Math.max(tangent, 1e-9))), 0.05, 120.0);
+      }
+
       function setSkyDomeViewOpacityScale(value, options = {}) {
         skyDomeViewOpacityScale = Math.min(Math.max(Number(value) || 0.0, 0.0), 1.0);
         if (skyDomeFrameEl && skyDomeViewOpacityScale <= 0.002) {
@@ -764,13 +808,13 @@ THREEJS_VIEWER_RUNTIME_JS = """
           const now = Number(timestampMs) || ((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now());
           const linear = clampRange((now - startMs) / durationMs, 0.0, 1.0);
           const eased = linear * linear * linear * (linear * (linear * 6.0 - 15.0) + 10.0);
-          setSkyDomeViewOpacityScale(startOpacity + ((endOpacity - startOpacity) * eased), { force: true });
+          setSkyDomeViewOpacityScale(startOpacity + ((endOpacity - startOpacity) * eased), { force: false });
           if (linear < 1.0) {
             skyDomeOpacityAnimationFrame = window.requestAnimationFrame(step);
             return;
           }
           skyDomeOpacityAnimationFrame = 0;
-          setSkyDomeViewOpacityScale(endOpacity, { force: true });
+          setSkyDomeViewOpacityScale(endOpacity, { force: false });
           if (typeof onComplete === "function") {
             onComplete();
           }
@@ -811,12 +855,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
             const distance = startDistance + ((endDistance - startDistance) * eased);
             let stepDirection = lockedDirection;
             if (startLockedDirection) {
-              stepDirection = startLockedDirection.clone().lerp(lockedDirection, eased);
-              if (stepDirection.lengthSq() <= 1e-12) {
-                stepDirection = lockedDirection;
-              } else {
-                stepDirection.normalize();
-              }
+              stepDirection = slerpSkyViewDirection(startLockedDirection, lockedDirection, eased);
             }
             controls.target.copy(camera.position).add(stepDirection.clone().multiplyScalar(distance));
           } else {
@@ -827,7 +866,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
             camera.up.copy(endUp);
           }
           camera.up.normalize();
-          camera.fov = startFov + (endFov - startFov) * eased;
+          camera.fov = interpolateCameraFovTangent(startFov, endFov, eased);
           camera.updateProjectionMatrix();
           updateControlSensitivityForView();
           controls.update();
@@ -840,6 +879,12 @@ THREEJS_VIEWER_RUNTIME_JS = """
             return;
           }
           cameraTransitionAnimationFrame = 0;
+          camera.position.copy(endPosition);
+          controls.target.copy(endTarget);
+          camera.up.copy(endUp).normalize();
+          camera.fov = endFov;
+          camera.updateProjectionMatrix();
+          controls.update();
           if (typeof onComplete === "function") {
             onComplete();
           }
@@ -1261,8 +1306,10 @@ THREEJS_VIEWER_RUNTIME_JS = """
 
       function enterEarthViewFromCurrentCamera(options = {}) {
         const wasEarthView = cameraViewMode === "earth";
-        const transitionSerial = ++skyViewTransitionSerial;
-        cancelSkyDomeOpacityAnimation();
+        const transitionSerial = cancelSkyViewTransitionAnimations({
+          cancelBackground: options.cancelBackgroundTransition !== false,
+          reason: "enter-earth-view",
+        });
         setSkyDomeViewOpacityScale(0.0, { force: true });
         if (!wasEarthView && (!options || options.storeReturnState !== false)) {
           earthViewReturnCameraState = captureEarthViewReturnCameraState();
@@ -1276,12 +1323,25 @@ THREEJS_VIEWER_RUNTIME_JS = """
         const preserveScaleBar = Boolean(options && options.preserveScaleBar);
         const preserveDirection = !options || options.preserveDirection !== false;
         const preserveFov = Boolean(options && options.preserveFov);
+        const destinationCameraState = cameraReturnStateFromPlainObject(
+          options && options.destinationCameraState
+        );
         const startDirection = preserveDirection
           ? cameraDirectionForEarthView(targetPoint)
           : null;
-        const direction = preserveDirection
-          ? leveledSkyViewDirectionForEarthView(targetPoint)
-          : new THREE.Vector3().subVectors(targetPoint, earthPoint);
+        const destinationDirection = destinationCameraState
+          ? new THREE.Vector3().subVectors(
+            destinationCameraState.target,
+            destinationCameraState.position
+          )
+          : null;
+        const direction = destinationDirection && destinationDirection.lengthSq() > 1e-12
+          ? destinationDirection
+          : (
+            preserveDirection
+              ? leveledSkyViewDirectionForEarthView(targetPoint)
+              : new THREE.Vector3().subVectors(targetPoint, earthPoint)
+          );
         if (!preserveDirection) {
           direction.z = 0.0;
         }
@@ -1290,28 +1350,50 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         direction.normalize();
         const focusDistance = Math.max(targetPoint.distanceTo(earthPoint), 1e-6);
-        const orbitRadius = Math.max(1e-3, Math.min(0.05, focusDistance * 1e-6));
-        const targetPosition = earthPoint.clone().sub(direction.clone().multiplyScalar(orbitRadius));
-        const targetFov = preserveFov
-          ? clampRange(Number(camera.fov) || 60.0, 0.05, 120.0)
+        const orbitRadius = destinationCameraState
+          ? Math.max(destinationCameraState.position.distanceTo(destinationCameraState.target), 1e-6)
+          : Math.max(1e-3, Math.min(0.05, focusDistance * 1e-6));
+        const targetPosition = destinationCameraState
+          ? destinationCameraState.position.clone()
+          : earthPoint.clone().sub(direction.clone().multiplyScalar(orbitRadius));
+        const targetControlsTarget = destinationCameraState
+          ? destinationCameraState.target.clone()
+          : earthPoint.clone();
+        const targetFov = destinationCameraState
+          ? destinationCameraState.fov
           : (
-            preserveScaleBar
-              ? cameraFovForScaleBarLength(previousScaleBarPc, focusDistance)
-              : 90.0
+            preserveFov
+              ? clampRange(Number(camera.fov) || 60.0, 0.05, 120.0)
+              : (
+                preserveScaleBar
+                  ? cameraFovForScaleBarLength(previousScaleBarPc, focusDistance)
+                  : 90.0
+              )
           );
-        const targetUp = skyViewUpVectorForDirection(direction);
+        const targetUp = destinationCameraState
+          ? destinationCameraState.up.clone()
+          : skyViewUpVectorForDirection(direction);
         cameraViewMode = "earth";
         earthViewFocusDistance = focusDistance;
         applyGlobalControlState();
         applyCameraViewMode();
         buildAxes();
         renderFrame(currentFrameIndex);
+        const transitionDurationMs = Math.max(Number(options.durationMs) || 820.0, 1.0);
+        const opacityDurationMs = Math.max(
+          Number(options.opacityDurationMs) || Math.min(Math.max(transitionDurationMs * 0.82, 520.0), transitionDurationMs),
+          1.0
+        );
+        animateSkyDomeViewOpacity(1.0, { durationMs: opacityDurationMs });
         animateCameraTransition(
           targetPosition,
-          earthPoint,
+          targetControlsTarget,
           targetFov,
           () => {
-            controls.target.copy(earthPoint);
+            if (transitionSerial !== skyViewTransitionSerial) {
+              return;
+            }
+            controls.target.copy(targetControlsTarget);
             camera.position.copy(targetPosition);
             camera.up.copy(targetUp);
             camera.fov = targetFov;
@@ -1327,30 +1409,28 @@ THREEJS_VIEWER_RUNTIME_JS = """
               (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
               { force: true }
             );
-            window.setTimeout(() => {
-              if (transitionSerial !== skyViewTransitionSerial || cameraViewMode !== "earth") {
-                return;
-              }
-              animateSkyDomeViewOpacity(1.0, { durationMs: 420.0 });
-            }, 70);
           },
           {
             lockDirection: preserveDirection,
             direction,
             startDirection,
             endDistance: orbitRadius,
-            durationMs: 820.0,
+            durationMs: transitionDurationMs,
             targetUp,
           }
         );
       }
 
-      function exitEarthView() {
+      function exitEarthViewToCameraState(options = {}) {
         if (cameraViewMode !== "earth") {
           return false;
         }
-        const transitionSerial = ++skyViewTransitionSerial;
-        const returnState = earthViewReturnCameraState || fallbackEarthViewReturnCameraState();
+        const transitionSerial = cancelSkyViewTransitionAnimations({
+          cancelBackground: options.cancelBackgroundTransition !== false,
+          reason: "exit-earth-view",
+        });
+        const destinationState = cameraReturnStateFromPlainObject(options.destinationCameraState);
+        const returnState = destinationState || earthViewReturnCameraState || fallbackEarthViewReturnCameraState();
         const targetPosition = returnState.position.clone();
         const targetControlsTarget = returnState.target.clone();
         const targetUp = returnState.up.clone();
@@ -1364,25 +1444,27 @@ THREEJS_VIEWER_RUNTIME_JS = """
           exitTargetDirection.set(1.0, 0.0, 0.0);
         }
         exitTargetDirection.normalize();
-        animateSkyDomeViewOpacity(0.0, { durationMs: 360.0 }, () => {
-          if (transitionSerial !== skyViewTransitionSerial) {
-            return;
-          }
-          const exitStartDirection = new THREE.Vector3();
-          camera.getWorldDirection(exitStartDirection);
-          if (exitStartDirection.lengthSq() <= 1e-12) {
-            exitStartDirection.subVectors(controls.target, camera.position);
-          }
-          if (exitStartDirection.lengthSq() <= 1e-12) {
-            exitStartDirection.copy(exitTargetDirection);
-          }
-          exitStartDirection.normalize();
-          setSkyDomeViewOpacityScale(0.0, { force: true });
-          animateCameraTransition(
+        const transitionDurationMs = Math.max(Number(options.durationMs) || 820.0, 1.0);
+        const exitStartDirection = new THREE.Vector3();
+        camera.getWorldDirection(exitStartDirection);
+        if (exitStartDirection.lengthSq() <= 1e-12) {
+          exitStartDirection.subVectors(controls.target, camera.position);
+        }
+        if (exitStartDirection.lengthSq() <= 1e-12) {
+          exitStartDirection.copy(exitTargetDirection);
+        }
+        exitStartDirection.normalize();
+        animateSkyDomeViewOpacity(0.0, {
+          durationMs: Math.min(Math.max(transitionDurationMs * 0.55, 360.0), transitionDurationMs),
+        });
+        animateCameraTransition(
             targetPosition,
             targetControlsTarget,
             targetFov,
             () => {
+              if (transitionSerial !== skyViewTransitionSerial) {
+                return;
+              }
               cameraViewMode = "free";
               earthViewFocusDistance = null;
               controls.target.copy(targetControlsTarget);
@@ -1401,7 +1483,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
               updateCameraResponsiveImagePlanes();
             },
             {
-              durationMs: 820.0,
+              durationMs: transitionDurationMs,
               targetUp,
               lockDirection: true,
               direction: exitTargetDirection,
@@ -1409,13 +1491,20 @@ THREEJS_VIEWER_RUNTIME_JS = """
               endDistance: exitTargetDistance,
             }
           );
-        });
         return true;
       }
 
-      function viewFromEarth() {
+      function exitEarthView() {
+        return exitEarthViewToCameraState({});
+      }
+
+      function viewFromEarth(options = {}) {
         resetToSunReferenceFrameForSkyView();
-        enterEarthViewFromCurrentCamera({ preserveScaleBar: false, preserveDirection: true, preserveFov: false });
+        enterEarthViewFromCurrentCamera(Object.assign({
+          preserveScaleBar: false,
+          preserveDirection: true,
+          preserveFov: false,
+        }, options || {}));
       }
 
       function toggleEarthView() {
