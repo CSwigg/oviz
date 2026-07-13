@@ -1053,6 +1053,30 @@ THREEJS_SCENE_RUNTIME_JS = """
         return Number(fallbackValue) || 0.0;
       }
 
+      function interpolateOptionalNumberField(target, fromObject, toObject, fieldName, alpha) {
+        const fromRaw = fromObject && fromObject[fieldName];
+        const toRaw = toObject && toObject[fieldName];
+        const fromNumber = fromRaw === null || fromRaw === undefined || fromRaw === ""
+          ? NaN
+          : Number(fromRaw);
+        const toNumber = toRaw === null || toRaw === undefined || toRaw === ""
+          ? NaN
+          : Number(toRaw);
+        if (!Number.isFinite(fromNumber) && !Number.isFinite(toNumber)) {
+          // Optional point and trace fields deliberately fall back to their
+          // trace defaults when omitted.  Writing an explicit zero here makes
+          // a fractional timeline frame invisible even though both integer
+          // endpoints are visible.
+          delete target[fieldName];
+          return;
+        }
+        if (Number.isFinite(fromNumber) && Number.isFinite(toNumber)) {
+          target[fieldName] = fromNumber + (toNumber - fromNumber) * alpha;
+        } else {
+          target[fieldName] = Number.isFinite(fromNumber) ? fromNumber : toNumber;
+        }
+      }
+
       function cloneTracePoint(point) {
         if (!point || typeof point !== "object") {
           return point;
@@ -1145,8 +1169,8 @@ THREEJS_SCENE_RUNTIME_JS = """
         blended.x = interpolateNumber(pointA.x, pointB.x, alpha, fallbackPoint && fallbackPoint.x);
         blended.y = interpolateNumber(pointA.y, pointB.y, alpha, fallbackPoint && fallbackPoint.y);
         blended.z = interpolateNumber(pointA.z, pointB.z, alpha, fallbackPoint && fallbackPoint.z);
-        blended.size = interpolateNumber(pointA.size, pointB.size, alpha, fallbackPoint && fallbackPoint.size);
-        blended.opacity = interpolateNumber(pointA.opacity, pointB.opacity, alpha, fallbackPoint && fallbackPoint.opacity);
+        interpolateOptionalNumberField(blended, pointA, pointB, "size", alpha);
+        interpolateOptionalNumberField(blended, pointA, pointB, "opacity", alpha);
         blended.oviz_presence_opacity = 1.0;
         if (blended.motion && typeof blended.motion === "object") {
           blended.motion.time_myr = Number.isFinite(timeValue) ? timeValue : Number(blended.motion.time_myr) || 0.0;
@@ -1170,7 +1194,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         blended.x = interpolateNumber(labelA.x, labelB.x, alpha, fallbackLabel && fallbackLabel.x);
         blended.y = interpolateNumber(labelA.y, labelB.y, alpha, fallbackLabel && fallbackLabel.y);
         blended.z = interpolateNumber(labelA.z, labelB.z, alpha, fallbackLabel && fallbackLabel.z);
-        blended.size = interpolateNumber(labelA.size, labelB.size, alpha, fallbackLabel && fallbackLabel.size);
+        interpolateOptionalNumberField(blended, labelA, labelB, "size", alpha);
         blended.oviz_presence_opacity = 1.0;
         return blended;
       }
@@ -1182,19 +1206,9 @@ THREEJS_SCENE_RUNTIME_JS = """
         }
         const blended = Object.assign({}, fallbackTrace);
         blended.oviz_presence_opacity = 1.0;
-        blended.opacity = interpolateNumber(traceA.opacity, traceB.opacity, alpha, fallbackTrace && fallbackTrace.opacity);
-        blended.default_opacity = interpolateNumber(
-          traceA.default_opacity,
-          traceB.default_opacity,
-          alpha,
-          fallbackTrace && fallbackTrace.default_opacity
-        );
-        blended.default_point_size = interpolateNumber(
-          traceA.default_point_size,
-          traceB.default_point_size,
-          alpha,
-          fallbackTrace && fallbackTrace.default_point_size
-        );
+        interpolateOptionalNumberField(blended, traceA, traceB, "opacity", alpha);
+        interpolateOptionalNumberField(blended, traceA, traceB, "default_opacity", alpha);
+        interpolateOptionalNumberField(blended, traceA, traceB, "default_point_size", alpha);
 
         if (Array.isArray(traceA.segments) && Array.isArray(traceB.segments) && traceA.segments.length === traceB.segments.length) {
           blended.segments = traceA.segments.map((segmentA, index) => {

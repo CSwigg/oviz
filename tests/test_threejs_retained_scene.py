@@ -87,6 +87,59 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
         self.assertEqual(payload["sizeFade"], [1, 0.5, 0])
         self.assertEqual(payload["opacityFade"], 1)
 
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_fractional_points_preserve_omitted_size_and_opacity_defaults(self):
+        html = _runtime_html()
+        interpolation_source = (
+            "function interpolateNumber(fromValue, toValue, alpha, fallbackValue = 0.0)"
+            + html.split(
+                "function interpolateNumber(fromValue, toValue, alpha, fallbackValue = 0.0)", 1
+            )[1].split("function interpolateTraceLabel", 1)[0]
+        )
+        script = f"""
+        function clampRange(value, minimum, maximum) {{
+          return Math.min(Math.max(Number(value) || 0, minimum), maximum);
+        }}
+        function clusterFilterSelectionKeyForPoint() {{ return ""; }}
+        {interpolation_source}
+        const pointA = {{
+          x: 0, y: 2, z: 4,
+          motion: {{ key: "cluster", age_now_myr: 10, time_myr: -1 }},
+        }};
+        const pointB = {{
+          x: 2, y: 4, z: 6,
+          motion: {{ key: "cluster", age_now_myr: 10, time_myr: 0 }},
+        }};
+        const blended = interpolateTracePoint(pointA, pointB, 0.5, -0.5);
+        const explicit = interpolateTracePoint(
+          {{ ...pointA, size: 4, opacity: 0.2 }},
+          {{ ...pointB, size: 8, opacity: 0.6 }},
+          0.5,
+          -0.5
+        );
+        process.stdout.write(JSON.stringify({{
+          blended,
+          explicit,
+          resolvedSize: blended.size ?? 7,
+          resolvedOpacity: blended.opacity ?? 0.6,
+        }}));
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertNotIn("size", payload["blended"])
+        self.assertNotIn("opacity", payload["blended"])
+        self.assertEqual(payload["resolvedSize"], 7)
+        self.assertEqual(payload["resolvedOpacity"], 0.6)
+        self.assertEqual(payload["explicit"]["size"], 6)
+        self.assertAlmostEqual(payload["explicit"]["opacity"], 0.4)
+        self.assertEqual(payload["blended"]["motion"]["time_myr"], -0.5)
+
     def test_transition_updates_do_not_rebuild_the_plot_group(self):
         html = _runtime_html()
         update_body = html.split(
