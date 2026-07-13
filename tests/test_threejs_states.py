@@ -243,6 +243,50 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn("ovizTransitionOpacityBucket(", glow_material_body)
         self.assertIn("ovizTransitionOpacityBucket(", core_material_body)
 
+    def test_exact_target_render_drops_transient_visibility_overrides_first(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        finish_body = html.split(
+            "async function ovizFinishStateTransition(transition)", 1
+        )[1].split("function ovizFailStateTransition", 1)[0]
+
+        exact_apply = finish_body.index(
+            "ovizApplyStateImmediately(transition.targetSnapshot"
+        )
+        self.assertLess(
+            finish_body.index("ovizStateTransitionTraceOpacity = null"),
+            exact_apply,
+        )
+        self.assertLess(
+            finish_body.index("ovizStateSelectionTransition = null"),
+            exact_apply,
+        )
+
+    def test_mask_only_lasso_states_keep_destination_points_visible(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        load_target_mask = html.split(
+            "transition.targetRuntimeLassoMask = mask", 1
+        )[1].split("return mask", 1)[0]
+        marker_body = html.split("function addMarkerTrace(parent, trace)", 1)[1].split(
+            "function addTextTrace(parent, trace)", 1
+        )[0]
+
+        self.assertIn("transition.selectionTransition.toMask = mask", load_target_mask)
+        self.assertNotIn("destination.lasso_volume_selection_enabled", load_target_mask)
+        self.assertIn(
+            'if (typeof ovizSelectionMembershipOpacity === "function")',
+            marker_body,
+        )
+
     def test_embedded_scene_state_schema_round_trips_to_payload(self):
         scene = {
             "width": 640,

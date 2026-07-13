@@ -1238,7 +1238,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
             transition.lassoReady = true;
             if (
               transition.selectionTransition
-              && destination.lasso_volume_selection_enabled
               && destination.lasso_selection_filter_enabled !== false
             ) {
               transition.selectionTransition.toMask = mask;
@@ -1636,6 +1635,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
               reason: "state-transition-complete",
             });
           }
+          const finishedSelectionTransition = transition.selectionTransition;
+          // The exact target render must not be multiplied by temporary
+          // appearance/lasso tracks.  Previously these were cleared only
+          // after ovizApplyStateImmediately(), leaving the already-rendered
+          // destination frame hidden even though state fidelity was exact.
+          ovizStateTransitionTraceOpacity = null;
+          ovizStateSelectionTransition = null;
           transition.sceneRenderCount += 1;
           // The animated camera has already delivered the exact target view to
           // Aladin. Do not force the same center/FOV again here: a redundant
@@ -1681,10 +1687,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (transition !== ovizStateTransition) {
             return;
           }
-          const finishedSelectionTransition = transition.selectionTransition;
           ovizStateTransition = null;
-          ovizStateTransitionTraceOpacity = null;
-          ovizStateSelectionTransition = null;
           if (finishedSelectionTransition) {
             new Set([
               finishedSelectionTransition.fromMask,

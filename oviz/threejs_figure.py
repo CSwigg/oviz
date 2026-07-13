@@ -15924,11 +15924,7 @@ __SKY_RUNTIME_JS__
               opacityMultiplier *= dendrogramActiveKeys.has(pointKey) ? 1.0 : 0.24;
             }
           }
-          if (
-            typeof ovizStateSelectionTransition !== "undefined"
-            && ovizStateSelectionTransition
-            && typeof ovizSelectionMembershipOpacity === "function"
-          ) {
+          if (typeof ovizSelectionMembershipOpacity === "function") {
             opacityMultiplier *= ovizSelectionMembershipOpacity(pointKey, point);
           } else if (lassoSelectionFilterActive()) {
             if (!pointKey || !selectedClusterKeys.has(pointKey)) {
