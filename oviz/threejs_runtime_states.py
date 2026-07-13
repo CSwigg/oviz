@@ -48,17 +48,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
         root.dataset.transitionOwner = transition ? "state" : "";
         root.dataset.transitionRunId = transition ? String(transition.transitionId || "") : "";
         if (!ovizTransitionDebugEnabled()) return;
-        const now = (typeof performance !== "undefined" && performance.now)
-          ? performance.now()
-          : Date.now();
-        if (
-          transition
-          && Number.isFinite(Number(transition.lastDiagnosticsAt))
-          && now - Number(transition.lastDiagnosticsAt) < 100.0
-        ) {
-          return;
-        }
-        if (transition) transition.lastDiagnosticsAt = now;
         const diagnostics = Object.assign({
           owner: transition ? "state" : "",
           runId: transition ? String(transition.transitionId || "") : "",
@@ -465,18 +454,15 @@ THREEJS_STATE_RUNTIME_JS = r"""
         lastPlaybackAdvanceTimestamp = null;
         setCameraAutoOrbitEnabled(false);
         const frameValue = Number(hydrated.current_frame_value);
-        const deferInitialRender = options.deferInitialRender === true;
-        const renderTargetFrame = (renderOptions = {}) => {
+        const renderTargetFrame = () => {
           if (Number.isFinite(frameValue)) {
-            renderInterpolatedFrameValue(frameValue, renderOptions);
+            renderInterpolatedFrameValue(frameValue);
           } else {
             renderFrame(Number(hydrated.current_frame_index) || 0);
           }
         };
-        if (!deferInitialRender) {
-          renderTargetFrame();
-          ovizApplyCapturedCameraState(hydrated);
-        }
+        renderTargetFrame();
+        ovizApplyCapturedCameraState(hydrated);
         if (Number.isFinite(Number(playback.interval_ms))) {
           playbackIntervalMs = Math.max(80, Number(playback.interval_ms));
         }
@@ -485,6 +471,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ? { runtimeMask: options.runtimeLassoMask }
           : {};
         return restoreLassoSelectionMask(hydrated.lasso_selection_mask, lassoRestoreOptions).then(() => {
+          renderTargetFrame();
+          ovizApplyCapturedCameraState(hydrated);
           updateSelectionUI();
           updatePlaybackButtons();
           renderLegend();
@@ -501,11 +489,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
               allowAutoCap: false,
             });
           }
-          renderTargetFrame(deferInitialRender ? {
-            updateWidgets: false,
-            preserveCamera: true,
-            transitionOwnerToken: "",
-          } : {});
           ovizApplyCapturedCameraState(hydrated);
           playbackDirection = targetPlaybackDirection;
           lastPlaybackAdvanceTimestamp = null;
@@ -1015,9 +998,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       function ovizApplyInterpolatedViewOffset(startValue, endValue, progress) {
         if (typeof applyActionCameraViewOffset !== "function") {
-          return false;
+          return;
         }
-        return applyActionCameraViewOffset(ovizInterpolatedViewOffset(startValue, endValue, progress));
+        applyActionCameraViewOffset(ovizInterpolatedViewOffset(startValue, endValue, progress));
       }
 
       function ovizPrepareDestinationSkyPresentation(snapshot, options = {}) {
@@ -1428,21 +1411,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
         ovizStateTransitionTraceOpacity = new Map();
         traceOpacity.forEach((value, key) => ovizStateTransitionTraceOpacity.set(key, value.from));
-        const genericFromPosition = ovizPointFrom(from, "position", camera.position);
-        const genericFromTarget = ovizPointFrom(from, "target", controls.target);
-        const genericFromUp = ovizPointFrom(from, "up", camera.up);
-        const genericCameraTrack = {
-          fromPosition: genericFromPosition,
-          toPosition: ovizPointFrom(destination, "position", genericFromPosition),
-          fromTarget: genericFromTarget,
-          toTarget: ovizPointFrom(destination, "target", genericFromTarget),
-          fromUp: genericFromUp,
-          toUp: ovizPointFrom(destination, "up", genericFromUp),
-          fromFov: Number((from.global_controls || {}).camera_fov),
-          toFov: Number((destination.global_controls || {}).camera_fov),
-          fromViewOffset: from.camera && (from.camera.view_offset || from.camera.viewOffset),
-          toViewOffset: destination.camera && (destination.camera.view_offset || destination.camera.viewOffset),
-        };
         let resolvePromise;
         let rejectPromise;
         const promise = new Promise((resolve, reject) => {
@@ -1471,14 +1439,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
           nativeCameraTrack: (
             viewTransitionKind === "enter-earth" || viewTransitionKind === "exit-earth"
           ) ? ovizCreateNativeViewCameraTrack(destination) : null,
-          genericCameraTrack,
           skyBackgroundPromise: null,
           skyLayerPromise: Promise.resolve({ unchanged: true }),
           forceSkyLayerRetarget,
           fromViewMode,
           toViewMode,
           lastProgressEventAt: -Infinity,
-          lastDiagnosticsAt: -Infinity,
           sceneRenderCount: 0,
           appearancePrepared: false,
           lassoReady: !destination.lasso_selection_mask,
@@ -1487,11 +1453,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
           selectionTransition: null,
           currentPhase: phasePlan.phases[0].name,
           currentAppearanceProgress: 0.0,
-          lastAppliedAppearanceProgress: null,
-          numericControlTracks: ovizCompileTransitionNumericControls(from, destination),
-          traceStyleTracks: ovizCompileTransitionTraceStyles(from, destination),
-          volumeTracks: ovizCompileTransitionVolumes(from, destination),
-          panelGeometryTracks: ovizCompileTransitionPanelGeometry(from, destination),
           // The exact target renderer must not replace the first retained
           // frame that reaches the destination before that frame is painted.
           // Latch it for one animation frame so time-dependent point fades
@@ -1615,7 +1576,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return promise;
       }
 
-      function ovizCompileTransitionNumericControls(from, to) {
+      function ovizApplyTransitionNumericControls(from, to, progress) {
         const fromGlobal = from.global_controls || {};
         const toGlobal = to.global_controls || {};
         const pairs = [
@@ -1627,113 +1588,60 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ["sky_dome_hips_contrast", (value) => { skyDomeSpec.hips_contrast = value; }],
           ["sky_dome_hips_gamma", (value) => { skyDomeSpec.hips_gamma = value; }],
         ];
-        return pairs.map(([key, setter]) => {
+        pairs.forEach(([key, setter]) => {
           const a = Number(fromGlobal[key]);
           const b = Number(toGlobal[key]);
-          return { setter, a, b };
-        }).filter((track) => (
-          Number.isFinite(track.a)
-          && Number.isFinite(track.b)
-          && Math.abs(track.a - track.b) > 1e-12
-        ));
-      }
-
-      function ovizApplyTransitionNumericControls(tracks, progress) {
-        (Array.isArray(tracks) ? tracks : []).forEach((track) => {
-          track.setter(ovizLerp(track.a, track.b, progress));
+          if (Number.isFinite(a) && Number.isFinite(b)) {
+            setter(ovizLerp(a, b, progress));
+          }
         });
       }
 
-      function ovizCompileTransitionTraceStyles(from, to) {
+      function ovizInterpolateColor(fromColor, toColor, progress) {
+        try {
+          const from = new THREE.Color(String(fromColor));
+          const to = new THREE.Color(String(toColor));
+          from.lerp(to, progress);
+          return `#${from.getHexString()}`;
+        } catch (_err) {
+          return progress < 0.5 ? fromColor : toColor;
+        }
+      }
+
+      function ovizApplyTransitionTraceStyles(from, to, progress) {
         const fromStyles = from.trace_style_state || {};
         const toStyles = to.trace_style_state || {};
-        return Object.keys(traceStyleStateByKey).map((key) => {
+        Object.keys(traceStyleStateByKey).forEach((key) => {
           const live = traceStyleStateByKey[key];
           const a = fromStyles[key] || live;
           const b = toStyles[key] || a;
-          const numericChanged = ["opacity", "sizeScale"].some((field) => (
-            Number.isFinite(Number(a[field]))
-            && Number.isFinite(Number(b[field]))
-            && Math.abs(Number(a[field]) - Number(b[field])) > 1e-12
-          ));
-          const colorChanged = String(a.color || "") !== String(b.color || "");
-          const discreteChanged = String(a.colorMode || "") !== String(b.colorMode || "")
-            || String(a.colormap || "") !== String(b.colormap || "");
-          if (!numericChanged && !colorChanged && !discreteChanged) return null;
-          let fromColor = null;
-          let toColor = null;
-          let color = null;
-          if (a.color && b.color) {
-            try {
-              fromColor = new THREE.Color(String(a.color));
-              toColor = new THREE.Color(String(b.color));
-              color = fromColor.clone();
-            } catch (_err) {
-              fromColor = null;
-              toColor = null;
-              color = null;
-            }
-          }
-          return { live, a, b, fromColor, toColor, color };
-        }).filter(Boolean);
-      }
-
-      function ovizApplyTransitionTraceStyles(tracks, progress) {
-        (Array.isArray(tracks) ? tracks : []).forEach((track) => {
-          const { live, a, b } = track;
           ["opacity", "sizeScale"].forEach((field) => {
             if (Number.isFinite(Number(a[field])) && Number.isFinite(Number(b[field]))) {
               live[field] = ovizLerp(a[field], b[field], progress);
             }
           });
-          if (track.color && track.fromColor && track.toColor) {
-            track.color.copy(track.fromColor).lerp(track.toColor, progress);
-            live.__ovizTransitionColor = track.color;
-          } else if (a.color && b.color) {
-            live.color = progress < 0.5 ? a.color : b.color;
-          }
+          if (a.color && b.color) live.color = ovizInterpolateColor(a.color, b.color, progress);
           if (progress >= 0.5) {
             if (b.colorMode) live.colorMode = b.colorMode;
             if (b.colormap) live.colormap = b.colormap;
           }
-          if (progress >= 1.0) {
-            if (b.color) live.color = b.color;
-            delete live.__ovizTransitionColor;
-          }
         });
       }
 
-      function ovizCompileTransitionVolumes(from, to) {
+      function ovizApplyTransitionVolumes(from, to, progress) {
         const fromVolumes = from.volume_state_by_key || {};
         const toVolumes = to.volume_state_by_key || {};
-        return Object.keys(volumeStateByKey).map((key) => {
+        Object.keys(volumeStateByKey).forEach((key) => {
           const live = volumeStateByKey[key];
           const a = fromVolumes[key] || live;
           const b = toVolumes[key] || a;
           const fromVisible = a.visible !== false;
           const toVisible = b.visible !== false;
-          const numericFields = ["vmin", "vmax", "steps", "alphaCoef", "gradientStep"]
-            .filter((field) => (
-              Number.isFinite(Number(a[field]))
-              && Number.isFinite(Number(b[field]))
-              && Math.abs(Number(a[field]) - Number(b[field])) > 1e-12
-            ));
-          const changed = numericFields.length > 0
-            || fromVisible !== toVisible
-            || Math.abs((Number(a.opacity) || 0) - (Number(b.opacity) || 0)) > 1e-12
-            || Boolean(a.showAllTimes) !== Boolean(b.showAllTimes)
-            || String(a.stretch || "") !== String(b.stretch || "")
-            || String(a.colormap || "") !== String(b.colormap || "");
-          return changed ? { live, a, b, fromVisible, toVisible, numericFields } : null;
-        }).filter(Boolean);
-      }
-
-      function ovizApplyTransitionVolumes(tracks, progress) {
-        (Array.isArray(tracks) ? tracks : []).forEach((track) => {
-          const { live, a, b, fromVisible, toVisible } = track;
           live.visible = fromVisible || toVisible;
-          track.numericFields.forEach((field) => {
-            live[field] = ovizLerp(a[field], b[field], progress);
+          ["vmin", "vmax", "steps", "alphaCoef", "gradientStep"].forEach((field) => {
+            if (Number.isFinite(Number(a[field])) && Number.isFinite(Number(b[field]))) {
+              live[field] = ovizLerp(a[field], b[field], progress);
+            }
           });
           const aOpacity = fromVisible ? Number(a.opacity) || 0 : 0;
           const bOpacity = toVisible ? Number(b.opacity) || 0 : 0;
@@ -1748,37 +1656,19 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
       }
 
-      function ovizCompileTransitionPanelGeometry(from, to) {
+      function ovizApplyTransitionPanelGeometry(from, to, progress) {
         const fromWidgets = from.widgets || {};
         const toWidgets = to.widgets || {};
-        const tracks = [];
         ["sky", "box_metrics", "age_kde", "cluster_filter", "dendrogram"].forEach((key) => {
           const panel = widgetPanelForKey(key);
           const a = fromWidgets[key] && fromWidgets[key].rect;
           const b = toWidgets[key] && toWidgets[key].rect;
           if (!panel || !a || !b) return;
           ["left", "top", "width", "height"].forEach((field) => {
-            const fromValue = Number(a[field]);
-            const toValue = Number(b[field]);
-            if (
-              Number.isFinite(fromValue)
-              && Number.isFinite(toValue)
-              && Math.abs(fromValue - toValue) > 1e-12
-            ) {
-              tracks.push({ panel, field, fromValue, toValue, lastValue: null });
+            if (Number.isFinite(Number(a[field])) && Number.isFinite(Number(b[field]))) {
+              panel.style[field] = `${ovizLerp(a[field], b[field], progress)}px`;
             }
           });
-        });
-        return tracks;
-      }
-
-      function ovizApplyTransitionPanelGeometry(tracks, progress) {
-        (Array.isArray(tracks) ? tracks : []).forEach((track) => {
-          const value = ovizLerp(track.fromValue, track.toValue, progress);
-          if (track.lastValue === null || Math.abs(track.lastValue - value) > 1e-4) {
-            track.panel.style[track.field] = `${value}px`;
-            track.lastValue = value;
-          }
         });
       }
 
@@ -1829,7 +1719,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const modeCameraProgress = ovizEasing(transition.transitionSpec.easing, modeCameraRaw);
           const from = transition.fromSnapshot;
           const to = transition.targetSnapshot;
-          const genericCameraTrack = transition.genericCameraTrack;
+          const fromPosition = ovizPointFrom(from, "position", camera.position);
+          const toPosition = ovizPointFrom(to, "position", fromPosition);
+          const fromTarget = ovizPointFrom(from, "target", controls.target);
+          const toTarget = ovizPointFrom(to, "target", fromTarget);
+          const fromUp = ovizPointFrom(from, "up", camera.up);
+          const toUp = ovizPointFrom(to, "up", fromUp);
           if (transition.viewTransitionKind === "earth-to-earth") {
             ovizApplyEarthCameraTrack(transition.earthCameraTrack, cameraProgress);
           } else if (
@@ -1839,43 +1734,36 @@ THREEJS_STATE_RUNTIME_JS = r"""
             ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, modeCameraProgress);
           } else if (!transition.nativeViewTransition) {
             camera.position.set(
-              ovizLerp(genericCameraTrack.fromPosition.x, genericCameraTrack.toPosition.x, cameraProgress),
-              ovizLerp(genericCameraTrack.fromPosition.y, genericCameraTrack.toPosition.y, cameraProgress),
-              ovizLerp(genericCameraTrack.fromPosition.z, genericCameraTrack.toPosition.z, cameraProgress)
+              ovizLerp(fromPosition.x, toPosition.x, cameraProgress),
+              ovizLerp(fromPosition.y, toPosition.y, cameraProgress),
+              ovizLerp(fromPosition.z, toPosition.z, cameraProgress)
             );
             controls.target.set(
-              ovizLerp(genericCameraTrack.fromTarget.x, genericCameraTrack.toTarget.x, cameraProgress),
-              ovizLerp(genericCameraTrack.fromTarget.y, genericCameraTrack.toTarget.y, cameraProgress),
-              ovizLerp(genericCameraTrack.fromTarget.z, genericCameraTrack.toTarget.z, cameraProgress)
+              ovizLerp(fromTarget.x, toTarget.x, cameraProgress),
+              ovizLerp(fromTarget.y, toTarget.y, cameraProgress),
+              ovizLerp(fromTarget.z, toTarget.z, cameraProgress)
             );
             camera.up.set(
-              ovizLerp(genericCameraTrack.fromUp.x, genericCameraTrack.toUp.x, cameraProgress),
-              ovizLerp(genericCameraTrack.fromUp.y, genericCameraTrack.toUp.y, cameraProgress),
-              ovizLerp(genericCameraTrack.fromUp.z, genericCameraTrack.toUp.z, cameraProgress)
+              ovizLerp(fromUp.x, toUp.x, cameraProgress),
+              ovizLerp(fromUp.y, toUp.y, cameraProgress),
+              ovizLerp(fromUp.z, toUp.z, cameraProgress)
             ).normalize();
           }
-          let fovChanged = false;
-          if (
-            !transition.nativeViewTransition
-            && Number.isFinite(genericCameraTrack.fromFov)
-            && Number.isFinite(genericCameraTrack.toFov)
-          ) {
-            const nextFov = ovizLerp(genericCameraTrack.fromFov, genericCameraTrack.toFov, cameraProgress);
-            fovChanged = Math.abs(Number(camera.fov) - nextFov) > 1e-9;
-            camera.fov = nextFov;
+          const fromFov = Number((from.global_controls || {}).camera_fov);
+          const toFov = Number((to.global_controls || {}).camera_fov);
+          if (!transition.nativeViewTransition && Number.isFinite(fromFov) && Number.isFinite(toFov)) {
+            camera.fov = ovizLerp(fromFov, toFov, cameraProgress);
+            camera.updateProjectionMatrix();
           }
-          let viewOffsetChanged = false;
           if (!transition.nativeViewTransition) {
-            viewOffsetChanged = ovizApplyInterpolatedViewOffset(
-              genericCameraTrack.fromViewOffset,
-              genericCameraTrack.toViewOffset,
-              cameraProgress,
-            );
+            const fromViewOffset = from.camera && (from.camera.view_offset || from.camera.viewOffset);
+            const toViewOffset = to.camera && (to.camera.view_offset || to.camera.viewOffset);
+            ovizApplyInterpolatedViewOffset(fromViewOffset, toViewOffset, cameraProgress);
           }
-          if (fovChanged && !viewOffsetChanged) camera.updateProjectionMatrix();
+          camera.updateProjectionMatrix();
           camera.lookAt(controls.target);
           camera.updateMatrixWorld(true);
-          if (root && root.dataset && ovizTransitionDebugEnabled()) {
+          if (root && root.dataset) {
             const liveDirection = new THREE.Vector3();
             camera.getWorldDirection(liveDirection);
             root.dataset.stateTransitionProgress = raw.toFixed(6);
@@ -1928,24 +1816,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const toFrame = ovizStateFrameValue(to);
           const interpolatedFrameValue = ovizLerp(fromFrame, toFrame, timeProgress);
           ovizStateTimelineMotionActive = transition.phasePlan.changed.time && timeRaw > 0.0 && timeRaw < 1.0;
-          if (
-            transition.lastAppliedAppearanceProgress === null
-            || Math.abs(transition.lastAppliedAppearanceProgress - appearanceProgress) > 1e-7
-          ) {
-            ovizApplyTransitionNumericControls(transition.numericControlTracks, appearanceProgress);
-            ovizApplyTransitionTraceStyles(transition.traceStyleTracks, appearanceProgress);
-            ovizApplyTransitionVolumes(transition.volumeTracks, appearanceProgress);
-            ovizApplyTransitionPanelGeometry(transition.panelGeometryTracks, appearanceProgress);
-            transition.traceOpacity.forEach((value, key) => {
-              ovizStateTransitionTraceOpacity.set(
-                key,
-                ovizLerp(value.from, value.to, appearanceProgress)
-              );
-            });
-            if (transition.selectionTransition) {
-              transition.selectionTransition.progress = appearanceProgress;
-            }
-            transition.lastAppliedAppearanceProgress = appearanceProgress;
+          ovizApplyTransitionNumericControls(from, to, appearanceProgress);
+          ovizApplyTransitionTraceStyles(from, to, appearanceProgress);
+          ovizApplyTransitionVolumes(from, to, appearanceProgress);
+          ovizApplyTransitionPanelGeometry(from, to, appearanceProgress);
+          transition.traceOpacity.forEach((value, key) => {
+            ovizStateTransitionTraceOpacity.set(
+              key,
+              ovizLerp(value.from, value.to, appearanceProgress)
+            );
+          });
+          if (transition.selectionTransition) {
+            transition.selectionTransition.progress = appearanceProgress;
           }
           if (transition.viewTransitionKind === "enter-earth") {
             const milkyWayFade = 1.0 - ovizEasing(
@@ -1957,7 +1839,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
               clampRange((cameraRaw - 0.80) / 0.20, 0, 1)
             );
             setMilkyWayModelOpacityScale(milkyWayFade);
-            setSkyDomeViewOpacityScale(skyFade, { force: false, deferFrameUpdate: true });
+            setSkyDomeViewOpacityScale(skyFade, { force: false });
           } else if (transition.viewTransitionKind === "exit-earth") {
             const skyFade = 1.0 - ovizEasing(
               transition.transitionSpec.easing,
@@ -1967,11 +1849,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
               transition.transitionSpec.easing,
               clampRange((cameraRaw - 0.80) / 0.20, 0, 1)
             );
-            setSkyDomeViewOpacityScale(skyFade, { force: false, deferFrameUpdate: true });
+            setSkyDomeViewOpacityScale(skyFade, { force: false });
             setMilkyWayModelOpacityScale(milkyWayFade);
           }
           displayedFrameValue = clampFrameValue(interpolatedFrameValue);
           currentFrameIndex = clampFrameIndex(displayedFrameValue);
+          updateTimelineUi(displayedFrameValue, frameTimeForValue(displayedFrameValue));
+          updateTimelineMotionOpacity();
           renderer.domElement.style.opacity = "1";
           if (appearanceRaw > 0.0 || timeRaw > 0.0) {
             renderInterpolatedFrameValue(displayedFrameValue, {
@@ -2072,7 +1956,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
             forceSkyBackground: false,
             postSkyLayersToAladin: false,
             runtimeLassoMask: transition.targetRuntimeLassoMask,
-            deferInitialRender: true,
           });
           if (transition !== ovizStateTransition) {
             return;
@@ -2098,7 +1981,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
               forceSkyBackground: false,
               postSkyLayersToAladin: false,
               runtimeLassoMask: transition.targetRuntimeLassoMask,
-              deferInitialRender: true,
             });
             if (transition !== ovizStateTransition) {
               return;

@@ -560,10 +560,13 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             entry.timeOpacityScale = scale;
           }
         });
-        milkyWayModelGroups.forEach((object) => {
-          if (object) object.userData.ovizTimeOpacityScale = scale;
+        plotGroup.traverse((object) => {
+          if (object && object.userData && object.userData.ovizDecorationKind === "milky_way_model") {
+            object.userData.ovizTimeOpacityScale = scale;
+          }
         });
         setMilkyWayModelOpacityScale(milkyWayViewOpacityScale);
+        updateCameraResponsiveImagePlanes();
       }
 
       function updateTimelineMotionOpacity() {

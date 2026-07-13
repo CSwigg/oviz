@@ -458,25 +458,6 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             update_body.index("ovizFinishStateTransition(transition)"),
         )
 
-    def test_exact_transition_completion_defers_duplicate_render_and_camera_apply(self):
-        html = ThreeJSFigure({
-            "width": 640,
-            "height": 480,
-            "frames": [],
-            "initial_state": {},
-        }).to_html(compress_scene_spec=False)
-        apply_body = html.split("function ovizApplyStateImmediately", 1)[1].split(
-            "function ovizPointFrom", 1
-        )[0]
-        finish_body = html.split("async function ovizFinishStateTransition", 1)[1].split(
-            "function ovizFailStateTransition", 1
-        )[0]
-
-        self.assertIn("const deferInitialRender = options.deferInitialRender === true", apply_body)
-        self.assertIn('transitionOwnerToken: ""', apply_body)
-        self.assertIn("deferInitialRender: true", finish_body)
-        self.assertLess(apply_body.index("resize();"), apply_body.rindex("renderTargetFrame("))
-
     def test_mask_only_lasso_states_keep_destination_points_visible(self):
         html = ThreeJSFigure({
             "width": 640,

@@ -192,38 +192,9 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
         )[0]
 
         self.assertIn("forceResident", render_body)
-        self.assertIn(
-            "addMarkerTrace(traceParent, trace, { forceResident, retainedPointComponents })",
-            render_body,
-        )
+        self.assertIn("addMarkerTrace(traceParent, trace, { forceResident })", render_body)
         self.assertIn("effectiveOpacity <= 0.001 && !forceResident", marker_body)
         self.assertIn("ovizRetainedPoint", marker_body)
-
-    def test_retained_scene_filters_hidden_traces_and_unused_point_components(self):
-        html = _runtime_html()
-        prepare_body = html.split(
-            "function ovizPrepareRetainedTransitionScene(", 1
-        )[1].split("function ovizRetainedDebugSnapshot", 1)[0]
-        marker_body = html.split("function addMarkerTrace(parent, trace)", 1)[1].split(
-            "function addTextTrace(parent, trace)", 1
-        )[0]
-
-        self.assertIn("ovizRetainedTraceKeySet(fromFrame, toFrame)", prepare_body)
-        self.assertIn("residentTraceKeys", prepare_body)
-        self.assertIn("ovizRetainedPointComponentPlan()", prepare_body)
-        self.assertIn("retainGlowComponents", marker_body)
-        self.assertIn("retainMarkerComponent", marker_body)
-        self.assertIn("residentTraceCount", html)
-        self.assertIn("runtime.livePointByIdentity.clear()", html)
-        self.assertIn("runtime.commonVisualByIdentity.clear()", html)
-        self.assertIn("ovizRetainedCommonPointVisual", html)
-        self.assertIn("pointEvaluations", html)
-        self.assertIn("ageKdeLastRenderSignature", html)
-        self.assertIn("ovizRetainedEndpointReuseSerial", html)
-        self.assertIn("ovizRetainedSetsEqual", prepare_body)
-        self.assertIn("previousRuntime.toEndpoint.frameIndex === frameState.lowerIndex", prepare_body)
-        self.assertIn("ovizDisposeRetainedRoot", prepare_body)
-        self.assertIn("ovizResetSceneRegistriesFromRoots", prepare_body)
 
     def test_cached_textures_are_not_disposed_with_retained_materials(self):
         html = _runtime_html()

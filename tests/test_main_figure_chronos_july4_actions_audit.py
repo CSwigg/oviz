@@ -105,12 +105,6 @@ def test_audit_html_contains_self_running_diagnostics_and_unified_runtime():
     assert "Rapid State 1 was not cancelled" in html
     assert "all-domains lasso membership" in html
     assert "renderedTraceFidelity" in html
-    assert "Transition session updated more than once in one animation frame" in html
-    assert "Retained scene updated more than once in one animation frame" in html
-    assert "Retained point component budget exceeded" in html
-    assert "Adjacent retained endpoints were not reused" in html
-    assert "3D transition RAF p95 exceeded 33 ms" in html
-    assert "pointComponents" in html
     assert "actionTransitionMetrics" not in html
     panel_index = html.rfind('id="oviz-actions-audit-panel"')
     assert panel_index > html.rfind("</script>", 0, panel_index)
