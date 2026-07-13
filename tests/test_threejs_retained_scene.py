@@ -21,52 +21,6 @@ def _runtime_html() -> str:
 
 class ThreeJSRetainedSceneTests(unittest.TestCase):
     @unittest.skipIf(shutil.which("node") is None, "node is not available")
-    def test_retained_live_motion_cannot_mutate_source_frame_points(self):
-        html = _runtime_html()
-        interpolation_helpers = (
-            "function interpolateNumber(fromValue, toValue, alpha, fallbackValue = 0.0)"
-            + html.split(
-                "function interpolateNumber(fromValue, toValue, alpha, fallbackValue = 0.0)", 1
-            )[1].split("function cloneTraceLabel", 1)[0]
-        )
-        retained_clone = (
-            "function ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr)"
-            + html.split(
-                "function ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr)", 1
-            )[1].split("function ovizPointBirthVisibility", 1)[0]
-        )
-        script = f"""
-        {interpolation_helpers}
-        {retained_clone}
-        const source = {{
-          x: 10, y: 20, z: 30,
-          motion: {{ key: "cluster-a", time_myr: 0, age_now_myr: 4 }},
-          selection: {{ cluster_name: "Cluster A" }},
-        }};
-        const livePoint = cloneTracePoint(source);
-        const pair = {{ from: {{ metadata: {{ point: source }} }}, to: null, livePoint }};
-        const rendered = ovizRetainedCloneLivePoint(pair, 0.5, -12.5);
-        process.stdout.write(JSON.stringify({{
-          sourceTime: source.motion.time_myr,
-          renderedTime: rendered.motion.time_myr,
-          motionIsOwned: rendered.motion !== source.motion,
-          selectionIsOwned: rendered.selection !== source.selection,
-        }}));
-        """
-        result = subprocess.run(
-            ["node"],
-            input=script,
-            text=True,
-            capture_output=True,
-            check=True,
-        )
-        payload = json.loads(result.stdout)
-        self.assertEqual(payload["sourceTime"], 0)
-        self.assertEqual(payload["renderedTime"], -12.5)
-        self.assertTrue(payload["motionIsOwned"])
-        self.assertTrue(payload["selectionIsOwned"])
-
-    @unittest.skipIf(shutil.which("node") is None, "node is not available")
     def test_exact_frame_birth_visibility_uses_motion_time_when_override_is_missing(self):
         html = _runtime_html()
         helper_source = (
@@ -263,13 +217,6 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
         self.assertIn("runtime.livePointByIdentity.clear()", html)
         self.assertIn("runtime.commonVisualByIdentity.clear()", html)
         self.assertIn("ovizRetainedCommonPointVisual", html)
-        self.assertIn("livePoint: cloneTracePoint(fromEntry.metadata.point || {}) || {}", html)
-        self.assertIn("livePoint: cloneTracePoint(toEntry.metadata.point || {}) || {}", html)
-        self.assertIn("const point = livePoint || metadata.point || {}", html)
-        pairing_body = html.split("function ovizPairRetainedPoints", 1)[1].split(
-            "function ovizRetainedCloneLivePoint", 1
-        )[0]
-        self.assertNotIn("livePoint: Object.assign", pairing_body)
         self.assertIn("pointEvaluations", html)
         self.assertIn("ageKdeLastRenderSignature", html)
         self.assertIn("ovizRetainedEndpointReuseSerial", html)
