@@ -5901,6 +5901,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const skyHideButtonEl = root.querySelector(".oviz-three-sky-hide");
       const ageKdePanelEl = root.querySelector(".oviz-three-age-panel");
       const ageKdeCanvasEl = root.querySelector(".oviz-three-age-canvas");
+      let ageKdeLastRenderSignature = "";
       const ageKdeFilterRangeMinEl = root.querySelector(".oviz-three-age-filter-range-min");
       const ageKdeFilterRangeMaxEl = root.querySelector(".oviz-three-age-filter-range-max");
       const ageKdeFilterRangeReadoutMinEl = root.querySelector(".oviz-three-age-filter-range-readout-min");
@@ -6154,6 +6155,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const cameraResponsivePointEntries = [];
       const cameraResponsiveImagePlaneEntries = [];
       const galacticReferenceOpacityGroups = [];
+      const milkyWayModelGroups = [];
+      let cameraResponsivePointRevision = 0;
+      let cameraResponsivePointAppliedSignature = "";
       const selectionSpriteEntriesByKey = new Map();
       const axisLineMaterials = [];
       const frameLineMaterials = [];
@@ -14501,6 +14505,7 @@ __SKY_RUNTIME_JS__
           sprite.userData.ovizResponsivePointEntry = entry;
         }
         cameraResponsivePointEntries.push(entry);
+        cameraResponsivePointRevision += 1;
         if (entry.selectionKey) {
           if (!selectionSpriteEntriesByKey.has(entry.selectionKey)) {
             selectionSpriteEntriesByKey.set(entry.selectionKey, []);
@@ -14541,6 +14546,14 @@ __SKY_RUNTIME_JS__
           return;
         }
         const activeKeys = activeHoveredClusterKeys();
+        const signature = [
+          cameraResponsivePointRevision,
+          Number(globalPointSizeScale).toFixed(6),
+          Number(globalPointGlowStrength).toFixed(6),
+          Array.from(activeKeys).sort().join("|"),
+        ].join(":");
+        if (signature === cameraResponsivePointAppliedSignature) return;
+        cameraResponsivePointAppliedSignature = signature;
         cameraResponsivePointEntries.forEach((entry) => {
           if (!entry || !entry.sprite) {
             return;
@@ -14554,6 +14567,10 @@ __SKY_RUNTIME_JS__
           const scale = baseScale * (isActive ? cameraResponsivePointHoverMultiplier(entry) : 1.0);
           entry.sprite.scale.set(scale, scale, 1.0);
         });
+      }
+
+      function markCameraResponsivePointSpritesDirty() {
+        cameraResponsivePointRevision += 1;
       }
 
       function registerCameraResponsiveImagePlane(mesh, options = {}) {
@@ -15364,16 +15381,16 @@ __SKY_RUNTIME_JS__
           }
         });
 
+        milkyWayModelGroups.push(group);
+
         return group;
       }
 
       function setMilkyWayModelOpacityScale(value) {
         const scale = clampRange(Number(value) || 0.0, 0.0, 1.0);
         milkyWayViewOpacityScale = scale;
-        plotGroup.traverse((object) => {
-          if (!object || !object.userData || object.userData.ovizDecorationKind !== "milky_way_model") {
-            return;
-          }
+        milkyWayModelGroups.forEach((object) => {
+          if (!object) return;
           object.visible = scale > 0.002;
           const timeScale = clampRange(Number(object.userData.ovizTimeOpacityScale ?? 1.0), 0.0, 1.0);
           object.traverse((child) => {
@@ -16014,6 +16031,16 @@ __SKY_RUNTIME_JS__
           return;
         }
         const forceResident = options.forceResident === true;
+        const retainedPointComponents = options.retainedPointComponents
+          && typeof options.retainedPointComponents === "object"
+          ? options.retainedPointComponents
+          : null;
+        const retainGlowComponents = !forceResident
+          || !retainedPointComponents
+          || retainedPointComponents.glow !== false;
+        const retainMarkerComponent = !forceResident
+          || !retainedPointComponents
+          || retainedPointComponents.marker !== false;
         const group = new THREE.Group();
         const traceState = traceStyleStateForKey(trace.key);
         const traceOpacityMultiplier = traceState
@@ -16090,7 +16117,7 @@ __SKY_RUNTIME_JS__
             pointIndex,
             component,
           });
-          if (glowStrength > 0.02 || forceResident) {
+          if ((glowStrength > 0.02 || forceResident) && retainGlowComponents) {
             const glowOpacity = clampRange(effectiveOpacity * (0.34 + 0.18 * glowStrength), 0.0, 0.78);
             const glowBaseMaterial = starGlowMaterialFor(pointColor, glowOpacity);
             const glowSprite = new THREE.Sprite(
@@ -16141,7 +16168,7 @@ __SKY_RUNTIME_JS__
             hoverTargets.push(coreSprite);
             registerCameraResponsivePointSprite(coreSprite, "core", pointPosition, scale, selectionKey);
           }
-          if (glowStrength <= 0.02 || forceResident) {
+          if ((glowStrength <= 0.02 || forceResident) && retainMarkerComponent) {
             const markerBaseMaterial = markerMaterialFor(
               pointSymbolForTrace(point, trace),
               pointColor,

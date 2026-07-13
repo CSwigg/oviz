@@ -769,6 +769,11 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (skyDomeFrameEl && skyDomeViewOpacityScale <= 0.002) {
           skyDomeFrameEl.style.opacity = "0";
         }
+        // Transition frames are already followed by the viewer's single Sky update.
+        // Avoid doing the iframe/DOM work twice while preserving all ordinary calls.
+        if (options.deferFrameUpdate === true) {
+          return;
+        }
         const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
         if (typeof updateSkyDome === "function") {
           updateSkyDome(now);
@@ -2558,9 +2563,13 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         const barLengthPc = scaleBarLengthPcForCurrentView();
         currentScaleBarLengthPc = barLengthPc;
-        scaleLabelEl.textContent = formatDistanceLabelPc(barLengthPc);
-        scaleBarEl.style.display = Number.isFinite(barLengthPc) ? "flex" : "none";
-        if (Number.isFinite(barLengthPc)) {
+        const nextLabel = formatDistanceLabelPc(barLengthPc);
+        const nextDisplay = Number.isFinite(barLengthPc) ? "flex" : "none";
+        const displayChanged = scaleBarEl.style.display !== nextDisplay;
+        const labelChanged = scaleLabelEl.textContent !== nextLabel;
+        if (labelChanged) scaleLabelEl.textContent = nextLabel;
+        if (displayChanged) scaleBarEl.style.display = nextDisplay;
+        if (Number.isFinite(barLengthPc) && (displayChanged || labelChanged)) {
           applyScaleBarPosition();
         }
       }

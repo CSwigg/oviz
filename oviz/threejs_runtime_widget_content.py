@@ -412,6 +412,19 @@ THREEJS_WIDGET_CONTENT_RUNTIME_JS = """
         const cssWidth = Math.max(1, Math.round(rect.width));
         const cssHeight = Math.max(1, Math.round(rect.height));
         const dpr = Math.max(window.devicePixelRatio || 1, 1);
+        const renderSignature = [
+          cssWidth,
+          cssHeight,
+          dpr.toFixed(3),
+          currentFrameIndex,
+          currentGroup,
+          activeThemeKey,
+          JSON.stringify(legendState),
+          JSON.stringify(traceStyleStateByKey),
+          JSON.stringify(clusterFilterRangeStateByKey),
+        ].join("|");
+        if (renderSignature === ageKdeLastRenderSignature) return;
+        ageKdeLastRenderSignature = renderSignature;
         if (ageKdeCanvasEl.width !== Math.round(cssWidth * dpr) || ageKdeCanvasEl.height !== Math.round(cssHeight * dpr)) {
           ageKdeCanvasEl.width = Math.round(cssWidth * dpr);
           ageKdeCanvasEl.height = Math.round(cssHeight * dpr);

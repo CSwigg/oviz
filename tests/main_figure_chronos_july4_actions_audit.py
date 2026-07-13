@@ -430,6 +430,19 @@ def _diagnostics_script(root_id: str, *, auto_run: bool) -> str:
       const events = [];
       const errors = [];
       const frameSamples = [];
+      const longTasks = [];
+      let previousFrameSampleAt = null;
+      if (typeof PerformanceObserver === "function") {{
+        try {{
+          const observer = new PerformanceObserver((list) => {{
+            list.getEntries().forEach((entry) => longTasks.push({{
+              startTime: entry.startTime,
+              duration: entry.duration,
+            }}));
+          }});
+          observer.observe({{ entryTypes: ["longtask"] }});
+        }} catch (_error) {{}}
+      }}
       let running = false;
       function log(value) {{
         logEl.textContent += `${{typeof value === "string" ? value : JSON.stringify(value)}}\n`;
@@ -457,17 +470,38 @@ def _diagnostics_script(root_id: str, *, auto_run: bool) -> str:
       function sampleFrame() {{
         if (!running) return;
         const canvas = root.querySelector("canvas");
+        const now = performance.now();
+        const retainedMetrics = parseDataset("retainedSceneMetrics");
         frameSamples.push({{
-          at: performance.now(),
+          at: now,
+          gapMs: previousFrameSampleAt === null ? 0 : now - previousFrameSampleAt,
           canvasOpacity: canvas ? Number(getComputedStyle(canvas).opacity) : NaN,
           diagnostics: parseDataset("transitionDiagnostics"),
           retained: parseDataset("retainedSceneDebug"),
+          retainedMetrics,
+          transitionFrameUpdates: Number(root.dataset.transitionFrameUpdates || 0),
+          retainedSceneUpdates: Number(root.dataset.retainedSceneUpdates || 0),
+          endpointBuilds: Number(root.dataset.retainedEndpointBuilds || 0),
+          endpointReuses: Number(root.dataset.retainedEndpointReuses || 0),
           owner: root.dataset.transitionOwner || "",
           runId: root.dataset.transitionRunId || "",
           actionRunId: root.dataset.actionRunId || "",
           actionPhase: root.dataset.actionPhase || "",
         }});
+        previousFrameSampleAt = now;
         requestAnimationFrame(sampleFrame);
+      }}
+      function percentile(values, fraction) {{
+        if (!values.length) return 0;
+        const sorted = values.slice().sort((left, right) => left - right);
+        return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)];
+      }}
+      function maxCounterDelta(samples, key) {{
+        let maximum = 0;
+        for (let index = 1; index < samples.length; index += 1) {{
+          maximum = Math.max(maximum, Number(samples[index][key]) - Number(samples[index - 1][key]));
+        }}
+        return maximum;
       }}
       function clickAction(label, options = {{}}) {{
         const button = Array.from(root.querySelectorAll(".oviz-three-action-button"))
@@ -540,7 +574,8 @@ def _diagnostics_script(root_id: str, *, auto_run: bool) -> str:
       async function run() {{
         if (running) return;
         running = true; runButton.disabled = true; errors.length = 0; events.length = 0;
-        frameSamples.length = 0; logEl.textContent = ""; requestAnimationFrame(sampleFrame);
+        frameSamples.length = 0; longTasks.length = 0; previousFrameSampleAt = null;
+        logEl.textContent = ""; requestAnimationFrame(sampleFrame);
         status.textContent = "Running…";
         try {{
           const states = window.Oviz.get({json.dumps(root_id)}).states;
@@ -624,9 +659,35 @@ def _diagnostics_script(root_id: str, *, auto_run: bool) -> str:
           require(sequentialCompletes.length >= 3, "Sequential Action was not exercised repeatedly");
           const actionDiagnostics = events.filter((event) => event.name.startsWith("action-") && event.detail);
           require(actionDiagnostics.every((event) => event.detail.owner === "action" && event.detail.runId), "Action diagnostics lack owner/run ID");
+          require(maxCounterDelta(frameSamples, "transitionFrameUpdates") <= 1, "Transition session updated more than once in one animation frame");
+          require(maxCounterDelta(frameSamples, "retainedSceneUpdates") <= 1, "Retained scene updated more than once in one animation frame");
+          const measuredComponents = frameSamples
+            .map((sample) => sample.retainedMetrics && Number(sample.retainedMetrics.pointComponents))
+            .filter((value) => Number.isFinite(value) && value > 0);
+          require(!measuredComponents.length || Math.max(...measuredComponents) <= 6500,
+            `Retained point component budget exceeded: ${{Math.max(...measuredComponents)}}`);
+          const endpointBuildStart = frameSamples.length ? frameSamples[0].endpointBuilds : 0;
+          const endpointReuseStart = frameSamples.length ? frameSamples[0].endpointReuses : 0;
+          const endpointBuildEnd = frameSamples.length ? frameSamples.at(-1).endpointBuilds : endpointBuildStart;
+          const endpointReuseEnd = frameSamples.length ? frameSamples.at(-1).endpointReuses : endpointReuseStart;
+          require(endpointBuildEnd > endpointBuildStart, "Retained endpoints were not exercised");
+          require(endpointReuseEnd > endpointReuseStart, "Adjacent retained endpoints were not reused");
+          const activeGaps = frameSamples
+            .filter((sample) => sample.gapMs > 0 && (sample.owner === "state" || sample.owner === "action"))
+            .map((sample) => sample.gapMs);
+          const p95GapMs = percentile(activeGaps, 0.95);
+          const maxGapMs = activeGaps.length ? Math.max(...activeGaps) : 0;
+          require(p95GapMs <= 33.0, `3D transition RAF p95 exceeded 33 ms: ${{p95GapMs.toFixed(1)}} ms`);
+          require(maxGapMs <= 50.0, `3D transition RAF maximum exceeded 50 ms: ${{maxGapMs.toFixed(1)}} ms`);
           status.textContent = "PASS";
           log({{ canvasOpacity, allDomainPhases, rapidResults, errors, eventCount: events.length,
             sampleCount: frameSamples.length,
+            performance: {{ p95GapMs, maxGapMs, longTasks: longTasks.length,
+              maxTransitionUpdatesPerFrame: maxCounterDelta(frameSamples, "transitionFrameUpdates"),
+              maxSceneUpdatesPerFrame: maxCounterDelta(frameSamples, "retainedSceneUpdates"),
+              endpointBuilds: endpointBuildEnd - endpointBuildStart,
+              endpointReuses: endpointReuseEnd - endpointReuseStart,
+              maxPointComponents: measuredComponents.length ? Math.max(...measuredComponents) : 0 }},
             fidelity: parseDataset("stateFidelity"),
             renderedFidelity: parseDataset("renderedTraceFidelity"),
             transitionMetrics: root.dataset.stateTransitionMetrics || null,

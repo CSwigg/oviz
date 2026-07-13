@@ -18,6 +18,7 @@ EXPECTED_FRAME_TIMES = [float(value) for value in range(-120, 1)]
 MAX_BACKGROUND_POINTS = 500
 MAX_BLUE_CLUSTER_POINTS = 650
 MIN_DESKTOP_VOLUME_AXIS_PIXELS = 256
+EXPECTED_RETAINED_BOUNDARY_COMPONENTS = 6416
 
 
 def _read_scene_spec(path: Path):
@@ -83,6 +84,19 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
 
     assert [frame["time"] for frame in scene_spec["frames"]] == EXPECTED_FRAME_TIMES
     assert scene_spec["timeline"]["frame_count"] == len(EXPECTED_FRAME_TIMES)
+
+    cluster_visibility = scene_spec["group_visibility"]["Clusters"]
+    boundary_visible_points = [
+        sum(
+            len(trace.get("points", []))
+            for trace in scene_spec["frames"][frame_index]["traces"]
+            if cluster_visibility.get(trace["key"]) is True
+        )
+        for frame_index in (119, 120)
+    ]
+    # The retained renderer keeps both endpoints and two glow components per
+    # visible point. Hidden traces must not inflate this to the old ~21k count.
+    assert sum(boundary_visible_points) * 2 == EXPECTED_RETAINED_BOUNDARY_COMPONENTS
 
     first_frame_traces = {
         trace["name"]: trace

@@ -360,13 +360,20 @@ THREEJS_ACTION_RUNTIME_JS = """
 
       function applyActionCameraViewOffset(viewOffset) {
         const nextOffset = normalizeActionViewOffset(viewOffset);
+        const previousOffset = normalizeActionViewOffset(currentActionCameraViewOffset);
+        if (
+          Math.abs(previousOffset.x - nextOffset.x) <= 1e-9
+          && Math.abs(previousOffset.y - nextOffset.y) <= 1e-9
+        ) {
+          return false;
+        }
         currentActionCameraViewOffset = nextOffset;
         if (Math.abs(nextOffset.x) <= 1e-6 && Math.abs(nextOffset.y) <= 1e-6) {
           if (typeof camera.clearViewOffset === "function") {
             camera.clearViewOffset();
           }
           camera.updateProjectionMatrix();
-          return;
+          return true;
         }
         const width = Math.max(root.clientWidth || sceneSpec.width || 1, 1);
         const height = Math.max(root.clientHeight || sceneSpec.height || 1, 1);
@@ -379,6 +386,7 @@ THREEJS_ACTION_RUNTIME_JS = """
           height,
         );
         camera.updateProjectionMatrix();
+        return true;
       }
 
       function captureCurrentActionViewState() {
@@ -692,7 +700,7 @@ THREEJS_ACTION_RUNTIME_JS = """
         setSkyDomeViewOpacityScale(
           Number(held.fromSkyOpacity)
           + (Number(held.toSkyOpacity) - Number(held.fromSkyOpacity)) * progress,
-          { force: false },
+          { force: false, deferFrameUpdate: true },
         );
         if (rawProgress >= 1.0) {
           finishActionHeldAppearanceRollback();
@@ -1457,12 +1465,14 @@ THREEJS_ACTION_RUNTIME_JS = """
         camera.position.lerpVectors(cameraActionTrack.fromPosition, cameraActionTrack.toPosition, easedProgress);
         controls.target.lerpVectors(cameraActionTrack.fromTarget, cameraActionTrack.toTarget, easedProgress);
         camera.up.lerpVectors(cameraActionTrack.fromUp, cameraActionTrack.toUp, easedProgress).normalize();
-        camera.fov = cameraActionTrack.fromFov + (cameraActionTrack.toFov - cameraActionTrack.fromFov) * easedProgress;
-        camera.updateProjectionMatrix();
-        applyActionCameraViewOffset({
+        const nextFov = cameraActionTrack.fromFov + (cameraActionTrack.toFov - cameraActionTrack.fromFov) * easedProgress;
+        const fovChanged = Math.abs(Number(camera.fov) - nextFov) > 1e-9;
+        camera.fov = nextFov;
+        const viewOffsetChanged = applyActionCameraViewOffset({
           x: cameraActionTrack.fromViewOffset.x + (cameraActionTrack.toViewOffset.x - cameraActionTrack.fromViewOffset.x) * easedProgress,
           y: cameraActionTrack.fromViewOffset.y + (cameraActionTrack.toViewOffset.y - cameraActionTrack.fromViewOffset.y) * easedProgress,
         });
+        if (fovChanged && !viewOffsetChanged) camera.updateProjectionMatrix();
         controls.update();
         if (rawProgress >= 1.0) {
           stopCameraActionTrack({ complete: true, now });
