@@ -1661,6 +1661,8 @@ THREEJS_SCENE_RUNTIME_JS = """
       let ovizRetainedTransitionScene = null;
       let ovizRetainedSceneBuildSerial = 0;
       let ovizRetainedSceneUpdateSerial = 0;
+      let ovizRetainedEndpointBuildSerial = 0;
+      let ovizRetainedEndpointReuseSerial = 0;
 
       function ovizRetainedTransitionOwner(options = {}) {
         if (options.preserveCamera !== true) {
@@ -1708,6 +1710,67 @@ THREEJS_SCENE_RUNTIME_JS = """
         return Array.isArray(object.material) ? object.material : [object.material];
       }
 
+      function ovizObjectWithinRoot(object, rootGroup) {
+        let current = object || null;
+        while (current) {
+          if (current === rootGroup) return true;
+          current = current.parent || null;
+        }
+        return false;
+      }
+
+      function ovizPruneRetainedArray(array, objectForEntry, rootGroup) {
+        if (!Array.isArray(array) || !rootGroup) return;
+        let writeIndex = 0;
+        array.forEach((entry) => {
+          const object = objectForEntry(entry);
+          if (!ovizObjectWithinRoot(object, rootGroup)) {
+            array[writeIndex] = entry;
+            writeIndex += 1;
+          }
+        });
+        array.length = writeIndex;
+      }
+
+      function ovizDisposeRetainedRoot(rootGroup) {
+        if (!rootGroup) return;
+        const materials = new Set();
+        rootGroup.traverse((object) => {
+          ovizRetainedMaterials(object).forEach((material) => materials.add(material));
+        });
+        ovizPruneRetainedArray(hoverTargets, (entry) => entry, rootGroup);
+        ovizPruneRetainedArray(cameraResponsivePointEntries, (entry) => entry && entry.sprite, rootGroup);
+        ovizPruneRetainedArray(cameraResponsiveImagePlaneEntries, (entry) => entry && entry.mesh, rootGroup);
+        ovizPruneRetainedArray(galacticReferenceOpacityGroups, (entry) => entry, rootGroup);
+        ovizPruneRetainedArray(screenStableTextSprites, (entry) => entry, rootGroup);
+        let lineWriteIndex = 0;
+        frameLineMaterials.forEach((material) => {
+          if (!materials.has(material)) {
+            frameLineMaterials[lineWriteIndex] = material;
+            lineWriteIndex += 1;
+          }
+        });
+        frameLineMaterials.length = lineWriteIndex;
+        selectionSpriteEntriesByKey.forEach((entries, key) => {
+          const kept = (Array.isArray(entries) ? entries : []).filter((entry) => (
+            !ovizObjectWithinRoot(entry && entry.sprite, rootGroup)
+          ));
+          if (kept.length) selectionSpriteEntriesByKey.set(key, kept);
+          else selectionSpriteEntriesByKey.delete(key);
+        });
+        volumeRuntimeByKey.forEach((runtime, key) => {
+          if (ovizObjectWithinRoot(runtime && runtime.mesh, rootGroup)) volumeRuntimeByKey.delete(key);
+        });
+        const parent = rootGroup.parent;
+        clearGroup(rootGroup);
+        if (parent) parent.remove(rootGroup);
+      }
+
+      function ovizRetainedSetsEqual(left, right) {
+        if (!(left instanceof Set) || !(right instanceof Set) || left.size !== right.size) return false;
+        return Array.from(left).every((value) => right.has(value));
+      }
+
       function ovizPrepareRetainedEndpoint(rootGroup, frame, frameIndex) {
         const pointEntries = [];
         let materialCount = 0;
@@ -1744,6 +1807,20 @@ THREEJS_SCENE_RUNTIME_JS = """
           pointEntries,
           materialCount,
         };
+      }
+
+      function ovizBuildRetainedEndpoint(rootGroup, frame, frameIndex, resetRegistries) {
+        renderFrameScene(frame, Number(frame && frame.time) || 0.0, {
+          updateWidgets: false,
+          preserveCamera: true,
+          targetGroup: rootGroup,
+          resetRegistries,
+          clearScene: false,
+          forceResident: true,
+          includeOverlays: false,
+        });
+        ovizRetainedEndpointBuildSerial += 1;
+        return ovizPrepareRetainedEndpoint(rootGroup, frame, frameIndex);
       }
 
       function ovizRetainedTraceShouldBeResident(trace) {
@@ -2295,39 +2372,60 @@ THREEJS_SCENE_RUNTIME_JS = """
       }
 
       function ovizPrepareRetainedTransitionScene(ownerToken, frameState) {
-        clearGroup(plotGroup);
+        const previousRuntime = ovizRetainedTransitionScene;
         plotGroup.position.set(0.0, 0.0, 0.0);
-        const fromRoot = new THREE.Group();
-        const toRoot = new THREE.Group();
         const overlayRoot = new THREE.Group();
-        plotGroup.add(fromRoot);
-        plotGroup.add(toRoot);
-        plotGroup.add(overlayRoot);
         const sourceFromFrame = frameSpecs[frameState.lowerIndex] || null;
         const sourceToFrame = frameSpecs[frameState.upperIndex] || sourceFromFrame;
         const residentTraceKeys = ovizRetainedTraceKeySet(sourceFromFrame, sourceToFrame);
         const fromFrame = ovizRetainedFrameWithResidentTraces(sourceFromFrame, residentTraceKeys);
         const toFrame = ovizRetainedFrameWithResidentTraces(sourceToFrame, residentTraceKeys);
-        renderFrameScene(fromFrame, Number(fromFrame && fromFrame.time) || 0.0, {
-          updateWidgets: false,
-          preserveCamera: true,
-          targetGroup: fromRoot,
-          resetRegistries: true,
-          clearScene: false,
-          forceResident: true,
-          includeOverlays: false,
-        });
-        renderFrameScene(toFrame, Number(toFrame && toFrame.time) || 0.0, {
-          updateWidgets: false,
-          preserveCamera: true,
-          targetGroup: toRoot,
-          resetRegistries: false,
-          clearScene: false,
-          forceResident: true,
-          includeOverlays: false,
-        });
-        const fromEndpoint = ovizPrepareRetainedEndpoint(fromRoot, fromFrame, frameState.lowerIndex);
-        const toEndpoint = ovizPrepareRetainedEndpoint(toRoot, toFrame, frameState.upperIndex);
+        const canReusePrevious = Boolean(
+          previousRuntime
+          && previousRuntime.ownerToken === ownerToken
+          && ovizRetainedSetsEqual(previousRuntime.residentTraceKeys, residentTraceKeys)
+        );
+        let fromEndpoint = null;
+        let toEndpoint = null;
+        let reusedEndpoint = null;
+        if (canReusePrevious && previousRuntime.toEndpoint.frameIndex === frameState.lowerIndex) {
+          fromEndpoint = previousRuntime.toEndpoint;
+          reusedEndpoint = fromEndpoint;
+        } else if (canReusePrevious && previousRuntime.fromEndpoint.frameIndex === frameState.upperIndex) {
+          toEndpoint = previousRuntime.fromEndpoint;
+          reusedEndpoint = toEndpoint;
+        }
+        if (reusedEndpoint) {
+          const outgoingEndpoint = reusedEndpoint === previousRuntime.fromEndpoint
+            ? previousRuntime.toEndpoint
+            : previousRuntime.fromEndpoint;
+          ovizDisposeRetainedRoot(outgoingEndpoint && outgoingEndpoint.root);
+          ovizDisposeRetainedRoot(previousRuntime.overlayRoot);
+          ovizRetainedEndpointReuseSerial += 1;
+        } else {
+          clearGroup(plotGroup);
+        }
+        if (!fromEndpoint) {
+          const fromRoot = new THREE.Group();
+          plotGroup.add(fromRoot);
+          fromEndpoint = ovizBuildRetainedEndpoint(
+            fromRoot,
+            fromFrame,
+            frameState.lowerIndex,
+            !reusedEndpoint,
+          );
+        }
+        if (!toEndpoint) {
+          const toRoot = new THREE.Group();
+          plotGroup.add(toRoot);
+          toEndpoint = ovizBuildRetainedEndpoint(
+            toRoot,
+            toFrame,
+            frameState.upperIndex,
+            false,
+          );
+        }
+        plotGroup.add(overlayRoot);
         ovizRetainedSceneBuildSerial += 1;
         const runtime = {
           ownerToken,
@@ -2343,6 +2441,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           materialCount: fromEndpoint.materialCount + toEndpoint.materialCount,
           residentTraceCount: residentTraceKeys.size,
           residentTraceKeys,
+          reusedEndpoint: Boolean(reusedEndpoint),
         };
         runtime.selectionOverlay = ovizPrepareRetainedSelectionOverlay(runtime);
         ovizRetainedTransitionScene = runtime;
@@ -2619,6 +2718,9 @@ THREEJS_SCENE_RUNTIME_JS = """
             materials: runtime.materialCount,
             pointEntries: runtime.pointPairs.length,
             residentTraces: runtime.residentTraceCount,
+            endpointBuilds: ovizRetainedEndpointBuildSerial,
+            endpointReuses: ovizRetainedEndpointReuseSerial,
+            reusedEndpoint: runtime.reusedEndpoint,
           });
           if (typeof ovizTransitionDebugEnabled === "function" && ovizTransitionDebugEnabled()) {
             root.dataset.retainedSceneDebug = JSON.stringify(ovizRetainedDebugSnapshot(runtime));

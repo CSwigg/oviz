@@ -247,6 +247,19 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
         self.assertIn("livePoint: cloneTracePoint(fromEntry.metadata.point || {}) || {}", html)
         self.assertIn("const point = livePoint || metadata.point || {}", html)
 
+    def test_adjacent_retained_intervals_reuse_the_shared_endpoint(self):
+        html = _runtime_html()
+        prepare_body = html.split(
+            "function ovizPrepareRetainedTransitionScene(", 1
+        )[1].split("function ovizRetainedDebugSnapshot", 1)[0]
+
+        self.assertIn("previousRuntime.toEndpoint.frameIndex === frameState.lowerIndex", prepare_body)
+        self.assertIn("previousRuntime.fromEndpoint.frameIndex === frameState.upperIndex", prepare_body)
+        self.assertIn("ovizDisposeRetainedRoot", prepare_body)
+        self.assertIn("ovizRetainedEndpointReuseSerial += 1", prepare_body)
+        self.assertIn("ovizBuildRetainedEndpoint", prepare_body)
+        self.assertNotIn("clearGroup(plotGroup);\n        plotGroup.position", prepare_body)
+
     def test_cached_textures_are_not_disposed_with_retained_materials(self):
         html = _runtime_html()
         clear_body = html.split("function clearGroup(group)", 1)[1].split(
