@@ -2004,7 +2004,10 @@ THREEJS_SCENE_RUNTIME_JS = """
           pairs.push({
             from: fromEntry,
             to: toEntry || null,
-            livePoint: Object.assign({}, fromEntry.metadata.point || {}),
+            // cloneTracePoint owns its nested motion record.  A shallow copy
+            // aliases frameSpecs[*].traces[*].points[*].motion, so updating
+            // the retained time would permanently deform the source scene.
+            livePoint: cloneTracePoint(fromEntry.metadata.point || {}) || {},
             logicalIdentity: ovizPointVisualIdentity(fromEntry.metadata, true),
           });
         });
@@ -2013,7 +2016,7 @@ THREEJS_SCENE_RUNTIME_JS = """
             pairs.push({
               from: null,
               to: toEntry,
-              livePoint: Object.assign({}, toEntry.metadata.point || {}),
+              livePoint: cloneTracePoint(toEntry.metadata.point || {}) || {},
               logicalIdentity: ovizPointVisualIdentity(toEntry.metadata, true),
             });
           }
@@ -2064,7 +2067,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         }
         const metadata = entry.metadata;
         const trace = metadata.trace || {};
-        const point = metadata.point || livePoint || {};
+        const point = livePoint || metadata.point || {};
         const traceState = traceStyleStateForKey(trace.key);
         const pointState = animatedPointState(point, trace, displayedTimeMyr);
         const birthVisibility = ovizPointBirthVisibility(pointState, point, trace);
