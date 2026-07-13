@@ -573,7 +573,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
 
         with self.assertRaisesRegex(ValueError, "renderer must be 'threejs'"):
-            viz.make_plot(
+            fig = viz.make_plot(
                 time=np.array([0.0, -1.0]),
                 renderer="legacy",
                 show=False,
@@ -877,7 +877,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 "Families": ["Family A"],
             },
         )
-        viz.make_plot(
+        fig = viz.make_plot(
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1004,8 +1004,8 @@ class ThreeJSRendererTests(unittest.TestCase):
             image_path = Path(tmp_dir) / "galaxy.jpg"
             image_path.write_bytes(b"\xff\xd8\xff\xd9")
             viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
-            viz.make_plot(
-                time=np.array([0.0, -1.0]),
+            fig = viz.make_plot(
+                time=np.arange(0.0, -6.0, -1.0),
                 renderer="threejs",
                 show=False,
                 threejs_initial_state={
@@ -1025,16 +1025,38 @@ class ThreeJSRendererTests(unittest.TestCase):
 
         zero_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == 0.0)
         past_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == -1.0)
+        faded_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == -5.0)
         zero_image = next(
             item for item in zero_frame["decorations"] if item.get("key") == "galaxy-image-overlay"
         )
         past_image = next(
             item for item in past_frame["decorations"] if item.get("key") == "galaxy-image-overlay"
         )
+        faded_image = next(
+            item for item in faded_frame["decorations"] if item.get("key") == "galaxy-image-overlay"
+        )
         self.assertEqual(zero_image["kind"], "image_plane")
         self.assertAlmostEqual(zero_image["opacity"], 0.35)
-        self.assertEqual(past_image["opacity"], 0.0)
+        self.assertEqual(past_image["opacity"], zero_image["opacity"])
+        self.assertEqual(faded_image["opacity"], zero_image["opacity"])
+        self.assertEqual(zero_image["opacity_scale"], 1.0)
+        self.assertGreater(past_image["opacity_scale"], 0.0)
+        self.assertLess(past_image["opacity_scale"], zero_image["opacity_scale"])
+        self.assertEqual(faded_image["opacity_scale"], 0.0)
         self.assertIn("Cluster A", [trace["name"] for trace in zero_frame["traces"]])
+        html = fig.to_html()
+        self.assertIn("ovizMilkyWayImage", html)
+        self.assertIn("timeOpacityScale", html)
+        self.assertIn('["opacity", "opacity_scale"].forEach((fieldName)', html)
+        self.assertIn("const persistentImagePlaneTextures = new WeakSet()", html)
+        self.assertIn("persistentImagePlaneTextures.add(texture)", html)
+        self.assertIn("initializeOvizStates().catch((err) =>", html)
+        self.assertNotIn("await initializeOvizStates()", html)
+        self.assertIn('sliderEl.step = "0.02"', html)
+        self.assertIn("const stableFrameIndex = clampFrameIndex(targetIndex)", html)
+        self.assertIn("updateTimelineMotionOpacity()", html)
+        self.assertNotIn("renderInterpolatedFrameValue(targetIndex, { updateWidgets: false })", html)
+        self.assertIn("entry.milkyWayImage ? milkyWayViewOpacityScale : 1.0", html)
 
     def test_static_lite_scene_disables_timeline_footer(self):
         static_sun_df = pd.DataFrame(
@@ -1079,10 +1101,10 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('const timelineSpec = sceneSpec.timeline || { enabled: frameSpecs.length > 1 };', html)
         self.assertIn('footerEl.style.display = "none";', html)
 
-    def test_threejs_milky_way_model_is_t0_only(self):
+    def test_threejs_milky_way_model_fades_near_t0(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
-        viz.make_plot(
-            time=np.array([0.0, -1.0]),
+        fig = viz.make_plot(
+            time=np.arange(0.0, -10.0, -1.0),
             renderer="threejs",
             show=False,
             show_milky_way_model=True,
@@ -1092,14 +1114,22 @@ class ThreeJSRendererTests(unittest.TestCase):
         frames = viz.fig_dict["frames"]
         zero_frame = next(frame for frame in frames if frame["time"] == 0.0)
         past_frame = next(frame for frame in frames if frame["time"] == -1.0)
+        distant_frame = next(frame for frame in frames if frame["time"] == -9.0)
 
         self.assertEqual(len(zero_frame["decorations"]), 1)
         self.assertEqual(zero_frame["decorations"][0]["kind"], "milky_way_model")
-        self.assertEqual(past_frame["decorations"], [])
+        self.assertEqual(zero_frame["decorations"][0]["opacity_scale"], 1.0)
+        self.assertEqual(past_frame["decorations"][0]["kind"], "milky_way_model")
+        self.assertGreater(past_frame["decorations"][0]["opacity_scale"], 0.0)
+        self.assertLess(past_frame["decorations"][0]["opacity_scale"], 1.0)
+        self.assertEqual(distant_frame["decorations"], [])
+        html = fig.to_html()
+        self.assertIn("ovizTimeOpacityScale", html)
+        self.assertIn("baseOpacity * timeScale * scale", html)
 
     def test_threejs_galactic_circles_include_gc_marker_and_drop_radius_labels(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
-        viz.make_plot(
+        fig = viz.make_plot(
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1132,6 +1162,13 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertNotIn("R = 4 kpc", label_texts)
         self.assertNotIn("R = 8.12 kpc", label_texts)
         self.assertNotIn("R = 12 kpc", label_texts)
+        html = fig.to_html()
+        self.assertIn("function galacticReferenceMotionVisible()", html)
+        self.assertIn("function galacticReferenceTimeOpacity()", html)
+        self.assertIn("Math.abs(timeMyr) / 5.0", html)
+        self.assertIn("timelineScrubMotionActive", html)
+        self.assertIn("playbackDirection !== 0", html)
+        self.assertIn("setTimelineScrubMotionActive(true, { settleDelayMs: 240.0 })", html)
 
     def test_threejs_text_trace_can_be_a_single_legend_item(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
@@ -1496,7 +1533,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertNotIn("opacityMultiplier *= selectedClusterKeys.has(pointKey) ? 1.0 : 0.16;", html)
         self.assertIn("endDistance: exitTargetDistance", html)
         self.assertNotIn('if (cameraViewMode === "earth") {\n          return false;\n        }\n        if (isGalacticReferenceTrace(trace)', html)
-        self.assertIn("(!galacticReferenceVisible || cameraViewMode === \"earth\")", html)
+        self.assertIn("isGalacticReferenceTrace(trace) && !galacticReferenceMotionVisible()", html)
         self.assertIn("lockDirection: preserveDirection", html)
         self.assertIn("oviz-three-sky-layer-preset-select", html)
         self.assertIn("oviz-three-sky-layer-list", html)

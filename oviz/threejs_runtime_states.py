@@ -773,6 +773,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
         }
         if (nativeViewTransition) {
           const destinationCameraState = ovizStateDestinationCameraState(destination);
+          if (viewTransitionKind === "enter-earth") {
+            setMilkyWayModelOpacityScale(1.0);
+            setSkyDomeViewOpacityScale(0.0, { force: false });
+          } else if (viewTransitionKind === "exit-earth") {
+            setMilkyWayModelOpacityScale(0.0);
+            setSkyDomeViewOpacityScale(1.0, { force: false });
+          }
           if (toViewMode === "earth") {
             if (viewTransitionKind === "enter-earth") {
               resetToSunReferenceFrameForSkyView();
@@ -956,6 +963,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
             ? 1
             : clampRange((now - transition.startedAt) / transition.transitionSpec.duration_ms, 0, 1);
           const progress = ovizEasing(transition.transitionSpec.easing, raw);
+          const modeCameraRaw = transition.nativeViewTransition
+            ? clampRange((raw - 0.20) / 0.60, 0, 1)
+            : raw;
+          const modeCameraProgress = ovizEasing(transition.transitionSpec.easing, modeCameraRaw);
           const from = transition.fromSnapshot;
           const to = transition.targetSnapshot;
           const fromPosition = ovizPointFrom(from, "position", camera.position);
@@ -972,7 +983,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             transition.viewTransitionKind === "enter-earth"
             || transition.viewTransitionKind === "exit-earth"
           ) {
-            ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, progress);
+            ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, modeCameraProgress);
           } else if (!transition.nativeViewTransition && !targetEarthViewLocked) {
             camera.position.set(
               ovizLerp(fromPosition.x, toPosition.x, progress),
@@ -1040,9 +1051,27 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const interpolatedFrameValue = ovizLerp(fromFrame, toFrame, progress);
           ovizApplyTransitionNumericControls(from, to, progress);
           if (transition.viewTransitionKind === "enter-earth") {
-            setSkyDomeViewOpacityScale(progress, { force: false });
+            const milkyWayFade = 1.0 - ovizEasing(
+              transition.transitionSpec.easing,
+              clampRange(raw / 0.20, 0, 1)
+            );
+            const skyFade = ovizEasing(
+              transition.transitionSpec.easing,
+              clampRange((raw - 0.80) / 0.20, 0, 1)
+            );
+            setMilkyWayModelOpacityScale(milkyWayFade);
+            setSkyDomeViewOpacityScale(skyFade, { force: false });
           } else if (transition.viewTransitionKind === "exit-earth") {
-            setSkyDomeViewOpacityScale(1.0 - progress, { force: false });
+            const skyFade = 1.0 - ovizEasing(
+              transition.transitionSpec.easing,
+              clampRange(raw / 0.20, 0, 1)
+            );
+            const milkyWayFade = ovizEasing(
+              transition.transitionSpec.easing,
+              clampRange((raw - 0.80) / 0.20, 0, 1)
+            );
+            setSkyDomeViewOpacityScale(skyFade, { force: false });
+            setMilkyWayModelOpacityScale(milkyWayFade);
           }
           ovizApplyTransitionPanelGeometry(from, to, progress);
           transition.traceOpacity.forEach((value, key) => {
@@ -1133,6 +1162,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
             forceSkyBackground: false,
             postSkyLayersToAladin: false,
           });
+          setMilkyWayModelOpacityScale(transition.toViewMode === "earth" ? 0.0 : 1.0);
+          setSkyDomeViewOpacityScale(transition.toViewMode === "earth" ? 1.0 : 0.0, { force: false });
           if (transition !== ovizStateTransition) {
             return;
           }
@@ -1176,6 +1207,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           cancelSkyViewTransitionAnimations({ reason: "state-transition-error" });
         }
         renderer.domElement.style.opacity = "1";
+        setMilkyWayModelOpacityScale(cameraViewMode === "earth" ? 0.0 : 1.0);
         ovizRenderStatesDrawer();
         ovizStateEvent("transition-error", {
           id: transition && transition.targetId,

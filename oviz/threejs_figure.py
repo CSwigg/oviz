@@ -6157,6 +6157,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const hoverTargets = [];
       const cameraResponsivePointEntries = [];
       const cameraResponsiveImagePlaneEntries = [];
+      const galacticReferenceOpacityGroups = [];
       const selectionSpriteEntriesByKey = new Map();
       const axisLineMaterials = [];
       const frameLineMaterials = [];
@@ -6170,6 +6171,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const textTextureCache = new Map();
       const galaxyTextureCache = new Map();
       const imagePlaneTextureCache = new Map();
+      const persistentImagePlaneTextures = new WeakSet();
       const volumeScalarDataCache = new Map();
       const volumeScalarDataPendingCache = new Map();
       const volumeTextureCache = new Map();
@@ -6191,6 +6193,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let clickSelectionEnabled = false;
       let lassoVolumeSelectionEnabled = true;
       let playbackDirection = 0;
+      let timelineScrubMotionActive = false;
+      let timelineMotionHideTimer = 0;
       let displayedFrameValue = currentFrameIndex;
       let frameTransitionState = null;
       let lastPlaybackAdvanceTimestamp = null;
@@ -6353,6 +6357,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let earthViewReturnCameraState = null;
       let cameraTransitionAnimationFrame = 0;
       let skyDomeOpacityAnimationFrame = 0;
+      let milkyWayOpacityAnimationFrame = 0;
+      let milkyWayViewOpacityScale = 1.0;
       let skyDomeViewOpacityScale = 0.0;
       let skyBackgroundHidden = Boolean(initialState.global_controls && initialState.global_controls.sky_background_hidden);
       let skyViewTransitionSerial = 0;
@@ -14037,13 +14043,17 @@ __SKY_RUNTIME_JS__
                 if (!material || material.userData?.cached) {
                   return;
                 }
-                if (material.map) {
+                if (material.map && !persistentImagePlaneTextures.has(material.map)) {
                   material.map.dispose();
                 }
                 material.dispose();
               });
             } else {
-              if (!child.material.userData?.cached && child.material.map) {
+              if (
+                !child.material.userData?.cached
+                && child.material.map
+                && !persistentImagePlaneTextures.has(child.material.map)
+              ) {
                 child.material.map.dispose();
               }
               if (!child.material.userData?.cached) {
@@ -14370,6 +14380,8 @@ __SKY_RUNTIME_JS__
         const entry = {
           mesh,
           baseOpacity: clamp01(Number(options.baseOpacity) || 0.0),
+          timeOpacityScale: clamp01(Number(options.timeOpacityScale ?? 1.0)),
+          milkyWayImage: Boolean(options.milkyWayImage),
           hideBelowScaleBarPc: Math.max(Number(options.hideBelowScaleBarPc) || 0.0, 0.0),
           fadeStartScaleBarPc: Math.max(Number(options.fadeStartScaleBarPc) || 0.0, 0.0),
         };
@@ -14409,7 +14421,11 @@ __SKY_RUNTIME_JS__
               fadeFactor = (currentScaleBarLengthPc - hideBelow) / Math.max(fadeStart - hideBelow, 1e-6);
             }
           }
-          const effectiveOpacity = clamp01(Number(entry.baseOpacity) || 0.0) * clamp01(fadeFactor);
+          const viewOpacityScale = entry.milkyWayImage ? milkyWayViewOpacityScale : 1.0;
+          const effectiveOpacity = clamp01(Number(entry.baseOpacity) || 0.0)
+            * clamp01(Number(entry.timeOpacityScale ?? 1.0))
+            * clamp01(fadeFactor)
+            * clamp01(viewOpacityScale);
           material.opacity = effectiveOpacity;
           mesh.visible = effectiveOpacity > 1e-4;
         });
@@ -15140,7 +15156,56 @@ __SKY_RUNTIME_JS__
         innerGlow.position.z = 0.0;
         group.add(innerGlow);
 
+        group.userData.ovizDecorationKind = "milky_way_model";
+        group.userData.ovizTimeOpacityScale = clampRange(Number(decoration.opacity_scale ?? 1.0), 0.0, 1.0);
+        group.traverse((object) => {
+          if (object.material) {
+            const materials = Array.isArray(object.material) ? object.material : [object.material];
+            materials.forEach((material) => {
+              if (!material || !material.userData) return;
+              material.userData.ovizBaseOpacity = Number(material.opacity ?? 1.0);
+              material.opacity = material.userData.ovizBaseOpacity * group.userData.ovizTimeOpacityScale;
+            });
+          }
+          if (object.isLight) {
+            object.userData.ovizBaseIntensity = Number(object.intensity ?? 1.0);
+            object.intensity = object.userData.ovizBaseIntensity * group.userData.ovizTimeOpacityScale;
+          }
+        });
+
         return group;
+      }
+
+      function setMilkyWayModelOpacityScale(value) {
+        const scale = clampRange(Number(value) || 0.0, 0.0, 1.0);
+        milkyWayViewOpacityScale = scale;
+        plotGroup.traverse((object) => {
+          if (!object || !object.userData || object.userData.ovizDecorationKind !== "milky_way_model") {
+            return;
+          }
+          object.visible = scale > 0.002;
+          const timeScale = clampRange(Number(object.userData.ovizTimeOpacityScale ?? 1.0), 0.0, 1.0);
+          object.traverse((child) => {
+            if (child.material) {
+              const materials = Array.isArray(child.material) ? child.material : [child.material];
+              materials.forEach((material) => {
+                const baseOpacity = Number(material && material.userData && material.userData.ovizBaseOpacity);
+                if (!material || !Number.isFinite(baseOpacity)) return;
+                material.transparent = true;
+                material.opacity = baseOpacity * timeScale * scale;
+              });
+            }
+            if (child.isLight) {
+              const baseIntensity = Number(child.userData && child.userData.ovizBaseIntensity);
+              if (Number.isFinite(baseIntensity)) {
+                child.intensity = baseIntensity * timeScale * scale;
+              }
+            }
+          });
+        });
+        if (root && root.dataset) {
+          root.dataset.milkyWayOpacityScale = scale.toFixed(3);
+        }
       }
 
       function imagePlaneSpecForDecoration(decoration) {
@@ -15160,6 +15225,7 @@ __SKY_RUNTIME_JS__
           return imagePlaneTextureCache.get(dataUrl);
         }
         const texture = new THREE.TextureLoader().load(dataUrl);
+        persistentImagePlaneTextures.add(texture);
         texture.minFilter = THREE.LinearFilter;
         texture.magFilter = THREE.LinearFilter;
         texture.generateMipmaps = true;
@@ -15180,8 +15246,9 @@ __SKY_RUNTIME_JS__
         }
         const width = Math.max(Number(imagePlaneSpec && imagePlaneSpec.width_pc) || 0.0, 1.0);
         const height = Math.max(Number(imagePlaneSpec && imagePlaneSpec.height_pc) || 0.0, 1.0);
-        const opacity = clamp01(Number(decoration.opacity) || 0.0);
-        if (!(opacity > 0.0)) {
+        const baseOpacity = clamp01(Number(decoration.opacity) || 0.0);
+        const timeOpacityScale = clamp01(Number(decoration.opacity_scale ?? 1.0));
+        if (!(baseOpacity > 0.0)) {
           return null;
         }
         const center = decoration.center || { x: 0.0, y: 0.0, z: 0.0 };
@@ -15189,12 +15256,14 @@ __SKY_RUNTIME_JS__
         const material = new THREE.MeshBasicMaterial({
           map: texture,
           transparent: true,
-          opacity,
+          opacity: baseOpacity * timeOpacityScale,
           side: THREE.DoubleSide,
           depthWrite: false,
           toneMapped: false,
         });
         const mesh = new THREE.Mesh(geometry, material);
+        const imageKey = String((decoration && decoration.key) || "");
+        mesh.userData.ovizMilkyWayImage = imageKey === "galaxy-image-overlay" || imageKey === "galactic-plane-overlay";
         mesh.position.set(
           Number(center.x) || 0.0,
           Number(center.y) || 0.0,
@@ -15206,7 +15275,9 @@ __SKY_RUNTIME_JS__
           : Number(imagePlaneSpec && imagePlaneSpec.render_order);
         mesh.renderOrder = Number.isFinite(renderOrder) ? renderOrder : -20;
         registerCameraResponsiveImagePlane(mesh, {
-          baseOpacity: opacity,
+          baseOpacity,
+          timeOpacityScale,
+          milkyWayImage: mesh.userData.ovizMilkyWayImage,
           hideBelowScaleBarPc: Number(imagePlaneSpec && imagePlaneSpec.hide_below_scale_bar_pc),
           fadeStartScaleBarPc: Number(imagePlaneSpec && imagePlaneSpec.fade_start_scale_bar_pc),
         });
@@ -16377,7 +16448,7 @@ __SKY_RUNTIME_JS__
       }
 
       function traceVisible(trace) {
-        if (isGalacticReferenceTrace(trace) && (!galacticReferenceVisible || cameraViewMode === "earth")) {
+        if (isGalacticReferenceTrace(trace) && !galacticReferenceMotionVisible()) {
           return false;
         }
         if (isNearbyRegionLabelTrace(trace) && !nearbyRegionLabelsVisible) {
@@ -17138,6 +17209,7 @@ __STATE_RUNTIME_JS__
         }
 
         sliderEl.max = String(Math.max(frameSpecs.length - 1, 0));
+        sliderEl.step = "0.02";
         renderTimeSliderTicks();
         const handleLegendPanelToggle = (event) => {
           event.preventDefault();
@@ -17207,7 +17279,11 @@ __STATE_RUNTIME_JS__
             interruptActionRun("time", { disableOrbit: false });
           }
           pause({ snap: false });
+          setTimelineScrubMotionActive(true, { settleDelayMs: 240.0 });
           scheduleSliderScrubRender(Number(sliderEl.value));
+        });
+        sliderEl.addEventListener("change", () => {
+          setTimelineScrubMotionActive(true, { settleDelayMs: 120.0 });
         });
         if (playBackwardButtonEl) {
           playBackwardButtonEl.addEventListener("click", () => {
@@ -17788,7 +17864,12 @@ __STATE_RUNTIME_JS__
       setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);
       initialActionViewState = captureCurrentActionViewState();
       syncActionButtons();
-      await initializeOvizStates();
+      initializeOvizStates().catch((err) => {
+        if (root && root.dataset) {
+          root.dataset.statesReady = "error";
+        }
+        console.error("Oviz States initialization failed", err);
+      });
       ovizStartupRecordPhase("sceneInitialize", ovizSceneInitializeStartMs);
       ovizStartupTiming.totalMs = ovizStartupRound(ovizStartupNow() - ovizStartupStartedAtMs, 1);
       ovizStartupMark("ready");

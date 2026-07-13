@@ -709,10 +709,18 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
       }
 
+      function cancelMilkyWayOpacityAnimation() {
+        if (milkyWayOpacityAnimationFrame) {
+          window.cancelAnimationFrame(milkyWayOpacityAnimationFrame);
+          milkyWayOpacityAnimationFrame = 0;
+        }
+      }
+
       function cancelSkyViewTransitionAnimations(options = {}) {
         skyViewTransitionSerial += 1;
         cancelCameraTransition();
         cancelSkyDomeOpacityAnimation();
+        cancelMilkyWayOpacityAnimation();
         if (
           options.cancelBackground !== false
           && typeof cancelSkyDomeBackgroundProgrammaticTransition === "function"
@@ -820,6 +828,33 @@ THREEJS_VIEWER_RUNTIME_JS = """
           }
         };
         skyDomeOpacityAnimationFrame = window.requestAnimationFrame(step);
+      }
+
+      function animateMilkyWayModelOpacity(targetOpacity, options = {}, onComplete = null) {
+        cancelMilkyWayOpacityAnimation();
+        const currentValue = root && root.dataset ? Number(root.dataset.milkyWayOpacityScale) : NaN;
+        const startOpacity = Number.isFinite(currentValue)
+          ? clampRange(currentValue, 0.0, 1.0)
+          : (cameraViewMode === "earth" ? 0.0 : 1.0);
+        const endOpacity = clampRange(Number(targetOpacity) || 0.0, 0.0, 1.0);
+        const durationMs = Math.max(Number(options.durationMs) || 240.0, 1.0);
+        const startMs = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        const step = (timestampMs) => {
+          const now = Number(timestampMs) || ((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now());
+          const linear = clampRange((now - startMs) / durationMs, 0.0, 1.0);
+          const eased = linear * linear * linear * (linear * (linear * 6.0 - 15.0) + 10.0);
+          setMilkyWayModelOpacityScale(startOpacity + ((endOpacity - startOpacity) * eased));
+          if (linear < 1.0) {
+            milkyWayOpacityAnimationFrame = window.requestAnimationFrame(step);
+            return;
+          }
+          milkyWayOpacityAnimationFrame = 0;
+          setMilkyWayModelOpacityScale(endOpacity);
+          if (typeof onComplete === "function") {
+            onComplete();
+          }
+        };
+        milkyWayOpacityAnimationFrame = window.requestAnimationFrame(step);
       }
 
       function animateCameraTransition(targetPosition, targetControlsTarget, targetFov, onComplete = null, options = {}) {
@@ -1373,6 +1408,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         const targetUp = destinationCameraState
           ? destinationCameraState.up.clone()
           : skyViewUpVectorForDirection(direction);
+        setMilkyWayModelOpacityScale(1.0);
         cameraViewMode = "earth";
         earthViewFocusDistance = focusDistance;
         applyGlobalControlState();
@@ -1380,45 +1416,49 @@ THREEJS_VIEWER_RUNTIME_JS = """
         buildAxes();
         renderFrame(currentFrameIndex);
         const transitionDurationMs = Math.max(Number(options.durationMs) || 820.0, 1.0);
-        const opacityDurationMs = Math.max(
-          Number(options.opacityDurationMs) || Math.min(Math.max(transitionDurationMs * 0.82, 520.0), transitionDurationMs),
-          1.0
-        );
-        animateSkyDomeViewOpacity(1.0, { durationMs: opacityDurationMs });
-        animateCameraTransition(
-          targetPosition,
-          targetControlsTarget,
-          targetFov,
-          () => {
-            if (transitionSerial !== skyViewTransitionSerial) {
-              return;
-            }
-            controls.target.copy(targetControlsTarget);
-            camera.position.copy(targetPosition);
-            camera.up.copy(targetUp);
-            camera.fov = targetFov;
-            renderFrame(currentFrameIndex);
-            applyGlobalControlState();
-            applyCameraViewMode();
-            buildAxes();
-            controls.update();
-            renderSceneControls();
-            updateScaleBar();
-            updateCameraResponsiveImagePlanes();
-            updateSkyDomeBackgroundFrame(
-              (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
-              { force: true }
-            );
-          },
-          {
-            lockDirection: preserveDirection,
-            direction,
-            startDirection,
-            endDistance: orbitRadius,
-            durationMs: transitionDurationMs,
-            targetUp,
+        const milkyWayFadeDurationMs = Math.max(Number(options.milkyWayFadeDurationMs) || 240.0, 1.0);
+        const skyFadeDurationMs = Math.max(Number(options.opacityDurationMs) || 360.0, 1.0);
+        setSkyDomeViewOpacityScale(0.0, { force: false });
+        animateMilkyWayModelOpacity(0.0, { durationMs: milkyWayFadeDurationMs }, () => {
+          if (transitionSerial !== skyViewTransitionSerial) {
+            return;
           }
-        );
+          animateCameraTransition(
+            targetPosition,
+            targetControlsTarget,
+            targetFov,
+            () => {
+              if (transitionSerial !== skyViewTransitionSerial) {
+                return;
+              }
+              controls.target.copy(targetControlsTarget);
+              camera.position.copy(targetPosition);
+              camera.up.copy(targetUp);
+              camera.fov = targetFov;
+              renderFrame(currentFrameIndex);
+              applyGlobalControlState();
+              applyCameraViewMode();
+              buildAxes();
+              controls.update();
+              renderSceneControls();
+              updateScaleBar();
+              updateCameraResponsiveImagePlanes();
+              updateSkyDomeBackgroundFrame(
+                (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
+                { force: true }
+              );
+              animateSkyDomeViewOpacity(1.0, { durationMs: skyFadeDurationMs });
+            },
+            {
+              lockDirection: preserveDirection,
+              direction,
+              startDirection,
+              endDistance: orbitRadius,
+              durationMs: transitionDurationMs,
+              targetUp,
+            }
+          );
+        });
       }
 
       function exitEarthViewToCameraState(options = {}) {
@@ -1454,10 +1494,13 @@ THREEJS_VIEWER_RUNTIME_JS = """
           exitStartDirection.copy(exitTargetDirection);
         }
         exitStartDirection.normalize();
-        animateSkyDomeViewOpacity(0.0, {
-          durationMs: Math.min(Math.max(transitionDurationMs * 0.55, 360.0), transitionDurationMs),
-        });
-        animateCameraTransition(
+        const skyFadeDurationMs = Math.max(Number(options.opacityDurationMs) || 360.0, 1.0);
+        const milkyWayFadeDurationMs = Math.max(Number(options.milkyWayFadeDurationMs) || 240.0, 1.0);
+        animateSkyDomeViewOpacity(0.0, { durationMs: skyFadeDurationMs }, () => {
+          if (transitionSerial !== skyViewTransitionSerial) {
+            return;
+          }
+          animateCameraTransition(
             targetPosition,
             targetControlsTarget,
             targetFov,
@@ -1481,6 +1524,8 @@ THREEJS_VIEWER_RUNTIME_JS = """
               renderSceneControls();
               updateScaleBar();
               updateCameraResponsiveImagePlanes();
+              setMilkyWayModelOpacityScale(0.0);
+              animateMilkyWayModelOpacity(1.0, { durationMs: milkyWayFadeDurationMs });
             },
             {
               durationMs: transitionDurationMs,
@@ -1491,6 +1536,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
               endDistance: exitTargetDistance,
             }
           );
+        });
         return true;
       }
 

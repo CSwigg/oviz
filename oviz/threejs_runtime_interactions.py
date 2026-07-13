@@ -472,7 +472,102 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         updateTimeSliderTickState(clampFrameIndex(clampedValue));
       }
 
+      function galacticReferenceMotionVisible() {
+        return Boolean(
+          galacticReferenceVisible
+          && cameraViewMode !== "earth"
+          && (
+            timelineScrubMotionActive
+            || playbackDirection !== 0
+            || (typeof timeActionTrack !== "undefined" && timeActionTrack)
+          )
+        );
+      }
+
+      function galacticReferenceTimeOpacity() {
+        const timeMyr = Number(frameTimeForValue(displayedFrameValue));
+        if (!Number.isFinite(timeMyr)) {
+          return 0.0;
+        }
+        const linear = clampRange(Math.abs(timeMyr) / 5.0, 0.0, 1.0);
+        return linear * linear * (3.0 - (2.0 * linear));
+      }
+
+      function milkyWayTimelineOpacity() {
+        const timeMyr = Number(frameTimeForValue(displayedFrameValue));
+        if (!Number.isFinite(timeMyr)) {
+          return 1.0;
+        }
+        const linear = clampRange(1.0 - (Math.abs(timeMyr) / 5.0), 0.0, 1.0);
+        return linear * linear * (3.0 - (2.0 * linear));
+      }
+
+      function updateGalacticReferenceMotionOpacity() {
+        const scale = galacticReferenceMotionVisible() ? galacticReferenceTimeOpacity() : 0.0;
+        galacticReferenceOpacityGroups.forEach((group) => {
+          if (!group) return;
+          group.visible = scale > 0.001;
+          group.traverse((object) => {
+            const material = object && object.material;
+            if (!material) return;
+            const materials = Array.isArray(material) ? material : [material];
+            materials.forEach((item) => {
+              const baseOpacity = Number(item && item.userData && item.userData.ovizTimelineBaseOpacity);
+              if (!item || !Number.isFinite(baseOpacity)) return;
+              item.transparent = true;
+              item.opacity = baseOpacity * scale;
+            });
+          });
+        });
+      }
+
+      function updateMilkyWayTimelineOpacity() {
+        const scale = milkyWayTimelineOpacity();
+        cameraResponsiveImagePlaneEntries.forEach((entry) => {
+          if (entry && entry.milkyWayImage) {
+            entry.timeOpacityScale = scale;
+          }
+        });
+        plotGroup.traverse((object) => {
+          if (object && object.userData && object.userData.ovizDecorationKind === "milky_way_model") {
+            object.userData.ovizTimeOpacityScale = scale;
+          }
+        });
+        setMilkyWayModelOpacityScale(milkyWayViewOpacityScale);
+        updateCameraResponsiveImagePlanes();
+      }
+
+      function updateTimelineMotionOpacity() {
+        updateGalacticReferenceMotionOpacity();
+        updateMilkyWayTimelineOpacity();
+      }
+
+      function setTimelineScrubMotionActive(active, options = {}) {
+        if (timelineMotionHideTimer) {
+          window.clearTimeout(timelineMotionHideTimer);
+          timelineMotionHideTimer = 0;
+        }
+        timelineScrubMotionActive = Boolean(active);
+        if (root && root.dataset) {
+          root.dataset.timelineMotionActive = timelineScrubMotionActive ? "true" : "false";
+        }
+        const settleDelayMs = Math.max(Number(options.settleDelayMs) || 0.0, 0.0);
+        if (timelineScrubMotionActive && settleDelayMs > 0.0) {
+          timelineMotionHideTimer = window.setTimeout(() => {
+            timelineMotionHideTimer = 0;
+            timelineScrubMotionActive = false;
+            if (root && root.dataset) {
+              root.dataset.timelineMotionActive = "false";
+            }
+            if (playbackDirection === 0 && !(typeof timeActionTrack !== "undefined" && timeActionTrack)) {
+              updateGalacticReferenceMotionOpacity();
+            }
+          }, settleDelayMs);
+        }
+      }
+
       function pause(options = {}) {
+        const wasPlaying = playbackDirection !== 0;
         if (!actionInterruptsMuted()) {
           interruptActionRun("time", { disableOrbit: false });
         }
@@ -499,6 +594,9 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           }
         }
         updatePlaybackButtons();
+        if (wasPlaying && !timelineScrubMotionActive) {
+          renderFrame(currentFrameIndex);
+        }
       }
 
       function play(direction = 1) {
@@ -531,11 +629,10 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function scheduleSliderScrubRender(index) {
-        const clampedIndex = clampFrameIndex(index);
-        pendingSliderFrameIndex = clampedIndex;
-        displayedFrameValue = clampedIndex;
-        currentFrameIndex = clampedIndex;
-        updateTimelineUi(clampedIndex, frameTimeForValue(clampedIndex));
+        const clampedValue = clampFrameValue(index);
+        pendingSliderFrameIndex = clampedValue;
+        displayedFrameValue = clampedValue;
+        updateTimelineUi(clampedValue, frameTimeForValue(clampedValue));
         if (sliderScrubRenderHandle !== null) {
           return;
         }
@@ -544,7 +641,14 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           const targetIndex = pendingSliderFrameIndex;
           pendingSliderFrameIndex = null;
           if (targetIndex !== null && targetIndex !== undefined) {
-            renderFrame(targetIndex);
+            const stableFrameIndex = clampFrameIndex(targetIndex);
+            if (stableFrameIndex !== currentFrameIndex || !galacticReferenceOpacityGroups.length) {
+              renderFrame(stableFrameIndex);
+            }
+            displayedFrameValue = clampFrameValue(targetIndex);
+            currentFrameIndex = stableFrameIndex;
+            updateTimelineUi(displayedFrameValue, frameTimeForValue(displayedFrameValue));
+            updateTimelineMotionOpacity();
           }
         });
       }

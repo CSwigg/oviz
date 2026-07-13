@@ -1074,13 +1074,51 @@ THREEJS_SCENE_RUNTIME_JS = """
         });
 
         const decorationFrame = easedAlpha < 0.5 ? lowerFrame : upperFrame;
+        const lowerDecorations = Array.isArray(lowerFrame.decorations) ? lowerFrame.decorations : [];
+        const upperDecorations = Array.isArray(upperFrame.decorations) ? upperFrame.decorations : [];
+        const decorationIdentity = (decoration, index) => {
+          const key = String((decoration && decoration.key) || "");
+          const kind = String((decoration && decoration.kind) || "");
+          return key ? `${kind}:${key}` : `${kind}:#${index}`;
+        };
+        const lowerDecorationByIdentity = new Map(
+          lowerDecorations.map((decoration, index) => [decorationIdentity(decoration, index), decoration])
+        );
+        const upperDecorationByIdentity = new Map(
+          upperDecorations.map((decoration, index) => [decorationIdentity(decoration, index), decoration])
+        );
+        const blendedDecorations = (
+          decorationFrame && Array.isArray(decorationFrame.decorations)
+            ? decorationFrame.decorations
+            : []
+        ).map((decoration, index) => {
+          const identity = decorationIdentity(decoration, index);
+          const lowerDecoration = lowerDecorationByIdentity.get(identity);
+          const upperDecoration = upperDecorationByIdentity.get(identity);
+          if (!lowerDecoration || !upperDecoration) {
+            return decoration;
+          }
+          const blended = Object.assign({}, decoration);
+          ["opacity", "opacity_scale"].forEach((fieldName) => {
+            if (
+              Number.isFinite(Number(lowerDecoration[fieldName]))
+              && Number.isFinite(Number(upperDecoration[fieldName]))
+            ) {
+              blended[fieldName] = interpolateNumber(
+                lowerDecoration[fieldName],
+                upperDecoration[fieldName],
+                easedAlpha,
+                decoration[fieldName]
+              );
+            }
+          });
+          return blended;
+        });
         return {
           name: formatTick(timeValue),
           time: timeValue,
           traces: blendedTraces,
-          decorations: decorationFrame && Array.isArray(decorationFrame.decorations)
-            ? decorationFrame.decorations
-            : [],
+          decorations: blendedDecorations,
         };
       }
 
@@ -1226,6 +1264,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         hoverTargets.length = 0;
         cameraResponsivePointEntries.length = 0;
         cameraResponsiveImagePlaneEntries.length = 0;
+        galacticReferenceOpacityGroups.length = 0;
         selectionSpriteEntriesByKey.clear();
         screenStableTextSprites.length = 0;
         clearGroup(plotGroup);
@@ -1237,24 +1276,39 @@ THREEJS_SCENE_RUNTIME_JS = """
           if (!traceVisible(trace)) {
             return;
           }
+          const galacticReferenceGroup = isGalacticReferenceTrace(trace) ? new THREE.Group() : null;
+          const traceParent = galacticReferenceGroup || plotGroup;
 
           if (trace.vectors && trace.vectors.length) {
             const vectorTrace = makeVectorObject(trace, frameLineMaterials);
             if (vectorTrace) {
-              plotGroup.add(vectorTrace);
+              traceParent.add(vectorTrace);
             }
           }
           if (trace.segments && trace.segments.length) {
             const line = makeLineObject(trace, frameLineMaterials);
             if (line) {
-              plotGroup.add(line);
+              traceParent.add(line);
             }
           }
           if (trace.points && trace.points.length) {
-            addMarkerTrace(plotGroup, trace);
+            addMarkerTrace(traceParent, trace);
           }
           if (trace.labels && trace.labels.length) {
-            addTextTrace(plotGroup, trace);
+            addTextTrace(traceParent, trace);
+          }
+          if (galacticReferenceGroup) {
+            galacticReferenceGroup.traverse((object) => {
+              const material = object && object.material;
+              if (!material) return;
+              const materials = Array.isArray(material) ? material : [material];
+              materials.forEach((item) => {
+                if (!item || !item.userData) return;
+                item.userData.ovizTimelineBaseOpacity = Number(item.opacity ?? 1.0);
+              });
+            });
+            galacticReferenceOpacityGroups.push(galacticReferenceGroup);
+            plotGroup.add(galacticReferenceGroup);
           }
         });
 
@@ -1275,6 +1329,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         }
 
         addManualLabels(plotGroup);
+        updateTimelineMotionOpacity();
 
         const focusOffset = focusTrackingOffsetForFrame(frame);
         if (focusOffset) {

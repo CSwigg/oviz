@@ -55,7 +55,7 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
             earth_branch,
         )
         native_mode_apply = update_transition.find(
-            "ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, progress);",
+            "ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, modeCameraProgress);",
             spherical_apply,
         )
         generic_guard = update_transition.find(
@@ -127,6 +127,50 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         self.assertIn("lastAppliedSkyBackgroundFovDeg", apply_view)
         self.assertIn("Math.abs(clampedFovDeg - Number(lastAppliedSkyBackgroundFovDeg)) > 1e-5", apply_view)
         self.assertIn("lastAppliedSkyBackgroundFovDeg = clampedFovDeg", apply_view)
+
+    def test_mode_changes_sequence_milky_way_camera_and_sky_fades(self):
+        update_transition = _function_region(
+            self.html,
+            "updateOvizStateTransition",
+            "ovizFinishStateTransition",
+        )
+        enter_view = _function_region(
+            self.html,
+            "enterEarthViewFromCurrentCamera",
+            "exitEarthViewToCameraState",
+        )
+        exit_view = _function_region(
+            self.html,
+            "exitEarthViewToCameraState",
+            "exitEarthView",
+        )
+
+        self.assertIn("clampRange((raw - 0.20) / 0.60, 0, 1)", update_transition)
+        self.assertIn("ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, modeCameraProgress)", update_transition)
+        self.assertIn("clampRange(raw / 0.20, 0, 1)", update_transition)
+        self.assertIn("clampRange((raw - 0.80) / 0.20, 0, 1)", update_transition)
+        self.assertIn("setMilkyWayModelOpacityScale(milkyWayFade)", update_transition)
+        self.assertIn("setSkyDomeViewOpacityScale(skyFade", update_transition)
+
+        self.assertLess(
+            enter_view.index("animateMilkyWayModelOpacity(0.0"),
+            enter_view.index("animateCameraTransition("),
+        )
+        self.assertLess(
+            enter_view.index("animateCameraTransition("),
+            enter_view.index("animateSkyDomeViewOpacity(1.0"),
+        )
+        self.assertLess(
+            exit_view.index("animateSkyDomeViewOpacity(0.0"),
+            exit_view.index("animateCameraTransition("),
+        )
+        self.assertLess(
+            exit_view.index("animateCameraTransition("),
+            exit_view.index("animateMilkyWayModelOpacity(1.0"),
+        )
+
+        self.assertHtmlContains('group.userData.ovizDecorationKind = "milky_way_model"')
+        self.assertHtmlContains("function setMilkyWayModelOpacityScale(value)")
 
     def test_state_finish_does_not_force_duplicate_aladin_redraw(self):
         finish_transition = _function_region(

@@ -2177,7 +2177,8 @@ class Animate3D:
             plane_center = self._threejs_milky_way_center(frame_json, fallback_center)
             if image_data_url and image_size_pc > 0.0:
                 if bool(galaxy_image_config.get('only_at_t0', True)):
-                    fade_alpha = 1.0 if np.isclose(float(time_value), 0.0, atol=1e-9) else 0.0
+                    fade_fraction = float(np.clip(1.0 - (abs(float(time_value)) / 5.0), 0.0, 1.0))
+                    fade_alpha = fade_fraction * fade_fraction * (3.0 - 2.0 * fade_fraction)
                 else:
                     fade_alpha = 1.0
                 decorations.append({
@@ -2188,7 +2189,8 @@ class Animate3D:
                         'y': float(plane_center.get('y', 0.0)),
                         'z': 0.0,
                     },
-                    'opacity': float(np.clip(galaxy_image_config.get('opacity', 0.6) * fade_alpha, 0.0, 1.0)),
+                    'opacity': float(np.clip(galaxy_image_config.get('opacity', 0.6), 0.0, 1.0)),
+                    'opacity_scale': fade_alpha,
                     'render_order': -20,
                 })
 
@@ -2197,7 +2199,8 @@ class Animate3D:
             image_size_pc = float(_coerce_float(galactic_simple_config.get('size_pc'), 40000.0))
             plane_center = self._threejs_milky_way_center(frame_json, fallback_center)
             if image_data_url and image_size_pc > 0.0:
-                fade_alpha = 1.0 if np.isclose(float(time_value), 0.0, atol=1e-9) else 0.0
+                fade_fraction = float(np.clip(1.0 - (abs(float(time_value)) / 5.0), 0.0, 1.0))
+                fade_alpha = fade_fraction * fade_fraction * (3.0 - 2.0 * fade_fraction)
                 decorations.append({
                     'kind': 'image_plane',
                     'key': str(galactic_simple_config.get('key') or 'galactic-plane-overlay'),
@@ -2206,7 +2209,8 @@ class Animate3D:
                         'y': float(plane_center.get('y', 0.0)),
                         'z': 0.0,
                     },
-                    'opacity': float(np.clip(galactic_simple_config.get('opacity', 0.6) * fade_alpha, 0.0, 1.0)),
+                    'opacity': float(np.clip(galactic_simple_config.get('opacity', 0.6), 0.0, 1.0)),
+                    'opacity_scale': fade_alpha,
                     'render_order': -20,
                 })
 
@@ -2250,7 +2254,14 @@ class Animate3D:
                     'render_order': 8,
                 })
 
-        if (not getattr(self, 'show_milky_way_model', False)) or (not np.isclose(float(time_value), 0.0, atol=1e-9)):
+        if not getattr(self, 'show_milky_way_model', False):
+            return decorations
+
+        milky_way_fade_window_myr = 5.0
+        time_distance_myr = abs(float(time_value))
+        fade_fraction = float(np.clip(1.0 - (time_distance_myr / milky_way_fade_window_myr), 0.0, 1.0))
+        opacity_scale = fade_fraction * fade_fraction * (3.0 - 2.0 * fade_fraction)
+        if opacity_scale <= 1e-6:
             return decorations
 
         x_span = max(float(x_range[1]) - float(x_range[0]), 1.0)
@@ -2261,6 +2272,7 @@ class Animate3D:
 
         decorations.append({
             'kind': 'milky_way_model',
+            'opacity_scale': opacity_scale,
             'center': center,
             'disc_radius_pc': disc_radius_pc,
             'disc_thickness_pc': max(180.0, 0.018 * disc_radius_pc),

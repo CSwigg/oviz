@@ -16,7 +16,7 @@ def _lite_mode_enabled(plot) -> bool:
     )
 
 
-_CONTROL_RANGE_KEYS = {"vmin", "vmax", "cut_min", "cut_max"}
+_CONTROL_RANGE_KEYS = {"vmin", "vmax", "cut_min", "cut_max", "opacity_scale"}
 
 
 def _round_scene_floats(value, precision: int, *, field_name: str | None = None):

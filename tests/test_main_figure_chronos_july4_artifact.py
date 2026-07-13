@@ -149,7 +149,26 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "mobile_active_volume_key" in html
     assert "lockNorthUp: skyDomeBackgroundOnly" in html
     assert "window.OvizSkyBackgroundBridge" in html
+    assert "function setMilkyWayModelOpacityScale(value)" in html
+    assert "function galacticReferenceMotionVisible()" in html
+    assert "function galacticReferenceTimeOpacity()" in html
+    assert "const stableFrameIndex = clampFrameIndex(targetIndex)" in html
+    assert "updateTimelineMotionOpacity()" in html
+    assert "renderInterpolatedFrameValue(targetIndex, { updateWidgets: false })" not in html
+    assert "ovizTimeOpacityScale" in html
     assert "setExclusiveVolumeVariantSelection(activeVolumeKey)" in html
+
+    galaxy_opacity_scale_by_time = {}
+    for frame in scene_spec["frames"]:
+        if float(frame["time"]) not in {0.0, -1.0, -5.0}:
+            continue
+        decoration = next(
+            item for item in frame.get("decorations", [])
+            if item.get("key") == "galaxy-image-overlay"
+        )
+        galaxy_opacity_scale_by_time[float(frame["time"])] = float(decoration["opacity_scale"])
+    assert galaxy_opacity_scale_by_time[0.0] > galaxy_opacity_scale_by_time[-1.0] > galaxy_opacity_scale_by_time[-5.0]
+    assert galaxy_opacity_scale_by_time[-5.0] == 0.0
     assert "oviz-three-mobile-sky-view" in html
     assert "oviz-three-mobile-lasso" in html
     assert 'data-ar-enabled="false"' in html
