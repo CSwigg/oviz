@@ -8351,14 +8351,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         renderBoxMetricsWidget();
       }
 
-      function restoreLassoSelectionMask(savedMask) {
-        lassoSelectionRestoreSerial += 1;
-        const restoreSerial = lassoSelectionRestoreSerial;
-        if (minimalModeEnabled) {
-          disposeLassoSelectionMask(currentLassoSelectionMask);
-          currentLassoSelectionMask = null;
-          return Promise.resolve();
+      function installLassoSelectionMask(mask) {
+        const previousMask = currentLassoSelectionMask;
+        currentLassoSelectionMask = mask || null;
+        if (previousMask !== currentLassoSelectionMask) {
+          disposeSelectionMaskIfUnused(previousMask);
         }
+        return currentLassoSelectionMask;
+      }
+
+      function loadLassoSelectionMask(savedMask) {
         if (
           !savedMask
           || typeof savedMask !== "object"
@@ -8366,18 +8368,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           || !Array.isArray(savedMask.view_projection_matrix)
           || savedMask.view_projection_matrix.length !== 16
         ) {
-          disposeLassoSelectionMask(currentLassoSelectionMask);
-          currentLassoSelectionMask = null;
-          return Promise.resolve();
+          return Promise.resolve(null);
         }
 
         return new Promise((resolve) => {
           const image = new Image();
           image.onload = () => {
-            if (restoreSerial !== lassoSelectionRestoreSerial) {
-              resolve(false);
-              return;
-            }
             const maskCanvas = document.createElement("canvas");
             const width = Math.max(1, Number(image.naturalWidth || image.width || 0));
             const height = Math.max(1, Number(image.naturalHeight || image.height || 0));
@@ -8407,26 +8403,39 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
                 }))
                 .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
               : [];
-            disposeLassoSelectionMask(currentLassoSelectionMask);
-            currentLassoSelectionMask = {
+            resolve({
               maskTexture: texture,
               viewProjectionMatrix,
               polygonNdc,
               maskSize: width,
               maskAlphaData: maskImageData ? maskImageData.data : null,
-            };
-            resolve(true);
+            });
           };
-          image.onerror = () => {
-            if (restoreSerial !== lassoSelectionRestoreSerial) {
-              resolve(false);
-              return;
-            }
-            disposeLassoSelectionMask(currentLassoSelectionMask);
-            currentLassoSelectionMask = null;
-            resolve(true);
-          };
+          image.onerror = () => resolve(null);
           image.src = String(savedMask.data_url);
+        });
+      }
+
+      function restoreLassoSelectionMask(savedMask, options = {}) {
+        lassoSelectionRestoreSerial += 1;
+        const restoreSerial = lassoSelectionRestoreSerial;
+        if (minimalModeEnabled) {
+          installLassoSelectionMask(null);
+          return Promise.resolve(true);
+        }
+        const suppliedMask = Object.prototype.hasOwnProperty.call(options, "runtimeMask")
+          ? options.runtimeMask
+          : undefined;
+        const loadPromise = suppliedMask === undefined
+          ? loadLassoSelectionMask(savedMask)
+          : Promise.resolve(suppliedMask);
+        return loadPromise.then((mask) => {
+          if (restoreSerial !== lassoSelectionRestoreSerial) {
+            disposeSelectionMaskIfUnused(mask);
+            return false;
+          }
+          installLassoSelectionMask(mask);
+          return true;
         });
       }
 
@@ -9520,6 +9529,46 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         );
         uniforms.selectionMaskTexture.value = activeMask ? activeMask.maskTexture : null;
         uniforms.selectionDimOutside.value = activeMask ? 0.0 : 1.0;
+      }
+
+      function applyLassoSelectionTransitionUniforms(uniforms) {
+        const transition = (
+          typeof ovizStateSelectionTransition !== "undefined"
+          && ovizStateSelectionTransition
+        ) ? ovizStateSelectionTransition : null;
+        const sourceMask = transition
+          ? transition.fromMask
+          : activeVolumeLassoSelectionMask();
+        applyLassoSelectionMaskUniforms(uniforms, sourceMask);
+        const sourceSecondaryMask = transition && transition.fromSecondaryMask
+          && transition.fromSecondaryMask.maskTexture
+          && transition.fromSecondaryMask.viewProjectionMatrix
+          ? transition.fromSecondaryMask
+          : null;
+        uniforms.useSelectionSourceSecondaryPolygon.value = Boolean(sourceSecondaryMask);
+        uniforms.selectionSourceSecondaryViewProjectionMatrix.value.copy(
+          sourceSecondaryMask ? sourceSecondaryMask.viewProjectionMatrix : new THREE.Matrix4()
+        );
+        uniforms.selectionSourceSecondaryMaskTexture.value = sourceSecondaryMask
+          ? sourceSecondaryMask.maskTexture
+          : null;
+        uniforms.selectionSourceBlend.value = transition
+          ? clampRange(Number(transition.fromMaskBlend) || 0.0, 0.0, 1.0)
+          : 0.0;
+        const targetMask = transition && transition.toMask
+          && transition.toMask.maskTexture
+          && transition.toMask.viewProjectionMatrix
+          ? transition.toMask
+          : null;
+        uniforms.useSelectionTargetPolygon.value = Boolean(targetMask);
+        uniforms.selectionTargetViewProjectionMatrix.value.copy(
+          targetMask ? targetMask.viewProjectionMatrix : new THREE.Matrix4()
+        );
+        uniforms.selectionTargetMaskTexture.value = targetMask ? targetMask.maskTexture : null;
+        uniforms.selectionTransitionActive.value = Boolean(transition);
+        uniforms.selectionTransitionProgress.value = transition
+          ? clampRange(Number(transition.progress) || 0.0, 0.0, 1.0)
+          : 0.0;
       }
 
       function selectionToolbarText(selections, focusSelection) {
@@ -13886,9 +13935,18 @@ __SKY_RUNTIME_JS__
             selectionViewProjectionMatrix: { value: new THREE.Matrix4() },
             selectionMaskTexture: { value: null },
             selectionDimOutside: { value: 1.0 },
+            useSelectionSourceSecondaryPolygon: { value: false },
+            selectionSourceSecondaryViewProjectionMatrix: { value: new THREE.Matrix4() },
+            selectionSourceSecondaryMaskTexture: { value: null },
+            selectionSourceBlend: { value: 0.0 },
+            useSelectionTargetPolygon: { value: false },
+            selectionTargetViewProjectionMatrix: { value: new THREE.Matrix4() },
+            selectionTargetMaskTexture: { value: null },
+            selectionTransitionActive: { value: false },
+            selectionTransitionProgress: { value: 0.0 },
           },
         ]);
-        applyLassoSelectionMaskUniforms(uniforms, activeVolumeLassoSelectionMask());
+        applyLassoSelectionTransitionUniforms(uniforms);
 
         const material = new THREE.ShaderMaterial({
           uniforms,
@@ -13930,7 +13988,7 @@ __SKY_RUNTIME_JS__
         runtime.material.uniforms.rotation.value.copy(
           volumeQuaternionForZRotation(volumeRotationAngleForFrame(layer, state, frame))
         );
-        applyLassoSelectionMaskUniforms(runtime.material.uniforms, activeVolumeLassoSelectionMask());
+        applyLassoSelectionTransitionUniforms(runtime.material.uniforms);
         if (option) {
           runtime.material.uniforms.colormap.value = volumeColorTextureFor(option);
         }
@@ -14169,8 +14227,29 @@ __SKY_RUNTIME_JS__
         return texture;
       }
 
+      function ovizTransitionOpacityBucket(opacity) {
+        const value = clampRange(Number(opacity) || 0.0, 0.0, 1.0);
+        const stateAppearanceProgress = (
+          typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+        ) ? Number(ovizStateTransition.currentAppearanceProgress) : 0.0;
+        const legendProgress = (
+          typeof legendTransitionState !== "undefined"
+          && legendTransitionState
+        ) ? Number(legendTransitionState.progress) : 0.0;
+        const transitionActive = (
+          stateAppearanceProgress > 1e-6 && stateAppearanceProgress < 1.0 - 1e-6
+        ) || (
+          legendProgress > 1e-6 && legendProgress < 1.0 - 1e-6
+        );
+        // Cache transient materials at sub-percent opacity resolution.  This
+        // bounds cache growth without making an 800 ms crossfade visibly step.
+        return transitionActive ? Math.round(value * 256.0) / 256.0 : value;
+      }
+
       function markerMaterialFor(symbol, color, opacity) {
-        const cacheKey = [symbol ?? "circle", color ?? "#ffffff", opacity ?? 1.0].join("|");
+        const materialOpacity = ovizTransitionOpacityBucket(opacity ?? 1.0);
+        const cacheKey = [symbol ?? "circle", color ?? "#ffffff", materialOpacity].join("|");
         if (markerMaterialCache.has(cacheKey)) {
           return markerMaterialCache.get(cacheKey);
         }
@@ -14178,7 +14257,7 @@ __SKY_RUNTIME_JS__
           map: markerTextureFor(symbol),
           color: color ?? "#ffffff",
           transparent: true,
-          opacity: opacity ?? 1.0,
+          opacity: materialOpacity,
           alphaTest: 0.15,
           depthWrite: false,
           depthTest: true,
@@ -14255,7 +14334,8 @@ __SKY_RUNTIME_JS__
       }
 
       function starGlowMaterialFor(color, opacity) {
-        const cacheKey = [color ?? "#ffffff", Number(opacity ?? 0.0).toFixed(4)].join("|");
+        const materialOpacity = ovizTransitionOpacityBucket(opacity ?? 0.0);
+        const cacheKey = [color ?? "#ffffff", materialOpacity].join("|");
         if (starGlowMaterialCache.has(cacheKey)) {
           return starGlowMaterialCache.get(cacheKey);
         }
@@ -14263,7 +14343,7 @@ __SKY_RUNTIME_JS__
           map: starGlowTextureFor("halo"),
           color: color ?? "#ffffff",
           transparent: true,
-          opacity: opacity ?? 0.0,
+          opacity: materialOpacity,
           depthWrite: false,
           depthTest: true,
           alphaTest: 0.0015,
@@ -14296,7 +14376,8 @@ __SKY_RUNTIME_JS__
       }
 
       function starCoreMaterialFor(color, opacity) {
-        const cacheKey = [color ?? "#ffffff", Number(opacity ?? 0.0).toFixed(4)].join("|");
+        const materialOpacity = ovizTransitionOpacityBucket(opacity ?? 0.0);
+        const cacheKey = [color ?? "#ffffff", materialOpacity].join("|");
         if (starCoreMaterialCache.has(cacheKey)) {
           return starCoreMaterialCache.get(cacheKey);
         }
@@ -14304,7 +14385,7 @@ __SKY_RUNTIME_JS__
           map: starCoreTextureFor("stellar_core"),
           color: color ?? "#ffffff",
           transparent: true,
-          opacity: opacity ?? 0.0,
+          opacity: materialOpacity,
           depthWrite: false,
           depthTest: true,
           sizeAttenuation: true,
@@ -15843,7 +15924,13 @@ __SKY_RUNTIME_JS__
               opacityMultiplier *= dendrogramActiveKeys.has(pointKey) ? 1.0 : 0.24;
             }
           }
-          if (lassoSelectionFilterActive()) {
+          if (
+            typeof ovizStateSelectionTransition !== "undefined"
+            && ovizStateSelectionTransition
+            && typeof ovizSelectionMembershipOpacity === "function"
+          ) {
+            opacityMultiplier *= ovizSelectionMembershipOpacity(pointKey, point);
+          } else if (lassoSelectionFilterActive()) {
             if (!pointKey || !selectedClusterKeys.has(pointKey)) {
               return;
             }
@@ -16044,7 +16131,7 @@ __SKY_RUNTIME_JS__
         }
       }
 
-      function buildSelectionFootprint(selection, materialBucket) {
+      function buildSelectionFootprint(selection, materialBucket, opacityScale = 1.0) {
         if (!selection) {
           return null;
         }
@@ -16126,7 +16213,7 @@ __SKY_RUNTIME_JS__
           new THREE.MeshBasicMaterial({
             color: theme.footprint || "#6ec5ff",
             transparent: true,
-            opacity: 0.18,
+            opacity: 0.18 * clampRange(Number(opacityScale) || 0.0, 0.0, 1.0),
             side: THREE.DoubleSide,
             depthWrite: false,
           })
@@ -16140,7 +16227,7 @@ __SKY_RUNTIME_JS__
             width: 5.0,
             dash: "solid",
           },
-          opacity: 1.0,
+          opacity: clampRange(Number(opacityScale) || 0.0, 0.0, 1.0),
         }, materialBucket);
         if (rim) {
           group.add(rim);
@@ -16480,9 +16567,6 @@ __SKY_RUNTIME_JS__
         if (isNearbyRegionLabelTrace(trace) && !nearbyRegionLabelsVisible) {
           return false;
         }
-        if (legendState[trace.key] === false) {
-          return false;
-        }
         const actionState = actionTraceVisibilityState(trace);
         if (actionState) {
           return Boolean(actionState.visible);
@@ -16490,6 +16574,9 @@ __SKY_RUNTIME_JS__
         const stateTransitionState = stateTraceVisibilityState(trace);
         if (stateTransitionState) {
           return Boolean(stateTransitionState.visible);
+        }
+        if (legendState[trace.key] === false) {
+          return false;
         }
         const defaults = groupDefaults(currentGroup);
         const mode = defaults[trace.key];

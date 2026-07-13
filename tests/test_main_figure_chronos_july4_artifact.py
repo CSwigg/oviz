@@ -152,6 +152,13 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "function setMilkyWayModelOpacityScale(value)" in html
     assert "function galacticReferenceMotionVisible()" in html
     assert "function galacticReferenceTimeOpacity()" in html
+    assert "function ovizBuildTransitionPhases(" in html
+    assert "phaseMinimumDurationMs = 800.0" in html
+    assert "actionHeldTraceOpacityByKey = null" in html
+    assert "for (let index = firstIndex; index <= lastIndex; index += 1)" in html
+    assert "preserveCamera: true" in html
+    assert "Math.round(value * 256.0) / 256.0" in html
+    assert "renderer.domElement.style.opacity = String(canvasOpacity)" not in html
     assert "const stableFrameIndex = clampFrameIndex(targetIndex)" in html
     assert "updateTimelineMotionOpacity()" in html
     assert "renderInterpolatedFrameValue(targetIndex, { updateWidgets: false })" not in html

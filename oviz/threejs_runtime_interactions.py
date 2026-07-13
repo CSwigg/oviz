@@ -155,6 +155,17 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         if (currentLassoSelectionMask === mask) {
           return true;
         }
+        if (
+          typeof ovizStateSelectionTransition !== "undefined"
+          && ovizStateSelectionTransition
+          && (
+            ovizStateSelectionTransition.fromMask === mask
+            || ovizStateSelectionTransition.fromSecondaryMask === mask
+            || ovizStateSelectionTransition.toMask === mask
+          )
+        ) {
+          return true;
+        }
         return selectionUndoStack.some((snapshot) => (
           snapshot
           && snapshot !== ignoredSnapshot
@@ -476,12 +487,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         return Boolean(
           galacticReferenceVisible
           && cameraViewMode !== "earth"
-          && (
-            timelineScrubMotionActive
-            || playbackDirection !== 0
-            || (typeof timeActionTrack !== "undefined" && timeActionTrack)
-            || ovizStateTimelineMotionActive
-          )
+          && galacticReferenceTimeOpacity() > 0.001
         );
       }
 

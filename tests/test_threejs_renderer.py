@@ -1127,7 +1127,7 @@ class ThreeJSRendererTests(unittest.TestCase):
     def test_threejs_galactic_circles_include_gc_marker_and_drop_radius_labels(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
         fig = viz.make_plot(
-            time=np.array([0.0, -1.0]),
+            time=np.array([1.0, 0.0, -1.0]),
             renderer="threejs",
             show=False,
             galactic_mode=True,
@@ -1135,6 +1135,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         )
 
         zero_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == 0.0)
+        positive_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == 1.0)
+        negative_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == -1.0)
         trace_names = [trace.get("name") for trace in zero_frame["traces"]]
         label_texts = [
             label.get("text")
@@ -1159,15 +1161,32 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertNotIn("R = 4 kpc", label_texts)
         self.assertNotIn("R = 8.12 kpc", label_texts)
         self.assertNotIn("R = 12 kpc", label_texts)
+        expected_reference_names = {"GC", "R = 4 kpc", "R = 8.12 kpc", "R = 12 kpc"}
+        self.assertTrue(expected_reference_names.issubset({
+            trace.get("name") for trace in positive_frame["traces"]
+        }))
+        self.assertTrue(expected_reference_names.issubset({
+            trace.get("name") for trace in negative_frame["traces"]
+        }))
         html = fig.to_html()
         self.assertIn("function galacticReferenceMotionVisible()", html)
         self.assertIn("function galacticReferenceTimeOpacity()", html)
         self.assertIn("return Math.abs(timeMyr) <= 1e-9 ? 0.0 : 1.0", html)
         self.assertIn("return Math.abs(timeMyr) <= 1e-9 ? 1.0 : 0.0", html)
         self.assertNotIn("Math.abs(timeMyr) / 5.0", html)
-        self.assertIn("timelineScrubMotionActive", html)
-        self.assertIn("playbackDirection !== 0", html)
-        self.assertIn("ovizStateTimelineMotionActive", html)
+        motion_visibility_body = html.split(
+            "function galacticReferenceMotionVisible()", 1
+        )[1].split("function galacticReferenceTimeOpacity()", 1)[0]
+        self.assertIn("galacticReferenceVisible", motion_visibility_body)
+        self.assertIn('cameraViewMode !== "earth"', motion_visibility_body)
+        self.assertNotIn("timelineScrubMotionActive", motion_visibility_body)
+        self.assertNotIn("playbackDirection", motion_visibility_body)
+        self.assertNotIn("timeActionTrack", motion_visibility_body)
+        self.assertNotIn("ovizStateTimelineMotionActive", motion_visibility_body)
+        self.assertIn(
+            "galacticReferenceMotionVisible() ? galacticReferenceTimeOpacity() : 0.0",
+            html,
+        )
         self.assertIn("setTimelineScrubMotionActive(true, { settleDelayMs: 240.0 })", html)
 
     def test_threejs_text_trace_can_be_a_single_legend_item(self):

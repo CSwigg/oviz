@@ -51,7 +51,7 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
             'if (transition.viewTransitionKind === "earth-to-earth")'
         )
         spherical_apply = update_transition.find(
-            "ovizApplyEarthCameraTrack(transition.earthCameraTrack, progress);",
+            "ovizApplyEarthCameraTrack(transition.earthCameraTrack, cameraProgress);",
             earth_branch,
         )
         native_mode_apply = update_transition.find(
@@ -59,7 +59,7 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
             spherical_apply,
         )
         generic_guard = update_transition.find(
-            "else if (!transition.nativeViewTransition && !targetEarthViewLocked)",
+            "else if (!transition.nativeViewTransition)",
             native_mode_apply,
         )
         cartesian_apply = update_transition.find("camera.position.set(", generic_guard)
@@ -145,10 +145,10 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
             "exitEarthView",
         )
 
-        self.assertIn("clampRange((raw - 0.20) / 0.60, 0, 1)", update_transition)
+        self.assertIn("clampRange((cameraRaw - 0.20) / 0.60, 0, 1)", update_transition)
         self.assertIn("ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, modeCameraProgress)", update_transition)
-        self.assertIn("clampRange(raw / 0.20, 0, 1)", update_transition)
-        self.assertIn("clampRange((raw - 0.80) / 0.20, 0, 1)", update_transition)
+        self.assertIn("clampRange(cameraRaw / 0.20, 0, 1)", update_transition)
+        self.assertIn("clampRange((cameraRaw - 0.80) / 0.20, 0, 1)", update_transition)
         self.assertIn("setMilkyWayModelOpacityScale(milkyWayFade)", update_transition)
         self.assertIn("setSkyDomeViewOpacityScale(skyFade", update_transition)
 
@@ -209,6 +209,25 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         self.assertHtmlContains("applySkyImageLayerEffectiveOpacity(")
         self.assertHtmlContains("const stackLayers = residentStack")
         self.assertHtmlContains("skyLayerSemanticTransitionSerial")
+
+    def test_sky_layer_crossfade_is_scheduled_in_the_appearance_phase(self):
+        start_layers = _function_region(
+            self.html,
+            "ovizStartSkyLayerTransition",
+            "ovizCreateEarthCameraTrack",
+        )
+        update_transition = _function_region(
+            self.html,
+            "updateOvizStateTransition",
+            "ovizFinishStateTransition",
+        )
+        self.assertIn('phase.name === "appearance"', start_layers)
+        self.assertIn("phaseDurationMs", start_layers)
+        self.assertIn('phaseState.name === "appearance"', update_transition)
+        self.assertIn(
+            "ovizStartSkyLayerTransition(transition, transition.sourceSkyLayers)",
+            update_transition,
+        )
 
     def test_live_aladin_iframe_signature_is_independent_of_survey_and_layers(self):
         restore_layers = _function_region(
@@ -343,7 +362,7 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         )
 
         self.assertIn("startedAtEpochMs: ovizTransitionEpochMs(now)", begin_transition)
-        self.assertIn("startedAtEpochMs: transition.startedAtEpochMs", self.html)
+        self.assertIn("startedAtEpochMs: phaseStartedAtEpochMs", self.html)
         self.assertIn("skyBackgroundTransitionStartedAt(data, transitionNow)", child_camera)
         self.assertIn("skyBackgroundTransitionStartedAt(data, transitionNow)", child_layers)
 

@@ -469,6 +469,8 @@ THREEJS_SCENE_RUNTIME_JS = """
         uniform sampler2D colormap;
         uniform sampler2D jitterTexture;
         uniform sampler2D selectionMaskTexture;
+        uniform sampler2D selectionSourceSecondaryMaskTexture;
+        uniform sampler2D selectionTargetMaskTexture;
         uniform float low;
         uniform float high;
         uniform float opacity;
@@ -482,6 +484,13 @@ THREEJS_SCENE_RUNTIME_JS = """
         uniform bool useSelectionPolygon;
         uniform mat4 selectionViewProjectionMatrix;
         uniform float selectionDimOutside;
+        uniform bool useSelectionSourceSecondaryPolygon;
+        uniform mat4 selectionSourceSecondaryViewProjectionMatrix;
+        uniform float selectionSourceBlend;
+        uniform bool useSelectionTargetPolygon;
+        uniform mat4 selectionTargetViewProjectionMatrix;
+        uniform bool selectionTransitionActive;
+        uniform float selectionTransitionProgress;
 
         varying vec3 localPosition;
         varying vec3 transformedCameraPosition;
@@ -579,6 +588,44 @@ THREEJS_SCENE_RUNTIME_JS = """
           return texture2D(selectionMaskTexture, uv).r > 0.5;
         }
 
+        bool sampleInsideTargetSelectionPolygon(vec3 worldPos) {
+          if (!useSelectionTargetPolygon) {
+            return true;
+          }
+          vec4 clip = selectionTargetViewProjectionMatrix * vec4(worldPos, 1.0);
+          if (clip.w <= 0.0) {
+            return false;
+          }
+          vec3 ndc = clip.xyz / clip.w;
+          if (ndc.z < -1.0 || ndc.z > 1.0) {
+            return false;
+          }
+          vec2 uv = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+          if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) {
+            return false;
+          }
+          return texture2D(selectionTargetMaskTexture, uv).r > 0.5;
+        }
+
+        bool sampleInsideSourceSecondarySelectionPolygon(vec3 worldPos) {
+          if (!useSelectionSourceSecondaryPolygon) {
+            return true;
+          }
+          vec4 clip = selectionSourceSecondaryViewProjectionMatrix * vec4(worldPos, 1.0);
+          if (clip.w <= 0.0) {
+            return false;
+          }
+          vec3 ndc = clip.xyz / clip.w;
+          if (ndc.z < -1.0 || ndc.z > 1.0) {
+            return false;
+          }
+          vec2 uv = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+          if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) {
+            return false;
+          }
+          return texture2D(selectionSourceSecondaryMaskTexture, uv).r > 0.5;
+        }
+
         vec3 worldGetNormal(in float px, in vec3 pos) {
           return normalize(vec3(
             px - sampleVolume(pos + vec3(gradient_step, 0.0, 0.0)),
@@ -636,13 +683,26 @@ THREEJS_SCENE_RUNTIME_JS = """
                 rotation
               );
               bool insideSelection = sampleInsideSelectionPolygon(worldPos);
-              if (!insideSelection && selectionDimOutside <= 0.001) {
+              float selectionWeight = insideSelection ? 1.0 : selectionDimOutside;
+              if (selectionTransitionActive) {
+                bool insideSourceSecondarySelection = sampleInsideSourceSecondarySelectionPolygon(worldPos);
+                bool insideTargetSelection = sampleInsideTargetSelectionPolygon(worldPos);
+                float sourceSelectionWeight = mix(
+                  insideSelection ? 1.0 : 0.0,
+                  insideSourceSecondarySelection ? 1.0 : 0.0,
+                  clamp(selectionSourceBlend, 0.0, 1.0)
+                );
+                selectionWeight = mix(
+                  sourceSelectionWeight,
+                  insideTargetSelection ? 1.0 : 0.0,
+                  clamp(selectionTransitionProgress, 0.0, 1.0)
+                );
+              }
+              if (selectionWeight <= 0.001) {
                 continue;
               }
               pxColor.a = 1.0 - pow(1.0 - clamp(pxColor.a * opacity, 0.0, 0.999), step * alpha_coef);
-              if (!insideSelection) {
-                pxColor.a *= selectionDimOutside;
-              }
+              pxColor.a *= selectionWeight;
               pxColor.a *= (1.0 - value.a);
               pxColor.rgb *= pxColor.a;
 
@@ -734,9 +794,18 @@ THREEJS_SCENE_RUNTIME_JS = """
             selectionViewProjectionMatrix: { value: new THREE.Matrix4() },
             selectionMaskTexture: { value: null },
             selectionDimOutside: { value: 1.0 },
+            useSelectionSourceSecondaryPolygon: { value: false },
+            selectionSourceSecondaryViewProjectionMatrix: { value: new THREE.Matrix4() },
+            selectionSourceSecondaryMaskTexture: { value: null },
+            selectionSourceBlend: { value: 0.0 },
+            useSelectionTargetPolygon: { value: false },
+            selectionTargetViewProjectionMatrix: { value: new THREE.Matrix4() },
+            selectionTargetMaskTexture: { value: null },
+            selectionTransitionActive: { value: false },
+            selectionTransitionProgress: { value: 0.0 },
           },
         ]);
-        applyLassoSelectionMaskUniforms(uniforms, activeVolumeLassoSelectionMask());
+        applyLassoSelectionTransitionUniforms(uniforms);
 
         const material = new THREE.ShaderMaterial({
           uniforms,
@@ -778,7 +847,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         runtime.material.uniforms.rotation.value.copy(
           volumeQuaternionForZRotation(volumeRotationAngleForFrame(layer, state, frame))
         );
-        applyLassoSelectionMaskUniforms(runtime.material.uniforms, activeVolumeLassoSelectionMask());
+        applyLassoSelectionTransitionUniforms(runtime.material.uniforms);
         if (option) {
           runtime.material.uniforms.colormap.value = volumeColorTextureFor(option);
         }
@@ -1247,13 +1316,14 @@ THREEJS_SCENE_RUNTIME_JS = """
 
       function renderFrameScene(frame, displayedTimeMyr, options = {}) {
         const updateWidgets = options.updateWidgets !== false;
+        const preserveCamera = options.preserveCamera === true;
         if (!frame) {
           return;
         }
-        if (zoomAnchorTracksFrame !== false) {
+        if (!preserveCamera && zoomAnchorTracksFrame !== false) {
           currentZoomAnchorPoint = trackedZoomAnchorPointForFrame(frame);
         }
-        if (galacticSimpleOrbitTargetTrackingActive && currentZoomAnchorPoint instanceof THREE.Vector3) {
+        if (!preserveCamera && galacticSimpleOrbitTargetTrackingActive && currentZoomAnchorPoint instanceof THREE.Vector3) {
           const orbitTargetDelta = currentZoomAnchorPoint.clone().sub(controls.target);
           if (orbitTargetDelta.lengthSq() > 1e-12) {
             controls.target.add(orbitTargetDelta);
@@ -1312,11 +1382,37 @@ THREEJS_SCENE_RUNTIME_JS = """
           }
         });
 
-        if (currentSelectionMode === "click" && currentSelection) {
+        const selectionTransition = (
+          typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+          && ovizStateTransition.phasePlan
+          && ovizStateTransition.phasePlan.changed.appearance
+        ) ? ovizStateTransition : null;
+        if (selectionTransition) {
+          const selectionProgress = clampRange(
+            Number(selectionTransition.currentAppearanceProgress) || 0.0,
+            0.0,
+            1.0,
+          );
+          const fromSelection = selectionTransition.fromSnapshot
+            && selectionTransition.fromSnapshot.current_selection;
+          const toSelection = selectionTransition.targetSnapshot
+            && selectionTransition.targetSnapshot.current_selection;
+          const fromFootprint = buildSelectionFootprint(
+            fromSelection,
+            frameLineMaterials,
+            1.0 - selectionProgress,
+          );
+          const toFootprint = buildSelectionFootprint(
+            toSelection,
+            frameLineMaterials,
+            selectionProgress,
+          );
+          if (fromFootprint) plotGroup.add(fromFootprint);
+          if (toFootprint) plotGroup.add(toFootprint);
+        } else if (currentSelectionMode === "click" && currentSelection) {
           const footprint = buildSelectionFootprint(currentSelection, frameLineMaterials);
-          if (footprint) {
-            plotGroup.add(footprint);
-          }
+          if (footprint) plotGroup.add(footprint);
         }
 
         (frame.decorations || []).forEach((decoration) => {

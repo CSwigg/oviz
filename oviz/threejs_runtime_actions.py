@@ -456,12 +456,20 @@ THREEJS_ACTION_RUNTIME_JS = """
         return true;
       }
 
-      function stopTimeActionTrack() {
+      function stopTimeActionTrack(options = {}) {
         if (!timeActionTrack) {
           return false;
         }
         const track = timeActionTrack;
         timeActionTrack = null;
+        if (options.complete === true) {
+          displayedFrameValue = clampFrameValue(track.targetFrameValue);
+          currentFrameIndex = clampFrameIndex(displayedFrameValue);
+          renderInterpolatedFrameValue(displayedFrameValue, {
+            updateWidgets: false,
+            preserveCamera: true,
+          });
+        }
         playbackDirection = 0;
         lastPlaybackAdvanceTimestamp = null;
         updateTimelineMotionOpacity();
@@ -486,7 +494,7 @@ THREEJS_ACTION_RUNTIME_JS = """
           });
         }
         if (timeActionTrack) {
-          stopTimeActionTrack();
+          stopTimeActionTrack({ complete: false });
         }
         if (options.disableOrbit && actionCameraOrbitOwned) {
           cameraAutoOrbitSpeedMultiplier = 1.0;
@@ -769,17 +777,35 @@ THREEJS_ACTION_RUNTIME_JS = """
 
       function startTimeAction(step, stepIndex, now) {
         const direction = String(step.direction) === "backward" ? -1 : 1;
+        const intervalMs = Math.max(Number(step.interval_ms) || playbackIntervalMs, 1);
+        const fromFrameValue = clampFrameValue(displayedFrameValue);
+        let targetFrameValue = Number(targetFrameIndexForTimeAction(step));
+        let durationMs = Math.abs(targetFrameValue - fromFrameValue) * intervalMs;
+        if (step.stop_after_ms !== undefined) {
+          durationMs = Math.max(Number(step.stop_after_ms) || 0.0, 0.0);
+          targetFrameValue = clampFrameValue(
+            fromFrameValue + direction * (durationMs / intervalMs)
+          );
+        }
+        if (durationMs <= 0.0 || Math.abs(targetFrameValue - fromFrameValue) <= 1e-9) {
+          displayedFrameValue = clampFrameValue(targetFrameValue);
+          currentFrameIndex = clampFrameIndex(displayedFrameValue);
+          renderInterpolatedFrameValue(displayedFrameValue, {
+            updateWidgets: false,
+            preserveCamera: true,
+          });
+          markActionStepFinished(stepIndex);
+          return;
+        }
         timeActionTrack = {
           stepIndex,
           direction,
-          intervalMs: Math.max(Number(step.interval_ms) || playbackIntervalMs, 1),
+          intervalMs,
           startTime: now,
-          lastAdvanceTimestamp: null,
-          advancedFrames: 0,
-          stopAtTimeMyr: step.stop_at_time_myr === undefined ? null : Number(step.stop_at_time_myr),
-          stopAfterFrames: step.stop_after_frames === undefined ? null : Math.max(Number(step.stop_after_frames) || 0, 0),
-          stopAfterMs: step.stop_after_ms === undefined ? null : Math.max(Number(step.stop_after_ms) || 0, 0),
-          targetIndex: targetFrameIndexForTimeAction(step),
+          durationMs,
+          fromFrameValue,
+          targetFrameValue,
+          easing: "easeInOutCubic",
         };
         playbackDirection = direction;
         lastPlaybackAdvanceTimestamp = null;
@@ -929,12 +955,14 @@ THREEJS_ACTION_RUNTIME_JS = """
               direction: clampFrameIndex(initialActionViewState.frameIndex) < clampFrameIndex(currentFrameIndex) ? -1 : 1,
               intervalMs: restoreTimeIntervalMs,
               startTime: now,
-              lastAdvanceTimestamp: null,
-              advancedFrames: 0,
-              stopAtTimeMyr: null,
-              stopAfterFrames: null,
-              stopAfterMs: null,
-              targetIndex: clampFrameIndex(initialActionViewState.frameIndex),
+              durationMs: Math.max(
+                Math.abs(clampFrameValue(initialActionViewState.frameIndex) - clampFrameValue(displayedFrameValue))
+                  * restoreTimeIntervalMs,
+                1.0,
+              ),
+              fromFrameValue: clampFrameValue(displayedFrameValue),
+              targetFrameValue: clampFrameValue(initialActionViewState.frameIndex),
+              easing: "easeInOutCubic",
             };
             playbackDirection = timeActionTrack.direction;
             lastPlaybackAdvanceTimestamp = null;
@@ -1022,23 +1050,8 @@ THREEJS_ACTION_RUNTIME_JS = """
       }
 
       function timeActionReachedStop(track) {
-        if (!track) {
-          return true;
-        }
-        if (track.stopAfterFrames !== null && track.advancedFrames >= track.stopAfterFrames) {
-          return true;
-        }
-        if (track.stopAfterMs !== null && (window.performance ? window.performance.now() : Date.now()) - track.startTime >= track.stopAfterMs) {
-          return true;
-        }
-        if (track.stopAtTimeMyr !== null) {
-          const currentTime = frameTimeForValue(currentFrameIndex);
-          if (track.direction < 0) {
-            return currentTime <= track.stopAtTimeMyr + 1e-9;
-          }
-          return currentTime >= track.stopAtTimeMyr - 1e-9;
-        }
-        return clampFrameIndex(currentFrameIndex) === clampFrameIndex(track.targetIndex);
+        return !track || (window.performance ? window.performance.now() : Date.now())
+          - Number(track.startTime || 0.0) >= Math.max(Number(track.durationMs) || 0.0, 0.0);
       }
 
       function updateTimeAction(now) {
@@ -1046,39 +1059,28 @@ THREEJS_ACTION_RUNTIME_JS = """
           return false;
         }
         if (timeActionReachedStop(timeActionTrack)) {
-          stopTimeActionTrack();
+          stopTimeActionTrack({ complete: true });
           return true;
         }
-        if (timeActionTrack.lastAdvanceTimestamp === null) {
-          timeActionTrack.lastAdvanceTimestamp = now;
-          return false;
+        const rawProgress = clampRange(
+          (now - Number(timeActionTrack.startTime)) / Math.max(Number(timeActionTrack.durationMs) || 1.0, 1.0),
+          0.0,
+          1.0,
+        );
+        const progress = actionEasingValue(timeActionTrack.easing, rawProgress);
+        displayedFrameValue = clampFrameValue(
+          timeActionTrack.fromFrameValue
+          + (timeActionTrack.targetFrameValue - timeActionTrack.fromFrameValue) * progress
+        );
+        currentFrameIndex = clampFrameIndex(displayedFrameValue);
+        renderInterpolatedFrameValue(displayedFrameValue, {
+          updateWidgets: false,
+          preserveCamera: true,
+        });
+        if (rawProgress >= 1.0) {
+          stopTimeActionTrack({ complete: true });
         }
-        const elapsedMs = Math.max(0.0, now - timeActionTrack.lastAdvanceTimestamp);
-        if (elapsedMs < timeActionTrack.intervalMs) {
-          return false;
-        }
-        const steps = Math.max(1, Math.floor(elapsedMs / timeActionTrack.intervalMs));
-        timeActionTrack.lastAdvanceTimestamp += steps * timeActionTrack.intervalMs;
-        let moved = false;
-        for (let idx = 0; idx < steps; idx += 1) {
-          const nextIndex = clampFrameIndex(currentFrameIndex + timeActionTrack.direction);
-          if (nextIndex === currentFrameIndex) {
-            stopTimeActionTrack();
-            break;
-          }
-          currentFrameIndex = nextIndex;
-          displayedFrameValue = nextIndex;
-          timeActionTrack.advancedFrames += 1;
-          moved = true;
-          if (timeActionReachedStop(timeActionTrack)) {
-            stopTimeActionTrack();
-            break;
-          }
-        }
-        if (moved) {
-          renderFrame(currentFrameIndex);
-        }
-        return moved;
+        return true;
       }
 
       function updateViewerActions(now) {

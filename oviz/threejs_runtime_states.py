@@ -19,6 +19,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
       let ovizStateTransition = null;
       let ovizStateTransitionSerial = 0;
       let ovizStateTransitionTraceOpacity = null;
+      let ovizStateSelectionTransition = null;
       let ovizStatesShellEl = null;
       let ovizStatesDrawerEl = null;
       let ovizStatesRowsEl = null;
@@ -371,7 +372,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
           playbackIntervalMs = Math.max(80, Number(playback.interval_ms));
         }
         ovizRestoreOriginalCameraResetState();
-        return restoreLassoSelectionMask(hydrated.lasso_selection_mask).then(() => {
+        const lassoRestoreOptions = Object.prototype.hasOwnProperty.call(options, "runtimeLassoMask")
+          ? { runtimeMask: options.runtimeLassoMask }
+          : {};
+        return restoreLassoSelectionMask(hydrated.lasso_selection_mask, lassoRestoreOptions).then(() => {
           renderTargetFrame();
           ovizApplyCapturedCameraState(hydrated);
           updateSelectionUI();
@@ -437,6 +441,11 @@ THREEJS_STATE_RUNTIME_JS = r"""
         cameraActionTrack = null;
         timeActionTrack = null;
         legendTransitionState = null;
+        // State navigation owns the complete rendered result.  A legacy
+        // Action may leave this transient opacity map behind when it is
+        // interrupted; keeping it would continue to multiply the State
+        // transition (and even its exact final restoration) afterward.
+        actionHeldTraceOpacityByKey = null;
         actionCameraOrbitOwned = false;
         actionCameraOrbitShouldPersist = true;
         syncActionButtons();
@@ -447,8 +456,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
         if (!transition) {
           return false;
         }
+        const selectionTransition = ovizStateSelectionTransition;
         ovizStateTransition = null;
         ovizStateTransitionTraceOpacity = null;
+        ovizStateSelectionTransition = null;
         ovizStateTimelineMotionActive = false;
         if (typeof cancelSkyViewTransitionAnimations === "function") {
           cancelSkyViewTransitionAnimations({ reason });
@@ -467,6 +478,20 @@ THREEJS_STATE_RUNTIME_JS = r"""
         if (typeof transition.resolve === "function") {
           transition.resolve({ cancelled: true, id: transition.targetId, reason });
         }
+        const preservedMasks = options.preserveSelectionMasks instanceof Set
+          ? options.preserveSelectionMasks
+          : new Set();
+        const cancelledMasks = new Set([transition.targetRuntimeLassoMask]);
+        if (selectionTransition) {
+          [
+            selectionTransition.fromMask,
+            selectionTransition.fromSecondaryMask,
+            selectionTransition.toMask,
+          ].forEach((mask) => cancelledMasks.add(mask));
+        }
+        cancelledMasks.forEach((mask) => {
+          if (mask && !preservedMasks.has(mask)) disposeSelectionMaskIfUnused(mask);
+        });
         ovizRenderStatesDrawer();
         return true;
       }
@@ -520,9 +545,211 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
       }
 
-      function ovizCurrentCanvasOpacity() {
-        const opacity = Number.parseFloat(renderer.domElement.style.opacity);
-        return Number.isFinite(opacity) ? clampRange(opacity, 0, 1) : 1;
+      function ovizStateFrameValue(snapshot) {
+        return Number.isFinite(Number(snapshot && snapshot.current_frame_value))
+          ? Number(snapshot.current_frame_value)
+          : Number(snapshot && snapshot.current_frame_index) || 0.0;
+      }
+
+      function ovizStateCameraSignature(snapshot) {
+        const state = snapshot || {};
+        const controlsState = state.global_controls || {};
+        return JSON.stringify({
+          camera: state.camera || {},
+          viewMode: controlsState.camera_view_mode || "free",
+          fov: controlsState.camera_fov,
+        });
+      }
+
+      function ovizStateAppearanceSignature(snapshot) {
+        const state = snapshot || {};
+        const controlsState = ovizStatesClone(state.global_controls || {}, {});
+        [
+          "camera_view_mode",
+          "camera_fov",
+          "camera_auto_orbit_enabled",
+          "camera_auto_orbit_direction",
+          "camera_auto_orbit_speed_multiplier",
+        ].forEach((key) => delete controlsState[key]);
+        return JSON.stringify({
+          group: state.current_group || "",
+          legend: state.legend_state || {},
+          traceStyles: state.trace_style_state || {},
+          volumes: state.volume_state_by_key || {},
+          selections: {
+            current: state.current_selection || null,
+            currentMany: state.current_selections || [],
+            mode: state.current_selection_mode || "none",
+            selectedKeys: state.selected_cluster_keys || [],
+            lassoMask: state.lasso_selection_mask || null,
+            lassoFilter: state.lasso_selection_filter_enabled !== false,
+          },
+          skyLayers: state.sky_layers || [],
+          controls: controlsState,
+          labels: state.manual_labels || [],
+          widgets: state.widgets || {},
+          legendPanel: state.legend_panel_state || null,
+          scaleBar: state.scale_bar_state || null,
+          selectionBox: state.selection_box_state || null,
+          clusterFilter: state.cluster_filter_state || null,
+          zen: Boolean(state.zen_mode_enabled),
+        });
+      }
+
+      function ovizBuildTransitionPhases(from, to, transitionSpec) {
+        const changed = {
+          camera: ovizStateCameraSignature(from) !== ovizStateCameraSignature(to),
+          appearance: ovizStateAppearanceSignature(from) !== ovizStateAppearanceSignature(to),
+          time: Math.abs(ovizStateFrameValue(from) - ovizStateFrameValue(to)) > 1e-9,
+        };
+        const names = ["camera", "appearance", "time"].filter((name) => changed[name]);
+        const requestedDurationMs = Math.max(Number(transitionSpec && transitionSpec.duration_ms) || 0.0, 0.0);
+        if (!names.length) {
+          return {
+            changed,
+            phases: [{ name: "settle", startMs: 0.0, endMs: 0.0 }],
+            effectiveDurationMs: 0.0,
+            requestedDurationMs,
+          };
+        }
+        const phaseMinimumDurationMs = 800.0;
+        const minimumDurationMs = names.length * phaseMinimumDurationMs;
+        const effectiveDurationMs = Math.max(requestedDurationMs, minimumDurationMs);
+        const baseWeight = { camera: 0.35, appearance: 0.30, time: 0.35, settle: 1.0 };
+        const totalWeight = names.reduce((sum, name) => sum + baseWeight[name], 0.0) || 1.0;
+        const extraDurationMs = Math.max(effectiveDurationMs - minimumDurationMs, 0.0);
+        let cursorMs = 0.0;
+        const phases = names.map((name, index) => {
+          const durationMs = phaseMinimumDurationMs + extraDurationMs * (baseWeight[name] / totalWeight);
+          const phase = {
+            name,
+            startMs: cursorMs,
+            endMs: index === names.length - 1 ? effectiveDurationMs : cursorMs + durationMs,
+          };
+          cursorMs = phase.endMs;
+          return phase;
+        });
+        return { changed, phases, effectiveDurationMs, requestedDurationMs };
+      }
+
+      function ovizTransitionPhaseState(transition, elapsedMs) {
+        const phases = transition.phasePlan.phases;
+        const elapsed = clampRange(Number(elapsedMs) || 0.0, 0.0, transition.phasePlan.effectiveDurationMs);
+        const phase = phases.find((item) => elapsed <= item.endMs + 1e-9) || phases[phases.length - 1];
+        const durationMs = Math.max(phase.endMs - phase.startMs, 1e-9);
+        return {
+          name: phase.name,
+          progress: clampRange((elapsed - phase.startMs) / durationMs, 0.0, 1.0),
+          elapsedMs: elapsed,
+        };
+      }
+
+      function ovizTransitionPhaseProgress(transition, phaseName, elapsedMs) {
+        const phase = transition.phasePlan.phases.find((item) => item.name === phaseName);
+        if (!phase) return 1.0;
+        if (elapsedMs <= phase.startMs) return 0.0;
+        if (elapsedMs >= phase.endMs) return 1.0;
+        return clampRange((elapsedMs - phase.startMs) / Math.max(phase.endMs - phase.startMs, 1e-9), 0.0, 1.0);
+      }
+
+      function ovizTraceCandidatesForFrameValue(frameValue) {
+        const candidates = new Map();
+        const clampedValue = clampFrameValue(frameValue);
+        const indices = new Set([
+          clampFrameIndex(Math.floor(clampedValue)),
+          clampFrameIndex(Math.ceil(clampedValue)),
+        ]);
+        indices.forEach((index) => {
+          const frame = frameSpecs[index];
+          (frame && Array.isArray(frame.traces) ? frame.traces : []).forEach((trace) => {
+            if (trace && trace.key && !candidates.has(trace.key)) candidates.set(trace.key, trace);
+          });
+        });
+        return candidates;
+      }
+
+      function ovizTraceCandidatesForSnapshots(from, to) {
+        const candidates = new Map();
+        const remember = (trace) => {
+          if (trace && trace.key && !candidates.has(trace.key)) candidates.set(trace.key, trace);
+        };
+        (currentFrame() && currentFrame().traces || []).forEach(remember);
+        const fromFrameValue = clampFrameValue(ovizStateFrameValue(from));
+        const toFrameValue = clampFrameValue(ovizStateFrameValue(to));
+        const firstIndex = clampFrameIndex(Math.floor(Math.min(fromFrameValue, toFrameValue)));
+        const lastIndex = clampFrameIndex(Math.ceil(Math.max(fromFrameValue, toFrameValue)));
+        for (let index = firstIndex; index <= lastIndex; index += 1) {
+          const frame = frameSpecs[index];
+          (frame && Array.isArray(frame.traces) ? frame.traces : []).forEach(remember);
+        }
+        return candidates;
+      }
+
+      function ovizSelectionEndpoint(snapshot) {
+        const state = snapshot || {};
+        const keys = new Set(
+          (Array.isArray(state.selected_cluster_keys) ? state.selected_cluster_keys : [])
+            .map((key) => normalizeMemberKey(key))
+            .filter(Boolean)
+        );
+        const hasMask = Boolean(state.lasso_selection_mask);
+        const filtered = state.lasso_selection_filter_enabled !== false
+          && String(state.current_selection_mode || "none") === "lasso"
+          && Boolean(keys.size || hasMask);
+        return { keys, filtered, hasMask };
+      }
+
+      function ovizSelectionMembershipOpacity(pointKey, point = null) {
+        const transition = ovizStateSelectionTransition;
+        const key = normalizeMemberKey(pointKey);
+        if (!transition) {
+          if (!lassoSelectionFilterActive()) return 1.0;
+          if (key && selectedClusterKeys.has(key)) return 1.0;
+          if (
+            !selectedClusterKeys.size
+            && currentLassoSelectionMask
+            && point
+            && typeof pointInsideProjectedLassoMask === "function"
+          ) {
+            return pointInsideProjectedLassoMask(
+              Number(point.x), Number(point.y), Number(point.z), currentLassoSelectionMask
+            ) ? 1.0 : 0.0;
+          }
+          return 0.0;
+        }
+        const fromWeight = key && transition.fromWeightByKey.has(key)
+          ? transition.fromWeightByKey.get(key)
+          : transition.fromDefaultWeight;
+        let toWeight = transition.toEndpoint.filtered ? 0.0 : 1.0;
+        if (transition.toEndpoint.filtered && key && transition.toEndpoint.keys.has(key)) {
+          toWeight = 1.0;
+        } else if (
+          transition.toEndpoint.filtered
+          && !transition.toEndpoint.keys.size
+          && transition.toMask
+          && point
+          && typeof pointInsideProjectedLassoMask === "function"
+        ) {
+          toWeight = pointInsideProjectedLassoMask(
+            Number(point.x), Number(point.y), Number(point.z), transition.toMask
+          ) ? 1.0 : 0.0;
+        }
+        return ovizLerp(fromWeight, toWeight, clampRange(Number(transition.progress) || 0.0, 0.0, 1.0));
+      }
+
+      function ovizCaptureSelectionMembershipOpacityMap(traceCandidates) {
+        const result = new Map();
+        traceCandidates.forEach((trace) => {
+          (trace && Array.isArray(trace.points) ? trace.points : []).forEach((point) => {
+            const key = normalizeMemberKey(
+              clusterFilterSelectionKeyForPoint(point) || normalizedSelectionKeyFor(point.selection)
+            );
+            if (key && !result.has(key)) {
+              result.set(key, ovizSelectionMembershipOpacity(key, point));
+            }
+          });
+        });
+        return result;
       }
 
       function ovizStateDestinationCameraState(snapshot) {
@@ -624,15 +851,21 @@ THREEJS_STATE_RUNTIME_JS = r"""
           return false;
         }
         try {
+          const appearancePhase = transition.phasePlan.phases.find((phase) => phase.name === "appearance");
+          const phaseDurationMs = appearancePhase
+            ? Math.max(appearancePhase.endMs - appearancePhase.startMs, 0.0)
+            : 0.0;
+          const phaseStartedAtEpochMs = transition.startedAtEpochMs
+            + (appearancePhase ? appearancePhase.startMs : 0.0);
           transition.skyLayerPromise = new Promise((resolve) => {
             ovizSkyLayerTransitionWaiters.set(String(transition.transitionId), resolve);
           });
           skyDomeFrameEl.contentWindow.postMessage({
             type: "oviz-sky-layer-transition",
             transitionId: transition.transitionId,
-            durationMs: transition.transitionSpec.duration_ms,
+            durationMs: phaseDurationMs,
             easing: transition.transitionSpec.easing,
-            startedAtEpochMs: transition.startedAtEpochMs,
+            startedAtEpochMs: phaseStartedAtEpochMs,
             residentStack: true,
             fromLayers,
             toLayers,
@@ -823,15 +1056,42 @@ THREEJS_STATE_RUNTIME_JS = r"""
       function ovizBeginStateTransition(target, options = {}) {
         const destination = ovizHydrateAssets(target.snapshot || {});
         const transitionSpec = ovizNormalizeTransition(target.transition, ovizStatesProject.default_transition);
+        const from = ovizCurrentTransitionSnapshot();
+        const traceCandidates = ovizTraceCandidatesForSnapshots(from, destination);
+        const sourceTraceKeys = new Set(
+          Array.from(ovizTraceCandidatesForFrameValue(ovizStateFrameValue(from)).keys())
+        );
+        const destinationTraceKeys = new Set(
+          Array.from(ovizTraceCandidatesForFrameValue(ovizStateFrameValue(destination)).keys())
+        );
         const liveTraceOpacity = new Map();
-        (currentFrame() && currentFrame().traces || []).forEach((trace) => {
+        traceCandidates.forEach((trace) => {
           liveTraceOpacity.set(
             trace.key,
-            traceVisible(trace) ? clampRange(traceVisibilityOpacityMultiplier(trace), 0.0, 1.0) : 0.0,
+            sourceTraceKeys.has(trace.key) && traceVisible(trace)
+              ? clampRange(traceVisibilityOpacityMultiplier(trace), 0.0, 1.0)
+              : 0.0,
           );
         });
-        const from = ovizCurrentTransitionSnapshot();
-        ovizCancelStateTransitionWithoutSnap("state-retarget", { restorePresentation: false });
+        const liveSelectionWeights = ovizCaptureSelectionMembershipOpacityMap(traceCandidates);
+        const liveSelectionDefaultWeight = ovizSelectionMembershipOpacity("", null);
+        const previousSelectionTransition = ovizStateSelectionTransition;
+        const sourceVolumeMask = previousSelectionTransition
+          ? previousSelectionTransition.fromMask
+          : activeVolumeLassoSelectionMask();
+        const sourceVolumeSecondaryMask = previousSelectionTransition
+          ? previousSelectionTransition.toMask
+          : null;
+        const sourceVolumeMaskBlend = previousSelectionTransition
+          ? clampRange(Number(previousSelectionTransition.progress) || 0.0, 0.0, 1.0)
+          : 0.0;
+        const preservedSelectionMasks = new Set(
+          [sourceVolumeMask, sourceVolumeSecondaryMask].filter(Boolean)
+        );
+        ovizCancelStateTransitionWithoutSnap("state-retarget", {
+          restorePresentation: false,
+          preserveSelectionMasks: preservedSelectionMasks,
+        });
         const fromViewMode = String((from.global_controls || {}).camera_view_mode || "free");
         const toViewMode = String((destination.global_controls || {}).camera_view_mode || "free");
         const viewTransitionKind = fromViewMode === "earth" && toViewMode === "earth"
@@ -852,21 +1112,17 @@ THREEJS_STATE_RUNTIME_JS = r"""
             toViewMode === "earth" ? 1320 : 1180
           );
         }
+        const phasePlan = ovizBuildTransitionPhases(from, destination, transitionSpec);
         if (options.preserveActionRun !== true) {
           ovizCancelActionWithoutSnap();
         }
         playbackDirection = 0;
         lastPlaybackAdvanceTimestamp = null;
         setCameraAutoOrbitEnabled(false);
-        const transitionFromFrame = Number.isFinite(Number(from.current_frame_value))
-          ? Number(from.current_frame_value)
-          : Number(from.current_frame_index) || 0;
-        const transitionToFrame = Number.isFinite(Number(destination.current_frame_value))
-          ? Number(destination.current_frame_value)
-          : Number(destination.current_frame_index) || 0;
+        const transitionFromFrame = ovizStateFrameValue(from);
+        const transitionToFrame = ovizStateFrameValue(destination);
         ovizStateTimelineMotionActive = Math.abs(transitionToFrame - transitionFromFrame) > 1e-9;
         if (ovizStateTimelineMotionActive) {
-          renderFrame(currentFrameIndex);
           displayedFrameValue = clampFrameValue(transitionFromFrame);
           currentFrameIndex = clampFrameIndex(displayedFrameValue);
           updateTimelineUi(displayedFrameValue, frameTimeForValue(displayedFrameValue));
@@ -879,13 +1135,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
         ovizStateTransitionSerial += 1;
         const transitionId = `state-view-${ovizStateTransitionSerial}`;
         const traceOpacity = new Map();
-        (currentFrame() && currentFrame().traces || []).forEach((trace) => {
+        traceCandidates.forEach((trace) => {
           const previous = liveTraceOpacity.has(trace.key)
             ? liveTraceOpacity.get(trace.key)
             : (traceVisible(trace) ? 1 : 0);
           traceOpacity.set(trace.key, {
             from: previous,
-            to: ovizTraceTargetVisible(trace, destination) ? 1 : 0,
+            to: destinationTraceKeys.has(trace.key) && ovizTraceTargetVisible(trace, destination) ? 1 : 0,
           });
         });
         ovizStateTransitionTraceOpacity = new Map();
@@ -903,9 +1159,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
           targetSnapshot: destination,
           fromSnapshot: from,
           transitionSpec,
+          phasePlan,
           startedAt: now,
           startedAtEpochMs: ovizTransitionEpochMs(now),
-          midpointApplied: false,
           traceOpacity,
           visualChanges: ovizTransitionVisualSignature(from) !== ovizTransitionVisualSignature(destination),
           nativeViewTransition,
@@ -923,8 +1179,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
           toViewMode,
           lastProgressEventAt: -Infinity,
           sceneRenderCount: 0,
-          sceneSwapped: false,
-          startCanvasOpacity: ovizCurrentCanvasOpacity(),
+          appearancePrepared: false,
+          lassoReady: !destination.lasso_selection_mask,
+          lassoLoadPromise: null,
+          targetRuntimeLassoMask: null,
+          selectionTransition: null,
+          currentPhase: phasePlan.phases[0].name,
+          currentAppearanceProgress: 0.0,
           animationFrameCount: 0,
           lastAnimationAt: now,
           maxFrameGapMs: 0,
@@ -936,6 +1197,54 @@ THREEJS_STATE_RUNTIME_JS = r"""
           root.dataset.stateTransitionKind = viewTransitionKind;
           root.dataset.stateTransitionProgress = "0";
           root.dataset.stateTransitionId = transitionId;
+          root.dataset.stateTransitionPhase = phasePlan.phases[0].name;
+          root.dataset.stateTransitionPhaseProgress = "0";
+          root.dataset.stateTransitionEffectiveDurationMs = String(phasePlan.effectiveDurationMs);
+        }
+        const fromSelectionSignature = JSON.stringify({
+          mode: from.current_selection_mode || "none",
+          keys: from.selected_cluster_keys || [],
+          mask: from.lasso_selection_mask || null,
+          filter: from.lasso_selection_filter_enabled !== false,
+        });
+        const toSelectionSignature = JSON.stringify({
+          mode: destination.current_selection_mode || "none",
+          keys: destination.selected_cluster_keys || [],
+          mask: destination.lasso_selection_mask || null,
+          filter: destination.lasso_selection_filter_enabled !== false,
+        });
+        if (fromSelectionSignature !== toSelectionSignature || previousSelectionTransition) {
+          const selectionTransition = {
+            fromWeightByKey: liveSelectionWeights,
+            fromDefaultWeight: liveSelectionDefaultWeight,
+            toEndpoint: ovizSelectionEndpoint(destination),
+            fromMask: sourceVolumeMask,
+            fromSecondaryMask: sourceVolumeSecondaryMask,
+            fromMaskBlend: sourceVolumeMaskBlend,
+            toMask: null,
+            progress: 0.0,
+          };
+          ovizStateTransition.selectionTransition = selectionTransition;
+          ovizStateSelectionTransition = selectionTransition;
+        }
+        if (destination.lasso_selection_mask) {
+          const transition = ovizStateTransition;
+          transition.lassoLoadPromise = loadLassoSelectionMask(destination.lasso_selection_mask).then((mask) => {
+            if (transition !== ovizStateTransition) {
+              disposeSelectionMaskIfUnused(mask);
+              return null;
+            }
+            transition.targetRuntimeLassoMask = mask;
+            transition.lassoReady = true;
+            if (
+              transition.selectionTransition
+              && destination.lasso_volume_selection_enabled
+              && destination.lasso_selection_filter_enabled !== false
+            ) {
+              transition.selectionTransition.toMask = mask;
+            }
+            return mask;
+          });
         }
         if (nativeViewTransition) {
           const destinationCameraState = ovizStateDestinationCameraState(destination);
@@ -967,7 +1276,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
             // every frame, matching the smooth View-button path and preventing
             // a second iframe-local camera animation from drifting off the traces.
             ovizStateTransition.skyBackgroundPromise = null;
-            ovizStartSkyLayerTransition(ovizStateTransition, sourceSkyLayers);
+            // Layers are an appearance domain.  Keep the current registered
+            // Aladin stack through the camera/Sky handoff and begin its own
+            // crossfade only when the appearance phase starts.
+            ovizStateTransition.sourceSkyLayers = sourceSkyLayers;
           }
         }
         ovizRenderStatesDrawer();
@@ -976,11 +1288,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
           index: target.index + 1,
           name: target.name,
           durationMs: transitionSpec.duration_ms,
+          effectiveDurationMs: phasePlan.effectiveDurationMs,
+          phase: phasePlan.phases[0].name,
           easing: transitionSpec.easing,
         });
-        if (transitionSpec.duration_ms === 0) {
-          ovizFinishStateTransition(ovizStateTransition);
-        }
         return promise;
       }
 
@@ -1054,10 +1365,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const aOpacity = fromVisible ? Number(a.opacity) || 0 : 0;
           const bOpacity = toVisible ? Number(b.opacity) || 0 : 0;
           live.opacity = ovizLerp(aOpacity, bOpacity, progress);
+          // Keep a volume resident for the whole crossfade.  The exact target
+          // showAllTimes value is restored once all visual phases finish.
+          live.showAllTimes = Boolean(a.showAllTimes || b.showAllTimes);
           if (progress >= 0.5) {
             if (b.stretch) live.stretch = b.stretch;
             if (b.colormap) live.colormap = b.colormap;
-            if (typeof b.showAllTimes === "boolean") live.showAllTimes = b.showAllTimes;
           }
         });
       }
@@ -1078,42 +1391,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
       }
 
-      function ovizSwapTransitionScene(transition, targetFrameValue) {
-        const position = camera.position.clone();
-        const target = controls.target.clone();
-        const up = camera.up.clone();
-        const fov = Number(camera.fov);
-        const viewOffset = ovizStatesClone(currentActionCameraViewOffset, { x: 0, y: 0 });
-        applyViewerStateSyncInternal(transition.targetSnapshot);
-        playbackDirection = 0;
-        lastPlaybackAdvanceTimestamp = null;
-        setCameraAutoOrbitEnabled(false);
-        const targetViewMode = String((transition.targetSnapshot.global_controls || {}).camera_view_mode || "free");
-        if (targetViewMode !== "earth" || transition.viewTransitionKind === "earth-to-earth") {
-          camera.position.copy(position);
-          controls.target.copy(target);
-          camera.up.copy(up);
-          camera.fov = fov;
-          camera.updateProjectionMatrix();
-          if (typeof applyActionCameraViewOffset === "function") applyActionCameraViewOffset(viewOffset);
-          controls.update();
-          if (targetViewMode === "earth") {
-            lockEarthViewCameraToTarget();
-          }
-        } else {
-          lockEarthViewCameraToTarget();
-        }
-        transition.traceOpacity.forEach((value, key) => {
-          ovizStateTransitionTraceOpacity.set(key, value.to);
-        });
-        ovizApplyTransitionTraceStyles(transition.targetSnapshot, transition.targetSnapshot, 1);
-        ovizApplyTransitionVolumes(transition.targetSnapshot, transition.targetSnapshot, 1);
-        renderInterpolatedFrameValue(targetFrameValue, { updateWidgets: false });
-        ovizRestoreOriginalCameraResetState();
-        transition.sceneSwapped = true;
-        transition.sceneRenderCount += 1;
-      }
-
       function updateOvizStateTransition(now) {
         const transition = ovizStateTransition;
         if (!transition) {
@@ -1128,13 +1405,36 @@ THREEJS_STATE_RUNTIME_JS = r"""
           transition.animationFrameCount += 1;
           transition.maxFrameGapMs = Math.max(transition.maxFrameGapMs, frameGapMs);
           if (frameGapMs > 50) transition.longFrameCount += 1;
-          const raw = transition.transitionSpec.duration_ms <= 0
-            ? 1
-            : clampRange((now - transition.startedAt) / transition.transitionSpec.duration_ms, 0, 1);
-          const progress = ovizEasing(transition.transitionSpec.easing, raw);
+          let elapsedMs = Math.max(0.0, now - transition.startedAt);
+          let phaseState = ovizTransitionPhaseState(transition, elapsedMs);
+          if (phaseState.name === "appearance" && !transition.lassoReady) {
+            transition.startedAt += frameGapMs;
+            transition.startedAtEpochMs += frameGapMs;
+            elapsedMs = Math.max(0.0, now - transition.startedAt);
+            phaseState = ovizTransitionPhaseState(transition, elapsedMs);
+          }
+          const raw = transition.phasePlan.effectiveDurationMs <= 0
+            ? 1.0
+            : clampRange(elapsedMs / transition.phasePlan.effectiveDurationMs, 0.0, 1.0);
+          const cameraRaw = ovizTransitionPhaseProgress(transition, "camera", elapsedMs);
+          const appearanceRaw = ovizTransitionPhaseProgress(transition, "appearance", elapsedMs);
+          const timeRaw = ovizTransitionPhaseProgress(transition, "time", elapsedMs);
+          const cameraProgress = ovizEasing(transition.transitionSpec.easing, cameraRaw);
+          const appearanceProgress = ovizEasing(transition.transitionSpec.easing, appearanceRaw);
+          const timeProgress = ovizEasing(transition.transitionSpec.easing, timeRaw);
+          transition.currentPhase = phaseState.name;
+          transition.currentAppearanceProgress = appearanceProgress;
+          if (
+            phaseState.name === "appearance"
+            && !transition.skyLayerTransitionStarted
+            && transition.sourceSkyLayers
+          ) {
+            transition.skyLayerTransitionStarted = true;
+            ovizStartSkyLayerTransition(transition, transition.sourceSkyLayers);
+          }
           const modeCameraRaw = transition.nativeViewTransition
-            ? clampRange((raw - 0.20) / 0.60, 0, 1)
-            : raw;
+            ? clampRange((cameraRaw - 0.20) / 0.60, 0, 1)
+            : cameraRaw;
           const modeCameraProgress = ovizEasing(transition.transitionSpec.easing, modeCameraRaw);
           const from = transition.fromSnapshot;
           const to = transition.targetSnapshot;
@@ -1144,42 +1444,40 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const toTarget = ovizPointFrom(to, "target", fromTarget);
           const fromUp = ovizPointFrom(from, "up", camera.up);
           const toUp = ovizPointFrom(to, "up", fromUp);
-          const targetViewMode = String((to.global_controls || {}).camera_view_mode || "free");
-          const targetEarthViewLocked = transition.sceneSwapped && targetViewMode === "earth";
           if (transition.viewTransitionKind === "earth-to-earth") {
-            ovizApplyEarthCameraTrack(transition.earthCameraTrack, progress);
+            ovizApplyEarthCameraTrack(transition.earthCameraTrack, cameraProgress);
           } else if (
             transition.viewTransitionKind === "enter-earth"
             || transition.viewTransitionKind === "exit-earth"
           ) {
             ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, modeCameraProgress);
-          } else if (!transition.nativeViewTransition && !targetEarthViewLocked) {
+          } else if (!transition.nativeViewTransition) {
             camera.position.set(
-              ovizLerp(fromPosition.x, toPosition.x, progress),
-              ovizLerp(fromPosition.y, toPosition.y, progress),
-              ovizLerp(fromPosition.z, toPosition.z, progress)
+              ovizLerp(fromPosition.x, toPosition.x, cameraProgress),
+              ovizLerp(fromPosition.y, toPosition.y, cameraProgress),
+              ovizLerp(fromPosition.z, toPosition.z, cameraProgress)
             );
             controls.target.set(
-              ovizLerp(fromTarget.x, toTarget.x, progress),
-              ovizLerp(fromTarget.y, toTarget.y, progress),
-              ovizLerp(fromTarget.z, toTarget.z, progress)
+              ovizLerp(fromTarget.x, toTarget.x, cameraProgress),
+              ovizLerp(fromTarget.y, toTarget.y, cameraProgress),
+              ovizLerp(fromTarget.z, toTarget.z, cameraProgress)
             );
             camera.up.set(
-              ovizLerp(fromUp.x, toUp.x, progress),
-              ovizLerp(fromUp.y, toUp.y, progress),
-              ovizLerp(fromUp.z, toUp.z, progress)
+              ovizLerp(fromUp.x, toUp.x, cameraProgress),
+              ovizLerp(fromUp.y, toUp.y, cameraProgress),
+              ovizLerp(fromUp.z, toUp.z, cameraProgress)
             ).normalize();
           }
           const fromFov = Number((from.global_controls || {}).camera_fov);
           const toFov = Number((to.global_controls || {}).camera_fov);
           if (!transition.nativeViewTransition && Number.isFinite(fromFov) && Number.isFinite(toFov)) {
-            camera.fov = ovizLerp(fromFov, toFov, progress);
+            camera.fov = ovizLerp(fromFov, toFov, cameraProgress);
             camera.updateProjectionMatrix();
           }
           if (!transition.nativeViewTransition) {
             const fromViewOffset = from.camera && (from.camera.view_offset || from.camera.viewOffset);
             const toViewOffset = to.camera && (to.camera.view_offset || to.camera.viewOffset);
-            ovizApplyInterpolatedViewOffset(fromViewOffset, toViewOffset, progress);
+            ovizApplyInterpolatedViewOffset(fromViewOffset, toViewOffset, cameraProgress);
           }
           camera.updateProjectionMatrix();
           camera.lookAt(controls.target);
@@ -1188,6 +1486,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
             const liveDirection = new THREE.Vector3();
             camera.getWorldDirection(liveDirection);
             root.dataset.stateTransitionProgress = raw.toFixed(6);
+            root.dataset.stateTransitionPhase = phaseState.name;
+            root.dataset.stateTransitionPhaseProgress = phaseState.progress.toFixed(6);
             root.dataset.stateTransitionCamera = JSON.stringify({
               x: camera.position.x,
               y: camera.position.y,
@@ -1214,68 +1514,57 @@ THREEJS_STATE_RUNTIME_JS = r"""
               }
             }
           }
-          const fromFrame = Number.isFinite(Number(from.current_frame_value))
-            ? Number(from.current_frame_value)
-            : Number(from.current_frame_index) || 0;
-          const toFrame = Number.isFinite(Number(to.current_frame_value))
-            ? Number(to.current_frame_value)
-            : Number(to.current_frame_index) || 0;
-          const interpolatedFrameValue = ovizLerp(fromFrame, toFrame, progress);
-          ovizStateTimelineMotionActive = Math.abs(toFrame - fromFrame) > 1e-9;
-          if (!transition.sceneSwapped) {
-            ovizApplyTransitionNumericControls(from, to, progress);
+          const fromFrame = ovizStateFrameValue(from);
+          const toFrame = ovizStateFrameValue(to);
+          const interpolatedFrameValue = ovizLerp(fromFrame, toFrame, timeProgress);
+          ovizStateTimelineMotionActive = transition.phasePlan.changed.time && timeRaw > 0.0 && timeRaw < 1.0;
+          ovizApplyTransitionNumericControls(from, to, appearanceProgress);
+          ovizApplyTransitionTraceStyles(from, to, appearanceProgress);
+          ovizApplyTransitionVolumes(from, to, appearanceProgress);
+          ovizApplyTransitionPanelGeometry(from, to, appearanceProgress);
+          transition.traceOpacity.forEach((value, key) => {
+            ovizStateTransitionTraceOpacity.set(
+              key,
+              ovizLerp(value.from, value.to, appearanceProgress)
+            );
+          });
+          if (transition.selectionTransition) {
+            transition.selectionTransition.progress = appearanceProgress;
           }
           if (transition.viewTransitionKind === "enter-earth") {
             const milkyWayFade = 1.0 - ovizEasing(
               transition.transitionSpec.easing,
-              clampRange(raw / 0.20, 0, 1)
+              clampRange(cameraRaw / 0.20, 0, 1)
             );
             const skyFade = ovizEasing(
               transition.transitionSpec.easing,
-              clampRange((raw - 0.80) / 0.20, 0, 1)
+              clampRange((cameraRaw - 0.80) / 0.20, 0, 1)
             );
             setMilkyWayModelOpacityScale(milkyWayFade);
             setSkyDomeViewOpacityScale(skyFade, { force: false });
           } else if (transition.viewTransitionKind === "exit-earth") {
             const skyFade = 1.0 - ovizEasing(
               transition.transitionSpec.easing,
-              clampRange(raw / 0.20, 0, 1)
+              clampRange(cameraRaw / 0.20, 0, 1)
             );
             const milkyWayFade = ovizEasing(
               transition.transitionSpec.easing,
-              clampRange((raw - 0.80) / 0.20, 0, 1)
+              clampRange((cameraRaw - 0.80) / 0.20, 0, 1)
             );
             setSkyDomeViewOpacityScale(skyFade, { force: false });
             setMilkyWayModelOpacityScale(milkyWayFade);
-          }
-          if (!transition.sceneSwapped) {
-            ovizApplyTransitionPanelGeometry(from, to, progress);
-            transition.traceOpacity.forEach((value, key) => {
-              ovizStateTransitionTraceOpacity.set(key, ovizLerp(value.from, value.to, progress));
-            });
           }
           displayedFrameValue = clampFrameValue(interpolatedFrameValue);
           currentFrameIndex = clampFrameIndex(displayedFrameValue);
           updateTimelineUi(displayedFrameValue, frameTimeForValue(displayedFrameValue));
           updateTimelineMotionOpacity();
-          const allowSceneCrossfade = !transition.nativeViewTransition
-            || transition.viewTransitionKind === "earth-to-earth";
-          if (transition.visualChanges && allowSceneCrossfade) {
-            const canvasOpacity = raw < 0.5
-              ? ovizLerp(transition.startCanvasOpacity, 0, raw * 2)
-              : clampRange((raw - 0.5) * 2, 0, 1);
-            renderer.domElement.style.opacity = String(canvasOpacity);
-            if (!transition.sceneSwapped && raw >= 0.5) {
-              ovizSwapTransitionScene(transition, toFrame);
-            }
-          } else if (allowSceneCrossfade) {
-            renderer.domElement.style.opacity = "1";
-          }
-          if (!transition.midpointApplied && raw >= 0.5) {
-            transition.midpointApplied = true;
-            if (String((from.global_controls || {}).theme_key || "") !== String((to.global_controls || {}).theme_key || "")) {
-              applyThemePreset(String((to.global_controls || {}).theme_key || activeThemeKey), { rerender: false });
-            }
+          renderer.domElement.style.opacity = "1";
+          if (appearanceRaw > 0.0 || timeRaw > 0.0) {
+            renderInterpolatedFrameValue(displayedFrameValue, {
+              updateWidgets: false,
+              preserveCamera: true,
+            });
+            transition.sceneRenderCount += 1;
           }
           if (now - transition.lastProgressEventAt >= 100 || raw >= 1) {
             transition.lastProgressEventAt = now;
@@ -1283,6 +1572,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
               id: transition.targetId,
               index: transition.targetIndex + 1,
               progress: raw,
+              phase: phaseState.name,
+              phaseProgress: phaseState.progress,
+              effectiveDurationMs: transition.phasePlan.effectiveDurationMs,
             });
           }
           if (raw >= 1) {
@@ -1314,6 +1606,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const preApplyFovError = Number.isFinite(targetFov) ? Math.abs(Number(camera.fov) - targetFov) : 0;
         renderer.domElement.style.opacity = "1";
         try {
+          if (transition.lassoLoadPromise) {
+            await transition.lassoLoadPromise;
+          }
+          if (transition !== ovizStateTransition) {
+            return;
+          }
           if (transition.skyBackgroundPromise) {
             await Promise.race([
               transition.skyBackgroundPromise,
@@ -1345,6 +1643,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           let appliedSnapshot = await ovizApplyStateImmediately(transition.targetSnapshot, {
             forceSkyBackground: false,
             postSkyLayersToAladin: false,
+            runtimeLassoMask: transition.targetRuntimeLassoMask,
           });
           if (transition !== ovizStateTransition) {
             return;
@@ -1357,6 +1656,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             appliedSnapshot = await ovizApplyStateImmediately(transition.targetSnapshot, {
               forceSkyBackground: false,
               postSkyLayersToAladin: false,
+              runtimeLassoMask: transition.targetRuntimeLassoMask,
             });
             if (transition !== ovizStateTransition) {
               return;
@@ -1381,16 +1681,29 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (transition !== ovizStateTransition) {
             return;
           }
+          const finishedSelectionTransition = transition.selectionTransition;
           ovizStateTransition = null;
           ovizStateTransitionTraceOpacity = null;
+          ovizStateSelectionTransition = null;
+          if (finishedSelectionTransition) {
+            new Set([
+              finishedSelectionTransition.fromMask,
+              finishedSelectionTransition.fromSecondaryMask,
+              finishedSelectionTransition.toMask,
+              transition.targetRuntimeLassoMask,
+            ]).forEach((mask) => disposeSelectionMaskIfUnused(mask));
+          }
           if (root && root.dataset) {
             root.dataset.stateTransitionProgress = "1";
             root.dataset.stateTransitionId = "";
+            root.dataset.stateTransitionPhase = "complete";
+            root.dataset.stateTransitionPhaseProgress = "1";
           }
           ovizActiveStateId = transition.targetId;
           ovizStateDirty = false;
           const performanceMetrics = {
             durationMs: Math.max(0, performance.now() - transition.startedAt),
+            effectiveDurationMs: transition.phasePlan.effectiveDurationMs,
             animationFrames: transition.animationFrameCount,
             sceneRenders: transition.sceneRenderCount,
             maxFrameGapMs: transition.maxFrameGapMs,
@@ -1413,10 +1726,21 @@ THREEJS_STATE_RUNTIME_JS = r"""
       }
 
       function ovizFailStateTransition(transition, err) {
+        const failedSelectionTransition = transition && transition.selectionTransition;
         if (transition === ovizStateTransition) {
           ovizStateTransition = null;
           ovizStateTransitionTraceOpacity = null;
+          ovizStateSelectionTransition = null;
         }
+        const failedMasks = new Set([transition && transition.targetRuntimeLassoMask]);
+        if (failedSelectionTransition) {
+          [
+            failedSelectionTransition.fromMask,
+            failedSelectionTransition.fromSecondaryMask,
+            failedSelectionTransition.toMask,
+          ].forEach((mask) => failedMasks.add(mask));
+        }
+        failedMasks.forEach((mask) => disposeSelectionMaskIfUnused(mask));
         if (typeof cancelSkyViewTransitionAnimations === "function") {
           cancelSkyViewTransitionAnimations({ reason: "state-transition-error" });
         }

@@ -136,11 +136,12 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn('ovizStateEvent("states-ready"', html)
         self.assertIn('ovizStateEvent("transition-progress"', html)
         self.assertIn('data.source !== "oviz-command"', html)
-        self.assertIn("ovizSwapTransitionScene(transition, toFrame)", html)
-        self.assertIn("renderer.domElement.style.opacity", html)
+        self.assertNotIn("function ovizSwapTransitionScene(", html)
+        self.assertNotIn("const canvasOpacity =", html)
+        self.assertNotIn("renderer.domElement.style.opacity = String(canvasOpacity)", html)
         self.assertIn("restoreSkyLayerStateFromSnapshot(initialState, {", html)
         self.assertIn("postToAladin: options.postSkyLayersToAladin !== false", html)
-        self.assertIn('targetViewMode !== "earth"', html)
+        self.assertIn("ovizStateCameraSignature", html)
         self.assertIn("lockEarthViewCameraToTarget()", html)
         self.assertIn("viewFromEarth();", html)
         self.assertIn("exitEarthView();", html)
@@ -165,7 +166,82 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn("actionHeldTraceOpacityByKey", html)
         self.assertIn("captureActionTraceOpacityMap", html)
         self.assertIn("preserveLegendTransitionFrame: true", html)
+        cancel_action_body = html.split(
+            "function ovizCancelActionWithoutSnap()", 1
+        )[1].split("function ovizCancelStateTransitionWithoutSnap", 1)[0]
+        self.assertIn("actionHeldTraceOpacityByKey = null", cancel_action_body)
         self.assertNotIn("__STATE_RUNTIME_JS__", html)
+
+    def test_state_transition_runtime_exposes_ordered_phase_instrumentation(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+
+        self.assertIn("phaseProgress", html)
+        self.assertIn("effectiveDurationMs", html)
+        self.assertIn("stateTransitionPhase", html)
+        self.assertIn("stateTransitionPhaseProgress", html)
+        self.assertIn("stateTransitionEffectiveDurationMs", html)
+        self.assertRegex(html, r"(?i)phase[^\n]{0,80}(?:minimum|min)[^\n]{0,80}800")
+        self.assertRegex(html, r'["\']camera["\']')
+        self.assertRegex(html, r'["\']appearance["\']')
+        self.assertRegex(html, r'["\']time["\']')
+
+    def test_legacy_time_actions_advance_fractional_frames_each_animation_frame(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        update_body = html.split("function updateTimeAction(now)", 1)[1].split(
+            "function updateViewerActions(now)", 1
+        )[0]
+
+        self.assertIn("displayedFrameValue", update_body)
+        self.assertIn("renderInterpolatedFrameValue", update_body)
+        self.assertIn("preserveCamera: true", update_body)
+        self.assertNotIn("currentFrameIndex + timeActionTrack.direction", update_body)
+        self.assertNotIn("for (let idx = 0; idx < steps; idx += 1)", update_body)
+
+    def test_appearance_phase_crossfades_trace_and_lasso_membership(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+
+        self.assertIn("function ovizTraceCandidatesForSnapshots(", html)
+        self.assertIn("ovizStateSelectionTransition", html)
+        self.assertIn("function ovizSelectionMembershipOpacity(", html)
+        self.assertIn("applyLassoSelectionTransitionUniforms", html)
+        self.assertIn("selectionTransitionProgress", html)
+        self.assertIn("selectionSourceSecondaryMaskTexture", html)
+        self.assertIn("float sourceSelectionWeight = mix(", html)
+        self.assertIn("selectionWeight = mix(", html)
+        self.assertIn("function ovizTransitionOpacityBucket(", html)
+        opacity_bucket_body = html.split(
+            "function ovizTransitionOpacityBucket(", 1
+        )[1].split("function markerMaterialFor(", 1)[0]
+        self.assertIn("256", opacity_bucket_body)
+        self.assertIn("for (let index = firstIndex; index <= lastIndex", html)
+        self.assertIn("1.0 - selectionProgress", html)
+        marker_material_body = html.split("function markerMaterialFor(", 1)[1].split(
+            "function smoothstep(", 1
+        )[0]
+        self.assertIn("ovizTransitionOpacityBucket(", marker_material_body)
+        glow_material_body = html.split("function starGlowMaterialFor(", 1)[1].split(
+            "function starCoreMaterialFor(", 1
+        )[0]
+        core_material_body = html.split("function starCoreMaterialFor(", 1)[1].split(
+            "function glowScaleForPoint(", 1
+        )[0]
+        self.assertIn("ovizTransitionOpacityBucket(", glow_material_body)
+        self.assertIn("ovizTransitionOpacityBucket(", core_material_body)
 
     def test_embedded_scene_state_schema_round_trips_to_payload(self):
         scene = {
