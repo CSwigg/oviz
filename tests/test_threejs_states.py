@@ -5,6 +5,7 @@ import re
 import unittest
 
 from oviz.threejs_figure import ThreeJSFigure
+from oviz.threejs_actions import normalize_threejs_actions
 from oviz.threejs_states import (
     DEFAULT_STATE_TRANSITION,
     deduplicate_state_assets,
@@ -15,6 +16,53 @@ from oviz.threejs_scene import _round_scene_floats
 
 
 class ThreeJSStatesSchemaTests(unittest.TestCase):
+    def test_action_can_delegate_exactly_one_step_to_a_viewer_state(self):
+        actions = normalize_threejs_actions(
+            [{"key": "sky", "label": "Sky", "steps": [{"type": "state", "state": "state-sky"}]}],
+            group_names=["All"],
+            trace_key_by_name={},
+            playback_interval_ms=160,
+        )
+
+        self.assertEqual(actions[0]["steps"], [{
+            "type": "state",
+            "start": "after_previous",
+            "delay_ms": 0,
+            "state": "state-sky",
+        }])
+        with self.assertRaisesRegex(ValueError, "exactly one state step"):
+            normalize_threejs_actions(
+                [{
+                    "key": "bad",
+                    "label": "Bad",
+                    "steps": [
+                        {"type": "state", "state": "state-sky"},
+                        {"type": "time", "direction": "backward"},
+                    ],
+                }],
+                group_names=["All"],
+                trace_key_by_name={},
+                playback_interval_ms=160,
+            )
+        with self.assertRaisesRegex(ValueError, "cannot overlap two 'camera' steps"):
+            normalize_threejs_actions(
+                [{
+                    "key": "overlap",
+                    "label": "Overlap",
+                    "steps": [
+                        {"type": "camera", "target": {"kind": "point", "x": 0, "y": 0, "z": 0}},
+                        {
+                            "type": "camera",
+                            "start": "with_previous",
+                            "target": {"kind": "point", "x": 1, "y": 1, "z": 1},
+                        },
+                    ],
+                }],
+                group_names=["All"],
+                trace_key_by_name={},
+                playback_interval_ms=160,
+            )
+
     def test_compact_rounding_preserves_control_range_precision(self):
         rounded = _round_scene_floats({"x": 1.234, "vmax": 0.07, "cut_max": 0.07123}, 1)
 
@@ -101,6 +149,22 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn("preApplyFovError", html)
         self.assertIn("now - transition.lastProgressEventAt >= 100", html)
         self.assertIn("root.dataset.stateTransitionMetrics", html)
+        self.assertIn("root.dataset.stateFidelity", html)
+        self.assertIn("ovizStateFidelityDifferences", html)
+        self.assertIn("ovizApplyCapturedCameraState", html)
+        self.assertIn("ovizCancelStateTransitionWithoutSnap", html)
+        self.assertIn("ovizStateTransition.targetIndex", html)
+        self.assertIn("startStateAction", html)
+        self.assertIn("lassoSelectionRestoreSerial", html)
+        self.assertIn("restoreSerial !== lassoSelectionRestoreSerial", html)
+        self.assertIn("previousStep.finished", html)
+        self.assertIn("completeCamera: false", html)
+        self.assertIn("ovizSkyLayerTransitionWaiters", html)
+        self.assertIn('data.type === "oviz-aladin-sky-layer-transition-complete"', html)
+        self.assertIn("stateOwnsCameraAndTime", html)
+        self.assertIn("actionHeldTraceOpacityByKey", html)
+        self.assertIn("captureActionTraceOpacityMap", html)
+        self.assertIn("preserveLegendTransitionFrame: true", html)
         self.assertNotIn("__STATE_RUNTIME_JS__", html)
 
     def test_embedded_scene_state_schema_round_trips_to_payload(self):

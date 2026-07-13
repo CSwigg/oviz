@@ -120,7 +120,6 @@ GALACTIC_RADIUS_CIRCLE_DEFS = (
 GALACTIC_RADIUS_TRACE_NAMES = (
     {name for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
     | {f'{name} Label' for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
-    | {'GC Ring'}
 )
 GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES = {
     'Sun',
@@ -1644,11 +1643,6 @@ class Animate3D:
                         t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
                     )
                 )
-                scatter_list.append(
-                    self._galactic_center_ring_trace(
-                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
-                    )
-                )
                 scatter_list.extend(
                     self._build_galactic_circles_with_labels(
                         t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
@@ -2177,8 +2171,7 @@ class Animate3D:
             plane_center = self._threejs_milky_way_center(frame_json, fallback_center)
             if image_data_url and image_size_pc > 0.0:
                 if bool(galaxy_image_config.get('only_at_t0', True)):
-                    fade_fraction = float(np.clip(1.0 - (abs(float(time_value)) / 5.0), 0.0, 1.0))
-                    fade_alpha = fade_fraction * fade_fraction * (3.0 - 2.0 * fade_fraction)
+                    fade_alpha = 1.0 if np.isclose(float(time_value), 0.0, atol=1e-9) else 0.0
                 else:
                     fade_alpha = 1.0
                 decorations.append({
@@ -2199,8 +2192,7 @@ class Animate3D:
             image_size_pc = float(_coerce_float(galactic_simple_config.get('size_pc'), 40000.0))
             plane_center = self._threejs_milky_way_center(frame_json, fallback_center)
             if image_data_url and image_size_pc > 0.0:
-                fade_fraction = float(np.clip(1.0 - (abs(float(time_value)) / 5.0), 0.0, 1.0))
-                fade_alpha = fade_fraction * fade_fraction * (3.0 - 2.0 * fade_fraction)
+                fade_alpha = 1.0 if np.isclose(float(time_value), 0.0, atol=1e-9) else 0.0
                 decorations.append({
                     'kind': 'image_plane',
                     'key': str(galactic_simple_config.get('key') or 'galactic-plane-overlay'),
@@ -2257,11 +2249,7 @@ class Animate3D:
         if not getattr(self, 'show_milky_way_model', False):
             return decorations
 
-        milky_way_fade_window_myr = 5.0
-        time_distance_myr = abs(float(time_value))
-        fade_fraction = float(np.clip(1.0 - (time_distance_myr / milky_way_fade_window_myr), 0.0, 1.0))
-        opacity_scale = fade_fraction * fade_fraction * (3.0 - 2.0 * fade_fraction)
-        if opacity_scale <= 1e-6:
+        if not np.isclose(float(time_value), 0.0, atol=1e-9):
             return decorations
 
         x_span = max(float(x_range[1]) - float(x_range[0]), 1.0)
@@ -2272,7 +2260,7 @@ class Animate3D:
 
         decorations.append({
             'kind': 'milky_way_model',
-            'opacity_scale': opacity_scale,
+            'opacity_scale': 1.0,
             'center': center,
             'disc_radius_pc': disc_radius_pc,
             'disc_thickness_pc': max(180.0, 0.018 * disc_radius_pc),

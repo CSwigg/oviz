@@ -167,7 +167,8 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
             if item.get("key") == "galaxy-image-overlay"
         )
         galaxy_opacity_scale_by_time[float(frame["time"])] = float(decoration["opacity_scale"])
-    assert galaxy_opacity_scale_by_time[0.0] > galaxy_opacity_scale_by_time[-1.0] > galaxy_opacity_scale_by_time[-5.0]
+    assert galaxy_opacity_scale_by_time[0.0] == 1.0
+    assert galaxy_opacity_scale_by_time[-1.0] == 0.0
     assert galaxy_opacity_scale_by_time[-5.0] == 0.0
     assert "oviz-three-mobile-sky-view" in html
     assert "oviz-three-mobile-lasso" in html

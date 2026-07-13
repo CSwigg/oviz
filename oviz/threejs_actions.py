@@ -215,9 +215,9 @@ def normalize_threejs_actions(
             step_label = f"{action_label}.steps[{step_index}]"
             step = _require_mapping(raw_step, label=step_label)
             step_type = str(step.get("type") or "").strip().lower()
-            if step_type not in {"legend_group", "camera", "time"}:
+            if step_type not in {"legend_group", "camera", "time", "state"}:
                 raise ValueError(
-                    f"{step_label}.type must be one of ['camera', 'legend_group', 'time']."
+                    f"{step_label}.type must be one of ['camera', 'legend_group', 'state', 'time']."
                 )
 
             start_mode = str(step.get("start") or "after_previous").strip().lower()
@@ -236,7 +236,16 @@ def normalize_threejs_actions(
                 ),
             }
 
-            if step_type == "legend_group":
+            if step_type == "state":
+                state_target = step.get("state", step.get("state_id", step.get("state_index")))
+                if not isinstance(state_target, (str, int)) or isinstance(state_target, bool):
+                    raise ValueError(
+                        f"{step_label}.state must be a state id, one-based index, or 'original'."
+                    )
+                if isinstance(state_target, str) and not state_target.strip():
+                    raise ValueError(f"{step_label}.state must not be empty.")
+                normalized_step["state"] = state_target
+            elif step_type == "legend_group":
                 group_name = str(step.get("group") or "").strip()
                 if not group_name:
                     raise ValueError(f"{step_label}.group is required.")
@@ -347,6 +356,22 @@ def normalize_threejs_actions(
                         raise ValueError(f"{step_label}.stop_after_ms must be positive.")
 
             normalized_steps.append(normalized_step)
+
+        if any(step["type"] == "state" for step in normalized_steps) and len(normalized_steps) != 1:
+            raise ValueError(
+                f"{action_label} state Actions must contain exactly one state step so one controller owns the transition."
+            )
+        concurrent_types: set[str] = set()
+        for step_index, step in enumerate(normalized_steps):
+            if step_index == 0 or step["start"] == "after_previous":
+                concurrent_types = {step["type"]}
+                continue
+            if step["type"] in concurrent_types:
+                raise ValueError(
+                    f"{action_label} cannot overlap two {step['type']!r} steps; "
+                    "use after_previous for steps that share a runtime channel."
+                )
+            concurrent_types.add(step["type"])
 
         normalized_actions.append(
             {

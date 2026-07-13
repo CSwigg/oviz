@@ -11,6 +11,7 @@ THREEJS_ACTION_RUNTIME_JS = """
       let selectedActionKey = "";
       let activeActionRun = null;
       let legendTransitionState = null;
+      let actionHeldTraceOpacityByKey = null;
       let cameraActionTrack = null;
       let timeActionTrack = null;
       let actionInterruptGuardDepth = 0;
@@ -96,7 +97,17 @@ THREEJS_ACTION_RUNTIME_JS = """
       }
 
       function actionTraceVisibilityState(trace) {
-        if (!legendTransitionState || !trace || !trace.key) {
+        if (!trace || !trace.key) {
+          return null;
+        }
+        if (!legendTransitionState) {
+          if (
+            actionHeldTraceOpacityByKey
+            && Object.prototype.hasOwnProperty.call(actionHeldTraceOpacityByKey, trace.key)
+          ) {
+            const opacity = clampRange(Number(actionHeldTraceOpacityByKey[trace.key]) || 0.0, 0.0, 1.0);
+            return { visible: opacity > 0.0001, opacity };
+          }
           return null;
         }
         const fromVisible = traceVisibleForGroupState(
@@ -109,17 +120,28 @@ THREEJS_ACTION_RUNTIME_JS = """
           legendTransitionState.toGroup,
           legendTransitionState.toLegendState,
         );
-        if (!fromVisible && !toVisible) {
+        const fromOpacity = legendTransitionState.fromOpacityByKey
+          && Object.prototype.hasOwnProperty.call(legendTransitionState.fromOpacityByKey, trace.key)
+          ? clampRange(Number(legendTransitionState.fromOpacityByKey[trace.key]) || 0.0, 0.0, 1.0)
+          : (fromVisible ? 1.0 : 0.0);
+        const toOpacity = toVisible ? 1.0 : 0.0;
+        if (fromOpacity <= 0.0001 && toOpacity <= 0.0001) {
           return { visible: false, opacity: 0.0 };
         }
         const progress = clampRange(Number(legendTransitionState.progress) || 0.0, 0.0, 1.0);
-        if (fromVisible && toVisible) {
-          return { visible: true, opacity: 1.0 };
-        }
-        if (fromVisible) {
-          return { visible: true, opacity: 1.0 - progress };
-        }
-        return { visible: true, opacity: progress };
+        const opacity = fromOpacity + (toOpacity - fromOpacity) * progress;
+        return { visible: opacity > 0.0001, opacity };
+      }
+
+      function captureActionTraceOpacityMap() {
+        const result = {};
+        (currentFrame() && currentFrame().traces || []).forEach((trace) => {
+          const state = actionTraceVisibilityState(trace);
+          result[trace.key] = state
+            ? clampRange(Number(state.opacity) || 0.0, 0.0, 1.0)
+            : (traceVisible(trace) ? 1.0 : 0.0);
+        });
+        return result;
       }
 
       function traceVisibilityOpacityMultiplier(trace) {
@@ -234,7 +256,9 @@ THREEJS_ACTION_RUNTIME_JS = """
         const previousLegendState = cloneLegendStateMap(legendState);
         const nextGroup = String(targetGroup || currentGroup);
         const nextLegendState = cloneLegendStateMap(targetLegendState);
-        const nextStateMatchesCurrent = nextGroup === currentGroup
+        const fromOpacityByKey = actionHeldTraceOpacityByKey;
+        actionHeldTraceOpacityByKey = null;
+        const nextStateMatchesCurrent = !fromOpacityByKey && nextGroup === currentGroup
           && JSON.stringify(nextLegendState) === JSON.stringify(previousLegendState);
         currentGroup = nextGroup;
         if (groupSelectEl) {
@@ -260,6 +284,7 @@ THREEJS_ACTION_RUNTIME_JS = """
           durationMs: nextDurationMs,
           easing: String(easing || "easeInOutCubic"),
           progress: 0.0,
+          fromOpacityByKey,
         };
         renderFrame(currentFrameIndex);
       }
@@ -305,6 +330,13 @@ THREEJS_ACTION_RUNTIME_JS = """
         if (step.type === "legend_group" || step.type === "camera") {
           return Math.max(Number(step.duration_ms) || 0, 0);
         }
+        if (step.type === "state") {
+          return Math.max(
+            Number(ovizStatesProject && ovizStatesProject.default_transition && ovizStatesProject.default_transition.duration_ms)
+              || 1200,
+            0,
+          );
+        }
         if (step.type !== "time") {
           return 0;
         }
@@ -333,6 +365,7 @@ THREEJS_ACTION_RUNTIME_JS = """
             endMs,
             started: false,
             finished: false,
+            finishedAt: null,
           });
           previousStartMs = startMs;
           previousEndMs = endMs;
@@ -370,6 +403,7 @@ THREEJS_ACTION_RUNTIME_JS = """
         const record = actionStepRecord(stepIndex);
         if (record) {
           record.finished = true;
+          record.finishedAt = window.performance ? window.performance.now() : Date.now();
         }
       }
 
@@ -381,6 +415,7 @@ THREEJS_ACTION_RUNTIME_JS = """
         const nextGroup = legendTransitionState.toGroup;
         const nextLegendState = cloneLegendStateMap(legendTransitionState.toLegendState);
         legendTransitionState = null;
+        actionHeldTraceOpacityByKey = null;
         if (commitTarget) {
           currentGroup = nextGroup;
           legendState = nextLegendState;
@@ -406,6 +441,7 @@ THREEJS_ACTION_RUNTIME_JS = """
           controls.target.copy(track.toTarget);
           camera.up.copy(track.toUp);
           camera.fov = Number(track.toFov);
+          camera.updateProjectionMatrix();
           applyActionCameraViewOffset(track.toViewOffset);
           controls.update();
         }
@@ -428,6 +464,7 @@ THREEJS_ACTION_RUNTIME_JS = """
         timeActionTrack = null;
         playbackDirection = 0;
         lastPlaybackAdvanceTimestamp = null;
+        updateTimelineMotionOpacity();
         updatePlaybackButtons();
         markActionStepFinished(track.stepIndex);
         return true;
@@ -435,7 +472,12 @@ THREEJS_ACTION_RUNTIME_JS = """
 
       function clearActiveActionState(options = {}) {
         if (legendTransitionState) {
-          finishLegendTransition(options.commitLegendTransition !== false);
+          if (options.preserveLegendTransitionFrame === true) {
+            actionHeldTraceOpacityByKey = captureActionTraceOpacityMap();
+            legendTransitionState = null;
+          } else {
+            finishLegendTransition(options.commitLegendTransition !== false);
+          }
         }
         if (cameraActionTrack) {
           stopCameraActionTrack({
@@ -466,7 +508,8 @@ THREEJS_ACTION_RUNTIME_JS = """
         }
         clearActiveActionState({
           commitLegendTransition: true,
-          completeCamera: true,
+          completeCamera: false,
+          preserveLegendTransitionFrame: true,
           disableOrbit: options.disableOrbit !== false && (reason === "camera" || reason === "keyboard" || reason === "user"),
           clearSelectedAction: options.clearSelectedAction === true,
         });
@@ -598,7 +641,7 @@ THREEJS_ACTION_RUNTIME_JS = """
         const nextTarget = overrides.target
           ? new THREE.Vector3(Number(overrides.target.x) || 0.0, Number(overrides.target.y) || 0.0, Number(overrides.target.z) || 0.0)
           : anchorCenter.clone();
-        const nextFov = Math.max(Number(overrides.fov) || camera.fov, 10.0);
+        const nextFov = clampRange(Number(overrides.fov) || camera.fov, 0.05, 120.0);
         const baseFitDistance = Math.max(
           (maxExtent * fitPadding) / Math.tan((nextFov * Math.PI / 180.0) * 0.5),
           sceneSpec.max_span * 0.02,
@@ -642,6 +685,42 @@ THREEJS_ACTION_RUNTIME_JS = """
           markActionStepFinished(stepIndex);
           return;
         }
+        if (cameraViewMode === "earth" && ovizStateControllerReady) {
+          const ownerRun = activeActionRun;
+          const destination = captureRuntimeState();
+          destination.camera = {
+            position: { x: resolved.toPosition.x, y: resolved.toPosition.y, z: resolved.toPosition.z },
+            target: { x: resolved.toTarget.x, y: resolved.toTarget.y, z: resolved.toTarget.z },
+            up: { x: resolved.toUp.x, y: resolved.toUp.y, z: resolved.toUp.z },
+            view_offset: normalizeActionViewOffset(resolved.toViewOffset),
+          };
+          destination.global_controls.camera_view_mode = "free";
+          destination.global_controls.camera_fov = Number(resolved.toFov);
+          destination.global_controls.camera_auto_orbit_enabled = Boolean(step.orbit && step.orbit.enabled);
+          destination.global_controls.camera_auto_orbit_direction = step.orbit && Number(step.orbit.direction) < 0.0 ? -1.0 : 1.0;
+          const activeStateIndex = ovizActiveStateId === null
+            ? -1
+            : ovizStatesProject.items.findIndex((item) => item.id === ovizActiveStateId);
+          ovizBeginStateTransition({
+            id: ovizActiveStateId,
+            index: activeStateIndex,
+            name: "Camera action",
+            snapshot: destination,
+            transition: {
+              duration_ms: Math.max(Number(step.duration_ms) || 0, 0),
+              easing: String(step.easing || "easeInOutCubic"),
+            },
+          }, { preserveActionRun: true }).then(() => {
+            if (activeActionRun !== ownerRun) return;
+            if (step.orbit && step.orbit.enabled && step.orbit.persist === false) {
+              setCameraAutoOrbitEnabled(false);
+            }
+            markActionStepFinished(stepIndex);
+          }).catch(() => {
+            if (activeActionRun === ownerRun) markActionStepFinished(stepIndex);
+          });
+          return;
+        }
         setCameraAutoOrbitEnabled(false);
         actionCameraOrbitOwned = false;
         actionCameraOrbitShouldPersist = true;
@@ -652,6 +731,7 @@ THREEJS_ACTION_RUNTIME_JS = """
           controls.target.copy(resolved.toTarget);
           camera.up.copy(resolved.toUp);
           camera.fov = Number(resolved.toFov);
+          camera.updateProjectionMatrix();
           applyActionCameraViewOffset(resolved.toViewOffset);
           controls.update();
           if (step.orbit && step.orbit.enabled) {
@@ -706,12 +786,40 @@ THREEJS_ACTION_RUNTIME_JS = """
         updatePlaybackButtons();
       }
 
+      function startStateAction(step, stepIndex) {
+        if (!ovizStateControllerReady) {
+          markActionStepFinished(stepIndex);
+          return;
+        }
+        let target;
+        const ownerRun = activeActionRun;
+        try {
+          target = ovizStateTargetFor(step.state);
+        } catch (_err) {
+          markActionStepFinished(stepIndex);
+          return;
+        }
+        ovizBeginStateTransition(target, { preserveActionRun: true }).then(() => {
+          if (activeActionRun === ownerRun) {
+            markActionStepFinished(stepIndex);
+          }
+        }).catch(() => {
+          if (activeActionRun === ownerRun) {
+            markActionStepFinished(stepIndex);
+          }
+        });
+      }
+
       function startActionStep(stepRecord, now) {
         if (!stepRecord || stepRecord.started || !stepRecord.step) {
           return;
         }
         stepRecord.started = true;
         const step = stepRecord.step;
+        if (step.type === "state") {
+          startStateAction(step, stepRecord.index);
+          return;
+        }
         if (step.type === "legend_group") {
           startLegendGroupAction(step, stepRecord.index, now);
           return;
@@ -728,10 +836,17 @@ THREEJS_ACTION_RUNTIME_JS = """
         if (!action) {
           return false;
         }
+        const stateBackedAction = Array.isArray(action.steps)
+          && action.steps.length === 1
+          && action.steps[0].type === "state";
+        if (ovizStateTransition && !stateBackedAction) {
+          ovizCancelStateTransitionWithoutSnap("action-start", { restorePresentation: true });
+        }
         withActionGuard(() => {
           clearActiveActionState({
             commitLegendTransition: true,
-            completeCamera: true,
+            completeCamera: false,
+            preserveLegendTransitionFrame: true,
             disableOrbit: true,
           });
           activeActionRun = {
@@ -742,11 +857,40 @@ THREEJS_ACTION_RUNTIME_JS = """
           activeActionKey = String(action.key);
           selectedActionKey = String(action.key);
           syncActionButtons();
+          if (
+            actionHeldTraceOpacityByKey
+            && !action.steps.some((step) => step && step.type === "legend_group")
+          ) {
+            beginLegendTransition(
+              currentGroup,
+              legendState,
+              -1,
+              window.performance ? window.performance.now() : Date.now(),
+              240,
+              "easeInOutCubic",
+            );
+          }
         });
         return true;
       }
 
       function startRestoreInitialView() {
+        const selectedAction = actionDefinitionByKey(selectedActionKey || activeActionKey);
+        const stateBackedAction = selectedAction
+          && Array.isArray(selectedAction.steps)
+          && selectedAction.steps.length === 1
+          && selectedAction.steps[0].type === "state";
+        if (stateBackedAction && ovizStateControllerReady) {
+          clearActiveActionState({
+            commitLegendTransition: true,
+            completeCamera: false,
+            preserveLegendTransitionFrame: true,
+            disableOrbit: true,
+            clearSelectedAction: true,
+          });
+          ovizBeginStateTransition(ovizStateTargetFor("original"));
+          return true;
+        }
         if (!initialActionViewState) {
           return false;
         }
@@ -756,7 +900,8 @@ THREEJS_ACTION_RUNTIME_JS = """
         withActionGuard(() => {
           clearActiveActionState({
             commitLegendTransition: true,
-            completeCamera: true,
+            completeCamera: false,
+            preserveLegendTransitionFrame: true,
             disableOrbit: true,
             clearSelectedAction: true,
           });
@@ -864,6 +1009,7 @@ THREEJS_ACTION_RUNTIME_JS = """
         controls.target.lerpVectors(cameraActionTrack.fromTarget, cameraActionTrack.toTarget, easedProgress);
         camera.up.lerpVectors(cameraActionTrack.fromUp, cameraActionTrack.toUp, easedProgress).normalize();
         camera.fov = cameraActionTrack.fromFov + (cameraActionTrack.toFov - cameraActionTrack.fromFov) * easedProgress;
+        camera.updateProjectionMatrix();
         applyActionCameraViewOffset({
           x: cameraActionTrack.fromViewOffset.x + (cameraActionTrack.toViewOffset.x - cameraActionTrack.fromViewOffset.x) * easedProgress,
           y: cameraActionTrack.fromViewOffset.y + (cameraActionTrack.toViewOffset.y - cameraActionTrack.fromViewOffset.y) * easedProgress,
@@ -920,13 +1066,17 @@ THREEJS_ACTION_RUNTIME_JS = """
             stopTimeActionTrack();
             break;
           }
-          renderFrame(nextIndex);
+          currentFrameIndex = nextIndex;
+          displayedFrameValue = nextIndex;
           timeActionTrack.advancedFrames += 1;
           moved = true;
           if (timeActionReachedStop(timeActionTrack)) {
             stopTimeActionTrack();
             break;
           }
+        }
+        if (moved) {
+          renderFrame(currentFrameIndex);
         }
         return moved;
       }
@@ -935,8 +1085,15 @@ THREEJS_ACTION_RUNTIME_JS = """
         let rerendered = false;
         if (activeActionRun && Array.isArray(activeActionRun.steps)) {
           const elapsedMs = Math.max(0.0, now - Number(activeActionRun.startedAt || now));
-          activeActionRun.steps.forEach((stepRecord) => {
-            if (!stepRecord.started && elapsedMs >= stepRecord.startMs) {
+          activeActionRun.steps.forEach((stepRecord, stepIndex) => {
+            const previousStep = stepIndex > 0 ? activeActionRun.steps[stepIndex - 1] : null;
+            const afterPreviousReady = String(stepRecord.step.start || "after_previous") !== "after_previous"
+              || !previousStep
+              || (
+                previousStep.finished
+                && now - Number(previousStep.finishedAt || now) >= Math.max(Number(stepRecord.step.delay_ms) || 0, 0)
+              );
+            if (!stepRecord.started && afterPreviousReady && elapsedMs >= stepRecord.startMs) {
               startActionStep(stepRecord, now);
             }
           });

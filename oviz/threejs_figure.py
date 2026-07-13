@@ -6125,14 +6125,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       })();
       const galacticReferenceTraceNames = new Set([
         "GC",
-        "GC Ring",
         "R = 4 kpc",
         "R = 8.12 kpc",
         "R = 12 kpc",
-        "Galactic Quadrants",
-        "Galactic l Ticks",
-        "Galactic l Labels",
-        "Galactic Z Axis",
       ]);
       const nearbyRegionLabelTraceNames = new Set([
         "Nearby Region Labels",
@@ -6195,6 +6190,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let playbackDirection = 0;
       let timelineScrubMotionActive = false;
       let timelineMotionHideTimer = 0;
+      let ovizStateTimelineMotionActive = false;
       let displayedFrameValue = currentFrameIndex;
       let frameTransitionState = null;
       let lastPlaybackAdvanceTimestamp = null;
@@ -6370,6 +6366,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let browserFullscreenFallbackPreviousZen = false;
       let fullscreenNoticeTimer = 0;
       let currentLassoSelectionMask = null;
+      let lassoSelectionRestoreSerial = 0;
       let lassoSelectionFilterEnabled = true;
       const selectionUndoStack = [];
       const MAX_SELECTION_UNDO_STATES = 32;
@@ -8355,6 +8352,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       function restoreLassoSelectionMask(savedMask) {
+        lassoSelectionRestoreSerial += 1;
+        const restoreSerial = lassoSelectionRestoreSerial;
         if (minimalModeEnabled) {
           disposeLassoSelectionMask(currentLassoSelectionMask);
           currentLassoSelectionMask = null;
@@ -8375,6 +8374,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return new Promise((resolve) => {
           const image = new Image();
           image.onload = () => {
+            if (restoreSerial !== lassoSelectionRestoreSerial) {
+              resolve(false);
+              return;
+            }
             const maskCanvas = document.createElement("canvas");
             const width = Math.max(1, Number(image.naturalWidth || image.width || 0));
             const height = Math.max(1, Number(image.naturalHeight || image.height || 0));
@@ -8412,12 +8415,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
               maskSize: width,
               maskAlphaData: maskImageData ? maskImageData.data : null,
             };
-            resolve();
+            resolve(true);
           };
           image.onerror = () => {
+            if (restoreSerial !== lassoSelectionRestoreSerial) {
+              resolve(false);
+              return;
+            }
             disposeLassoSelectionMask(currentLassoSelectionMask);
             currentLassoSelectionMask = null;
-            resolve();
+            resolve(true);
           };
           image.src = String(savedMask.data_url);
         });
@@ -8466,7 +8473,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           currentFrameIndex = Math.max(0, Math.min(Math.round(requestedFrameIndex), Math.max(frameSpecs.length - 1, 0)));
         }
 
-        clickSelectionEnabled = false;
+        clickSelectionEnabled = typeof initialState.click_selection_enabled === "boolean"
+          ? initialState.click_selection_enabled
+          : false;
         if (typeof initialState.lasso_volume_selection_enabled === "boolean") {
           lassoVolumeSelectionEnabled = initialState.lasso_volume_selection_enabled;
         }
@@ -8477,6 +8486,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           lassoArmed = initialState.lasso_armed;
         }
         loadManualLabels(initialState.manual_labels, initialState.active_manual_label_id);
+        if (typeof initialState.zen_mode_enabled === "boolean") {
+          zenModeEnabled = initialState.zen_mode_enabled;
+        }
 
         const savedGlobalControls = initialState.global_controls;
         if (savedGlobalControls && typeof savedGlobalControls === "object") {
@@ -8789,7 +8801,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         currentSelections = uniqueSelections(Array.isArray(initialState.current_selections) ? initialState.current_selections : []);
-        currentSelection = null;
+        currentSelection = initialState.current_selection && typeof initialState.current_selection === "object"
+          ? ovizStatesClone(initialState.current_selection, null)
+          : null;
         if (Array.isArray(initialState.selected_cluster_keys) && initialState.selected_cluster_keys.length) {
           selectedClusterKeys = new Set(
             initialState.selected_cluster_keys
@@ -8803,7 +8817,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
               .filter(Boolean)
           );
         }
-        currentSelectionMode = (currentSelections.length || selectedClusterKeys.size || Boolean(initialState.lasso_selection_mask)) ? "lasso" : "none";
+        const requestedSelectionMode = String(initialState.current_selection_mode || "");
+        currentSelectionMode = ["none", "click", "lasso"].includes(requestedSelectionMode)
+          ? requestedSelectionMode
+          : ((currentSelections.length || selectedClusterKeys.size || Boolean(initialState.lasso_selection_mask)) ? "lasso" : "none");
 
         const savedWidgets = initialState.widgets;
         if (savedWidgets && typeof savedWidgets === "object") {
@@ -8887,6 +8904,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             postToAladin: options.postSkyLayersToAladin !== false,
           });
         }
+        if (
+          savedGlobalControls
+          && typeof savedGlobalControls.sky_dome_source_key === "string"
+          && savedGlobalControls.sky_dome_source_key
+          && typeof setSkyDomeSourceByKey === "function"
+          && skyDomeHasLocalSources()
+        ) {
+          setSkyDomeSourceByKey(savedGlobalControls.sky_dome_source_key);
+        }
 
         if (minimalModeEnabled) {
           clickSelectionEnabled = false;
@@ -8961,7 +8987,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           active_manual_label_id: activeManualLabelId,
           legend_state: legendState,
           trace_style_state: traceStyleStateByKey,
-          click_selection_enabled: false,
+          click_selection_enabled: clickSelectionEnabled,
           lasso_volume_selection_enabled: lassoVolumeSelectionEnabled,
           lasso_selection_filter_enabled: lassoSelectionFilterEnabled,
           lasso_armed: lassoArmed,
@@ -17814,10 +17840,15 @@ __STATE_RUNTIME_JS__
         lastAnimationTimestamp = now;
         updateViewerActions(now);
         updateOvizStateTransition(now);
-        updateAnimatedFramePlayback(now);
-        updateKeyboardMotion(deltaSeconds);
-        updateGalacticSimpleDefaultOrbit(deltaSeconds);
-        if (controls.enabled) {
+        const stateOwnsCameraAndTime = Boolean(
+          typeof ovizStateTransition !== "undefined" && ovizStateTransition
+        );
+        if (!stateOwnsCameraAndTime) {
+          updateAnimatedFramePlayback(now);
+          updateKeyboardMotion(deltaSeconds);
+          updateGalacticSimpleDefaultOrbit(deltaSeconds);
+        }
+        if (controls.enabled && !stateOwnsCameraAndTime) {
           controls.update();
         } else if (
           cameraViewMode === "earth"

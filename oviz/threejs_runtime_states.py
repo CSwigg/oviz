@@ -27,6 +27,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
       let ovizStatesDraftTimer = null;
       let ovizStatesPreloadStatus = { loaded: 0, total: 0, failed: [] };
       let ovizResidentSkyBaseLayerKey = "";
+      const ovizSkyLayerTransitionWaiters = new Map();
 
       function ovizStatesClone(value, fallback = null) {
         try {
@@ -282,27 +283,108 @@ THREEJS_STATE_RUNTIME_JS = r"""
         initialCameraState.viewOffset = ovizStatesClone(ovizOriginalCameraResetState.viewOffset, { x: 0, y: 0 });
       }
 
+      function ovizApplyCapturedCameraState(snapshot) {
+        const savedCamera = snapshot && snapshot.camera || {};
+        const savedGlobal = snapshot && snapshot.global_controls || {};
+        const position = savedCamera.position || {};
+        const target = savedCamera.target || {};
+        const up = savedCamera.up || {};
+        if ([position.x, position.y, position.z].every((value) => Number.isFinite(Number(value)))) {
+          camera.position.set(Number(position.x), Number(position.y), Number(position.z));
+        }
+        if ([target.x, target.y, target.z].every((value) => Number.isFinite(Number(value)))) {
+          controls.target.set(Number(target.x), Number(target.y), Number(target.z));
+        }
+        if ([up.x, up.y, up.z].every((value) => Number.isFinite(Number(value)))) {
+          camera.up.set(Number(up.x), Number(up.y), Number(up.z)).normalize();
+        }
+        if (Number.isFinite(Number(savedGlobal.camera_fov))) {
+          camera.fov = Number(savedGlobal.camera_fov);
+        }
+        const viewOffset = savedCamera.view_offset || savedCamera.viewOffset || { x: 0.0, y: 0.0 };
+        ovizApplyInterpolatedViewOffset(viewOffset, viewOffset, 1.0);
+        camera.updateProjectionMatrix();
+        camera.lookAt(controls.target);
+        camera.updateMatrixWorld(true);
+        controls.update();
+      }
+
+      function ovizStateFidelityDifferences(expected, actual, path = "state", differences = []) {
+        if (differences.length >= 64) {
+          return differences;
+        }
+        if (typeof expected === "number" && typeof actual === "number") {
+          const tolerance = 1e-6 * Math.max(1.0, Math.abs(expected));
+          if (!Number.isFinite(actual) || Math.abs(expected - actual) > tolerance) {
+            differences.push(path);
+          }
+          return differences;
+        }
+        if (Array.isArray(expected)) {
+          if (!Array.isArray(actual) || expected.length !== actual.length) {
+            differences.push(path);
+            return differences;
+          }
+          expected.forEach((item, index) => {
+            ovizStateFidelityDifferences(item, actual[index], `${path}[${index}]`, differences);
+          });
+          return differences;
+        }
+        if (expected && typeof expected === "object") {
+          if (!actual || typeof actual !== "object" || Array.isArray(actual)) {
+            differences.push(path);
+            return differences;
+          }
+          Object.keys(expected).forEach((key) => {
+            ovizStateFidelityDifferences(expected[key], actual[key], `${path}.${key}`, differences);
+          });
+          return differences;
+        }
+        if (expected !== actual) {
+          differences.push(path);
+        }
+        return differences;
+      }
+
       function ovizApplyStateImmediately(snapshot, options = {}) {
         const hydrated = ovizHydrateAssets(snapshot || {});
-        applyViewerStateSyncInternal(hydrated, options);
-        const frameValue = Number(hydrated.current_frame_value);
-        if (Number.isFinite(frameValue)) {
-          renderInterpolatedFrameValue(frameValue);
-        } else {
-          renderFrame(Number(hydrated.current_frame_index) || 0);
-        }
         const playback = hydrated.playback_state || {};
-        playbackDirection = Number(playback.direction) || 0;
+        const targetPlaybackDirection = Number(playback.direction) || 0;
+        const targetOrbitEnabled = Boolean(
+          hydrated.global_controls && hydrated.global_controls.camera_auto_orbit_enabled
+        );
+        applyViewerStateSyncInternal(hydrated, options);
+        playbackDirection = 0;
+        lastPlaybackAdvanceTimestamp = null;
+        setCameraAutoOrbitEnabled(false);
+        const frameValue = Number(hydrated.current_frame_value);
+        const renderTargetFrame = () => {
+          if (Number.isFinite(frameValue)) {
+            renderInterpolatedFrameValue(frameValue);
+          } else {
+            renderFrame(Number(hydrated.current_frame_index) || 0);
+          }
+        };
+        renderTargetFrame();
+        ovizApplyCapturedCameraState(hydrated);
         if (Number.isFinite(Number(playback.interval_ms))) {
           playbackIntervalMs = Math.max(80, Number(playback.interval_ms));
         }
-        lastPlaybackAdvanceTimestamp = null;
         ovizRestoreOriginalCameraResetState();
         return restoreLassoSelectionMask(hydrated.lasso_selection_mask).then(() => {
+          renderTargetFrame();
+          ovizApplyCapturedCameraState(hydrated);
           updateSelectionUI();
           updatePlaybackButtons();
           renderLegend();
           resize();
+          ovizApplyCapturedCameraState(hydrated);
+          playbackDirection = targetPlaybackDirection;
+          lastPlaybackAdvanceTimestamp = null;
+          setCameraAutoOrbitEnabled(targetOrbitEnabled);
+          updatePlaybackButtons();
+          updateTimelineMotionOpacity();
+          return captureRuntimeState();
         });
       }
 
@@ -360,6 +442,35 @@ THREEJS_STATE_RUNTIME_JS = r"""
         syncActionButtons();
       }
 
+      function ovizCancelStateTransitionWithoutSnap(reason = "cancelled", options = {}) {
+        const transition = ovizStateTransition;
+        if (!transition) {
+          return false;
+        }
+        ovizStateTransition = null;
+        ovizStateTransitionTraceOpacity = null;
+        ovizStateTimelineMotionActive = false;
+        if (typeof cancelSkyViewTransitionAnimations === "function") {
+          cancelSkyViewTransitionAnimations({ reason });
+        }
+        const resolveLayerTransition = ovizSkyLayerTransitionWaiters.get(String(transition.transitionId));
+        if (resolveLayerTransition) {
+          ovizSkyLayerTransitionWaiters.delete(String(transition.transitionId));
+          resolveLayerTransition({ cancelled: true, reason });
+        }
+        if (options.restorePresentation !== false) {
+          renderer.domElement.style.opacity = "1";
+          setMilkyWayModelOpacityScale(cameraViewMode === "earth" ? 0.0 : 1.0);
+          setSkyDomeViewOpacityScale(cameraViewMode === "earth" ? 1.0 : 0.0, { force: false });
+          updateTimelineMotionOpacity();
+        }
+        if (typeof transition.resolve === "function") {
+          transition.resolve({ cancelled: true, id: transition.targetId, reason });
+        }
+        ovizRenderStatesDrawer();
+        return true;
+      }
+
       function ovizCurrentTransitionSnapshot() {
         const snapshot = captureRuntimeState();
         if (ovizStateTransition) {
@@ -384,8 +495,28 @@ THREEJS_STATE_RUNTIME_JS = r"""
           legend: state.legend_state || {},
           traces: state.trace_style_state || {},
           volumes: state.volume_state_by_key || {},
-          selection: state.selected_cluster_keys || [],
-          mode: (state.global_controls || {}).camera_view_mode || "",
+          selections: {
+            current: state.current_selection || null,
+            currentMany: state.current_selections || [],
+            selectedKeys: state.selected_cluster_keys || [],
+            lassoMask: state.lasso_selection_mask || null,
+          },
+          sky: {
+            layers: state.sky_layers || [],
+            activeLayer: state.active_sky_layer_key || "",
+            source: (state.global_controls || {}).sky_dome_source_key || "",
+            hidden: Boolean((state.global_controls || {}).sky_background_hidden),
+          },
+          controls: state.global_controls || {},
+          labels: state.manual_labels || [],
+          panels: {
+            widgets: state.widgets || {},
+            legend: state.legend_panel_state || null,
+            scaleBar: state.scale_bar_state || null,
+          },
+          selectionBox: state.selection_box_state || null,
+          filters: state.cluster_filter_state || null,
+          zen: Boolean(state.zen_mode_enabled),
         });
       }
 
@@ -438,6 +569,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       function ovizPrepareDestinationSkyPresentation(snapshot, options = {}) {
         const global = snapshot && snapshot.global_controls || {};
+        if (options.prepareOnly === true) {
+          if (typeof updateSkyDomeCaptureFrame === "function") {
+            updateSkyDomeCaptureFrame();
+          }
+          return;
+        }
         restoreSkyLayerStateFromSnapshot(snapshot, {
           postToAladin: options.postLayersToAladin !== false,
         });
@@ -477,11 +614,19 @@ THREEJS_STATE_RUNTIME_JS = r"""
           return false;
         }
         const fromLayers = ovizResidentSkyLayers(sourceLayers || []);
-        const toLayers = ovizResidentSkyLayers(serializableSkyLayers());
+        const toLayers = ovizResidentSkyLayers(
+          Array.isArray(transition.targetSnapshot && transition.targetSnapshot.sky_layers)
+            ? transition.targetSnapshot.sky_layers
+            : [],
+        );
         if (JSON.stringify(fromLayers) === JSON.stringify(toLayers)) {
+          transition.skyLayerPromise = Promise.resolve({ unchanged: true });
           return false;
         }
         try {
+          transition.skyLayerPromise = new Promise((resolve) => {
+            ovizSkyLayerTransitionWaiters.set(String(transition.transitionId), resolve);
+          });
           skyDomeFrameEl.contentWindow.postMessage({
             type: "oviz-sky-layer-transition",
             transitionId: transition.transitionId,
@@ -494,6 +639,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
           }, "*");
           return true;
         } catch (_err) {
+          ovizSkyLayerTransitionWaiters.delete(String(transition.transitionId));
+          transition.skyLayerPromise = Promise.resolve({ failed: true });
           postSkyLayerStateToAladin();
           return false;
         }
@@ -673,16 +820,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
         renderFrame(currentFrameIndex);
       }
 
-      function ovizBeginStateTransition(target) {
+      function ovizBeginStateTransition(target, options = {}) {
         const destination = ovizHydrateAssets(target.snapshot || {});
         const transitionSpec = ovizNormalizeTransition(target.transition, ovizStatesProject.default_transition);
-        if (ovizStateTransition && typeof ovizStateTransition.resolve === "function") {
-          ovizStateTransition.resolve({ cancelled: true, id: ovizStateTransition.targetId });
-        }
+        const liveTraceOpacity = new Map();
+        (currentFrame() && currentFrame().traces || []).forEach((trace) => {
+          liveTraceOpacity.set(
+            trace.key,
+            traceVisible(trace) ? clampRange(traceVisibilityOpacityMultiplier(trace), 0.0, 1.0) : 0.0,
+          );
+        });
         const from = ovizCurrentTransitionSnapshot();
-        if (typeof cancelSkyViewTransitionAnimations === "function") {
-          cancelSkyViewTransitionAnimations({ reason: "state-retarget" });
-        }
+        ovizCancelStateTransitionWithoutSnap("state-retarget", { restorePresentation: false });
         const fromViewMode = String((from.global_controls || {}).camera_view_mode || "free");
         const toViewMode = String((destination.global_controls || {}).camera_view_mode || "free");
         const viewTransitionKind = fromViewMode === "earth" && toViewMode === "earth"
@@ -703,10 +852,26 @@ THREEJS_STATE_RUNTIME_JS = r"""
             toViewMode === "earth" ? 1320 : 1180
           );
         }
-        ovizCancelActionWithoutSnap();
+        if (options.preserveActionRun !== true) {
+          ovizCancelActionWithoutSnap();
+        }
         playbackDirection = 0;
         lastPlaybackAdvanceTimestamp = null;
         setCameraAutoOrbitEnabled(false);
+        const transitionFromFrame = Number.isFinite(Number(from.current_frame_value))
+          ? Number(from.current_frame_value)
+          : Number(from.current_frame_index) || 0;
+        const transitionToFrame = Number.isFinite(Number(destination.current_frame_value))
+          ? Number(destination.current_frame_value)
+          : Number(destination.current_frame_index) || 0;
+        ovizStateTimelineMotionActive = Math.abs(transitionToFrame - transitionFromFrame) > 1e-9;
+        if (ovizStateTimelineMotionActive) {
+          renderFrame(currentFrameIndex);
+          displayedFrameValue = clampFrameValue(transitionFromFrame);
+          currentFrameIndex = clampFrameIndex(displayedFrameValue);
+          updateTimelineUi(displayedFrameValue, frameTimeForValue(displayedFrameValue));
+          updateTimelineMotionOpacity();
+        }
         const now = performance.now();
         const sourceSkyLayers = typeof serializableSkyLayers === "function"
           ? serializableSkyLayers()
@@ -715,8 +880,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const transitionId = `state-view-${ovizStateTransitionSerial}`;
         const traceOpacity = new Map();
         (currentFrame() && currentFrame().traces || []).forEach((trace) => {
-          const previous = ovizStateTransitionTraceOpacity && ovizStateTransitionTraceOpacity.has(trace.key)
-            ? ovizStateTransitionTraceOpacity.get(trace.key)
+          const previous = liveTraceOpacity.has(trace.key)
+            ? liveTraceOpacity.get(trace.key)
             : (traceVisible(trace) ? 1 : 0);
           traceOpacity.set(trace.key, {
             from: previous,
@@ -753,6 +918,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             viewTransitionKind === "enter-earth" || viewTransitionKind === "exit-earth"
           ) ? ovizCreateNativeViewCameraTrack(destination) : null,
           skyBackgroundPromise: null,
+          skyLayerPromise: Promise.resolve({ unchanged: true }),
           fromViewMode,
           toViewMode,
           lastProgressEventAt: -Infinity,
@@ -786,7 +952,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
               ovizStateTransition.nativeCameraTrack = ovizCreateNativeViewCameraTrack(destination);
               ovizPrepareEarthViewModeForStateTransition();
             }
-            ovizPrepareDestinationSkyPresentation(destination, { postLayersToAladin: false });
+            ovizPrepareDestinationSkyPresentation(destination, {
+              postLayersToAladin: false,
+              prepareOnly: true,
+            });
             if (viewTransitionKind === "enter-earth") {
               const synchronizedStart = performance.now();
               ovizStateTransition.startedAt = synchronizedStart;
@@ -1012,6 +1181,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
             const toViewOffset = to.camera && (to.camera.view_offset || to.camera.viewOffset);
             ovizApplyInterpolatedViewOffset(fromViewOffset, toViewOffset, progress);
           }
+          camera.updateProjectionMatrix();
+          camera.lookAt(controls.target);
+          camera.updateMatrixWorld(true);
           if (root && root.dataset) {
             const liveDirection = new THREE.Vector3();
             camera.getWorldDirection(liveDirection);
@@ -1049,7 +1221,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
             ? Number(to.current_frame_value)
             : Number(to.current_frame_index) || 0;
           const interpolatedFrameValue = ovizLerp(fromFrame, toFrame, progress);
-          ovizApplyTransitionNumericControls(from, to, progress);
+          ovizStateTimelineMotionActive = Math.abs(toFrame - fromFrame) > 1e-9;
+          if (!transition.sceneSwapped) {
+            ovizApplyTransitionNumericControls(from, to, progress);
+          }
           if (transition.viewTransitionKind === "enter-earth") {
             const milkyWayFade = 1.0 - ovizEasing(
               transition.transitionSpec.easing,
@@ -1073,13 +1248,16 @@ THREEJS_STATE_RUNTIME_JS = r"""
             setSkyDomeViewOpacityScale(skyFade, { force: false });
             setMilkyWayModelOpacityScale(milkyWayFade);
           }
-          ovizApplyTransitionPanelGeometry(from, to, progress);
-          transition.traceOpacity.forEach((value, key) => {
-            ovizStateTransitionTraceOpacity.set(key, ovizLerp(value.from, value.to, progress));
-          });
+          if (!transition.sceneSwapped) {
+            ovizApplyTransitionPanelGeometry(from, to, progress);
+            transition.traceOpacity.forEach((value, key) => {
+              ovizStateTransitionTraceOpacity.set(key, ovizLerp(value.from, value.to, progress));
+            });
+          }
           displayedFrameValue = clampFrameValue(interpolatedFrameValue);
           currentFrameIndex = clampFrameIndex(displayedFrameValue);
           updateTimelineUi(displayedFrameValue, frameTimeForValue(displayedFrameValue));
+          updateTimelineMotionOpacity();
           const allowSceneCrossfade = !transition.nativeViewTransition
             || transition.viewTransitionKind === "earth-to-earth";
           if (transition.visualChanges && allowSceneCrossfade) {
@@ -1142,6 +1320,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
               new Promise((resolve) => window.setTimeout(() => resolve({ timedOut: true }), 500.0)),
             ]);
           }
+          if (transition.skyLayerPromise) {
+            await Promise.race([
+              transition.skyLayerPromise,
+              new Promise((resolve) => window.setTimeout(() => resolve({ timedOut: true }), 500.0)),
+            ]);
+          }
           if (transition !== ovizStateTransition) {
             return;
           }
@@ -1158,10 +1342,40 @@ THREEJS_STATE_RUNTIME_JS = r"""
           // The animated camera has already delivered the exact target view to
           // Aladin. Do not force the same center/FOV again here: a redundant
           // setFoV clears Aladin's canvas and can expose a black repaint frame.
-          await ovizApplyStateImmediately(transition.targetSnapshot, {
+          let appliedSnapshot = await ovizApplyStateImmediately(transition.targetSnapshot, {
             forceSkyBackground: false,
             postSkyLayersToAladin: false,
           });
+          if (transition !== ovizStateTransition) {
+            return;
+          }
+          let fidelityDifferences = ovizStateFidelityDifferences(
+            transition.targetSnapshot,
+            appliedSnapshot,
+          );
+          if (fidelityDifferences.length) {
+            appliedSnapshot = await ovizApplyStateImmediately(transition.targetSnapshot, {
+              forceSkyBackground: false,
+              postSkyLayersToAladin: false,
+            });
+            if (transition !== ovizStateTransition) {
+              return;
+            }
+            fidelityDifferences = ovizStateFidelityDifferences(
+              transition.targetSnapshot,
+              appliedSnapshot,
+            );
+          }
+          postSkyLayerStateToAladin();
+          root.dataset.stateFidelity = JSON.stringify({
+            exact: fidelityDifferences.length === 0,
+            differences: fidelityDifferences,
+          });
+          if (fidelityDifferences.length) {
+            throw new Error(`State fidelity check failed: ${fidelityDifferences.join(", ")}`);
+          }
+          ovizStateTimelineMotionActive = false;
+          updateTimelineMotionOpacity();
           setMilkyWayModelOpacityScale(transition.toViewMode === "earth" ? 0.0 : 1.0);
           setSkyDomeViewOpacityScale(transition.toViewMode === "earth" ? 1.0 : 0.0, { force: false });
           if (transition !== ovizStateTransition) {
@@ -1206,6 +1420,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
         if (typeof cancelSkyViewTransitionAnimations === "function") {
           cancelSkyViewTransitionAnimations({ reason: "state-transition-error" });
         }
+        ovizStateTimelineMotionActive = false;
+        updateTimelineMotionOpacity();
         renderer.domElement.style.opacity = "1";
         setMilkyWayModelOpacityScale(cameraViewMode === "earth" ? 0.0 : 1.0);
         ovizRenderStatesDrawer();
@@ -1230,9 +1446,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
       }
 
       function ovizStatesNext() {
-        const activeIndex = ovizActiveStateId === null
-          ? -1
-          : ovizStatesProject.items.findIndex((item) => item.id === ovizActiveStateId);
+        const activeIndex = ovizStateTransition
+          ? Number(ovizStateTransition.targetIndex)
+          : (
+            ovizActiveStateId === null
+              ? -1
+              : ovizStatesProject.items.findIndex((item) => item.id === ovizActiveStateId)
+          );
         if (activeIndex >= ovizStatesProject.items.length - 1) {
           return Promise.resolve({ boundary: true, id: ovizActiveStateId });
         }
@@ -1240,9 +1460,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
       }
 
       function ovizStatesPrevious() {
-        const activeIndex = ovizActiveStateId === null
-          ? -1
-          : ovizStatesProject.items.findIndex((item) => item.id === ovizActiveStateId);
+        const activeIndex = ovizStateTransition
+          ? Number(ovizStateTransition.targetIndex)
+          : (
+            ovizActiveStateId === null
+              ? -1
+              : ovizStatesProject.items.findIndex((item) => item.id === ovizActiveStateId)
+          );
         if (activeIndex < 0) {
           return Promise.resolve({ boundary: true, id: null });
         }
@@ -1663,6 +1887,15 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       function ovizPostMessageHandler(event) {
         const data = event.data;
+        if (data && data.type === "oviz-aladin-sky-layer-transition-complete") {
+          const transitionId = String(data.transitionId || "");
+          const resolve = ovizSkyLayerTransitionWaiters.get(transitionId);
+          if (resolve) {
+            ovizSkyLayerTransitionWaiters.delete(transitionId);
+            resolve(data);
+          }
+          return;
+        }
         if (!data || data.source !== "oviz-command" || (data.rootId && data.rootId !== root.id)) return;
         const requestId = data.requestId || null;
         const command = String(data.command || "");
@@ -1693,15 +1926,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
         window.addEventListener("message", ovizPostMessageHandler);
         root.addEventListener("pointerdown", (event) => {
           if (ovizStateTransition && (!ovizStatesShellEl || !ovizStatesShellEl.contains(event.target))) {
-            const transition = ovizStateTransition;
-            ovizStateTransition = null;
-            ovizStateTransitionTraceOpacity = null;
-            if (typeof cancelSkyViewTransitionAnimations === "function") {
-              cancelSkyViewTransitionAnimations({ reason: "user-interaction" });
-            }
-            renderer.domElement.style.opacity = "1";
-            transition.resolve({ cancelled: true, reason: "user-interaction" });
-            ovizRenderStatesDrawer();
+            ovizCancelStateTransitionWithoutSnap("user-interaction", { restorePresentation: true });
           }
         }, { capture: true });
         const draft = await ovizReadDraft();

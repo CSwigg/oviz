@@ -1040,8 +1040,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(past_image["opacity"], zero_image["opacity"])
         self.assertEqual(faded_image["opacity"], zero_image["opacity"])
         self.assertEqual(zero_image["opacity_scale"], 1.0)
-        self.assertGreater(past_image["opacity_scale"], 0.0)
-        self.assertLess(past_image["opacity_scale"], zero_image["opacity_scale"])
+        self.assertEqual(past_image["opacity_scale"], 0.0)
         self.assertEqual(faded_image["opacity_scale"], 0.0)
         self.assertIn("Cluster A", [trace["name"] for trace in zero_frame["traces"]])
         html = fig.to_html()
@@ -1101,7 +1100,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('const timelineSpec = sceneSpec.timeline || { enabled: frameSpecs.length > 1 };', html)
         self.assertIn('footerEl.style.display = "none";', html)
 
-    def test_threejs_milky_way_model_fades_near_t0(self):
+    def test_threejs_milky_way_model_only_exists_at_t0(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
         fig = viz.make_plot(
             time=np.arange(0.0, -10.0, -1.0),
@@ -1119,9 +1118,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(len(zero_frame["decorations"]), 1)
         self.assertEqual(zero_frame["decorations"][0]["kind"], "milky_way_model")
         self.assertEqual(zero_frame["decorations"][0]["opacity_scale"], 1.0)
-        self.assertEqual(past_frame["decorations"][0]["kind"], "milky_way_model")
-        self.assertGreater(past_frame["decorations"][0]["opacity_scale"], 0.0)
-        self.assertLess(past_frame["decorations"][0]["opacity_scale"], 1.0)
+        self.assertEqual(past_frame["decorations"], [])
         self.assertEqual(distant_frame["decorations"], [])
         html = fig.to_html()
         self.assertIn("ovizTimeOpacityScale", html)
@@ -1155,7 +1152,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("R = 8.12 kpc", trace_names)
         self.assertIn("R = 12 kpc", trace_names)
         self.assertIn("GC", trace_names)
-        self.assertIn("GC Ring", trace_names)
+        self.assertNotIn("GC Ring", trace_names)
         self.assertIn("G.C.", label_texts)
         self.assertTrue(gc_labels)
         self.assertGreater(float(gc_labels[0].get("z", 0.0)), 0.0)
@@ -1165,9 +1162,12 @@ class ThreeJSRendererTests(unittest.TestCase):
         html = fig.to_html()
         self.assertIn("function galacticReferenceMotionVisible()", html)
         self.assertIn("function galacticReferenceTimeOpacity()", html)
-        self.assertIn("Math.abs(timeMyr) / 5.0", html)
+        self.assertIn("return Math.abs(timeMyr) <= 1e-9 ? 0.0 : 1.0", html)
+        self.assertIn("return Math.abs(timeMyr) <= 1e-9 ? 1.0 : 0.0", html)
+        self.assertNotIn("Math.abs(timeMyr) / 5.0", html)
         self.assertIn("timelineScrubMotionActive", html)
         self.assertIn("playbackDirection !== 0", html)
+        self.assertIn("ovizStateTimelineMotionActive", html)
         self.assertIn("setTimelineScrubMotionActive(true, { settleDelayMs: 240.0 })", html)
 
     def test_threejs_text_trace_can_be_a_single_legend_item(self):

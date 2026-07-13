@@ -480,6 +480,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             timelineScrubMotionActive
             || playbackDirection !== 0
             || (typeof timeActionTrack !== "undefined" && timeActionTrack)
+            || ovizStateTimelineMotionActive
           )
         );
       }
@@ -489,8 +490,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         if (!Number.isFinite(timeMyr)) {
           return 0.0;
         }
-        const linear = clampRange(Math.abs(timeMyr) / 5.0, 0.0, 1.0);
-        return linear * linear * (3.0 - (2.0 * linear));
+        return Math.abs(timeMyr) <= 1e-9 ? 0.0 : 1.0;
       }
 
       function milkyWayTimelineOpacity() {
@@ -498,8 +498,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         if (!Number.isFinite(timeMyr)) {
           return 1.0;
         }
-        const linear = clampRange(1.0 - (Math.abs(timeMyr) / 5.0), 0.0, 1.0);
-        return linear * linear * (3.0 - (2.0 * linear));
+        return Math.abs(timeMyr) <= 1e-9 ? 1.0 : 0.0;
       }
 
       function updateGalacticReferenceMotionOpacity() {
