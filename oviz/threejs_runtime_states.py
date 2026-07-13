@@ -539,12 +539,20 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       function ovizCancelActionWithoutSnap(reason = "state-navigation") {
         if (typeof cancelActionRun === "function" && activeActionRun) {
-          return cancelActionRun(reason, {
+          const cancelled = cancelActionRun(reason, {
             preserveLegendTransitionFrame: true,
             disableOrbit: true,
             cancelStateTransition: false,
             restorePresentation: false,
           });
+          // ovizGoToStateRecord captured the exact live trace opacities before
+          // cancelling this Action and copied them into the new State tracks.
+          // Do not leave the Action's held opacity map installed: trace
+          // rendering multiplies that map with the State tracks, so the
+          // animated destination can look correct and then lose points when
+          // the exact destination frame is rebuilt at completion.
+          actionHeldTraceOpacityByKey = null;
+          return cancelled;
         }
         activeActionRun = null;
         activeActionKey = "";

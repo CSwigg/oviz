@@ -2443,6 +2443,14 @@ THREEJS_SCENE_RUNTIME_JS = """
             differences.push(`volume_mask_transition:${String(runtime.layer && runtime.layer.key || "unknown")}`);
           }
         });
+        // Exact State restoration must not inherit any Action-owned opacity
+        // multiplier.  Such a leftover can make the retained transition look
+        // correct, then hide destination points as soon as the final frame is
+        // rebuilt.  Report it explicitly instead of letting traceVisible()
+        // treat the stale multiplier as part of the expected result.
+        if (actionHeldTraceOpacityByKey) {
+          differences.push("transient_action_trace_opacity");
+        }
         if (Math.abs(Number(renderer.domElement.style.opacity || 1.0) - 1.0) > 1e-6) {
           differences.push("canvas_opacity");
         }

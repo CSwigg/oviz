@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import unittest
 
 from oviz.threejs_figure import ThreeJSFigure
@@ -16,6 +18,45 @@ from oviz.threejs_scene import _round_scene_floats
 
 
 class ThreeJSStatesSchemaTests(unittest.TestCase):
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_state_navigation_clears_cancelled_action_trace_hold(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        cancel_source = (
+            "function ovizCancelActionWithoutSnap(reason"
+            + html.split("function ovizCancelActionWithoutSnap(reason", 1)[1].split(
+                "function ovizCancelStateTransitionWithoutSnap", 1
+            )[0]
+        )
+        script = f"""
+        let activeActionRun = {{ id: "active" }};
+        let actionHeldTraceOpacityByKey = {{ young: 0.0 }};
+        function cancelActionRun() {{
+          actionHeldTraceOpacityByKey = {{ young: 0.0 }};
+          return true;
+        }}
+        {cancel_source}
+        const result = ovizCancelActionWithoutSnap("state-navigation");
+        process.stdout.write(JSON.stringify({{
+          result,
+          heldTraceOpacity: actionHeldTraceOpacityByKey,
+        }}));
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["result"])
+        self.assertIsNone(payload["heldTraceOpacity"])
+
     def test_action_can_delegate_exactly_one_step_to_a_viewer_state(self):
         actions = normalize_threejs_actions(
             [{"key": "sky", "label": "Sky", "steps": [{"type": "state", "state": "state-sky"}]}],
@@ -151,6 +192,7 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn("now - transition.lastProgressEventAt >= 100", html)
         self.assertIn("root.dataset.stateTransitionMetrics", html)
         self.assertIn("root.dataset.stateFidelity", html)
+        self.assertIn('differences.push("transient_action_trace_opacity")', html)
         self.assertIn("ovizStateFidelityDifferences", html)
         self.assertIn("ovizApplyCapturedCameraState", html)
         self.assertIn("ovizCancelStateTransitionWithoutSnap", html)
@@ -182,6 +224,16 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             "function ovizCancelActionWithoutSnap(reason", 1
         )[1].split("function ovizCancelStateTransitionWithoutSnap", 1)[0]
         self.assertIn("actionHeldTraceOpacityByKey = null", cancel_action_body)
+        active_action_cancel_body = cancel_action_body.split(
+            'if (typeof cancelActionRun === "function" && activeActionRun)', 1
+        )[1].split("activeActionRun = null", 1)[0]
+        self.assertIn("const cancelled = cancelActionRun", active_action_cancel_body)
+        self.assertIn("actionHeldTraceOpacityByKey = null", active_action_cancel_body)
+        self.assertLess(
+            active_action_cancel_body.index("actionHeldTraceOpacityByKey = null"),
+            active_action_cancel_body.index("return cancelled"),
+        )
+        self.assertNotIn("return cancelActionRun", active_action_cancel_body)
         self.assertNotIn("__STATE_RUNTIME_JS__", html)
         fail_state_body = html.split(
             "function ovizFailStateTransition(transition, err)", 1
