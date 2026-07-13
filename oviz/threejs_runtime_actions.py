@@ -10,15 +10,136 @@ THREEJS_ACTION_RUNTIME_JS = """
       let activeActionKey = "";
       let selectedActionKey = "";
       let activeActionRun = null;
+      let observedActionRun = null;
+      let actionRunSerial = 0;
       let legendTransitionState = null;
       let actionHeldTraceOpacityByKey = null;
+      let actionHeldAppearanceRollback = null;
       let cameraActionTrack = null;
       let timeActionTrack = null;
       let actionInterruptGuardDepth = 0;
       let actionCameraOrbitOwned = false;
       let actionCameraOrbitShouldPersist = true;
+      let actionSceneRenderSerial = 0;
       let initialActionViewState = null;
       let currentActionCameraViewOffset = { x: 0.0, y: 0.0 };
+
+      function actionTimestamp(value = null) {
+        if (value !== null && value !== undefined) {
+          const supplied = Number(value);
+          if (Number.isFinite(supplied)) {
+            return supplied;
+          }
+        }
+        return window.performance ? window.performance.now() : Date.now();
+      }
+
+      function renderActionInterpolatedFrameValue(frameValue, options = {}) {
+        actionSceneRenderSerial += 1;
+        if (root && root.dataset) {
+          root.dataset.actionSceneRenderCount = String(actionSceneRenderSerial);
+        }
+        return renderInterpolatedFrameValue(frameValue, options);
+      }
+
+      function actionEvent(name, run = activeActionRun, detail = {}) {
+        const payload = Object.assign({
+          owner: "action",
+          runId: run ? String(run.id || "") : "",
+          actionKey: run ? String(run.key || "") : "",
+          actionLabel: run ? String(run.label || run.key || "") : "",
+        }, detail || {});
+        if (typeof ovizStateEvent === "function") {
+          ovizStateEvent(name, payload);
+        } else {
+          root.dispatchEvent(new CustomEvent(name, { detail: Object.assign({ rootId: root.id }, payload) }));
+        }
+      }
+
+      function actionDebugState(run, record = null, detail = {}) {
+        if (!root || !root.dataset) {
+          return;
+        }
+        root.dataset.actionOwner = run ? "action" : "";
+        root.dataset.actionRunId = run ? String(run.id || "") : "";
+        root.dataset.actionKey = run ? String(run.key || "") : "";
+        root.dataset.actionStep = record ? String(record.index) : "";
+        root.dataset.actionPhase = String(detail.phase || (record && record.domain) || "");
+        if (detail.progress !== undefined) {
+          root.dataset.actionProgress = String(clampRange(Number(detail.progress) || 0.0, 0.0, 1.0));
+        }
+        if (detail.effectiveDurationMs !== undefined) {
+          root.dataset.actionEffectiveDurationMs = String(Math.max(Number(detail.effectiveDurationMs) || 0.0, 0.0));
+        }
+        if (detail.status) {
+          root.dataset.actionStatus = String(detail.status);
+        }
+      }
+
+      function actionDomainsForStep(step) {
+        const type = String(step && step.type || "");
+        if (type === "state") {
+          return ["camera", "appearance", "selection", "time"];
+        }
+        if (type === "legend_group") {
+          return ["appearance"];
+        }
+        if (type === "camera") {
+          return ["camera"];
+        }
+        if (type === "time") {
+          return ["time"];
+        }
+        return [];
+      }
+
+      function actionDomainsForStepAtStart(step) {
+        if (
+          step
+          && String(step.type || "") === "camera"
+          && String(cameraViewMode || "free") === "earth"
+        ) {
+          // Sky camera Actions are implemented by the State controller so the
+          // registered Aladin path remains the sole spatial writer.  Treat that
+          // routed step as an exclusive State session; otherwise a nominally
+          // disjoint with_previous time step can run behind it and jump later.
+          return ["camera", "appearance", "selection", "time"];
+        }
+        return actionDomainsForStep(step);
+      }
+
+      function actionRecordOwnsDomains(run, record) {
+        if (!run || !record || !(run.domainOwners instanceof Map)) {
+          return false;
+        }
+        return record.domains.every((domain) => run.domainOwners.get(domain) === record.index);
+      }
+
+      function actionDomainsAvailable(run, record) {
+        if (!run || !record || !(run.domainOwners instanceof Map)) {
+          return false;
+        }
+        return record.domains.every((domain) => !run.domainOwners.has(domain));
+      }
+
+      function claimActionDomains(run, record) {
+        if (!actionDomainsAvailable(run, record)) {
+          return false;
+        }
+        record.domains.forEach((domain) => run.domainOwners.set(domain, record.index));
+        return true;
+      }
+
+      function releaseActionDomains(run, record) {
+        if (!run || !record || !(run.domainOwners instanceof Map)) {
+          return;
+        }
+        record.domains.forEach((domain) => {
+          if (run.domainOwners.get(domain) === record.index) {
+            run.domainOwners.delete(domain);
+          }
+        });
+      }
 
       function actionInterruptsMuted() {
         return actionInterruptGuardDepth > 0;
@@ -91,7 +212,10 @@ THREEJS_ACTION_RUNTIME_JS = """
           const stateMap = stateOverride && typeof stateOverride === "object"
             ? stateOverride
             : legendStateForGroup(groupName);
-          return Boolean(stateMap[trace.key]);
+          if (Object.prototype.hasOwnProperty.call(stateMap, trace.key)) {
+            return Boolean(stateMap[trace.key]);
+          }
+          return mode === true;
         }
         return mode === true;
       }
@@ -135,11 +259,31 @@ THREEJS_ACTION_RUNTIME_JS = """
 
       function captureActionTraceOpacityMap() {
         const result = {};
-        (currentFrame() && currentFrame().traces || []).forEach((trace) => {
+        const candidates = new Map();
+        const remember = (trace) => {
+          if (trace && trace.key && !candidates.has(trace.key)) candidates.set(trace.key, trace);
+        };
+        (currentFrame() && currentFrame().traces || []).forEach(remember);
+        if (
+          typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+          && typeof ovizTraceCandidatesForSnapshots === "function"
+        ) {
+          ovizTraceCandidatesForSnapshots(
+            ovizStateTransition.fromSnapshot,
+            ovizStateTransition.targetSnapshot,
+          ).forEach(remember);
+        }
+        candidates.forEach((trace) => {
           const state = actionTraceVisibilityState(trace);
+          const stateTransition = stateTraceVisibilityState(trace);
           result[trace.key] = state
             ? clampRange(Number(state.opacity) || 0.0, 0.0, 1.0)
-            : (traceVisible(trace) ? 1.0 : 0.0);
+            : (
+              stateTransition
+                ? clampRange(Number(stateTransition.opacity) || 0.0, 0.0, 1.0)
+                : (traceVisible(trace) ? 1.0 : 0.0)
+            );
         });
         return result;
       }
@@ -174,6 +318,7 @@ THREEJS_ACTION_RUNTIME_JS = """
           const button = document.createElement("button");
           button.type = "button";
           button.className = "oviz-three-action-button";
+          button.dataset.actionKey = String(action.key || "");
           button.textContent = String(action.label || action.key || "Action");
           if (action.description) {
             button.title = String(action.description);
@@ -237,21 +382,12 @@ THREEJS_ACTION_RUNTIME_JS = """
       }
 
       function captureCurrentActionViewState() {
-        return {
-          group: String(currentGroup || defaultGroup || ""),
-          legendState: cloneLegendStateMap(legendState),
-          frameIndex: clampFrameIndex(currentFrameIndex),
-          camera: {
-            position: camera.position.clone(),
-            target: controls.target.clone(),
-            up: camera.up.clone(),
-            fov: Number(camera.fov),
-            viewOffset: normalizeActionViewOffset(currentActionCameraViewOffset),
-          },
-        };
+        return captureRuntimeState();
       }
 
       function beginLegendTransition(targetGroup, targetLegendState, stepIndex, now, durationMs, easing) {
+        const timestamp = actionTimestamp(now);
+        const runId = activeActionRun ? activeActionRun.id : null;
         const previousGroup = currentGroup;
         const previousLegendState = cloneLegendStateMap(legendState);
         const nextGroup = String(targetGroup || currentGroup);
@@ -267,26 +403,33 @@ THREEJS_ACTION_RUNTIME_JS = """
         syncLegendGroupChooser();
         renderLegend();
         const nextDurationMs = Math.max(Number(durationMs) || 0, 0);
+        const stepRecord = actionStepRecord(stepIndex, runId);
+        if (stepRecord) {
+          stepRecord.effectiveDurationMs = nextDurationMs;
+        }
         if (nextDurationMs <= 0 || nextStateMatchesCurrent) {
           legendState = nextLegendState;
           renderLegend();
-          renderFrame(currentFrameIndex);
-          markActionStepFinished(stepIndex);
+          renderActionInterpolatedFrameValue(displayedFrameValue, {
+            updateWidgets: false,
+            preserveCamera: true,
+          });
+          markActionStepFinished(stepIndex, timestamp, runId);
           return;
         }
         legendTransitionState = {
           stepIndex,
+          runId,
           fromGroup: previousGroup,
           fromLegendState: previousLegendState,
           toGroup: nextGroup,
           toLegendState: nextLegendState,
-          startTime: now,
+          startTime: timestamp,
           durationMs: nextDurationMs,
           easing: String(easing || "easeInOutCubic"),
           progress: 0.0,
           fromOpacityByKey,
         };
-        renderFrame(currentFrameIndex);
       }
 
       function targetFrameIndexForTimeAction(step) {
@@ -323,54 +466,23 @@ THREEJS_ACTION_RUNTIME_JS = """
         return String(step.direction) === "backward" ? 0 : Math.max(frameSpecs.length - 1, 0);
       }
 
-      function estimateActionStepDurationMs(step) {
-        if (!step || typeof step !== "object") {
-          return 0;
-        }
-        if (step.type === "legend_group" || step.type === "camera") {
-          return Math.max(Number(step.duration_ms) || 0, 0);
-        }
-        if (step.type === "state") {
-          return Math.max(
-            Number(ovizStatesProject && ovizStatesProject.default_transition && ovizStatesProject.default_transition.duration_ms)
-              || 1200,
-            0,
-          );
-        }
-        if (step.type !== "time") {
-          return 0;
-        }
-        if (step.stop_after_ms !== undefined) {
-          return Math.max(Number(step.stop_after_ms) || 0, 0);
-        }
-        const intervalMs = Math.max(Number(step.interval_ms) || playbackIntervalMs, 1);
-        const targetIndex = targetFrameIndexForTimeAction(step);
-        const frameDistance = Math.abs(targetIndex - clampFrameIndex(currentFrameIndex));
-        return frameDistance * intervalMs;
-      }
-
       function buildScheduledActionSteps(action) {
-        const scheduled = [];
-        let previousStartMs = 0.0;
-        let previousEndMs = 0.0;
-        (action.steps || []).forEach((step, index) => {
-          const delayMs = Math.max(Number(step.delay_ms) || 0, 0);
-          const startMs = (String(step.start || "after_previous") === "with_previous" ? previousStartMs : previousEndMs) + delayMs;
-          const durationMs = estimateActionStepDurationMs(step);
-          const endMs = startMs + durationMs;
-          scheduled.push({
+        return (action.steps || []).map((step, index) => {
+          const domains = actionDomainsForStep(step);
+          return {
             index,
             step,
-            startMs,
-            endMs,
+            domains,
+            domain: domains.join("+") || String(step.type || "action"),
             started: false,
             finished: false,
+            startedAt: null,
             finishedAt: null,
-          });
-          previousStartMs = startMs;
-          previousEndMs = endMs;
+            effectiveDurationMs: 0.0,
+            lastProgressEventAt: -Infinity,
+            lastProgress: 0.0,
+          };
         });
-        return scheduled;
       }
 
       function actionDefinitionByKey(actionKey) {
@@ -392,26 +504,75 @@ THREEJS_ACTION_RUNTIME_JS = """
         return Math.max(Number(timeStep.interval_ms) || fallbackIntervalMs, 1);
       }
 
-      function actionStepRecord(stepIndex) {
-        if (!activeActionRun || !Array.isArray(activeActionRun.steps)) {
+      function actionStepRecord(stepIndex, runId = null) {
+        if (
+          !activeActionRun
+          || activeActionRun.status !== "running"
+          || !Array.isArray(activeActionRun.steps)
+          || (runId !== null && String(activeActionRun.id) !== String(runId))
+        ) {
           return null;
         }
         return activeActionRun.steps.find((step) => step.index === stepIndex) || null;
       }
 
-      function markActionStepFinished(stepIndex) {
-        const record = actionStepRecord(stepIndex);
-        if (record) {
+      function emitActionProgress(record, now, rawProgress, easedProgress, phase = null) {
+        const run = activeActionRun;
+        if (!run || !record || String(run.id) !== String(record.runId || run.id)) {
+          return;
+        }
+        const raw = clampRange(Number(rawProgress) || 0.0, 0.0, 1.0);
+        const eased = clampRange(Number(easedProgress) || 0.0, 0.0, 1.0);
+        record.lastProgress = raw;
+        const timestamp = actionTimestamp(now);
+        if (raw < 1.0 && timestamp - Number(record.lastProgressEventAt) < 100.0) {
+          return;
+        }
+        record.lastProgressEventAt = timestamp;
+        const detail = {
+          step: record.index,
+          stepType: String(record.step && record.step.type || ""),
+          phase: String(phase || record.domain || ""),
+          progress: raw,
+          easedProgress: eased,
+          effectiveDurationMs: Math.max(Number(record.effectiveDurationMs) || 0.0, 0.0),
+        };
+        actionDebugState(run, record, Object.assign({ status: "running" }, detail));
+        actionEvent("action-progress", run, detail);
+      }
+
+      function markActionStepFinished(stepIndex, now = null, runId = null) {
+        const record = actionStepRecord(stepIndex, runId);
+        if (record && !record.finished) {
+          const timestamp = actionTimestamp(now);
+          emitActionProgress(record, timestamp, 1.0, 1.0, record.domain);
           record.finished = true;
-          record.finishedAt = window.performance ? window.performance.now() : Date.now();
+          record.finishedAt = timestamp;
+          releaseActionDomains(activeActionRun, record);
         }
       }
 
-      function finishLegendTransition(commitTarget = true) {
+      function actionStepReadyAt(run, record) {
+        const delayMs = Math.max(Number(record.step && record.step.delay_ms) || 0.0, 0.0);
+        if (record.index <= 0) {
+          return Number(run.startedAt) + delayMs;
+        }
+        const previous = run.steps[record.index - 1];
+        if (!previous) {
+          return Number(run.startedAt) + delayMs;
+        }
+        if (String(record.step.start || "after_previous") === "with_previous") {
+          return previous.startedAt === null ? null : Number(previous.startedAt) + delayMs;
+        }
+        return previous.finishedAt === null ? null : Number(previous.finishedAt) + delayMs;
+      }
+
+      function finishLegendTransition(commitTarget = true, now = null, options = {}) {
         if (!legendTransitionState) {
           return false;
         }
         const stepIndex = legendTransitionState.stepIndex;
+        const runId = legendTransitionState.runId;
         const nextGroup = legendTransitionState.toGroup;
         const nextLegendState = cloneLegendStateMap(legendTransitionState.toLegendState);
         legendTransitionState = null;
@@ -425,8 +586,13 @@ THREEJS_ACTION_RUNTIME_JS = """
           syncLegendGroupChooser();
         }
         renderLegend();
-        renderFrame(currentFrameIndex);
-        markActionStepFinished(stepIndex);
+        if (options.render !== false) {
+          renderActionInterpolatedFrameValue(displayedFrameValue, {
+            updateWidgets: false,
+            preserveCamera: true,
+          });
+        }
+        markActionStepFinished(stepIndex, now, runId);
         return true;
       }
 
@@ -452,7 +618,9 @@ THREEJS_ACTION_RUNTIME_JS = """
           setCameraAutoOrbitEnabled(true);
           actionCameraOrbitShouldPersist = track.orbitPersist !== false;
         }
-        markActionStepFinished(track.stepIndex);
+        if (options.markFinished !== false) {
+          markActionStepFinished(track.stepIndex, options.now, track.runId);
+        }
         return true;
       }
 
@@ -465,7 +633,7 @@ THREEJS_ACTION_RUNTIME_JS = """
         if (options.complete === true) {
           displayedFrameValue = clampFrameValue(track.targetFrameValue);
           currentFrameIndex = clampFrameIndex(displayedFrameValue);
-          renderInterpolatedFrameValue(displayedFrameValue, {
+          renderActionInterpolatedFrameValue(displayedFrameValue, {
             updateWidgets: false,
             preserveCamera: true,
           });
@@ -474,47 +642,225 @@ THREEJS_ACTION_RUNTIME_JS = """
         lastPlaybackAdvanceTimestamp = null;
         updateTimelineMotionOpacity();
         updatePlaybackButtons();
-        markActionStepFinished(track.stepIndex);
+        if (options.markFinished !== false) {
+          markActionStepFinished(track.stepIndex, options.now, track.runId);
+        }
         return true;
       }
 
-      function clearActiveActionState(options = {}) {
-        if (legendTransitionState) {
-          if (options.preserveLegendTransitionFrame === true) {
-            actionHeldTraceOpacityByKey = captureActionTraceOpacityMap();
-            legendTransitionState = null;
+      function finishActionHeldAppearanceRollback() {
+        const held = actionHeldAppearanceRollback;
+        if (held) {
+          held.currentAppearanceProgress = 0.0;
+          setMilkyWayModelOpacityScale(held.toMilkyWayOpacity);
+          setSkyDomeViewOpacityScale(held.toSkyOpacity, { force: false });
+          actionHeldAppearanceRollback = null;
+        }
+        if (typeof ovizHeldSelectionTransition !== "undefined" && ovizHeldSelectionTransition) {
+          ovizHeldSelectionTransition.progress = 1.0;
+          if (typeof releaseOvizHeldSelectionTransition === "function") {
+            releaseOvizHeldSelectionTransition();
           } else {
-            finishLegendTransition(options.commitLegendTransition !== false);
+            ovizHeldSelectionTransition = null;
           }
         }
-        if (cameraActionTrack) {
-          stopCameraActionTrack({
-            complete: options.completeCamera !== false,
-            activateOrbit: false,
-          });
+        return Boolean(held);
+      }
+
+      function updateActionHeldAppearanceRollback(now) {
+        const held = actionHeldAppearanceRollback;
+        if (!held) return false;
+        const durationMs = Math.max(Number(held.durationMs) || 240.0, 1.0);
+        const rawProgress = clampRange(
+          (actionTimestamp(now) - Number(held.startedAt)) / durationMs,
+          0.0,
+          1.0,
+        );
+        const progress = actionEasingValue("easeInOutCubic", rawProgress);
+        held.currentAppearanceProgress = clampRange(
+          Number(held.frozenAppearanceProgress) * (1.0 - progress),
+          0.0,
+          1.0,
+        );
+        if (typeof ovizHeldSelectionTransition !== "undefined" && ovizHeldSelectionTransition) {
+          ovizHeldSelectionTransition.progress = progress;
         }
-        if (timeActionTrack) {
-          stopTimeActionTrack({ complete: false });
+        setMilkyWayModelOpacityScale(
+          Number(held.fromMilkyWayOpacity)
+          + (Number(held.toMilkyWayOpacity) - Number(held.fromMilkyWayOpacity)) * progress
+        );
+        setSkyDomeViewOpacityScale(
+          Number(held.fromSkyOpacity)
+          + (Number(held.toSkyOpacity) - Number(held.fromSkyOpacity)) * progress,
+          { force: false },
+        );
+        if (rawProgress >= 1.0) {
+          finishActionHeldAppearanceRollback();
+        }
+        return true;
+      }
+
+      function cancelActionRun(reason = "cancelled", options = {}) {
+        const run = activeActionRun;
+        const timestamp = actionTimestamp(options.now);
+        if (run) {
+          run.status = "cancelled";
+          run.cancelReason = String(reason || "cancelled");
+        }
+        if (
+          run
+          && options.cancelStateTransition !== false
+          && typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+          && typeof ovizCancelStateTransitionWithoutSnap === "function"
+        ) {
+          try {
+            ovizCancelStateTransitionWithoutSnap(`action-${String(reason || "cancelled")}`, {
+              restorePresentation: options.restorePresentation !== false,
+            });
+          } catch (err) {
+            console.error("Oviz Action could not cancel its State transition", err);
+          }
+        }
+        if (legendTransitionState) {
+          try {
+            if (options.preserveLegendTransitionFrame === true) {
+              actionHeldTraceOpacityByKey = captureActionTraceOpacityMap();
+            } else if (options.commitLegendTransition !== false) {
+              currentGroup = legendTransitionState.toGroup;
+              legendState = cloneLegendStateMap(legendTransitionState.toLegendState);
+              if (groupSelectEl) groupSelectEl.value = currentGroup;
+              syncLegendGroupChooser();
+              renderLegend();
+            }
+          } catch (err) {
+            actionHeldTraceOpacityByKey = null;
+            console.error("Oviz Action legend cleanup failed", err);
+          }
+          legendTransitionState = null;
+        }
+        cameraActionTrack = null;
+        timeActionTrack = null;
+        if (options.preserveHeldAppearance !== true) {
+          finishActionHeldAppearanceRollback();
+        }
+        playbackDirection = 0;
+        lastPlaybackAdvanceTimestamp = null;
+        try {
+          updateTimelineMotionOpacity();
+          updatePlaybackButtons();
+        } catch (err) {
+          console.error("Oviz Action timeline cleanup failed", err);
         }
         if (options.disableOrbit && actionCameraOrbitOwned) {
           cameraAutoOrbitSpeedMultiplier = 1.0;
-          setCameraAutoOrbitEnabled(false);
-          actionCameraOrbitOwned = false;
-          actionCameraOrbitShouldPersist = true;
+          try {
+            setCameraAutoOrbitEnabled(false);
+          } catch (err) {
+            console.error("Oviz Action orbit cleanup failed", err);
+          }
         }
+        actionCameraOrbitOwned = false;
+        actionCameraOrbitShouldPersist = true;
         activeActionRun = null;
         activeActionKey = "";
         if (options.clearSelectedAction) {
           selectedActionKey = "";
         }
+        try {
+          syncActionButtons();
+        } catch (err) {
+          console.error("Oviz Action button cleanup failed", err);
+        }
+        if (run && options.emitEvent !== false) {
+          actionDebugState(run, null, { status: "cancelled", phase: "cancelled", progress: 0.0 });
+          actionEvent("action-cancel", run, {
+            reason: String(reason || "cancelled"),
+            elapsedMs: Math.max(0.0, timestamp - Number(run.startedAt || timestamp)),
+          });
+        }
+        if (observedActionRun === run) {
+          observedActionRun = null;
+        }
+        return Boolean(run);
+      }
+
+      function clearActiveActionState(options = {}) {
+        return cancelActionRun(String(options.reason || "cleared"), options);
+      }
+
+      function failActionRun(err, record = null, now = null) {
+        const run = activeActionRun;
+        if (!run) {
+          return false;
+        }
+        const timestamp = actionTimestamp(now);
+        const message = String(err && err.message || err || "Unknown Action error");
+        try {
+          cancelActionRun("error", {
+            now: timestamp,
+            preserveLegendTransitionFrame: true,
+            disableOrbit: true,
+            cancelStateTransition: true,
+            emitEvent: false,
+          });
+        } catch (cleanupErr) {
+          activeActionRun = null;
+          if (observedActionRun === run) observedActionRun = null;
+          activeActionKey = "";
+          legendTransitionState = null;
+          cameraActionTrack = null;
+          timeActionTrack = null;
+          playbackDirection = 0;
+          lastPlaybackAdvanceTimestamp = null;
+          actionCameraOrbitOwned = false;
+          actionCameraOrbitShouldPersist = true;
+          console.error("Oviz Action cleanup failed", cleanupErr);
+        }
+        if (root && root.dataset) {
+          root.dataset.actionStatus = "error";
+          root.dataset.actionError = message;
+        }
+        try {
+          actionEvent("action-error", run, {
+            step: record ? record.index : null,
+            stepType: record && record.step ? String(record.step.type || "") : "",
+            error: message,
+            elapsedMs: Math.max(0.0, timestamp - Number(run.startedAt || timestamp)),
+          });
+        } catch (eventErr) {
+          console.error("Oviz Action error event failed", eventErr);
+        }
+        console.error("Oviz Action failed", err);
+        return true;
+      }
+
+      function completeActionRun(now = null) {
+        const run = activeActionRun;
+        if (!run || run.status !== "running") {
+          return false;
+        }
+        const timestamp = actionTimestamp(now);
+        finishActionHeldAppearanceRollback();
+        run.status = "complete";
+        activeActionRun = null;
+        activeActionKey = "";
+        actionDebugState(run, null, { status: "complete", phase: "complete", progress: 1.0 });
+        actionEvent("action-complete", run, {
+          elapsedMs: Math.max(0.0, timestamp - Number(run.startedAt || timestamp)),
+        });
+        if (observedActionRun === run) {
+          observedActionRun = null;
+        }
         syncActionButtons();
+        return true;
       }
 
       function interruptActionRun(reason = "user", options = {}) {
         if (!activeActionRun || actionInterruptsMuted()) {
           return false;
         }
-        clearActiveActionState({
+        cancelActionRun(reason, {
           commitLegendTransition: true,
           completeCamera: false,
           preserveLegendTransitionFrame: true,
@@ -688,13 +1034,14 @@ THREEJS_ACTION_RUNTIME_JS = """
       }
 
       function startCameraAction(step, stepIndex, now) {
+        const timestamp = actionTimestamp(now);
+        const ownerRun = activeActionRun;
+        const runId = ownerRun ? ownerRun.id : null;
         const resolved = resolveCameraActionState(step);
         if (!resolved) {
-          markActionStepFinished(stepIndex);
-          return;
+          throw new Error(`Camera Action target could not be resolved for step ${stepIndex}.`);
         }
         if (cameraViewMode === "earth" && ovizStateControllerReady) {
-          const ownerRun = activeActionRun;
           const destination = captureRuntimeState();
           destination.camera = {
             position: { x: resolved.toPosition.x, y: resolved.toPosition.y, z: resolved.toPosition.z },
@@ -709,7 +1056,7 @@ THREEJS_ACTION_RUNTIME_JS = """
           const activeStateIndex = ovizActiveStateId === null
             ? -1
             : ovizStatesProject.items.findIndex((item) => item.id === ovizActiveStateId);
-          ovizBeginStateTransition({
+          const statePromise = ovizBeginStateTransition({
             id: ovizActiveStateId,
             index: activeStateIndex,
             name: "Camera action",
@@ -718,14 +1065,29 @@ THREEJS_ACTION_RUNTIME_JS = """
               duration_ms: Math.max(Number(step.duration_ms) || 0, 0),
               easing: String(step.easing || "easeInOutCubic"),
             },
-          }, { preserveActionRun: true }).then(() => {
-            if (activeActionRun !== ownerRun) return;
+          }, { preserveActionRun: true });
+          const record = actionStepRecord(stepIndex, runId);
+          if (record && ovizStateTransition && ovizStateTransition.phasePlan) {
+            record.effectiveDurationMs = Math.max(Number(ovizStateTransition.phasePlan.effectiveDurationMs) || 0.0, 0.0);
+          }
+          statePromise.then((result) => {
+            if (!activeActionRun || String(activeActionRun.id) !== String(runId)) return;
+            if (result && result.cancelled) {
+              cancelActionRun(String(result.reason || "state-transition-cancelled"), {
+                preserveLegendTransitionFrame: true,
+                disableOrbit: true,
+                cancelStateTransition: false,
+              });
+              return;
+            }
             if (step.orbit && step.orbit.enabled && step.orbit.persist === false) {
               setCameraAutoOrbitEnabled(false);
             }
-            markActionStepFinished(stepIndex);
-          }).catch(() => {
-            if (activeActionRun === ownerRun) markActionStepFinished(stepIndex);
+            markActionStepFinished(stepIndex, null, runId);
+          }).catch((err) => {
+            if (activeActionRun && String(activeActionRun.id) === String(runId)) {
+              failActionRun(err, actionStepRecord(stepIndex, runId));
+            }
           });
           return;
         }
@@ -734,6 +1096,8 @@ THREEJS_ACTION_RUNTIME_JS = """
         actionCameraOrbitShouldPersist = true;
         cameraAutoOrbitSpeedMultiplier = 1.0;
         const durationMs = Math.max(Number(step.duration_ms) || 0, 0);
+        const record = actionStepRecord(stepIndex, runId);
+        if (record) record.effectiveDurationMs = durationMs;
         if (durationMs <= 0) {
           camera.position.copy(resolved.toPosition);
           controls.target.copy(resolved.toTarget);
@@ -749,12 +1113,13 @@ THREEJS_ACTION_RUNTIME_JS = """
             setCameraAutoOrbitEnabled(true);
             actionCameraOrbitShouldPersist = step.orbit.persist !== false;
           }
-          markActionStepFinished(stepIndex);
+          markActionStepFinished(stepIndex, timestamp, runId);
           return;
         }
         cameraActionTrack = {
           stepIndex,
-          startTime: now,
+          runId,
+          startTime: timestamp,
           durationMs,
           easing: String(step.easing || "easeInOutCubic"),
           fromPosition: camera.position.clone(),
@@ -776,6 +1141,8 @@ THREEJS_ACTION_RUNTIME_JS = """
       }
 
       function startTimeAction(step, stepIndex, now) {
+        const timestamp = actionTimestamp(now);
+        const runId = activeActionRun ? activeActionRun.id : null;
         const direction = String(step.direction) === "backward" ? -1 : 1;
         const intervalMs = Math.max(Number(step.interval_ms) || playbackIntervalMs, 1);
         const fromFrameValue = clampFrameValue(displayedFrameValue);
@@ -787,21 +1154,24 @@ THREEJS_ACTION_RUNTIME_JS = """
             fromFrameValue + direction * (durationMs / intervalMs)
           );
         }
+        const record = actionStepRecord(stepIndex, runId);
+        if (record) record.effectiveDurationMs = durationMs;
         if (durationMs <= 0.0 || Math.abs(targetFrameValue - fromFrameValue) <= 1e-9) {
           displayedFrameValue = clampFrameValue(targetFrameValue);
           currentFrameIndex = clampFrameIndex(displayedFrameValue);
-          renderInterpolatedFrameValue(displayedFrameValue, {
+          renderActionInterpolatedFrameValue(displayedFrameValue, {
             updateWidgets: false,
             preserveCamera: true,
           });
-          markActionStepFinished(stepIndex);
+          markActionStepFinished(stepIndex, timestamp, runId);
           return;
         }
         timeActionTrack = {
           stepIndex,
+          runId,
           direction,
           intervalMs,
-          startTime: now,
+          startTime: timestamp,
           durationMs,
           fromFrameValue,
           targetFrameValue,
@@ -812,49 +1182,116 @@ THREEJS_ACTION_RUNTIME_JS = """
         updatePlaybackButtons();
       }
 
-      function startStateAction(step, stepIndex) {
+      function startStateAction(step, stepIndex, now) {
         if (!ovizStateControllerReady) {
-          markActionStepFinished(stepIndex);
-          return;
+          throw new Error("The States controller is not ready for this Action.");
         }
         let target;
-        const ownerRun = activeActionRun;
+        const runId = activeActionRun ? activeActionRun.id : null;
         try {
-          target = ovizStateTargetFor(step.state);
-        } catch (_err) {
-          markActionStepFinished(stepIndex);
-          return;
+          target = step.runtime_snapshot
+            ? {
+                id: null,
+                index: -1,
+                name: String(step.runtime_name || "Original action view"),
+                snapshot: safeJsonClone(step.runtime_snapshot, {}),
+                transition: {
+                  duration_ms: Math.max(Number(step.duration_ms) || 1200, 0.0),
+                  easing: String(step.easing || "easeInOutCubic"),
+                },
+              }
+            : ovizStateTargetFor(step.state);
+        } catch (err) {
+          throw new Error(`State Action target could not be resolved: ${String(err && err.message || err)}`);
         }
-        ovizBeginStateTransition(target, { preserveActionRun: true }).then(() => {
-          if (activeActionRun === ownerRun) {
-            markActionStepFinished(stepIndex);
+        const statePromise = ovizBeginStateTransition(target, { preserveActionRun: true });
+        const record = actionStepRecord(stepIndex, runId);
+        if (record && ovizStateTransition && ovizStateTransition.phasePlan) {
+          record.effectiveDurationMs = Math.max(Number(ovizStateTransition.phasePlan.effectiveDurationMs) || 0.0, 0.0);
+        }
+        statePromise.then((result) => {
+          if (!activeActionRun || String(activeActionRun.id) !== String(runId)) return;
+          if (result && result.cancelled) {
+            cancelActionRun(String(result.reason || "state-transition-cancelled"), {
+              preserveLegendTransitionFrame: true,
+              disableOrbit: true,
+              cancelStateTransition: false,
+            });
+            return;
           }
-        }).catch(() => {
-          if (activeActionRun === ownerRun) {
-            markActionStepFinished(stepIndex);
+          markActionStepFinished(stepIndex, null, runId);
+        }).catch((err) => {
+          if (activeActionRun && String(activeActionRun.id) === String(runId)) {
+            failActionRun(err, actionStepRecord(stepIndex, runId));
           }
         });
       }
 
       function startActionStep(stepRecord, now) {
-        if (!stepRecord || stepRecord.started || !stepRecord.step) {
+        const run = activeActionRun;
+        if (!run || !stepRecord || stepRecord.started || !stepRecord.step) {
           return;
         }
+        stepRecord.domains = actionDomainsForStepAtStart(stepRecord.step);
+        stepRecord.domain = stepRecord.domains.join("+") || String(stepRecord.step.type || "action");
+        if (!claimActionDomains(run, stepRecord)) {
+          return;
+        }
+        const timestamp = actionTimestamp(now);
         stepRecord.started = true;
+        stepRecord.startedAt = timestamp;
+        stepRecord.runId = run.id;
         const step = stepRecord.step;
+        if (step.type === "legend_group" || step.type === "camera") {
+          stepRecord.effectiveDurationMs = Math.max(Number(step.duration_ms) || 0.0, 0.0);
+        } else if (step.type === "time" && step.stop_after_ms !== undefined) {
+          stepRecord.effectiveDurationMs = Math.max(Number(step.stop_after_ms) || 0.0, 0.0);
+        }
+        actionDebugState(run, stepRecord, {
+          status: "running",
+          phase: stepRecord.domain,
+          progress: 0.0,
+          effectiveDurationMs: stepRecord.effectiveDurationMs,
+        });
+        actionEvent("action-step-start", run, {
+          step: stepRecord.index,
+          stepType: String(step.type || ""),
+          phase: stepRecord.domain,
+          effectiveDurationMs: stepRecord.effectiveDurationMs,
+        });
         if (step.type === "state") {
-          startStateAction(step, stepRecord.index);
+          startStateAction(step, stepRecord.index, timestamp);
           return;
         }
         if (step.type === "legend_group") {
-          startLegendGroupAction(step, stepRecord.index, now);
+          startLegendGroupAction(step, stepRecord.index, timestamp);
           return;
         }
         if (step.type === "camera") {
-          startCameraAction(step, stepRecord.index, now);
+          startCameraAction(step, stepRecord.index, timestamp);
           return;
         }
-        startTimeAction(step, stepRecord.index, now);
+        startTimeAction(step, stepRecord.index, timestamp);
+      }
+
+      function beginActionRun(action, now) {
+        const timestamp = actionTimestamp(now);
+        actionRunSerial += 1;
+        const run = {
+          id: `action-${actionRunSerial}`,
+          key: String(action.key || ""),
+          label: String(action.label || action.key || "Action"),
+          steps: buildScheduledActionSteps(action),
+          domainOwners: new Map(),
+          startedAt: timestamp,
+          status: "running",
+        };
+        activeActionRun = run;
+        observedActionRun = run;
+        activeActionKey = run.key;
+        actionDebugState(run, null, { status: "running", phase: "scheduled", progress: 0.0 });
+        actionEvent("action-start", run, { stepCount: run.steps.length });
+        return run;
       }
 
       function startViewerAction(actionKey) {
@@ -862,166 +1299,144 @@ THREEJS_ACTION_RUNTIME_JS = """
         if (!action) {
           return false;
         }
-        const stateBackedAction = Array.isArray(action.steps)
-          && action.steps.length === 1
-          && action.steps[0].type === "state";
-        if (ovizStateTransition && !stateBackedAction) {
-          ovizCancelStateTransitionWithoutSnap("action-start", { restorePresentation: true });
-        }
-        withActionGuard(() => {
-          clearActiveActionState({
-            commitLegendTransition: true,
-            completeCamera: false,
-            preserveLegendTransitionFrame: true,
-            disableOrbit: true,
-          });
-          activeActionRun = {
-            key: String(action.key),
-            steps: buildScheduledActionSteps(action),
-            startedAt: window.performance ? window.performance.now() : Date.now(),
-          };
-          activeActionKey = String(action.key);
-          selectedActionKey = String(action.key);
-          syncActionButtons();
-          if (
-            actionHeldTraceOpacityByKey
-            && !action.steps.some((step) => step && step.type === "legend_group")
-          ) {
-            beginLegendTransition(
-              currentGroup,
-              legendState,
-              -1,
-              window.performance ? window.performance.now() : Date.now(),
-              240,
-              "easeInOutCubic",
-            );
+        try {
+          const now = actionTimestamp();
+          const stateBackedAction = Array.isArray(action.steps)
+            && action.steps.length === 1
+            && action.steps[0].type === "state";
+          if (ovizStateTransition && !stateBackedAction) {
+            actionHeldTraceOpacityByKey = captureActionTraceOpacityMap();
+            actionHeldAppearanceRollback = {
+              fromSnapshot: safeJsonClone(ovizStateTransition.fromSnapshot, {}),
+              targetSnapshot: safeJsonClone(ovizStateTransition.targetSnapshot, {}),
+              frozenAppearanceProgress: clampRange(
+                Number(ovizStateTransition.currentAppearanceProgress) || 0.0,
+                0.0,
+                1.0,
+              ),
+              currentAppearanceProgress: clampRange(
+                Number(ovizStateTransition.currentAppearanceProgress) || 0.0,
+                0.0,
+                1.0,
+              ),
+              startedAt: now,
+              durationMs: 240.0,
+              fromMilkyWayOpacity: clampRange(Number(milkyWayViewOpacityScale) || 0.0, 0.0, 1.0),
+              fromSkyOpacity: clampRange(Number(skyDomeViewOpacityScale) || 0.0, 0.0, 1.0),
+              toMilkyWayOpacity: String(cameraViewMode || "free") === "earth" ? 0.0 : 1.0,
+              toSkyOpacity: String(cameraViewMode || "free") === "earth" ? 1.0 : 0.0,
+            };
+            ovizCancelStateTransitionWithoutSnap("action-start", {
+              restorePresentation: false,
+              preserveRenderedSelection: true,
+            });
           }
-        });
-        return true;
+          withActionGuard(() => {
+            cancelActionRun("replaced", {
+              now,
+              commitLegendTransition: true,
+              preserveLegendTransitionFrame: true,
+              preserveHeldAppearance: true,
+              disableOrbit: true,
+              cancelStateTransition: false,
+            });
+            const run = beginActionRun(action, now);
+            selectedActionKey = String(action.key);
+            syncActionButtons();
+            if (
+              actionHeldTraceOpacityByKey
+              && !action.steps.some((step) => step && step.type === "legend_group")
+            ) {
+              beginLegendTransition(
+                currentGroup,
+                legendState,
+                -1,
+                now,
+                240,
+                "easeInOutCubic",
+              );
+            }
+            return run;
+          });
+          return true;
+        } catch (err) {
+          if (activeActionRun) {
+            failActionRun(err, null);
+          } else {
+            console.error("Oviz Action could not start", err);
+          }
+          return false;
+        }
       }
 
       function startRestoreInitialView() {
-        const selectedAction = actionDefinitionByKey(selectedActionKey || activeActionKey);
-        const stateBackedAction = selectedAction
-          && Array.isArray(selectedAction.steps)
-          && selectedAction.steps.length === 1
-          && selectedAction.steps[0].type === "state";
-        if (stateBackedAction && ovizStateControllerReady) {
-          clearActiveActionState({
-            commitLegendTransition: true,
-            completeCamera: false,
-            preserveLegendTransitionFrame: true,
-            disableOrbit: true,
-            clearSelectedAction: true,
-          });
-          ovizBeginStateTransition(ovizStateTargetFor("original"));
-          return true;
-        }
-        if (!initialActionViewState) {
+        if (!initialActionViewState || !ovizStateControllerReady) {
           return false;
         }
-        const now = window.performance ? window.performance.now() : Date.now();
-        const restoreAction = actionDefinitionByKey(selectedActionKey || activeActionKey);
-        const restoreTimeIntervalMs = restoreTimeIntervalMsForAction(restoreAction);
-        withActionGuard(() => {
-          clearActiveActionState({
-            commitLegendTransition: true,
-            completeCamera: false,
-            preserveLegendTransitionFrame: true,
-            disableOrbit: true,
-            clearSelectedAction: true,
-          });
-          const restoreSteps = [];
-          let nextStepIndex = 0;
-          if (
-            String(currentGroup || "") !== String(initialActionViewState.group || "")
-            || JSON.stringify(cloneLegendStateMap(legendState)) !== JSON.stringify(cloneLegendStateMap(initialActionViewState.legendState))
-          ) {
-            restoreSteps.push({ index: nextStepIndex, finished: false });
-            beginLegendTransition(
-              initialActionViewState.group,
-              initialActionViewState.legendState,
-              nextStepIndex,
+        try {
+          const now = actionTimestamp();
+          withActionGuard(() => {
+            cancelActionRun("restore", {
               now,
-              420,
-              "easeInOutCubic",
-            );
-            nextStepIndex += 1;
+              commitLegendTransition: true,
+              preserveLegendTransitionFrame: true,
+              disableOrbit: true,
+              clearSelectedAction: true,
+              cancelStateTransition: false,
+            });
+            selectedActionKey = "";
+            beginActionRun({
+              key: "__restore__",
+              label: "Restore original view",
+              steps: [{
+                type: "state",
+                start: "after_previous",
+                delay_ms: 0,
+                runtime_snapshot: safeJsonClone(initialActionViewState, {}),
+                runtime_name: "Original action view",
+                duration_ms: 1200,
+                easing: "easeInOutCubic",
+              }],
+            }, now);
+            syncActionButtons();
+          });
+          return true;
+        } catch (err) {
+          if (activeActionRun) {
+            failActionRun(err, null);
+          } else {
+            console.error("Oviz Action restore could not start", err);
           }
-          if (clampFrameIndex(currentFrameIndex) !== clampFrameIndex(initialActionViewState.frameIndex)) {
-            restoreSteps.push({ index: nextStepIndex, finished: false });
-            timeActionTrack = {
-              stepIndex: nextStepIndex,
-              direction: clampFrameIndex(initialActionViewState.frameIndex) < clampFrameIndex(currentFrameIndex) ? -1 : 1,
-              intervalMs: restoreTimeIntervalMs,
-              startTime: now,
-              durationMs: Math.max(
-                Math.abs(clampFrameValue(initialActionViewState.frameIndex) - clampFrameValue(displayedFrameValue))
-                  * restoreTimeIntervalMs,
-                1.0,
-              ),
-              fromFrameValue: clampFrameValue(displayedFrameValue),
-              targetFrameValue: clampFrameValue(initialActionViewState.frameIndex),
-              easing: "easeInOutCubic",
-            };
-            playbackDirection = timeActionTrack.direction;
-            lastPlaybackAdvanceTimestamp = null;
-            updatePlaybackButtons();
-            nextStepIndex += 1;
-          }
-          restoreSteps.push({ index: nextStepIndex, finished: false });
-          setCameraAutoOrbitEnabled(false);
-          actionCameraOrbitOwned = false;
-          actionCameraOrbitShouldPersist = true;
-          cameraAutoOrbitSpeedMultiplier = 1.0;
-          cameraAutoOrbitDirection = Number(
-            initialState.global_controls && initialState.global_controls.camera_auto_orbit_direction
-          ) < 0.0 ? -1.0 : 1.0;
-          cameraActionTrack = {
-            stepIndex: nextStepIndex,
-            startTime: now,
-            durationMs: 1050,
-            easing: "easeInOutCubic",
-            fromPosition: camera.position.clone(),
-            fromTarget: controls.target.clone(),
-            fromUp: camera.up.clone(),
-            fromFov: Number(camera.fov),
-            fromViewOffset: normalizeActionViewOffset(currentActionCameraViewOffset),
-            toPosition: initialActionViewState.camera.position.clone(),
-            toTarget: initialActionViewState.camera.target.clone(),
-            toUp: initialActionViewState.camera.up.clone(),
-            toFov: Number(initialActionViewState.camera.fov),
-            toViewOffset: normalizeActionViewOffset(initialActionViewState.camera.viewOffset),
-            orbitEnabled: Boolean(initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled),
-            orbitSpeedMultiplier: 1.0,
-            orbitDirection: Number(
-              initialState.global_controls && initialState.global_controls.camera_auto_orbit_direction
-            ) < 0.0 ? -1.0 : 1.0,
-            orbitPersist: true,
-            orbitOwned: false,
-          };
-          activeActionRun = {
-            key: "__restore__",
-            steps: restoreSteps,
-            startedAt: now,
-          };
-          activeActionKey = "__restore__";
-          syncActionButtons();
-        });
-        return true;
+          return false;
+        }
       }
 
-      function updateLegendTransition(now) {
+      function updateLegendTransition(now, options = {}) {
         if (!legendTransitionState) {
+          return false;
+        }
+        if (
+          legendTransitionState.runId
+          && (!activeActionRun || String(activeActionRun.id) !== String(legendTransitionState.runId))
+        ) {
+          legendTransitionState = null;
           return false;
         }
         const durationMs = Math.max(Number(legendTransitionState.durationMs) || 0, 1);
         const rawProgress = (now - Number(legendTransitionState.startTime)) / durationMs;
         const easedProgress = actionEasingValue(legendTransitionState.easing, rawProgress);
         legendTransitionState.progress = easedProgress;
-        renderFrameScene(currentFrame(), frameTimeForValue(displayedFrameValue), { updateWidgets: false });
+        const record = actionStepRecord(legendTransitionState.stepIndex, legendTransitionState.runId);
+        if (record) emitActionProgress(record, now, rawProgress, easedProgress, "appearance");
+        if (options.render !== false && rawProgress < 1.0) {
+          renderActionInterpolatedFrameValue(displayedFrameValue, {
+            updateWidgets: false,
+            preserveCamera: true,
+            transitionOwnerToken: `action:${String(legendTransitionState.runId || "")}`,
+          });
+        }
         if (rawProgress >= 1.0) {
-          finishLegendTransition(true);
+          finishLegendTransition(true, now, options);
         }
         return true;
       }
@@ -1030,9 +1445,15 @@ THREEJS_ACTION_RUNTIME_JS = """
         if (!cameraActionTrack) {
           return false;
         }
+        if (!activeActionRun || String(activeActionRun.id) !== String(cameraActionTrack.runId)) {
+          cameraActionTrack = null;
+          return false;
+        }
         const durationMs = Math.max(Number(cameraActionTrack.durationMs) || 0, 1);
         const rawProgress = (now - Number(cameraActionTrack.startTime)) / durationMs;
         const easedProgress = actionEasingValue(cameraActionTrack.easing, rawProgress);
+        const record = actionStepRecord(cameraActionTrack.stepIndex, cameraActionTrack.runId);
+        if (record) emitActionProgress(record, now, rawProgress, easedProgress, "camera");
         camera.position.lerpVectors(cameraActionTrack.fromPosition, cameraActionTrack.toPosition, easedProgress);
         controls.target.lerpVectors(cameraActionTrack.fromTarget, cameraActionTrack.toTarget, easedProgress);
         camera.up.lerpVectors(cameraActionTrack.fromUp, cameraActionTrack.toUp, easedProgress).normalize();
@@ -1044,22 +1465,26 @@ THREEJS_ACTION_RUNTIME_JS = """
         });
         controls.update();
         if (rawProgress >= 1.0) {
-          stopCameraActionTrack({ complete: true });
+          stopCameraActionTrack({ complete: true, now });
         }
         return true;
       }
 
-      function timeActionReachedStop(track) {
-        return !track || (window.performance ? window.performance.now() : Date.now())
-          - Number(track.startTime || 0.0) >= Math.max(Number(track.durationMs) || 0.0, 0.0);
+      function timeActionReachedStop(track, now) {
+        return !track || actionTimestamp(now) - Number(track.startTime || 0.0)
+          >= Math.max(Number(track.durationMs) || 0.0, 0.0);
       }
 
       function updateTimeAction(now) {
         if (!timeActionTrack) {
           return false;
         }
-        if (timeActionReachedStop(timeActionTrack)) {
-          stopTimeActionTrack({ complete: true });
+        if (!activeActionRun || String(activeActionRun.id) !== String(timeActionTrack.runId)) {
+          timeActionTrack = null;
+          return false;
+        }
+        if (timeActionReachedStop(timeActionTrack, now)) {
+          stopTimeActionTrack({ complete: true, now });
           return true;
         }
         const rawProgress = clampRange(
@@ -1068,57 +1493,120 @@ THREEJS_ACTION_RUNTIME_JS = """
           1.0,
         );
         const progress = actionEasingValue(timeActionTrack.easing, rawProgress);
+        const record = actionStepRecord(timeActionTrack.stepIndex, timeActionTrack.runId);
+        if (record) emitActionProgress(record, now, rawProgress, progress, "time");
         displayedFrameValue = clampFrameValue(
           timeActionTrack.fromFrameValue
           + (timeActionTrack.targetFrameValue - timeActionTrack.fromFrameValue) * progress
         );
         currentFrameIndex = clampFrameIndex(displayedFrameValue);
-        renderInterpolatedFrameValue(displayedFrameValue, {
+        renderActionInterpolatedFrameValue(displayedFrameValue, {
           updateWidgets: false,
           preserveCamera: true,
         });
         if (rawProgress >= 1.0) {
-          stopTimeActionTrack({ complete: true });
+          stopTimeActionTrack({ complete: true, now });
         }
         return true;
       }
 
-      function updateViewerActions(now) {
+      function updateStateBackedActionProgress(now) {
+        const run = activeActionRun;
+        if (!run || typeof ovizStateTransition === "undefined" || !ovizStateTransition) {
+          return;
+        }
+        const record = run.steps.find((item) => item.started && !item.finished && item.step.type === "state");
+        if (!record) {
+          return;
+        }
+        const effectiveDurationMs = Math.max(
+          Number(ovizStateTransition.phasePlan && ovizStateTransition.phasePlan.effectiveDurationMs)
+            || Number(record.effectiveDurationMs)
+            || 0.0,
+          0.0,
+        );
+        record.effectiveDurationMs = effectiveDurationMs;
+        const rawProgress = effectiveDurationMs > 0.0
+          ? clampRange((actionTimestamp(now) - Number(ovizStateTransition.startedAt || now)) / effectiveDurationMs, 0.0, 1.0)
+          : 1.0;
+        const phase = String(ovizStateTransition.currentPhase || record.domain || "state");
+        emitActionProgress(record, now, rawProgress, rawProgress, phase);
+      }
+
+      function updateViewerActions(now, options = {}) {
         let rerendered = false;
-        if (activeActionRun && Array.isArray(activeActionRun.steps)) {
-          const elapsedMs = Math.max(0.0, now - Number(activeActionRun.startedAt || now));
-          activeActionRun.steps.forEach((stepRecord, stepIndex) => {
-            const previousStep = stepIndex > 0 ? activeActionRun.steps[stepIndex - 1] : null;
-            const afterPreviousReady = String(stepRecord.step.start || "after_previous") !== "after_previous"
-              || !previousStep
-              || (
-                previousStep.finished
-                && now - Number(previousStep.finishedAt || now) >= Math.max(Number(stepRecord.step.delay_ms) || 0, 0)
-              );
-            if (!stepRecord.started && afterPreviousReady && elapsedMs >= stepRecord.startMs) {
-              startActionStep(stepRecord, now);
-            }
-          });
-        }
-        if (updateLegendTransition(now)) {
-          rerendered = true;
-        }
-        if (updateCameraAction(now)) {
-          rerendered = true;
-        }
-        if (updateTimeAction(now)) {
-          rerendered = true;
-        }
-        if (activeActionRun && Array.isArray(activeActionRun.steps) && activeActionRun.steps.every((step) => step.finished)) {
-          if (actionCameraOrbitOwned && !actionCameraOrbitShouldPersist) {
-            cameraAutoOrbitSpeedMultiplier = 1.0;
-            setCameraAutoOrbitEnabled(false);
-            actionCameraOrbitOwned = false;
-            actionCameraOrbitShouldPersist = true;
+        const renderSerialAtStart = actionSceneRenderSerial;
+        const timestamp = actionTimestamp(now);
+        try {
+          if (!activeActionRun && observedActionRun && observedActionRun.status === "running") {
+            const interruptedRun = observedActionRun;
+            interruptedRun.status = "cancelled";
+            observedActionRun = null;
+            actionDebugState(interruptedRun, null, {
+              status: "cancelled",
+              phase: "cancelled",
+              progress: 0.0,
+            });
+            actionEvent("action-cancel", interruptedRun, {
+              reason: "state-navigation",
+              elapsedMs: Math.max(0.0, timestamp - Number(interruptedRun.startedAt || timestamp)),
+            });
           }
-          activeActionRun = null;
-          activeActionKey = "";
-          syncActionButtons();
+          const run = activeActionRun;
+          if (run && run.status === "running" && Array.isArray(run.steps)) {
+            for (let stepIndex = 0; stepIndex < run.steps.length; stepIndex += 1) {
+              if (activeActionRun !== run || run.status !== "running") break;
+              const stepRecord = run.steps[stepIndex];
+              if (stepRecord.started) continue;
+              const readyAt = actionStepReadyAt(run, stepRecord);
+              if (readyAt !== null && timestamp >= readyAt && actionDomainsAvailable(run, stepRecord)) {
+                startActionStep(stepRecord, timestamp);
+              }
+            }
+          }
+          updateStateBackedActionProgress(timestamp);
+          if (!options.schedulerOnly) {
+            const heldAppearanceUpdated = updateActionHeldAppearanceRollback(timestamp);
+            const timeWillRender = Boolean(timeActionTrack);
+            updateLegendTransition(timestamp, { render: !timeWillRender });
+            updateCameraAction(timestamp);
+            updateTimeAction(timestamp);
+            rerendered = actionSceneRenderSerial !== renderSerialAtStart;
+            if (heldAppearanceUpdated && !rerendered) {
+              renderActionInterpolatedFrameValue(displayedFrameValue, {
+                updateWidgets: false,
+                preserveCamera: true,
+                transitionOwnerToken: activeActionRun
+                  ? `action:${String(activeActionRun.id || "")}`
+                  : "action-held-appearance",
+              });
+              rerendered = true;
+            }
+          }
+          if (
+            activeActionRun
+            && activeActionRun.status === "running"
+            && Array.isArray(activeActionRun.steps)
+            && activeActionRun.steps.every((step) => step.finished)
+            && !legendTransitionState
+            && !cameraActionTrack
+            && !timeActionTrack
+            && !actionHeldAppearanceRollback
+            && !(typeof ovizHeldSelectionTransition !== "undefined" && ovizHeldSelectionTransition)
+          ) {
+            if (actionCameraOrbitOwned && !actionCameraOrbitShouldPersist) {
+              cameraAutoOrbitSpeedMultiplier = 1.0;
+              setCameraAutoOrbitEnabled(false);
+              actionCameraOrbitOwned = false;
+              actionCameraOrbitShouldPersist = true;
+            }
+            completeActionRun(timestamp);
+          }
+        } catch (err) {
+          const record = activeActionRun && Array.isArray(activeActionRun.steps)
+            ? activeActionRun.steps.find((item) => item.started && !item.finished) || null
+            : null;
+          failActionRun(err, record, timestamp);
         }
         return rerendered;
       }

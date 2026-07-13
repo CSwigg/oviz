@@ -1270,7 +1270,7 @@ THREEJS_SKY_RUNTIME_JS = """
         }
       }
 
-      function cancelSkyDomeBackgroundProgrammaticTransition(reason = "cancelled") {
+      function cancelSkyDomeBackgroundProgrammaticTransition(reason = "cancelled", options = {}) {
         const active = skyDomeBackgroundProgrammaticTransition;
         if (!active) {
           return false;
@@ -1284,11 +1284,13 @@ THREEJS_SKY_RUNTIME_JS = """
               seq: active.seq,
               reason: String(reason || "cancelled"),
             }, "*");
-            skyDomeFrameEl.contentWindow.postMessage({
-              type: "oviz-sky-layer-transition-cancel",
-              transitionId: active.id,
-              reason: String(reason || "cancelled"),
-            }, "*");
+            if (options.cancelLayerTransition !== false) {
+              skyDomeFrameEl.contentWindow.postMessage({
+                type: "oviz-sky-layer-transition-cancel",
+                transitionId: active.id,
+                reason: String(reason || "cancelled"),
+              }, "*");
+            }
           } catch (_err) {
           }
         }

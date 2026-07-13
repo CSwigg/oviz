@@ -470,6 +470,8 @@ THREEJS_SCENE_RUNTIME_JS = """
         uniform sampler2D jitterTexture;
         uniform sampler2D selectionMaskTexture;
         uniform sampler2D selectionSourceSecondaryMaskTexture;
+        uniform sampler2D selectionSourceTertiaryMaskTexture;
+        uniform sampler2D selectionSourceQuaternaryMaskTexture;
         uniform sampler2D selectionTargetMaskTexture;
         uniform float low;
         uniform float high;
@@ -486,7 +488,12 @@ THREEJS_SCENE_RUNTIME_JS = """
         uniform float selectionDimOutside;
         uniform bool useSelectionSourceSecondaryPolygon;
         uniform mat4 selectionSourceSecondaryViewProjectionMatrix;
+        uniform bool useSelectionSourceTertiaryPolygon;
+        uniform mat4 selectionSourceTertiaryViewProjectionMatrix;
+        uniform bool useSelectionSourceQuaternaryPolygon;
+        uniform mat4 selectionSourceQuaternaryViewProjectionMatrix;
         uniform float selectionSourceBlend;
+        uniform vec4 selectionSourceWeights;
         uniform bool useSelectionTargetPolygon;
         uniform mat4 selectionTargetViewProjectionMatrix;
         uniform bool selectionTransitionActive;
@@ -626,6 +633,44 @@ THREEJS_SCENE_RUNTIME_JS = """
           return texture2D(selectionSourceSecondaryMaskTexture, uv).r > 0.5;
         }
 
+        bool sampleInsideSourceTertiarySelectionPolygon(vec3 worldPos) {
+          if (!useSelectionSourceTertiaryPolygon) {
+            return true;
+          }
+          vec4 clip = selectionSourceTertiaryViewProjectionMatrix * vec4(worldPos, 1.0);
+          if (clip.w <= 0.0) {
+            return false;
+          }
+          vec3 ndc = clip.xyz / clip.w;
+          if (ndc.z < -1.0 || ndc.z > 1.0) {
+            return false;
+          }
+          vec2 uv = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+          if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) {
+            return false;
+          }
+          return texture2D(selectionSourceTertiaryMaskTexture, uv).r > 0.5;
+        }
+
+        bool sampleInsideSourceQuaternarySelectionPolygon(vec3 worldPos) {
+          if (!useSelectionSourceQuaternaryPolygon) {
+            return true;
+          }
+          vec4 clip = selectionSourceQuaternaryViewProjectionMatrix * vec4(worldPos, 1.0);
+          if (clip.w <= 0.0) {
+            return false;
+          }
+          vec3 ndc = clip.xyz / clip.w;
+          if (ndc.z < -1.0 || ndc.z > 1.0) {
+            return false;
+          }
+          vec2 uv = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+          if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) {
+            return false;
+          }
+          return texture2D(selectionSourceQuaternaryMaskTexture, uv).r > 0.5;
+        }
+
         vec3 worldGetNormal(in float px, in vec3 pos) {
           return normalize(vec3(
             px - sampleVolume(pos + vec3(gradient_step, 0.0, 0.0)),
@@ -686,11 +731,22 @@ THREEJS_SCENE_RUNTIME_JS = """
               float selectionWeight = insideSelection ? 1.0 : selectionDimOutside;
               if (selectionTransitionActive) {
                 bool insideSourceSecondarySelection = sampleInsideSourceSecondarySelectionPolygon(worldPos);
+                bool insideSourceTertiarySelection = sampleInsideSourceTertiarySelectionPolygon(worldPos);
+                bool insideSourceQuaternarySelection = sampleInsideSourceQuaternarySelectionPolygon(worldPos);
                 bool insideTargetSelection = sampleInsideTargetSelectionPolygon(worldPos);
                 float sourceSelectionWeight = mix(
                   insideSelection ? 1.0 : 0.0,
                   insideSourceSecondarySelection ? 1.0 : 0.0,
                   clamp(selectionSourceBlend, 0.0, 1.0)
+                );
+                sourceSelectionWeight = dot(
+                  selectionSourceWeights,
+                  vec4(
+                    insideSelection ? 1.0 : 0.0,
+                    insideSourceSecondarySelection ? 1.0 : 0.0,
+                    insideSourceTertiarySelection ? 1.0 : 0.0,
+                    insideSourceQuaternarySelection ? 1.0 : 0.0
+                  )
                 );
                 selectionWeight = mix(
                   sourceSelectionWeight,
@@ -797,7 +853,14 @@ THREEJS_SCENE_RUNTIME_JS = """
             useSelectionSourceSecondaryPolygon: { value: false },
             selectionSourceSecondaryViewProjectionMatrix: { value: new THREE.Matrix4() },
             selectionSourceSecondaryMaskTexture: { value: null },
+            useSelectionSourceTertiaryPolygon: { value: false },
+            selectionSourceTertiaryViewProjectionMatrix: { value: new THREE.Matrix4() },
+            selectionSourceTertiaryMaskTexture: { value: null },
+            useSelectionSourceQuaternaryPolygon: { value: false },
+            selectionSourceQuaternaryViewProjectionMatrix: { value: new THREE.Matrix4() },
+            selectionSourceQuaternaryMaskTexture: { value: null },
             selectionSourceBlend: { value: 0.0 },
+            selectionSourceWeights: { value: new THREE.Vector4(1.0, 0.0, 0.0, 0.0) },
             useSelectionTargetPolygon: { value: false },
             selectionTargetViewProjectionMatrix: { value: new THREE.Matrix4() },
             selectionTargetMaskTexture: { value: null },
@@ -825,6 +888,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         mesh.renderOrder = -30;
         mesh.frustumCulled = false;
         const runtime = { mesh, material, geometry, layer };
+        mesh.userData.ovizVolumeRuntime = runtime;
         applyVolumeStateToRuntime(layer, runtime);
         return runtime;
       }
@@ -1007,6 +1071,66 @@ THREEJS_SCENE_RUNTIME_JS = """
         return label && typeof label === "object" ? Object.assign({}, label) : label;
       }
 
+      function ovizTransitionStablePointKey(point, trace = null) {
+        const motionKey = normalizeMemberKey(motionKeyForPoint(point));
+        if (motionKey) {
+          return `motion:${motionKey}`;
+        }
+        const selection = point && point.selection && typeof point.selection === "object"
+          ? point.selection
+          : selectionForPoint(point, trace);
+        const selectionKey = normalizedSelectionKeyFor(selection);
+        return selectionKey ? `selection:${selectionKey}` : "";
+      }
+
+      function ovizTransitionIdentityRecords(items, stableKeyForItem, allowIndex, side) {
+        const occurrences = new Map();
+        return (Array.isArray(items) ? items : []).map((item, index) => {
+          const stableKey = stableKeyForItem(item, index);
+          if (stableKey) {
+            const occurrence = Number(occurrences.get(stableKey) || 0);
+            occurrences.set(stableKey, occurrence + 1);
+            return { item, index, key: `${stableKey}#${occurrence}`, stable: true };
+          }
+          return {
+            item,
+            index,
+            key: allowIndex ? `index:${index}` : `${side}-only:${index}`,
+            stable: false,
+          };
+        });
+      }
+
+      function cloneTracePointWithPresence(point, presence) {
+        const clone = cloneTracePoint(point);
+        if (clone && typeof clone === "object") {
+          clone.oviz_presence_opacity = clampRange(Number(presence), 0.0, 1.0);
+        }
+        return clone;
+      }
+
+      function cloneTraceLabelWithPresence(label, presence) {
+        const clone = cloneTraceLabel(label);
+        if (clone && typeof clone === "object") {
+          clone.oviz_presence_opacity = clampRange(Number(presence), 0.0, 1.0);
+        }
+        return clone;
+      }
+
+      function cloneTraceWithPresence(trace, presence) {
+        if (!trace || typeof trace !== "object") {
+          return null;
+        }
+        const clone = Object.assign({}, trace);
+        clone.oviz_presence_opacity = clampRange(Number(presence), 0.0, 1.0);
+        if (Array.isArray(trace.points)) clone.points = trace.points.map(cloneTracePoint);
+        if (Array.isArray(trace.labels)) clone.labels = trace.labels.map(cloneTraceLabel);
+        if (Array.isArray(trace.segments)) clone.segments = trace.segments.map((segment) => (
+          Array.isArray(segment) ? segment.slice() : segment
+        ));
+        return clone;
+      }
+
       function interpolateTracePoint(pointA, pointB, alpha, timeValue) {
         const fallbackPoint = alpha < 0.5 ? pointA : pointB;
         if (!pointA || !pointB) {
@@ -1023,6 +1147,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         blended.z = interpolateNumber(pointA.z, pointB.z, alpha, fallbackPoint && fallbackPoint.z);
         blended.size = interpolateNumber(pointA.size, pointB.size, alpha, fallbackPoint && fallbackPoint.size);
         blended.opacity = interpolateNumber(pointA.opacity, pointB.opacity, alpha, fallbackPoint && fallbackPoint.opacity);
+        blended.oviz_presence_opacity = 1.0;
         if (blended.motion && typeof blended.motion === "object") {
           blended.motion.time_myr = Number.isFinite(timeValue) ? timeValue : Number(blended.motion.time_myr) || 0.0;
           const ageNowMyr = Number(blended.motion.age_now_myr);
@@ -1046,6 +1171,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         blended.y = interpolateNumber(labelA.y, labelB.y, alpha, fallbackLabel && fallbackLabel.y);
         blended.z = interpolateNumber(labelA.z, labelB.z, alpha, fallbackLabel && fallbackLabel.z);
         blended.size = interpolateNumber(labelA.size, labelB.size, alpha, fallbackLabel && fallbackLabel.size);
+        blended.oviz_presence_opacity = 1.0;
         return blended;
       }
 
@@ -1055,6 +1181,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           return fallbackTrace || null;
         }
         const blended = Object.assign({}, fallbackTrace);
+        blended.oviz_presence_opacity = 1.0;
         blended.opacity = interpolateNumber(traceA.opacity, traceB.opacity, alpha, fallbackTrace && fallbackTrace.opacity);
         blended.default_opacity = interpolateNumber(
           traceA.default_opacity,
@@ -1081,16 +1208,65 @@ THREEJS_SCENE_RUNTIME_JS = """
           });
         }
 
-        if (Array.isArray(traceA.points) && Array.isArray(traceB.points) && traceA.points.length === traceB.points.length) {
-          blended.points = traceA.points.map((pointA, index) => (
-            interpolateTracePoint(pointA, traceB.points[index], alpha, timeValue)
-          ));
+        if (Array.isArray(traceA.points) || Array.isArray(traceB.points)) {
+          const pointsA = Array.isArray(traceA.points) ? traceA.points : [];
+          const pointsB = Array.isArray(traceB.points) ? traceB.points : [];
+          const allowIndex = pointsA.length === pointsB.length;
+          const recordsA = ovizTransitionIdentityRecords(
+            pointsA,
+            (point) => ovizTransitionStablePointKey(point, traceA),
+            allowIndex,
+            "source",
+          );
+          const recordsB = ovizTransitionIdentityRecords(
+            pointsB,
+            (point) => ovizTransitionStablePointKey(point, traceB),
+            allowIndex,
+            "target",
+          );
+          const targetByKey = new Map(recordsB.map((record) => [record.key, record]));
+          const usedTargetKeys = new Set();
+          blended.points = [];
+          recordsA.forEach((recordA) => {
+            const recordB = targetByKey.get(recordA.key);
+            if (recordB) {
+              usedTargetKeys.add(recordA.key);
+              blended.points.push(interpolateTracePoint(recordA.item, recordB.item, alpha, timeValue));
+            } else {
+              blended.points.push(cloneTracePointWithPresence(recordA.item, 1.0 - alpha));
+            }
+          });
+          recordsB.forEach((recordB) => {
+            if (!usedTargetKeys.has(recordB.key)) {
+              blended.points.push(cloneTracePointWithPresence(recordB.item, alpha));
+            }
+          });
         }
 
-        if (Array.isArray(traceA.labels) && Array.isArray(traceB.labels) && traceA.labels.length === traceB.labels.length) {
-          blended.labels = traceA.labels.map((labelA, index) => (
-            interpolateTraceLabel(labelA, traceB.labels[index], alpha)
-          ));
+        if (Array.isArray(traceA.labels) || Array.isArray(traceB.labels)) {
+          const labelsA = Array.isArray(traceA.labels) ? traceA.labels : [];
+          const labelsB = Array.isArray(traceB.labels) ? traceB.labels : [];
+          const allowIndex = labelsA.length === labelsB.length;
+          const labelKey = (label) => String(label && label.text || "").trim();
+          const recordsA = ovizTransitionIdentityRecords(labelsA, labelKey, allowIndex, "source");
+          const recordsB = ovizTransitionIdentityRecords(labelsB, labelKey, allowIndex, "target");
+          const targetByKey = new Map(recordsB.map((record) => [record.key, record]));
+          const usedTargetKeys = new Set();
+          blended.labels = [];
+          recordsA.forEach((recordA) => {
+            const recordB = targetByKey.get(recordA.key);
+            if (recordB) {
+              usedTargetKeys.add(recordA.key);
+              blended.labels.push(interpolateTraceLabel(recordA.item, recordB.item, alpha));
+            } else {
+              blended.labels.push(cloneTraceLabelWithPresence(recordA.item, 1.0 - alpha));
+            }
+          });
+          recordsB.forEach((recordB) => {
+            if (!usedTargetKeys.has(recordB.key)) {
+              blended.labels.push(cloneTraceLabelWithPresence(recordB.item, alpha));
+            }
+          });
         }
 
         return blended;
@@ -1113,32 +1289,41 @@ THREEJS_SCENE_RUNTIME_JS = """
 
         const lowerTraces = Array.isArray(lowerFrame.traces) ? lowerFrame.traces : [];
         const upperTraces = Array.isArray(upperFrame.traces) ? upperFrame.traces : [];
-        const upperTraceByKey = new Map(upperTraces.map((trace) => [String(trace && trace.key), trace]));
+        const upperTraceByKey = new Map();
+        upperTraces.forEach((trace) => {
+          const traceKey = trace && trace.key !== undefined && trace.key !== null
+            ? String(trace.key)
+            : "";
+          if (traceKey) upperTraceByKey.set(traceKey, trace);
+        });
         const usedUpperKeys = new Set();
         const blendedTraces = [];
 
-        lowerTraces.forEach((lowerTrace, index) => {
-          const traceKey = String(lowerTrace && lowerTrace.key);
-          let upperTrace = traceKey ? upperTraceByKey.get(traceKey) : null;
-          if (!upperTrace && index < upperTraces.length) {
-            upperTrace = upperTraces[index];
-          }
+        lowerTraces.forEach((lowerTrace) => {
+          const traceKey = lowerTrace && lowerTrace.key !== undefined && lowerTrace.key !== null
+            ? String(lowerTrace.key)
+            : "";
+          const upperTrace = traceKey ? upperTraceByKey.get(traceKey) : null;
           if (traceKey && upperTrace) {
             usedUpperKeys.add(traceKey);
           }
-          const blendedTrace = interpolateTraceSpec(lowerTrace, upperTrace, easedAlpha, timeValue);
+          const blendedTrace = upperTrace
+            ? interpolateTraceSpec(lowerTrace, upperTrace, easedAlpha, timeValue)
+            : cloneTraceWithPresence(lowerTrace, 1.0 - easedAlpha);
           if (blendedTrace) {
             blendedTraces.push(blendedTrace);
           }
         });
 
-        upperTraces.forEach((upperTrace, index) => {
-          const traceKey = String(upperTrace && upperTrace.key);
-          if ((traceKey && usedUpperKeys.has(traceKey)) || index < lowerTraces.length) {
+        upperTraces.forEach((upperTrace) => {
+          const traceKey = upperTrace && upperTrace.key !== undefined && upperTrace.key !== null
+            ? String(upperTrace.key)
+            : "";
+          if (traceKey && usedUpperKeys.has(traceKey)) {
             return;
           }
           if (upperTrace) {
-            blendedTraces.push(upperTrace);
+            blendedTraces.push(cloneTraceWithPresence(upperTrace, easedAlpha));
           }
         });
 
@@ -1192,6 +1377,7 @@ THREEJS_SCENE_RUNTIME_JS = """
       }
 
       function makeVectorObject(trace, materialBucket) {
+        const options = arguments.length > 2 && arguments[2] ? arguments[2] : {};
         const vectors = Array.isArray(trace && trace.vectors) ? trace.vectors : [];
         if (!vectors.length) {
           return null;
@@ -1205,11 +1391,12 @@ THREEJS_SCENE_RUNTIME_JS = """
           || "#ffffff";
         let opacity = traceState ? clamp01(traceState.opacity) : clamp01(trace.opacity ?? trace.default_opacity ?? 1.0);
         opacity *= traceVisibilityOpacityMultiplier(trace);
+        opacity *= clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
         const focusedTraceKey = dendrogramFocusTraceKey();
         if (focusedTraceKey && String(trace.key) !== focusedTraceKey) {
           opacity *= 0.16;
         }
-        if (opacity <= 0.001) {
+        if (opacity <= 0.001 && options.forceResident !== true) {
           return null;
         }
         const sizeScale = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
@@ -1310,6 +1497,8 @@ THREEJS_SCENE_RUNTIME_JS = """
         material.resolution.set(root.clientWidth, root.clientHeight);
         const line = new LineSegments2(geometry, material);
         line.computeLineDistances();
+        line.userData.ovizRetainedTrace = trace;
+        line.userData.ovizRetainedKind = "vectors";
         materialBucket.push(material);
         return line;
       }
@@ -1317,6 +1506,11 @@ THREEJS_SCENE_RUNTIME_JS = """
       function renderFrameScene(frame, displayedTimeMyr, options = {}) {
         const updateWidgets = options.updateWidgets !== false;
         const preserveCamera = options.preserveCamera === true;
+        const renderRoot = options.targetGroup instanceof THREE.Group ? options.targetGroup : plotGroup;
+        const resetRegistries = options.resetRegistries !== false;
+        const clearScene = options.clearScene !== false;
+        const forceResident = options.forceResident === true;
+        const includeOverlays = options.includeOverlays !== false;
         if (!frame) {
           return;
         }
@@ -1331,26 +1525,30 @@ THREEJS_SCENE_RUNTIME_JS = """
           }
         }
         tooltipEl.style.display = "none";
-        hoverTargets.length = 0;
-        cameraResponsivePointEntries.length = 0;
-        cameraResponsiveImagePlaneEntries.length = 0;
-        galacticReferenceOpacityGroups.length = 0;
-        selectionSpriteEntriesByKey.clear();
-        screenStableTextSprites.length = 0;
-        clearGroup(plotGroup);
-        plotGroup.position.set(0.0, 0.0, 0.0);
-        frameLineMaterials.length = 0;
-        volumeRuntimeByKey.clear();
+        if (resetRegistries) {
+          hoverTargets.length = 0;
+          cameraResponsivePointEntries.length = 0;
+          cameraResponsiveImagePlaneEntries.length = 0;
+          galacticReferenceOpacityGroups.length = 0;
+          selectionSpriteEntriesByKey.clear();
+          screenStableTextSprites.length = 0;
+          frameLineMaterials.length = 0;
+          volumeRuntimeByKey.clear();
+        }
+        if (clearScene) {
+          clearGroup(renderRoot);
+        }
+        renderRoot.position.set(0.0, 0.0, 0.0);
 
-        frame.traces.forEach((trace) => {
-          if (!traceVisible(trace)) {
+        (Array.isArray(frame.traces) ? frame.traces : []).forEach((trace) => {
+          if (!forceResident && !traceVisible(trace)) {
             return;
           }
           const galacticReferenceGroup = isGalacticReferenceTrace(trace) ? new THREE.Group() : null;
-          const traceParent = galacticReferenceGroup || plotGroup;
+          const traceParent = galacticReferenceGroup || renderRoot;
 
           if (trace.vectors && trace.vectors.length) {
-            const vectorTrace = makeVectorObject(trace, frameLineMaterials);
+            const vectorTrace = makeVectorObject(trace, frameLineMaterials, { forceResident });
             if (vectorTrace) {
               traceParent.add(vectorTrace);
             }
@@ -1362,10 +1560,10 @@ THREEJS_SCENE_RUNTIME_JS = """
             }
           }
           if (trace.points && trace.points.length) {
-            addMarkerTrace(traceParent, trace);
+            addMarkerTrace(traceParent, trace, { forceResident });
           }
           if (trace.labels && trace.labels.length) {
-            addTextTrace(traceParent, trace);
+            addTextTrace(traceParent, trace, { forceResident });
           }
           if (galacticReferenceGroup) {
             galacticReferenceGroup.traverse((object) => {
@@ -1378,7 +1576,7 @@ THREEJS_SCENE_RUNTIME_JS = """
               });
             });
             galacticReferenceOpacityGroups.push(galacticReferenceGroup);
-            plotGroup.add(galacticReferenceGroup);
+            renderRoot.add(galacticReferenceGroup);
           }
         });
 
@@ -1388,7 +1586,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           && ovizStateTransition.phasePlan
           && ovizStateTransition.phasePlan.changed.appearance
         ) ? ovizStateTransition : null;
-        if (selectionTransition) {
+        if (includeOverlays && selectionTransition) {
           const selectionProgress = clampRange(
             Number(selectionTransition.currentAppearanceProgress) || 0.0,
             0.0,
@@ -1408,28 +1606,30 @@ THREEJS_SCENE_RUNTIME_JS = """
             frameLineMaterials,
             selectionProgress,
           );
-          if (fromFootprint) plotGroup.add(fromFootprint);
-          if (toFootprint) plotGroup.add(toFootprint);
-        } else if (currentSelectionMode === "click" && currentSelection) {
+          if (fromFootprint) renderRoot.add(fromFootprint);
+          if (toFootprint) renderRoot.add(toFootprint);
+        } else if (includeOverlays && currentSelectionMode === "click" && currentSelection) {
           const footprint = buildSelectionFootprint(currentSelection, frameLineMaterials);
-          if (footprint) plotGroup.add(footprint);
+          if (footprint) renderRoot.add(footprint);
         }
 
         (frame.decorations || []).forEach((decoration) => {
-          addDecoration(plotGroup, decoration);
+          addDecoration(renderRoot, decoration, { forceResident });
         });
 
-        const selectionBoxGroup = buildSelectionBoxGroupForFrame(displayedTimeMyr);
+        const selectionBoxGroup = includeOverlays ? buildSelectionBoxGroupForFrame(displayedTimeMyr) : null;
         if (selectionBoxGroup) {
-          plotGroup.add(selectionBoxGroup);
+          renderRoot.add(selectionBoxGroup);
         }
 
-        addManualLabels(plotGroup);
+        if (includeOverlays) {
+          addManualLabels(renderRoot);
+        }
         updateTimelineMotionOpacity();
 
         const focusOffset = focusTrackingOffsetForFrame(frame);
         if (focusOffset) {
-          plotGroup.position.copy(focusOffset.multiplyScalar(-1.0));
+          renderRoot.position.copy(focusOffset.multiplyScalar(-1.0));
         }
 
         applySceneHoverState();
@@ -1444,16 +1644,893 @@ THREEJS_SCENE_RUNTIME_JS = """
         }
       }
 
+      let ovizRetainedTransitionScene = null;
+      let ovizRetainedSceneBuildSerial = 0;
+      let ovizRetainedSceneUpdateSerial = 0;
+
+      function ovizRetainedTransitionOwner(options = {}) {
+        if (options.preserveCamera !== true) {
+          return "";
+        }
+        if (options.transitionOwnerToken !== undefined && options.transitionOwnerToken !== null) {
+          return String(options.transitionOwnerToken || "");
+        }
+        if (typeof ovizStateTransition !== "undefined" && ovizStateTransition) {
+          return String(
+            ovizStateTransition.transitionId
+            || ovizStateTransition.targetId
+            || "state-transition"
+          );
+        }
+        if (typeof activeActionRun !== "undefined" && activeActionRun) {
+          return `action:${String(activeActionRun.id || "")}`;
+        }
+        if (typeof timeActionTrack !== "undefined" && timeActionTrack) {
+          return [
+            "action-time",
+            Number(timeActionTrack.stepIndex) || 0,
+            Number(timeActionTrack.startTime) || 0,
+          ].join(":");
+        }
+        return "";
+      }
+
+      function disposeRetainedTransitionScene(ownerToken = "", options = {}) {
+        const runtime = ovizRetainedTransitionScene;
+        if (!runtime) return false;
+        const requestedOwner = String(ownerToken || "");
+        if (requestedOwner && requestedOwner !== runtime.ownerToken) return false;
+        ovizRetainedTransitionScene = null;
+        if (options.clear === true) {
+          clearGroup(plotGroup);
+        }
+        return true;
+      }
+
+      function ovizRetainedMaterials(object) {
+        if (!object || !object.material) {
+          return [];
+        }
+        return Array.isArray(object.material) ? object.material : [object.material];
+      }
+
+      function ovizPrepareRetainedEndpoint(rootGroup, frame, frameIndex) {
+        const pointEntries = [];
+        let materialCount = 0;
+        rootGroup.traverse((object) => {
+          if (!object || !object.material) {
+            return;
+          }
+          if (Array.isArray(object.material)) {
+            object.material = object.material.map((material) => {
+              if (!material || !material.userData || !material.userData.cached) {
+                return material;
+              }
+              return ovizRetainedSpriteMaterial(material);
+            });
+          } else if (object.material.userData && object.material.userData.cached) {
+            object.material = ovizRetainedSpriteMaterial(object.material);
+          }
+          ovizRetainedMaterials(object).forEach((material) => {
+            if (!material) return;
+            materialCount += 1;
+            material.userData = Object.assign({}, material.userData || {});
+            material.userData.ovizRetainedBaseOpacity = Number(material.opacity ?? 1.0);
+          });
+          const pointMetadata = object.userData && object.userData.ovizRetainedPoint;
+          if (pointMetadata) {
+            pointEntries.push({ object, metadata: pointMetadata });
+          }
+        });
+        return {
+          root: rootGroup,
+          focusPosition: rootGroup.position.clone(),
+          frame,
+          frameIndex,
+          pointEntries,
+          materialCount,
+        };
+      }
+
+      function ovizPointComponentIdentity(metadata, allowIndex) {
+        if (!metadata) return "";
+        const pointIdentity = metadata.stablePointKey
+          ? `stable:${metadata.stablePointKey}#${Number(metadata.stableOccurrence) || 0}`
+          : (allowIndex ? `index:${Number(metadata.pointIndex) || 0}` : "");
+        if (!pointIdentity) return "";
+        return `${String(metadata.traceKey || "")}\n${pointIdentity}\n${String(metadata.component || "")}`;
+      }
+
+      function ovizFramePointTopologyByTrace(frame) {
+        const topology = new Map();
+        (frame && Array.isArray(frame.traces) ? frame.traces : []).forEach((trace) => {
+          const points = Array.isArray(trace && trace.points) ? trace.points : [];
+          topology.set(String(trace && trace.key || ""), {
+            count: points.length,
+            positional: points.every((point) => !ovizTransitionStablePointKey(point)),
+          });
+        });
+        return topology;
+      }
+
+      function ovizPairRetainedPoints(fromEndpoint, toEndpoint) {
+        const fromTopology = ovizFramePointTopologyByTrace(fromEndpoint.frame);
+        const toTopology = ovizFramePointTopologyByTrace(toEndpoint.frame);
+        const canUseIndex = (traceKey) => {
+          const from = fromTopology.get(traceKey);
+          const to = toTopology.get(traceKey);
+          return Boolean(
+            from
+            && to
+            && from.positional
+            && to.positional
+            && Number(from.count) === Number(to.count)
+          );
+        };
+        const targetByIdentity = new Map();
+        toEndpoint.pointEntries.forEach((entry) => {
+          const traceKey = String(entry.metadata.traceKey || "");
+          const identity = ovizPointComponentIdentity(entry.metadata, canUseIndex(traceKey));
+          if (identity) targetByIdentity.set(identity, entry);
+        });
+        const usedTargets = new Set();
+        const pairs = [];
+        fromEndpoint.pointEntries.forEach((fromEntry) => {
+          const traceKey = String(fromEntry.metadata.traceKey || "");
+          const identity = ovizPointComponentIdentity(fromEntry.metadata, canUseIndex(traceKey));
+          const toEntry = identity ? targetByIdentity.get(identity) : null;
+          if (toEntry) usedTargets.add(toEntry);
+          pairs.push({
+            from: fromEntry,
+            to: toEntry || null,
+            livePoint: Object.assign({}, fromEntry.metadata.point || {}),
+          });
+        });
+        toEndpoint.pointEntries.forEach((toEntry) => {
+          if (!usedTargets.has(toEntry)) {
+            pairs.push({
+              from: null,
+              to: toEntry,
+              livePoint: Object.assign({}, toEntry.metadata.point || {}),
+            });
+          }
+        });
+        return pairs;
+      }
+
+      function ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr) {
+        const fromPoint = pair.from && pair.from.metadata.point;
+        const toPoint = pair.to && pair.to.metadata.point;
+        const fallback = fromPoint || toPoint || {};
+        const livePoint = pair.livePoint;
+        Object.assign(livePoint, fallback);
+        if (fromPoint && toPoint) {
+          livePoint.x = interpolateNumber(fromPoint.x, toPoint.x, alpha, fallback.x);
+          livePoint.y = interpolateNumber(fromPoint.y, toPoint.y, alpha, fallback.y);
+          livePoint.z = interpolateNumber(fromPoint.z, toPoint.z, alpha, fallback.z);
+          livePoint.size = interpolateNumber(fromPoint.size, toPoint.size, alpha, fallback.size);
+          livePoint.opacity = interpolateNumber(fromPoint.opacity, toPoint.opacity, alpha, fallback.opacity);
+        }
+        if (fallback.motion && typeof fallback.motion === "object") {
+          livePoint.motion = Object.assign({}, fallback.motion, { time_myr: displayedTimeMyr });
+        }
+        return livePoint;
+      }
+
+      function ovizRetainedPointVisual(entry, livePoint, displayedTimeMyr) {
+        if (!entry || !entry.object || !entry.metadata) {
+          return { opacity: 0.0, pointScale: 0.0, color: "#ffffff" };
+        }
+        const metadata = entry.metadata;
+        const trace = metadata.trace || {};
+        const point = metadata.point || livePoint || {};
+        const traceState = traceStyleStateForKey(trace.key);
+        const pointState = animatedPointState(point, trace, displayedTimeMyr);
+        const traceOpacityMultiplier = traceState
+          ? clamp01(traceState.opacity) / Math.max(clamp01(Number(trace.default_opacity ?? 1.0)), 1e-6)
+          : 1.0;
+        let opacityMultiplier = clusterFilterPassesPoint(livePoint) ? 1.0 : 0.0;
+        const pointKey = clusterFilterSelectionKeyForPoint(livePoint)
+          || normalizedSelectionKeyFor(livePoint && livePoint.selection)
+          || clusterFilterSelectionKeyForPoint(point)
+          || normalizedSelectionKeyFor(point && point.selection);
+        const focusedTraceKey = dendrogramFocusTraceKey();
+        const dendrogramActiveKeys = activeDendrogramSelectionKeys();
+        if (focusedTraceKey) {
+          if (String(trace.key) !== focusedTraceKey) {
+            opacityMultiplier *= 0.14;
+          } else if (dendrogramActiveKeys.size && pointKey) {
+            opacityMultiplier *= dendrogramActiveKeys.has(pointKey) ? 1.0 : 0.24;
+          }
+        }
+        if (typeof ovizSelectionMembershipOpacity === "function") {
+          opacityMultiplier *= ovizSelectionMembershipOpacity(pointKey, livePoint);
+        } else if (lassoSelectionFilterActive()) {
+          opacityMultiplier *= pointKey && selectedClusterKeys.has(pointKey) ? 1.0 : 0.0;
+        }
+        const baseOpacity = Number(pointState.opacity ?? pointOpacityForTrace(point, trace));
+        const presenceOpacity = clamp01(Number(point.oviz_presence_opacity ?? 1.0))
+          * clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
+        const effectiveOpacity = clamp01(
+          baseOpacity
+          * traceOpacityMultiplier
+          * (traceVisible(trace) ? traceVisibilityOpacityMultiplier(trace) : 0.0)
+          * opacityMultiplier
+          * globalPointOpacityScale
+          * presenceOpacity
+        );
+        const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
+        const starsFactor = sizeByStarsFactorForPoint(point, trace, traceState);
+        const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05);
+        const baseScale = Math.max(
+          Math.max(Number(pointState.size) || 0.0, 0.0)
+            * sizeScaleFactor
+            * starsFactor
+            * globalPointSizeScale
+            * pointScale,
+          scaleFloor,
+        );
+        const glowStrength = Math.max(Number(globalPointGlowStrength) || 0.0, 0.0);
+        const glowMix = clampRange(glowStrength / 0.15, 0.0, 1.0);
+        let componentOpacity = effectiveOpacity;
+        let responsivePointScale = nonGlowMarkerScaleForPoint(baseScale, entry.object.position);
+        if (metadata.component === "glow") {
+          componentOpacity = clampRange(
+            effectiveOpacity * (0.34 + 0.18 * glowStrength) * glowMix,
+            0.0,
+            0.78,
+          );
+          responsivePointScale = baseScale;
+        } else if (metadata.component === "core") {
+          componentOpacity = clampRange(
+            effectiveOpacity * (1.00 + 0.24 * glowStrength) * glowMix,
+            0.0,
+            1.0,
+          );
+          responsivePointScale = baseScale;
+        } else {
+          componentOpacity *= 1.0 - glowMix;
+        }
+        return {
+          opacity: componentOpacity,
+          pointScale: responsivePointScale,
+          color: metadata.component === "core"
+            ? "#ffffff"
+            : pointColorForTrace(point, trace, traceState),
+        };
+      }
+
+      function ovizApplyRetainedPointEntry(entry, visual, endpointWeight, livePoint) {
+        if (!entry || !entry.object) return;
+        const object = entry.object;
+        object.position.set(
+          Number(livePoint && livePoint.x) || 0.0,
+          Number(livePoint && livePoint.y) || 0.0,
+          Number(livePoint && livePoint.z) || 0.0,
+        );
+        const material = object.material;
+        if (material) {
+          material.transparent = true;
+          material.opacity = clamp01(Number(visual.opacity) || 0.0) * clamp01(endpointWeight);
+          if (material.color && typeof material.color.set === "function") {
+            material.color.set(String(visual.color || "#ffffff"));
+          }
+        }
+        const responsive = object.userData && object.userData.ovizResponsivePointEntry;
+        if (responsive) {
+          responsive.position.copy(object.position);
+          responsive.pointScale = Math.max(Number(visual.pointScale) || 0.0, 0.0);
+        }
+        object.visible = Boolean(material && material.opacity > 0.0001);
+      }
+
+      function ovizApplyRetainedEndpointWeight(endpoint, weight, displayedTimeMyr) {
+        const endpointWeight = clamp01(weight);
+        endpoint.root.traverse((object) => {
+          if (!object || !object.material || (object.userData && object.userData.ovizRetainedPoint)) {
+            return;
+          }
+          const responsiveImage = object.userData && object.userData.ovizResponsiveImagePlaneEntry;
+          if (responsiveImage) {
+            responsiveImage.transitionOpacityScale = endpointWeight;
+            return;
+          }
+          const volumeRuntime = object.userData && object.userData.ovizVolumeRuntime;
+          if (volumeRuntime) {
+            applyVolumeStateToRuntime(volumeRuntime.layer, volumeRuntime, endpoint.frame);
+            const opacityUniform = volumeRuntime.material
+              && volumeRuntime.material.uniforms
+              && volumeRuntime.material.uniforms.opacity;
+            if (opacityUniform) {
+              opacityUniform.value = Number(opacityUniform.value || 0.0) * endpointWeight;
+              object.visible = endpointWeight > 0.0001 && object.visible !== false;
+            }
+            return;
+          }
+          const trace = object.userData && object.userData.ovizRetainedTrace;
+          const labelMetadata = object.userData && object.userData.ovizRetainedLabel;
+          ovizRetainedMaterials(object).forEach((material) => {
+            if (!material) return;
+            let baseOpacity = Number(material.userData && material.userData.ovizRetainedBaseOpacity);
+            if (!Number.isFinite(baseOpacity)) baseOpacity = Number(material.opacity ?? 1.0);
+            if (trace) {
+              const traceState = traceStyleStateForKey(trace.key);
+              baseOpacity = (traceState
+                ? clamp01(traceState.opacity)
+                : clamp01(trace.opacity ?? trace.default_opacity ?? 1.0))
+                * (traceVisible(trace) ? traceVisibilityOpacityMultiplier(trace) : 0.0)
+                * clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
+              const color = (traceState && traceState.color)
+                || trace.default_color
+                || trace.color
+                || ((trace.line || {}).color)
+                || "#ffffff";
+              if (material.color && typeof material.color.set === "function") material.color.set(color);
+            } else if (labelMetadata) {
+              const labelTrace = labelMetadata.trace || {};
+              const label = labelMetadata.label || {};
+              const traceState = traceStyleStateForKey(labelTrace.key);
+              baseOpacity = (traceState ? clamp01(traceState.opacity) : 1.0)
+                * (traceVisible(labelTrace) ? traceVisibilityOpacityMultiplier(labelTrace) : 0.0)
+                * clamp01(Number(labelTrace.oviz_presence_opacity ?? 1.0))
+                * clamp01(Number(label.oviz_presence_opacity ?? 1.0));
+              const color = (traceState && traceState.color) || label.color || theme.axis_color;
+              if (material.color && typeof material.color.set === "function") material.color.set(color);
+            }
+            material.transparent = true;
+            material.opacity = clamp01(baseOpacity) * endpointWeight;
+          });
+        });
+      }
+
+      function ovizPrepareRetainedSelectionOverlay(runtime) {
+        if (!runtime || !runtime.overlayRoot) return null;
+        const materialBucket = [];
+        const registerEndpoint = (group) => {
+          if (!group) return null;
+          runtime.overlayRoot.add(group);
+          const materials = [];
+          group.traverse((object) => {
+            ovizRetainedMaterials(object).forEach((material) => {
+              if (!material) return;
+              material.userData = Object.assign({}, material.userData || {});
+              material.userData.ovizRetainedBaseOpacity = Number(material.opacity ?? 1.0);
+              materials.push(material);
+            });
+          });
+          return { group, materials };
+        };
+        const createSelectionEndpoint = (selection) => registerEndpoint(
+          buildSelectionFootprint(selection, materialBucket, 1.0)
+        );
+        const createManualLabelEndpoint = (labels) => {
+          const group = new THREE.Group();
+          addManualLabels(group, { labels, interactive: false });
+          return group.children.length ? registerEndpoint(group) : null;
+        };
+        const createSelectionBoxEndpoint = (state, timeMyr) => registerEndpoint(
+          buildSelectionBoxGroupForFrame(timeMyr, state, { interactive: false })
+        );
+        const stateAppearanceTransition = (
+          typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+          && ovizStateTransition.phasePlan
+          && ovizStateTransition.phasePlan.changed.appearance
+        ) ? ovizStateTransition : null;
+        const selectionTransition = stateAppearanceTransition || (
+          typeof actionHeldAppearanceRollback !== "undefined"
+          && actionHeldAppearanceRollback
+          && Number(actionHeldAppearanceRollback.frozenAppearanceProgress) > 0.0
+            ? actionHeldAppearanceRollback
+            : null
+        );
+        const sourceComposite = stateAppearanceTransition
+          && stateAppearanceTransition.sourceAppearanceComposite
+          ? stateAppearanceTransition.sourceAppearanceComposite
+          : null;
+        const compositeWeight = sourceComposite
+          ? clampRange(Number(sourceComposite.targetWeight) || 0.0, 0.0, 1.0)
+          : 0.0;
+        let from = null;
+        let composite = null;
+        let to = null;
+        if (selectionTransition) {
+          const sourceSnapshot = sourceComposite
+            ? sourceComposite.fromSnapshot
+            : selectionTransition.fromSnapshot;
+          const fromSelection = sourceSnapshot && sourceSnapshot.current_selection;
+          const compositeSelection = sourceComposite
+            && sourceComposite.targetSnapshot
+            && sourceComposite.targetSnapshot.current_selection;
+          const toSelection = selectionTransition.targetSnapshot
+            && selectionTransition.targetSnapshot.current_selection;
+          from = createSelectionEndpoint(fromSelection);
+          composite = createSelectionEndpoint(compositeSelection);
+          to = createSelectionEndpoint(toSelection);
+        } else if (currentSelectionMode === "click" && currentSelection) {
+          from = createSelectionEndpoint(currentSelection);
+        }
+        const fromSnapshot = sourceComposite
+          ? sourceComposite.fromSnapshot
+          : (selectionTransition ? selectionTransition.fromSnapshot : null);
+        const compositeSnapshot = sourceComposite ? sourceComposite.targetSnapshot : null;
+        const toSnapshot = selectionTransition ? selectionTransition.targetSnapshot : null;
+        const fromLabels = fromSnapshot && Array.isArray(fromSnapshot.manual_labels)
+          ? fromSnapshot.manual_labels
+          : manualLabels;
+        const toLabels = toSnapshot && Array.isArray(toSnapshot.manual_labels)
+          ? toSnapshot.manual_labels
+          : fromLabels;
+        const compositeLabels = compositeSnapshot && Array.isArray(compositeSnapshot.manual_labels)
+          ? compositeSnapshot.manual_labels
+          : fromLabels;
+        const manualCompositeSameFrom = JSON.stringify(fromLabels) === JSON.stringify(compositeLabels);
+        const manualToSameFrom = JSON.stringify(fromLabels) === JSON.stringify(toLabels);
+        const manualToSameComposite = JSON.stringify(compositeLabels) === JSON.stringify(toLabels);
+        const manualFrom = createManualLabelEndpoint(fromLabels);
+        const manualComposite = sourceComposite
+          && !manualCompositeSameFrom
+          ? createManualLabelEndpoint(compositeLabels)
+          : null;
+        const manualTo = selectionTransition
+          && !manualToSameFrom
+          && !(sourceComposite && manualToSameComposite)
+          ? createManualLabelEndpoint(toLabels)
+          : null;
+        const fromBoxState = fromSnapshot && fromSnapshot.selection_box_state
+          ? fromSnapshot.selection_box_state
+          : {
+              center_local_pc: {
+                x: Number(selectionBoxState.center && selectionBoxState.center.x) || 0.0,
+                y: Number(selectionBoxState.center && selectionBoxState.center.y) || 0.0,
+                z: Number(selectionBoxState.center && selectionBoxState.center.z) || 0.0,
+              },
+              visible: selectionBoxState.visible !== false,
+              half_width_pc: clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc),
+            };
+        const toBoxState = toSnapshot && toSnapshot.selection_box_state
+          ? toSnapshot.selection_box_state
+          : fromBoxState;
+        const compositeBoxState = compositeSnapshot && compositeSnapshot.selection_box_state
+          ? compositeSnapshot.selection_box_state
+          : fromBoxState;
+        const compositeBoxSameFrom = JSON.stringify(fromBoxState) === JSON.stringify(compositeBoxState);
+        const toBoxSameFrom = JSON.stringify(fromBoxState) === JSON.stringify(toBoxState);
+        const toBoxSameComposite = JSON.stringify(compositeBoxState) === JSON.stringify(toBoxState);
+        const lowerTime = Number(runtime.fromEndpoint.frame && runtime.fromEndpoint.frame.time) || 0.0;
+        const upperTime = Number(runtime.toEndpoint.frame && runtime.toEndpoint.frame.time) || lowerTime;
+        const boxes = {
+          fromLower: createSelectionBoxEndpoint(fromBoxState, lowerTime),
+          fromUpper: createSelectionBoxEndpoint(fromBoxState, upperTime),
+          compositeLower: null,
+          compositeUpper: null,
+          toLower: null,
+          toUpper: null,
+        };
+        if (sourceComposite && !compositeBoxSameFrom) {
+          boxes.compositeLower = createSelectionBoxEndpoint(compositeBoxState, lowerTime);
+          boxes.compositeUpper = createSelectionBoxEndpoint(compositeBoxState, upperTime);
+        }
+        if (selectionTransition && !toBoxSameFrom && !(sourceComposite && toBoxSameComposite)) {
+          boxes.toLower = createSelectionBoxEndpoint(toBoxState, lowerTime);
+          boxes.toUpper = createSelectionBoxEndpoint(toBoxState, upperTime);
+        }
+        runtime.overlayLineMaterials = materialBucket;
+        return {
+          from,
+          composite,
+          to,
+          manualFrom,
+          manualComposite,
+          manualTo,
+          boxes,
+          transition: selectionTransition,
+          compositeWeight,
+          manualCompositeSameFrom,
+          manualToSameFrom,
+          manualToSameComposite,
+          compositeBoxSameFrom,
+          toBoxSameFrom,
+          toBoxSameComposite,
+        };
+      }
+
+      function ovizApplyRetainedSelectionOverlay(runtime, frameAlpha = 0.0) {
+        const overlay = runtime && runtime.selectionOverlay;
+        if (!overlay) return;
+        const progress = overlay.transition
+          ? clampRange(Number(overlay.transition.currentAppearanceProgress) || 0.0, 0.0, 1.0)
+          : 0.0;
+        const applyEndpoint = (endpoint, weight) => {
+          if (!endpoint) return;
+          const clampedWeight = clamp01(weight);
+          endpoint.group.visible = clampedWeight > 0.0001;
+          endpoint.materials.forEach((material) => {
+            const baseOpacity = Number(material.userData && material.userData.ovizRetainedBaseOpacity);
+            material.transparent = true;
+            material.opacity = (Number.isFinite(baseOpacity) ? baseOpacity : 1.0) * clampedWeight;
+          });
+        };
+        const sourceWeight = overlay.transition ? 1.0 - progress : 1.0;
+        const compositeWeight = clamp01(Number(overlay.compositeWeight) || 0.0);
+        applyEndpoint(overlay.from, sourceWeight * (1.0 - compositeWeight));
+        applyEndpoint(overlay.composite, sourceWeight * compositeWeight);
+        applyEndpoint(overlay.to, progress);
+        let manualFromWeight = sourceWeight * (1.0 - compositeWeight);
+        let manualCompositeWeight = sourceWeight * compositeWeight;
+        let manualToWeight = progress;
+        if (overlay.manualCompositeSameFrom) {
+          manualFromWeight += manualCompositeWeight;
+          manualCompositeWeight = 0.0;
+        }
+        if (overlay.manualToSameFrom) {
+          manualFromWeight += manualToWeight;
+          manualToWeight = 0.0;
+        } else if (overlay.manualToSameComposite) {
+          manualCompositeWeight += manualToWeight;
+          manualToWeight = 0.0;
+        }
+        applyEndpoint(overlay.manualFrom, manualFromWeight);
+        applyEndpoint(overlay.manualComposite, manualCompositeWeight);
+        applyEndpoint(overlay.manualTo, manualToWeight);
+        const lowerWeight = 1.0 - clamp01(frameAlpha);
+        const upperWeight = clamp01(frameAlpha);
+        let boxFromWeight = sourceWeight * (1.0 - compositeWeight);
+        let boxCompositeWeight = sourceWeight * compositeWeight;
+        let boxToWeight = progress;
+        if (overlay.compositeBoxSameFrom) {
+          boxFromWeight += boxCompositeWeight;
+          boxCompositeWeight = 0.0;
+        }
+        if (overlay.toBoxSameFrom) {
+          boxFromWeight += boxToWeight;
+          boxToWeight = 0.0;
+        } else if (overlay.toBoxSameComposite) {
+          boxCompositeWeight += boxToWeight;
+          boxToWeight = 0.0;
+        }
+        applyEndpoint(overlay.boxes.fromLower, boxFromWeight * lowerWeight);
+        applyEndpoint(overlay.boxes.fromUpper, boxFromWeight * upperWeight);
+        applyEndpoint(overlay.boxes.compositeLower, boxCompositeWeight * lowerWeight);
+        applyEndpoint(overlay.boxes.compositeUpper, boxCompositeWeight * upperWeight);
+        applyEndpoint(overlay.boxes.toLower, boxToWeight * lowerWeight);
+        applyEndpoint(overlay.boxes.toUpper, boxToWeight * upperWeight);
+      }
+
+      function ovizPrepareRetainedTransitionScene(ownerToken, frameState) {
+        clearGroup(plotGroup);
+        plotGroup.position.set(0.0, 0.0, 0.0);
+        const fromRoot = new THREE.Group();
+        const toRoot = new THREE.Group();
+        const overlayRoot = new THREE.Group();
+        plotGroup.add(fromRoot);
+        plotGroup.add(toRoot);
+        plotGroup.add(overlayRoot);
+        const fromFrame = frameSpecs[frameState.lowerIndex] || null;
+        const toFrame = frameSpecs[frameState.upperIndex] || fromFrame;
+        renderFrameScene(fromFrame, Number(fromFrame && fromFrame.time) || 0.0, {
+          updateWidgets: false,
+          preserveCamera: true,
+          targetGroup: fromRoot,
+          resetRegistries: true,
+          clearScene: false,
+          forceResident: true,
+          includeOverlays: false,
+        });
+        renderFrameScene(toFrame, Number(toFrame && toFrame.time) || 0.0, {
+          updateWidgets: false,
+          preserveCamera: true,
+          targetGroup: toRoot,
+          resetRegistries: false,
+          clearScene: false,
+          forceResident: true,
+          includeOverlays: false,
+        });
+        const fromEndpoint = ovizPrepareRetainedEndpoint(fromRoot, fromFrame, frameState.lowerIndex);
+        const toEndpoint = ovizPrepareRetainedEndpoint(toRoot, toFrame, frameState.upperIndex);
+        ovizRetainedSceneBuildSerial += 1;
+        const runtime = {
+          ownerToken,
+          intervalKey: `${frameState.lowerIndex}:${frameState.upperIndex}`,
+          fromEndpoint,
+          toEndpoint,
+          pointPairs: ovizPairRetainedPoints(fromEndpoint, toEndpoint),
+          overlayRoot,
+          overlayLineMaterials: [],
+          selectionOverlay: null,
+          buildSerial: ovizRetainedSceneBuildSerial,
+          updateCount: 0,
+          materialCount: fromEndpoint.materialCount + toEndpoint.materialCount,
+        };
+        runtime.selectionOverlay = ovizPrepareRetainedSelectionOverlay(runtime);
+        ovizRetainedTransitionScene = runtime;
+        return runtime;
+      }
+
+      function ovizRetainedDebugSnapshot(runtime) {
+        const effectiveTraceOpacities = {};
+        let renderedObjectCount = 0;
+        let hiddenObjectCount = 0;
+        [runtime.fromEndpoint.root, runtime.toEndpoint.root, runtime.overlayRoot].forEach((endpointRoot) => {
+          endpointRoot.traverse((object) => {
+            if (!object || !object.material) return;
+            const materials = ovizRetainedMaterials(object);
+            const opacity = materials.reduce(
+              (maximum, material) => Math.max(maximum, Number(material && material.opacity) || 0.0),
+              0.0,
+            );
+            if (object.visible !== false && opacity > 0.0001) renderedObjectCount += 1;
+            else hiddenObjectCount += 1;
+            const pointMetadata = object.userData && object.userData.ovizRetainedPoint;
+            const traceMetadata = object.userData && object.userData.ovizRetainedTrace;
+            const labelMetadata = object.userData && object.userData.ovizRetainedLabel;
+            const traceKey = String(
+              (pointMetadata && pointMetadata.traceKey)
+              || (traceMetadata && traceMetadata.key)
+              || (labelMetadata && labelMetadata.trace && labelMetadata.trace.key)
+              || ""
+            );
+            if (traceKey) {
+              effectiveTraceOpacities[traceKey] = Math.max(
+                Number(effectiveTraceOpacities[traceKey]) || 0.0,
+                opacity,
+              );
+            }
+          });
+        });
+        const selection = (
+          typeof ovizStateSelectionTransition !== "undefined" && ovizStateSelectionTransition
+        ) || (
+          typeof ovizHeldSelectionTransition !== "undefined" && ovizHeldSelectionTransition
+        ) || null;
+        return {
+          effectiveTraceOpacities,
+          renderedObjectCount,
+          hiddenObjectCount,
+          lassoWeights: selection
+            ? Object.fromEntries(Array.from(selection.fromWeightByKey || []).slice(0, 256))
+            : {},
+          lassoProgress: selection ? Number(selection.progress) || 0.0 : null,
+          canvasOpacity: Number(renderer && renderer.domElement && renderer.domElement.style.opacity || 1.0),
+        };
+      }
+
+      function ovizExpectedTraceOpacity(trace, displayedTimeMyr) {
+        if (!trace || !trace.key || !traceVisible(trace)) return 0.0;
+        const traceState = traceStyleStateForKey(trace.key);
+        const visibility = traceVisibilityOpacityMultiplier(trace);
+        const presence = clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
+        let maximum = 0.0;
+        if ((trace.segments && trace.segments.length) || (trace.vectors && trace.vectors.length)) {
+          maximum = Math.max(
+            maximum,
+            (traceState ? clamp01(traceState.opacity) : clamp01(trace.opacity ?? 1.0))
+              * visibility
+              * presence,
+          );
+        }
+        if (trace.labels && trace.labels.some((label) => label && label.text)) {
+          maximum = Math.max(
+            maximum,
+            (traceState ? clamp01(traceState.opacity) : 1.0) * visibility * presence,
+          );
+        }
+        (Array.isArray(trace.points) ? trace.points : []).forEach((point) => {
+          maximum = Math.max(maximum, ovizExpectedPointOpacity(trace, point, displayedTimeMyr));
+        });
+        return maximum;
+      }
+
+      function ovizExpectedPointOpacity(trace, point, displayedTimeMyr) {
+          if (!trace || !point || !traceVisible(trace) || !clusterFilterPassesPoint(point)) return 0.0;
+          const traceState = traceStyleStateForKey(trace.key);
+          const visibility = traceVisibilityOpacityMultiplier(trace);
+          const presence = clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
+          const pointState = animatedPointState(point, trace, displayedTimeMyr);
+          const defaultOpacity = Math.max(clamp01(Number(trace.default_opacity ?? 1.0)), 1e-6);
+          const traceOpacityMultiplier = traceState
+            ? clamp01(traceState.opacity) / defaultOpacity
+            : 1.0;
+          let selectionOpacity = 1.0;
+          const pointKey = clusterFilterSelectionKeyForPoint(point)
+            || normalizedSelectionKeyFor(point && point.selection);
+          const focusedTraceKey = dendrogramFocusTraceKey();
+          const dendrogramActiveKeys = activeDendrogramSelectionKeys();
+          if (focusedTraceKey) {
+            if (String(trace.key) !== focusedTraceKey) {
+              selectionOpacity *= 0.14;
+            } else if (dendrogramActiveKeys.size && pointKey) {
+              selectionOpacity *= dendrogramActiveKeys.has(pointKey) ? 1.0 : 0.24;
+            }
+          }
+          if (typeof ovizSelectionMembershipOpacity === "function") {
+            selectionOpacity *= ovizSelectionMembershipOpacity(pointKey, point);
+          } else if (lassoSelectionFilterActive()) {
+            selectionOpacity *= pointKey && selectedClusterKeys.has(pointKey) ? 1.0 : 0.0;
+          }
+          return clamp01(
+            Number(pointState.opacity ?? pointOpacityForTrace(point, trace))
+            * traceOpacityMultiplier
+            * visibility
+            * selectionOpacity
+            * globalPointOpacityScale
+            * presence
+            * clamp01(Number(point.oviz_presence_opacity ?? 1.0))
+          );
+      }
+
+      function ovizRenderedSceneFidelityDifferences(snapshot = {}) {
+        const actualOpacityByTrace = new Map();
+        const actualOpacityByPoint = new Map();
+        let renderedManualLabelCount = 0;
+        plotGroup.traverse((object) => {
+          if (!object || !object.material || object.visible === false) return;
+          const pointMetadata = object.userData && object.userData.ovizRetainedPoint;
+          const traceMetadata = object.userData && object.userData.ovizRetainedTrace;
+          const labelMetadata = object.userData && object.userData.ovizRetainedLabel;
+          if (object.userData && object.userData.ovizRetainedManualLabel) {
+            renderedManualLabelCount += 1;
+          }
+          const traceKey = String(
+            (pointMetadata && pointMetadata.traceKey)
+            || (traceMetadata && traceMetadata.key)
+            || (labelMetadata && labelMetadata.trace && labelMetadata.trace.key)
+            || ""
+          );
+          if (!traceKey) return;
+          const opacity = ovizRetainedMaterials(object).reduce(
+            (maximum, material) => Math.max(maximum, Number(material && material.opacity) || 0.0),
+            0.0,
+          );
+          actualOpacityByTrace.set(
+            traceKey,
+            Math.max(Number(actualOpacityByTrace.get(traceKey)) || 0.0, opacity),
+          );
+          if (pointMetadata) {
+            const pointKey = `${traceKey}:${Number(pointMetadata.pointIndex) || 0}`;
+            actualOpacityByPoint.set(
+              pointKey,
+              Math.max(Number(actualOpacityByPoint.get(pointKey)) || 0.0, opacity),
+            );
+          }
+        });
+        const displayedTimeMyr = frameTimeForValue(displayedFrameValue);
+        const renderedFrame = interpolatedFrameSpecForValue(displayedFrameValue, displayedTimeMyr);
+        const expectedOpacityByTrace = {};
+        const expectedOpacityByPoint = {};
+        const differences = [];
+        (renderedFrame && Array.isArray(renderedFrame.traces) ? renderedFrame.traces : []).forEach((trace) => {
+          const expectedOpacity = ovizExpectedTraceOpacity(trace, displayedTimeMyr);
+          expectedOpacityByTrace[String(trace.key || "")] = expectedOpacity;
+          const requiredTraceOpacity = Math.min(0.0001, expectedOpacity * 0.01);
+          if (
+            expectedOpacity > 0.0001
+            && (Number(actualOpacityByTrace.get(String(trace.key || ""))) || 0.0) <= requiredTraceOpacity
+          ) {
+            differences.push(`rendered_trace:${String(trace.key || trace.name || "unknown")}`);
+          } else if (
+            expectedOpacity > 0.0001
+            && (Number(actualOpacityByTrace.get(String(trace.key || ""))) || 0.0) < expectedOpacity * 0.02
+          ) {
+            differences.push(`rendered_trace_opacity:${String(trace.key || trace.name || "unknown")}`);
+          }
+          (Array.isArray(trace.points) ? trace.points : []).forEach((point, pointIndex) => {
+            const pointKey = `${String(trace.key || "")}:${pointIndex}`;
+            const expectedPointOpacity = ovizExpectedPointOpacity(trace, point, displayedTimeMyr);
+            const actualPointOpacity = Number(actualOpacityByPoint.get(pointKey)) || 0.0;
+            expectedOpacityByPoint[pointKey] = expectedPointOpacity;
+            const requiredPointOpacity = Math.min(0.0001, expectedPointOpacity * 0.01);
+            if (expectedPointOpacity > 0.0001 && actualPointOpacity <= requiredPointOpacity) {
+              differences.push(`rendered_point:${pointKey}`);
+            } else if (expectedPointOpacity <= 0.0001 && actualPointOpacity > 0.0001) {
+              differences.push(`rendered_selection_extra:${pointKey}`);
+            }
+          });
+        });
+        const expectedManualLabelCount = Array.isArray(snapshot.manual_labels)
+          ? snapshot.manual_labels.filter((label) => label && label.text).length
+          : manualLabels.filter((label) => label && label.text).length;
+        if (renderedManualLabelCount !== expectedManualLabelCount) {
+          differences.push("rendered_manual_labels");
+        }
+        volumeRuntimeByKey.forEach((runtime) => {
+          const uniforms = runtime && runtime.material && runtime.material.uniforms;
+          if (
+            uniforms
+            && uniforms.selectionTransitionActive
+            && uniforms.selectionTransitionActive.value
+          ) {
+            differences.push(`volume_mask_transition:${String(runtime.layer && runtime.layer.key || "unknown")}`);
+          }
+        });
+        if (Math.abs(Number(renderer.domElement.style.opacity || 1.0) - 1.0) > 1e-6) {
+          differences.push("canvas_opacity");
+        }
+        if (root && root.dataset) {
+          root.dataset.renderedTraceFidelity = JSON.stringify({
+            exact: differences.length === 0,
+            differences,
+            expectedOpacityByTrace,
+            actualOpacityByTrace: Object.fromEntries(actualOpacityByTrace),
+            expectedVisiblePointCount: Object.values(expectedOpacityByPoint).filter((value) => value > 0.0001).length,
+            actualVisiblePointCount: Array.from(actualOpacityByPoint.values()).filter((value) => value > 0.0001).length,
+            renderedManualLabelCount,
+            expectedManualLabelCount,
+          });
+        }
+        return differences;
+      }
+
+      function ovizUpdateRetainedTransitionScene(ownerToken, frameValue, displayedTimeMyr) {
+        const frameState = frameValueState(frameValue);
+        const intervalKey = `${frameState.lowerIndex}:${frameState.upperIndex}`;
+        let runtime = ovizRetainedTransitionScene;
+        if (!runtime || runtime.ownerToken !== ownerToken || runtime.intervalKey !== intervalKey) {
+          runtime = ovizPrepareRetainedTransitionScene(ownerToken, frameState);
+        }
+        const alpha = smoothstep01(frameState.alpha);
+        const fromWeight = 1.0 - alpha;
+        const toWeight = alpha;
+        const focusPosition = runtime.fromEndpoint.focusPosition.clone().lerp(
+          runtime.toEndpoint.focusPosition,
+          alpha,
+        );
+        runtime.fromEndpoint.root.position.copy(focusPosition);
+        runtime.toEndpoint.root.position.copy(focusPosition);
+        ovizApplyRetainedSelectionOverlay(runtime, alpha);
+        updateTimelineMotionOpacity();
+        // Timeline opacity and image-plane camera rules run independently;
+        // reapply the endpoint weight after they have updated their base state.
+        ovizApplyRetainedEndpointWeight(runtime.fromEndpoint, fromWeight, displayedTimeMyr);
+        ovizApplyRetainedEndpointWeight(runtime.toEndpoint, toWeight, displayedTimeMyr);
+        runtime.pointPairs.forEach((pair) => {
+          const livePoint = ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr);
+          if (pair.from) {
+            const visual = ovizRetainedPointVisual(pair.from, livePoint, displayedTimeMyr);
+            ovizApplyRetainedPointEntry(pair.from, visual, fromWeight, livePoint);
+          }
+          if (pair.to) {
+            const visual = ovizRetainedPointVisual(pair.to, livePoint, displayedTimeMyr);
+            ovizApplyRetainedPointEntry(pair.to, visual, toWeight, livePoint);
+          }
+        });
+        updateCameraResponsiveImagePlanes();
+        runtime.updateCount += 1;
+        ovizRetainedSceneUpdateSerial += 1;
+        if (root && root.dataset) {
+          root.dataset.retainedSceneMetrics = JSON.stringify({
+            owner: ownerToken,
+            interval: intervalKey,
+            builds: ovizRetainedSceneBuildSerial,
+            updates: ovizRetainedSceneUpdateSerial,
+            intervalUpdates: runtime.updateCount,
+            materials: runtime.materialCount,
+            pointEntries: runtime.pointPairs.length,
+          });
+          if (typeof ovizTransitionDebugEnabled === "function" && ovizTransitionDebugEnabled()) {
+            root.dataset.retainedSceneDebug = JSON.stringify(ovizRetainedDebugSnapshot(runtime));
+          }
+        }
+        return runtime;
+      }
+
       function renderInterpolatedFrameValue(frameValue, options = {}) {
         displayedFrameValue = clampFrameValue(frameValue);
         currentFrameIndex = clampFrameIndex(displayedFrameValue);
         const displayedTimeMyr = frameTimeForValue(displayedFrameValue);
-        const frame = interpolatedFrameSpecForValue(displayedFrameValue, displayedTimeMyr);
         updateTimelineUi(displayedFrameValue, displayedTimeMyr);
+        const retainedOwner = ovizRetainedTransitionOwner(options);
+        if (retainedOwner) {
+          ovizUpdateRetainedTransitionScene(retainedOwner, displayedFrameValue, displayedTimeMyr);
+          return;
+        }
+        ovizRetainedTransitionScene = null;
+        const frame = interpolatedFrameSpecForValue(displayedFrameValue, displayedTimeMyr);
         renderFrameScene(frame, displayedTimeMyr, options);
       }
 
       function renderFrame(index) {
+        ovizRetainedTransitionScene = null;
         currentFrameIndex = clampFrameIndex(index);
         displayedFrameValue = currentFrameIndex;
         frameTransitionState = null;
@@ -1522,7 +2599,11 @@ THREEJS_SCENE_RUNTIME_JS = """
         } else {
           camera.updateProjectionMatrix();
         }
-        [...axisLineMaterials, ...frameLineMaterials].forEach((material) => {
+        const retainedOverlayLineMaterials = (
+          ovizRetainedTransitionScene
+          && Array.isArray(ovizRetainedTransitionScene.overlayLineMaterials)
+        ) ? ovizRetainedTransitionScene.overlayLineMaterials : [];
+        [...axisLineMaterials, ...frameLineMaterials, ...retainedOverlayLineMaterials].forEach((material) => {
           material.resolution.set(width, height);
         });
         if (legendPanelEl) {

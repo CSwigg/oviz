@@ -20,6 +20,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
       let ovizStateTransitionSerial = 0;
       let ovizStateTransitionTraceOpacity = null;
       let ovizStateSelectionTransition = null;
+      let ovizHeldSelectionTransition = null;
       let ovizStatesShellEl = null;
       let ovizStatesDrawerEl = null;
       let ovizStatesRowsEl = null;
@@ -30,12 +31,106 @@ THREEJS_STATE_RUNTIME_JS = r"""
       let ovizResidentSkyBaseLayerKey = "";
       const ovizSkyLayerTransitionWaiters = new Map();
 
+      function ovizTransitionDebugEnabled() {
+        if (sceneSpec && sceneSpec.debug_transitions === true) return true;
+        try {
+          const query = new URLSearchParams(window.location.search || "");
+          return ["1", "true", "yes", "on"].includes(
+            String(query.get("ovizDebugTransitions") || "").toLowerCase()
+          );
+        } catch (_err) {
+          return false;
+        }
+      }
+
+      function ovizWriteTransitionDiagnostics(transition, values = {}) {
+        if (!root || !root.dataset) return;
+        root.dataset.transitionOwner = transition ? "state" : "";
+        root.dataset.transitionRunId = transition ? String(transition.transitionId || "") : "";
+        if (!ovizTransitionDebugEnabled()) return;
+        const diagnostics = Object.assign({
+          owner: transition ? "state" : "",
+          runId: transition ? String(transition.transitionId || "") : "",
+          targetId: transition ? transition.targetId : null,
+          frameValue: Number(displayedFrameValue),
+          canvasOpacity: Number(renderer && renderer.domElement && renderer.domElement.style.opacity || 1),
+        }, values || {});
+        root.dataset.transitionDiagnostics = JSON.stringify(diagnostics);
+      }
+
       function ovizStatesClone(value, fallback = null) {
         try {
           return JSON.parse(JSON.stringify(value));
         } catch (_err) {
           return fallback;
         }
+      }
+
+      const OVIZ_MAX_VOLUME_MASK_SOURCE_COMPONENTS = 4;
+
+      function ovizNormalizeVolumeMaskSourceComponents(components, maxComponents = OVIZ_MAX_VOLUME_MASK_SOURCE_COMPONENTS) {
+        const merged = [];
+        (Array.isArray(components) ? components : []).forEach((component) => {
+          if (!component || !Number.isFinite(Number(component.weight))) return;
+          const weight = Math.max(0.0, Number(component.weight));
+          if (weight <= 1e-8) return;
+          // A null mask is a real, unfiltered endpoint whose membership is one
+          // everywhere.  Merge by runtime identity without cloning masks or
+          // their GPU textures.
+          const existing = merged.find((entry) => entry.mask === (component.mask || null));
+          if (existing) {
+            existing.weight += weight;
+          } else {
+            merged.push({ mask: component.mask || null, weight });
+          }
+        });
+        const limit = Math.max(1, Math.floor(Number(maxComponents) || OVIZ_MAX_VOLUME_MASK_SOURCE_COMPONENTS));
+        let retained = merged;
+        if (retained.length > limit) {
+          const strongest = new Set(
+            retained
+              .slice()
+              .sort((left, right) => right.weight - left.weight)
+              .slice(0, limit)
+          );
+          retained = retained.filter((component) => strongest.has(component));
+        }
+        const total = retained.reduce((sum, component) => sum + component.weight, 0.0);
+        if (total <= 1e-8) return [{ mask: null, weight: 1.0 }];
+        return retained.map((component) => ({
+          mask: component.mask,
+          weight: component.weight / total,
+        }));
+      }
+
+      function ovizVolumeMaskTransitionSourceComponents(transition, fallbackMask = null) {
+        if (transition && Array.isArray(transition.sourceMaskComponents)) {
+          return ovizNormalizeVolumeMaskSourceComponents(transition.sourceMaskComponents);
+        }
+        if (transition) {
+          const blend = clampRange(Number(transition.fromMaskBlend) || 0.0, 0.0, 1.0);
+          return ovizNormalizeVolumeMaskSourceComponents([
+            { mask: transition.fromMask || null, weight: 1.0 - blend },
+            { mask: transition.fromSecondaryMask || null, weight: blend },
+          ]);
+        }
+        return ovizNormalizeVolumeMaskSourceComponents([
+          { mask: fallbackMask || null, weight: 1.0 },
+        ]);
+      }
+
+      function ovizFreezeVolumeMaskSourceComponents(transition, fallbackMask = null) {
+        const source = ovizVolumeMaskTransitionSourceComponents(transition, fallbackMask);
+        if (!transition) return source;
+        const progress = clampRange(Number(transition.progress) || 0.0, 0.0, 1.0);
+        return ovizNormalizeVolumeMaskSourceComponents([
+          ...source.map((component) => ({
+            mask: component.mask,
+            weight: component.weight * (1.0 - progress),
+          })),
+          // Null deliberately means the unfiltered, all-points endpoint.
+          { mask: transition.toMask || null, weight: progress },
+        ]);
       }
 
       function ovizStatesUuid(prefix = "state") {
@@ -417,14 +512,21 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const groupName = String(snapshot.current_group || currentGroup);
         const legend = snapshot.legend_state || {};
         const defaults = groupVisibility[groupName] || {};
-        if (legend[trace.key] === false) {
-          return false;
+        if (
+          typeof OvizTransitionRuntime !== "undefined"
+          && OvizTransitionRuntime
+          && typeof OvizTransitionRuntime.resolveTraceVisibility === "function"
+        ) {
+          return OvizTransitionRuntime.resolveTraceVisibility(trace, defaults, legend);
         }
         const mode = defaults[trace.key];
-        if (mode === false || mode === undefined) {
-          return false;
+        if (mode === false || mode === undefined) return false;
+        if (trace.showlegend) {
+          return Object.prototype.hasOwnProperty.call(legend, trace.key)
+            ? Boolean(legend[trace.key])
+            : mode === true;
         }
-        return trace.showlegend ? Boolean(legend[trace.key]) : mode === true;
+        return mode === true;
       }
 
       function stateTraceVisibilityState(trace) {
@@ -435,7 +537,15 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return opacity === undefined ? null : { visible: opacity > 0.0001, opacity };
       }
 
-      function ovizCancelActionWithoutSnap() {
+      function ovizCancelActionWithoutSnap(reason = "state-navigation") {
+        if (typeof cancelActionRun === "function" && activeActionRun) {
+          return cancelActionRun(reason, {
+            preserveLegendTransitionFrame: true,
+            disableOrbit: true,
+            cancelStateTransition: false,
+            restorePresentation: false,
+          });
+        }
         activeActionRun = null;
         activeActionKey = "";
         cameraActionTrack = null;
@@ -449,6 +559,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
         actionCameraOrbitOwned = false;
         actionCameraOrbitShouldPersist = true;
         syncActionButtons();
+        return false;
       }
 
       function ovizCancelStateTransitionWithoutSnap(reason = "cancelled", options = {}) {
@@ -457,12 +568,46 @@ THREEJS_STATE_RUNTIME_JS = r"""
           return false;
         }
         const selectionTransition = ovizStateSelectionTransition;
+        if (options.preserveRenderedSelection === true && selectionTransition) {
+          const traceCandidates = ovizTraceCandidatesForSnapshots(
+            transition.fromSnapshot,
+            transition.targetSnapshot,
+          );
+          const liveWeights = ovizCaptureSelectionMembershipOpacityMap(traceCandidates);
+          const liveDefaultWeight = ovizSelectionMembershipOpacity("", null);
+          const sourceMaskComponents = ovizFreezeVolumeMaskSourceComponents(
+            selectionTransition,
+            activeVolumeLassoSelectionMask(),
+          );
+          ovizHeldSelectionTransition = {
+            fromWeightByKey: liveWeights,
+            fromDefaultWeight: liveDefaultWeight,
+            toEndpoint: {
+              keys: new Set(Array.from(selectedClusterKeys || [])),
+              filtered: lassoSelectionFilterActive(),
+              hasMask: Boolean(currentLassoSelectionMask),
+            },
+            sourceMaskComponents,
+            fromMask: sourceMaskComponents[0] ? sourceMaskComponents[0].mask : null,
+            fromSecondaryMask: sourceMaskComponents[1] ? sourceMaskComponents[1].mask : null,
+            fromMaskBlend: sourceMaskComponents[1] ? sourceMaskComponents[1].weight : 0.0,
+            toMask: currentLassoSelectionMask,
+            progress: 0.0,
+            rollback: true,
+          };
+        }
         ovizStateTransition = null;
         ovizStateTransitionTraceOpacity = null;
         ovizStateSelectionTransition = null;
         ovizStateTimelineMotionActive = false;
         if (typeof cancelSkyViewTransitionAnimations === "function") {
-          cancelSkyViewTransitionAnimations({ reason });
+          cancelSkyViewTransitionAnimations({
+            reason,
+            // A State retarget sends a replacement layer transition below.
+            // Keeping the iframe's live resident layer stack until that message
+            // arrives lets it retarget from the pixels actually on screen.
+            cancelLayerTransition: options.preserveSkyLayerTransition !== true,
+          });
         }
         const resolveLayerTransition = ovizSkyLayerTransitionWaiters.get(String(transition.transitionId));
         if (resolveLayerTransition) {
@@ -475,14 +620,55 @@ THREEJS_STATE_RUNTIME_JS = r"""
           setSkyDomeViewOpacityScale(cameraViewMode === "earth" ? 1.0 : 0.0, { force: false });
           updateTimelineMotionOpacity();
         }
+        if (
+          options.preserveSkyLayerTransition !== true
+          && skyDomeFrameEl
+          && skyDomeFrameEl.contentWindow
+          && transition.skyLayerTransitionStarted
+        ) {
+          try {
+            skyDomeFrameEl.contentWindow.postMessage({
+              type: "oviz-sky-layer-transition-cancel",
+              transitionId: transition.transitionId,
+              reason,
+            }, "*");
+          } catch (_err) {
+          }
+        }
         if (typeof transition.resolve === "function") {
           transition.resolve({ cancelled: true, id: transition.targetId, reason });
         }
+        ovizWriteTransitionDiagnostics(null, {
+          cancelledRunId: transition.transitionId,
+          reason,
+        });
+        ovizStateEvent("transition-cancel", {
+          owner: "state",
+          runId: transition.transitionId,
+          id: transition.targetId,
+          index: transition.targetIndex + 1,
+          reason,
+        });
         const preservedMasks = options.preserveSelectionMasks instanceof Set
           ? options.preserveSelectionMasks
           : new Set();
+        if (options.preserveRenderedSelection === true && ovizHeldSelectionTransition) {
+          (ovizHeldSelectionTransition.sourceMaskComponents || []).forEach((component) => {
+            if (component && component.mask) preservedMasks.add(component.mask);
+          });
+          [
+            ovizHeldSelectionTransition.fromMask,
+            ovizHeldSelectionTransition.fromSecondaryMask,
+            ovizHeldSelectionTransition.toMask,
+          ].forEach((mask) => {
+            if (mask) preservedMasks.add(mask);
+          });
+        }
         const cancelledMasks = new Set([transition.targetRuntimeLassoMask]);
         if (selectionTransition) {
+          (selectionTransition.sourceMaskComponents || []).forEach((component) => {
+            if (component && component.mask) cancelledMasks.add(component.mask);
+          });
           [
             selectionTransition.fromMask,
             selectionTransition.fromSecondaryMask,
@@ -593,6 +779,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
           selectionBox: state.selection_box_state || null,
           clusterFilter: state.cluster_filter_state || null,
           zen: Boolean(state.zen_mode_enabled),
+          renderedTraceOpacity: state.__oviz_rendered_trace_opacity || null,
+          renderedSelectionWeights: state.__oviz_rendered_selection_weights || null,
+          renderedVolumeMaskBlend: state.__oviz_rendered_volume_mask_blend || null,
         });
       }
 
@@ -700,7 +889,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
       }
 
       function ovizSelectionMembershipOpacity(pointKey, point = null) {
-        const transition = ovizStateSelectionTransition;
+        const transition = ovizStateSelectionTransition || ovizHeldSelectionTransition;
         const key = normalizeMemberKey(pointKey);
         if (!transition) {
           if (!lassoSelectionFilterActive()) return 1.0;
@@ -846,7 +1035,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
             ? transition.targetSnapshot.sky_layers
             : [],
         );
-        if (JSON.stringify(fromLayers) === JSON.stringify(toLayers)) {
+        if (
+          !transition.forceSkyLayerRetarget
+          && JSON.stringify(fromLayers) === JSON.stringify(toLayers)
+        ) {
           transition.skyLayerPromise = Promise.resolve({ unchanged: true });
           return false;
         }
@@ -1057,6 +1249,20 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const destination = ovizHydrateAssets(target.snapshot || {});
         const transitionSpec = ovizNormalizeTransition(target.transition, ovizStatesProject.default_transition);
         const from = ovizCurrentTransitionSnapshot();
+        const sourceAppearanceComposite = (
+          typeof actionHeldAppearanceRollback !== "undefined"
+          && actionHeldAppearanceRollback
+          && Number(actionHeldAppearanceRollback.currentAppearanceProgress) > 0.0
+        ) ? {
+            fromSnapshot: ovizStatesClone(actionHeldAppearanceRollback.fromSnapshot, {}),
+            targetSnapshot: ovizStatesClone(actionHeldAppearanceRollback.targetSnapshot, {}),
+            targetWeight: clampRange(
+              Number(actionHeldAppearanceRollback.currentAppearanceProgress) || 0.0,
+              0.0,
+              1.0,
+            ),
+          }
+        : null;
         const traceCandidates = ovizTraceCandidatesForSnapshots(from, destination);
         const sourceTraceKeys = new Set(
           Array.from(ovizTraceCandidatesForFrameValue(ovizStateFrameValue(from)).keys())
@@ -1075,25 +1281,64 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
         const liveSelectionWeights = ovizCaptureSelectionMembershipOpacityMap(traceCandidates);
         const liveSelectionDefaultWeight = ovizSelectionMembershipOpacity("", null);
-        const previousSelectionTransition = ovizStateSelectionTransition;
-        const sourceVolumeMask = previousSelectionTransition
-          ? previousSelectionTransition.fromMask
-          : activeVolumeLassoSelectionMask();
-        const sourceVolumeSecondaryMask = previousSelectionTransition
-          ? previousSelectionTransition.toMask
+        const previousSelectionTransition = ovizStateSelectionTransition || ovizHeldSelectionTransition;
+        const previousStateTransition = ovizStateTransition;
+        const destinationViewMode = String(
+          (destination.global_controls || {}).camera_view_mode || "free"
+        );
+        const forceSkyLayerRetarget = Boolean(
+          previousStateTransition
+          && previousStateTransition.skyLayerTransitionStarted
+          && destinationViewMode === "earth"
+        );
+        // Freeze the exact composed source membership before cancelling the
+        // old transition.  Keeping four weighted masks prevents a rapid third
+        // (or fourth) retarget from dropping an earlier live contribution.
+        const sourceVolumeMaskComponents = ovizFreezeVolumeMaskSourceComponents(
+          previousSelectionTransition,
+          activeVolumeLassoSelectionMask()
+        );
+        const sourceVolumeMask = sourceVolumeMaskComponents[0]
+          ? sourceVolumeMaskComponents[0].mask
           : null;
-        const sourceVolumeMaskBlend = previousSelectionTransition
-          ? clampRange(Number(previousSelectionTransition.progress) || 0.0, 0.0, 1.0)
+        const sourceVolumeSecondaryMask = sourceVolumeMaskComponents[1]
+          ? sourceVolumeMaskComponents[1].mask
+          : null;
+        const sourceVolumeMaskBlend = sourceVolumeMaskComponents[1]
+          ? sourceVolumeMaskComponents[1].weight
           : 0.0;
+        if (
+          ovizStateTransition
+          || previousSelectionTransition
+          || legendTransitionState
+          || actionHeldTraceOpacityByKey
+        ) {
+          // Retarget phase detection must describe the frame that is actually
+          // on screen, not only the last committed logical snapshot.  These
+          // fields are transition-local and are never exported as authored state.
+          from.__oviz_rendered_trace_opacity = Object.fromEntries(liveTraceOpacity);
+          from.__oviz_rendered_selection_weights = Object.fromEntries(liveSelectionWeights);
+          from.__oviz_rendered_volume_mask_blend = {
+            active: Boolean(previousSelectionTransition),
+            progress: previousSelectionTransition
+              ? clampRange(Number(previousSelectionTransition.progress) || 0.0, 0.0, 1.0)
+              : 0.0,
+            has_source: Boolean(sourceVolumeMask),
+            has_secondary: Boolean(sourceVolumeSecondaryMask),
+            component_weights: sourceVolumeMaskComponents.map((component) => component.weight),
+          };
+        }
         const preservedSelectionMasks = new Set(
-          [sourceVolumeMask, sourceVolumeSecondaryMask].filter(Boolean)
+          sourceVolumeMaskComponents.map((component) => component.mask).filter(Boolean)
         );
         ovizCancelStateTransitionWithoutSnap("state-retarget", {
           restorePresentation: false,
           preserveSelectionMasks: preservedSelectionMasks,
+          preserveSkyLayerTransition: forceSkyLayerRetarget,
         });
+        ovizHeldSelectionTransition = null;
         const fromViewMode = String((from.global_controls || {}).camera_view_mode || "free");
-        const toViewMode = String((destination.global_controls || {}).camera_view_mode || "free");
+        const toViewMode = destinationViewMode;
         const viewTransitionKind = fromViewMode === "earth" && toViewMode === "earth"
           ? "earth-to-earth"
           : (
@@ -1114,7 +1359,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
         }
         const phasePlan = ovizBuildTransitionPhases(from, destination, transitionSpec);
         if (options.preserveActionRun !== true) {
-          ovizCancelActionWithoutSnap();
+          ovizCancelActionWithoutSnap("state-navigation");
         }
         playbackDirection = 0;
         lastPlaybackAdvanceTimestamp = null;
@@ -1158,6 +1403,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           targetName: target.name,
           targetSnapshot: destination,
           fromSnapshot: from,
+          sourceAppearanceComposite,
           transitionSpec,
           phasePlan,
           startedAt: now,
@@ -1175,6 +1421,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ) ? ovizCreateNativeViewCameraTrack(destination) : null,
           skyBackgroundPromise: null,
           skyLayerPromise: Promise.resolve({ unchanged: true }),
+          forceSkyLayerRetarget,
           fromViewMode,
           toViewMode,
           lastProgressEventAt: -Infinity,
@@ -1201,6 +1448,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
           root.dataset.stateTransitionPhaseProgress = "0";
           root.dataset.stateTransitionEffectiveDurationMs = String(phasePlan.effectiveDurationMs);
         }
+        ovizWriteTransitionDiagnostics(ovizStateTransition, {
+          phase: phasePlan.phases[0].name,
+          phaseProgress: 0.0,
+          effectiveDurationMs: phasePlan.effectiveDurationMs,
+          topologyPrepareCount: 0,
+          retainedUpdateCount: 0,
+        });
         const fromSelectionSignature = JSON.stringify({
           mode: from.current_selection_mode || "none",
           keys: from.selected_cluster_keys || [],
@@ -1218,6 +1472,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             fromWeightByKey: liveSelectionWeights,
             fromDefaultWeight: liveSelectionDefaultWeight,
             toEndpoint: ovizSelectionEndpoint(destination),
+            sourceMaskComponents: sourceVolumeMaskComponents,
             fromMask: sourceVolumeMask,
             fromSecondaryMask: sourceVolumeSecondaryMask,
             fromMaskBlend: sourceVolumeMaskBlend,
@@ -1283,6 +1538,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
         }
         ovizRenderStatesDrawer();
         ovizStateEvent("transition-start", {
+          owner: "state",
+          runId: transitionId,
           id: target.id,
           index: target.index + 1,
           name: target.name,
@@ -1513,6 +1770,23 @@ THREEJS_STATE_RUNTIME_JS = r"""
               }
             }
           }
+          ovizWriteTransitionDiagnostics(transition, {
+            phase: phaseState.name,
+            phaseProgress: phaseState.progress,
+            effectiveDurationMs: transition.phasePlan.effectiveDurationMs,
+            camera: {
+              x: camera.position.x,
+              y: camera.position.y,
+              z: camera.position.z,
+              tx: controls.target.x,
+              ty: controls.target.y,
+              tz: controls.target.z,
+              fov: Number(camera.fov),
+            },
+            maxFrameGapMs: transition.maxFrameGapMs,
+            longFrameCount: transition.longFrameCount,
+            sceneRenderCount: transition.sceneRenderCount,
+          });
           const fromFrame = ovizStateFrameValue(from);
           const toFrame = ovizStateFrameValue(to);
           const interpolatedFrameValue = ovizLerp(fromFrame, toFrame, timeProgress);
@@ -1568,6 +1842,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (now - transition.lastProgressEventAt >= 100 || raw >= 1) {
             transition.lastProgressEventAt = now;
             ovizStateEvent("transition-progress", {
+              owner: "state",
+              runId: transition.transitionId,
               id: transition.targetId,
               index: transition.targetIndex + 1,
               progress: raw,
@@ -1642,6 +1918,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           // destination frame hidden even though state fidelity was exact.
           ovizStateTransitionTraceOpacity = null;
           ovizStateSelectionTransition = null;
+          ovizHeldSelectionTransition = null;
           transition.sceneRenderCount += 1;
           // The animated camera has already delivered the exact target view to
           // Aladin. Do not force the same center/FOV again here: a redundant
@@ -1654,10 +1931,22 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (transition !== ovizStateTransition) {
             return;
           }
+          // Let the exact destination survive a renderer frame before testing
+          // fidelity.  Logical state alone cannot reveal a stale or empty plot.
+          await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+          if (transition !== ovizStateTransition) {
+            return;
+          }
+          appliedSnapshot = captureRuntimeState();
           let fidelityDifferences = ovizStateFidelityDifferences(
             transition.targetSnapshot,
             appliedSnapshot,
           );
+          if (typeof ovizRenderedSceneFidelityDifferences === "function") {
+            fidelityDifferences.push(
+              ...ovizRenderedSceneFidelityDifferences(transition.targetSnapshot)
+            );
+          }
           if (fidelityDifferences.length) {
             appliedSnapshot = await ovizApplyStateImmediately(transition.targetSnapshot, {
               forceSkyBackground: false,
@@ -1667,10 +1956,20 @@ THREEJS_STATE_RUNTIME_JS = r"""
             if (transition !== ovizStateTransition) {
               return;
             }
+            await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+            if (transition !== ovizStateTransition) {
+              return;
+            }
+            appliedSnapshot = captureRuntimeState();
             fidelityDifferences = ovizStateFidelityDifferences(
               transition.targetSnapshot,
               appliedSnapshot,
             );
+            if (typeof ovizRenderedSceneFidelityDifferences === "function") {
+              fidelityDifferences.push(
+                ...ovizRenderedSceneFidelityDifferences(transition.targetSnapshot)
+              );
+            }
           }
           postSkyLayerStateToAladin();
           root.dataset.stateFidelity = JSON.stringify({
@@ -1689,12 +1988,16 @@ THREEJS_STATE_RUNTIME_JS = r"""
           }
           ovizStateTransition = null;
           if (finishedSelectionTransition) {
-            new Set([
+            const finishedMasks = new Set([
               finishedSelectionTransition.fromMask,
               finishedSelectionTransition.fromSecondaryMask,
               finishedSelectionTransition.toMask,
               transition.targetRuntimeLassoMask,
-            ]).forEach((mask) => disposeSelectionMaskIfUnused(mask));
+            ]);
+            (finishedSelectionTransition.sourceMaskComponents || []).forEach((component) => {
+              if (component && component.mask) finishedMasks.add(component.mask);
+            });
+            finishedMasks.forEach((mask) => disposeSelectionMaskIfUnused(mask));
           }
           if (root && root.dataset) {
             root.dataset.stateTransitionProgress = "1";
@@ -1715,8 +2018,14 @@ THREEJS_STATE_RUNTIME_JS = r"""
             preApplyFovError,
           };
           root.dataset.stateTransitionMetrics = JSON.stringify(performanceMetrics);
+          ovizWriteTransitionDiagnostics(null, {
+            completedRunId: transition.transitionId,
+            performance: performanceMetrics,
+          });
           ovizRenderStatesDrawer();
           ovizStateEvent("transition-complete", {
+            owner: "state",
+            runId: transition.transitionId,
             id: transition.targetId,
             index: transition.targetIndex + 1,
             name: transition.targetName,
@@ -1730,19 +2039,27 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       function ovizFailStateTransition(transition, err) {
         const failedSelectionTransition = transition && transition.selectionTransition;
-        if (transition === ovizStateTransition) {
-          ovizStateTransition = null;
-          ovizStateTransitionTraceOpacity = null;
-          ovizStateSelectionTransition = null;
-        }
         const failedMasks = new Set([transition && transition.targetRuntimeLassoMask]);
         if (failedSelectionTransition) {
+          (failedSelectionTransition.sourceMaskComponents || []).forEach((component) => {
+            if (component && component.mask) failedMasks.add(component.mask);
+          });
           [
             failedSelectionTransition.fromMask,
             failedSelectionTransition.fromSecondaryMask,
             failedSelectionTransition.toMask,
           ].forEach((mask) => failedMasks.add(mask));
         }
+        // Async completion from an abandoned run must never reset the active
+        // camera/Sky presentation or emit an error for its replacement.
+        if (transition !== ovizStateTransition) {
+          failedMasks.forEach((mask) => disposeSelectionMaskIfUnused(mask));
+          return false;
+        }
+        ovizStateTransition = null;
+        ovizStateTransitionTraceOpacity = null;
+        ovizStateSelectionTransition = null;
+        ovizHeldSelectionTransition = null;
         failedMasks.forEach((mask) => disposeSelectionMaskIfUnused(mask));
         if (typeof cancelSkyViewTransitionAnimations === "function") {
           cancelSkyViewTransitionAnimations({ reason: "state-transition-error" });
@@ -1751,14 +2068,22 @@ THREEJS_STATE_RUNTIME_JS = r"""
         updateTimelineMotionOpacity();
         renderer.domElement.style.opacity = "1";
         setMilkyWayModelOpacityScale(cameraViewMode === "earth" ? 0.0 : 1.0);
+        setSkyDomeViewOpacityScale(cameraViewMode === "earth" ? 1.0 : 0.0, { force: false });
+        ovizWriteTransitionDiagnostics(null, {
+          failedRunId: transition && transition.transitionId,
+          error: String(err && err.message || err),
+        });
         ovizRenderStatesDrawer();
         ovizStateEvent("transition-error", {
+          owner: "state",
+          runId: transition && transition.transitionId,
           id: transition && transition.targetId,
           message: String(err && err.message || err),
         });
         if (transition && typeof transition.reject === "function") {
           transition.reject(err);
         }
+        return true;
       }
 
       function ovizGoToState(idOrIndex) {

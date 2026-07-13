@@ -725,7 +725,10 @@ THREEJS_VIEWER_RUNTIME_JS = """
           options.cancelBackground !== false
           && typeof cancelSkyDomeBackgroundProgrammaticTransition === "function"
         ) {
-          cancelSkyDomeBackgroundProgrammaticTransition(options.reason || "cancelled");
+          cancelSkyDomeBackgroundProgrammaticTransition(
+            options.reason || "cancelled",
+            { cancelLayerTransition: options.cancelLayerTransition !== false },
+          );
         }
         return skyViewTransitionSerial;
       }

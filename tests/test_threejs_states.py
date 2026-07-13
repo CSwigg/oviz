@@ -158,19 +158,42 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn("startStateAction", html)
         self.assertIn("lassoSelectionRestoreSerial", html)
         self.assertIn("restoreSerial !== lassoSelectionRestoreSerial", html)
-        self.assertIn("previousStep.finished", html)
+        self.assertIn("const OvizTransitionRuntime = (() =>", html)
+        self.assertIn("OvizTransitionRuntime.createFrameCoordinator", html)
+        self.assertIn("updateOvizUnifiedTransitionSession(now)", html)
+        self.assertIn("previous.startedAt === null ? null", html)
+        self.assertIn("previous.finishedAt === null ? null", html)
         self.assertIn("completeCamera: false", html)
         self.assertIn("ovizSkyLayerTransitionWaiters", html)
         self.assertIn('data.type === "oviz-aladin-sky-layer-transition-complete"', html)
-        self.assertIn("stateOwnsCameraAndTime", html)
+        self.assertIn("transitionOwnsCameraAndTime", html)
+        self.assertIn('typeof activeActionRun !== "undefined" && activeActionRun', html)
         self.assertIn("actionHeldTraceOpacityByKey", html)
         self.assertIn("captureActionTraceOpacityMap", html)
         self.assertIn("preserveLegendTransitionFrame: true", html)
+        self.assertIn("actionHeldAppearanceRollback", html)
+        self.assertIn("sourceAppearanceComposite", html)
+        self.assertIn("preserveRenderedSelection: true", html)
+        self.assertIn("restorePresentation: false", html)
+        self.assertIn('destinationViewMode === "earth"', html)
+        self.assertIn("if (transition !== ovizStateTransition)", html)
+        self.assertIn("finishActionHeldAppearanceRollback", html)
         cancel_action_body = html.split(
-            "function ovizCancelActionWithoutSnap()", 1
+            "function ovizCancelActionWithoutSnap(reason", 1
         )[1].split("function ovizCancelStateTransitionWithoutSnap", 1)[0]
         self.assertIn("actionHeldTraceOpacityByKey = null", cancel_action_body)
         self.assertNotIn("__STATE_RUNTIME_JS__", html)
+        fail_state_body = html.split(
+            "function ovizFailStateTransition(transition, err)", 1
+        )[1].split("function ovizGoToState", 1)[0]
+        stale_guard_index = fail_state_body.index("if (transition !== ovizStateTransition)")
+        sky_cancel_index = fail_state_body.index("cancelSkyViewTransitionAnimations")
+        self.assertLess(stale_guard_index, sky_cancel_index)
+        trace_visible_body = html.split("function traceVisible(trace)", 1)[1].split(
+            "function isGalacticReferenceTrace", 1
+        )[0]
+        self.assertIn("Object.prototype.hasOwnProperty.call(legendState, trace.key)", trace_visible_body)
+        self.assertIn(": mode === true", trace_visible_body)
 
     def test_state_transition_runtime_exposes_ordered_phase_instrumentation(self):
         html = ThreeJSFigure({
@@ -223,6 +246,8 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn("selectionSourceSecondaryMaskTexture", html)
         self.assertIn("float sourceSelectionWeight = mix(", html)
         self.assertIn("selectionWeight = mix(", html)
+        self.assertIn("ovizHeldSelectionTransition", html)
+        self.assertIn("preserveRenderedSelection: true", html)
         self.assertIn("function ovizTransitionOpacityBucket(", html)
         opacity_bucket_body = html.split(
             "function ovizTransitionOpacityBucket(", 1
@@ -265,6 +290,7 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             finish_body.index("ovizStateSelectionTransition = null"),
             exact_apply,
         )
+        self.assertIn("ovizRenderedSceneFidelityDifferences", finish_body)
 
     def test_mask_only_lasso_states_keep_destination_points_visible(self):
         html = ThreeJSFigure({

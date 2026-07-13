@@ -639,7 +639,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("clearSelectedAction: options.clearSelectedAction === true", html)
         self.assertIn("function applyActionCameraViewOffset(viewOffset)", html)
         self.assertIn("function restoreTimeIntervalMsForAction(action)", html)
-        self.assertIn("intervalMs: restoreTimeIntervalMs", html)
+        self.assertIn("runtime_snapshot: safeJsonClone(initialActionViewState, {})", html)
+        self.assertIn("captureRuntimeState()", html)
         self.assertIn("Paper 1", html)
 
     def test_threejs_renderer_keeps_actions_in_minimal_mode(self):
@@ -758,7 +759,10 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('document.addEventListener("webkitfullscreenchange", syncOvizFullscreenButton);', html)
         self.assertIn("const mobileDeferVolumes = mobileModeEnabled && initialState.mobile_defer_volumes !== false;", html)
         self.assertIn('root.dataset.mobileVolumesDeferred = mobileDeferVolumes ? "true" : "false";', html)
-        self.assertIn("!state || !volumeVisibleForFrame(layer, state, currentFrame())", html)
+        self.assertIn(
+            "!state || (!forceResident && !volumeVisibleForFrame(layer, state, currentFrame()))",
+            html,
+        )
 
     def test_chronos_mobile_runner_uses_full_resolution_mobile_assets(self):
         source = (Path(__file__).resolve().parent / "main_figure_new_chronos.py").read_text(encoding="utf-8")

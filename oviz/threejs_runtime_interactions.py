@@ -155,13 +155,20 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         if (currentLassoSelectionMask === mask) {
           return true;
         }
+        const transition = (
+          typeof ovizStateSelectionTransition !== "undefined" && ovizStateSelectionTransition
+        ) || (
+          typeof ovizHeldSelectionTransition !== "undefined" && ovizHeldSelectionTransition
+        ) || null;
         if (
-          typeof ovizStateSelectionTransition !== "undefined"
-          && ovizStateSelectionTransition
+          transition
           && (
-            ovizStateSelectionTransition.fromMask === mask
-            || ovizStateSelectionTransition.fromSecondaryMask === mask
-            || ovizStateSelectionTransition.toMask === mask
+            transition.fromMask === mask
+            || transition.fromSecondaryMask === mask
+            || transition.toMask === mask
+            || (transition.sourceMaskComponents || []).some(
+              (component) => component && component.mask === mask
+            )
           )
         ) {
           return true;
@@ -178,6 +185,24 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           return;
         }
         disposeLassoSelectionMask(mask);
+      }
+
+      function releaseOvizHeldSelectionTransition() {
+        if (typeof ovizHeldSelectionTransition === "undefined" || !ovizHeldSelectionTransition) {
+          return false;
+        }
+        const held = ovizHeldSelectionTransition;
+        ovizHeldSelectionTransition = null;
+        const masks = new Set([
+          held.fromMask,
+          held.fromSecondaryMask,
+          held.toMask,
+        ]);
+        (held.sourceMaskComponents || []).forEach((component) => {
+          if (component && component.mask) masks.add(component.mask);
+        });
+        masks.forEach((mask) => disposeSelectionMaskIfUnused(mask));
+        return true;
       }
 
       function selectionStateSnapshot() {
@@ -317,6 +342,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function setClusterSelections(selections, mode = "lasso", options = {}) {
+        releaseOvizHeldSelectionTransition();
         if (minimalModeEnabled) {
           currentSelection = null;
           currentSelections = [];
@@ -356,7 +382,8 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function clearClusterSelections() {
-        if (!selectionStateHasContent()) {
+        const releasedHeldSelection = releaseOvizHeldSelectionTransition();
+        if (!selectionStateHasContent() && !releasedHeldSelection) {
           return;
         }
         pushSelectionUndoState();

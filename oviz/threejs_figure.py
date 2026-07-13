@@ -17,6 +17,7 @@ from .threejs_runtime_legend import THREEJS_LEGEND_RUNTIME_JS
 from .threejs_runtime_interactions import THREEJS_INTERACTION_RUNTIME_JS
 from .threejs_runtime_ar import THREEJS_AR_RUNTIME_JS
 from .threejs_runtime_actions import THREEJS_ACTION_RUNTIME_JS
+from .threejs_transition_runtime import THREEJS_TRANSITION_RUNTIME_JS
 from .threejs_runtime_states import THREEJS_STATE_RUNTIME_JS
 from .threejs_runtime_scene import THREEJS_SCENE_RUNTIME_JS
 from .threejs_runtime_sky import THREEJS_SKY_RUNTIME_JS
@@ -7712,12 +7713,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         };
       }
 
-      function selectionBoxDisplayStateAtTime(timeMyr) {
+      function selectionBoxDisplayStateAtTime(timeMyr, stateOverride = null) {
         if (!selectionBoxSpec.enabled) {
           return null;
         }
-        const centerLocal = selectionBoxState.center || { x: 0.0, y: 0.0, z: 0.0 };
-        const halfWidthPc = clampSelectionBoxHalfWidth(selectionBoxState.halfWidthPc);
+        const override = stateOverride && typeof stateOverride === "object" ? stateOverride : null;
+        if (override && override.visible === false) {
+          return null;
+        }
+        const state = override
+          ? {
+              center: override.center_local_pc || override.center || selectionBoxState.center,
+              halfWidthPc: override.half_width_pc ?? override.halfWidthPc ?? selectionBoxState.halfWidthPc,
+            }
+          : selectionBoxState;
+        const centerLocal = state.center || { x: 0.0, y: 0.0, z: 0.0 };
+        const halfWidthPc = clampSelectionBoxHalfWidth(state.halfWidthPc);
         const signs = [
           [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
           [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
@@ -9524,9 +9535,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       function applyLassoSelectionMaskUniforms(uniforms, mask) {
         const activeMask = mask && mask.maskTexture && mask.viewProjectionMatrix ? mask : null;
         uniforms.useSelectionPolygon.value = Boolean(activeMask);
-        uniforms.selectionViewProjectionMatrix.value.copy(
-          activeMask ? activeMask.viewProjectionMatrix : new THREE.Matrix4()
-        );
+        if (activeMask) {
+          uniforms.selectionViewProjectionMatrix.value.copy(activeMask.viewProjectionMatrix);
+        } else {
+          uniforms.selectionViewProjectionMatrix.value.identity();
+        }
         uniforms.selectionMaskTexture.value = activeMask ? activeMask.maskTexture : null;
         uniforms.selectionDimOutside.value = activeMask ? 0.0 : 1.0;
       }
@@ -9535,25 +9548,49 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         const transition = (
           typeof ovizStateSelectionTransition !== "undefined"
           && ovizStateSelectionTransition
-        ) ? ovizStateSelectionTransition : null;
-        const sourceMask = transition
-          ? transition.fromMask
-          : activeVolumeLassoSelectionMask();
-        applyLassoSelectionMaskUniforms(uniforms, sourceMask);
-        const sourceSecondaryMask = transition && transition.fromSecondaryMask
-          && transition.fromSecondaryMask.maskTexture
-          && transition.fromSecondaryMask.viewProjectionMatrix
-          ? transition.fromSecondaryMask
-          : null;
-        uniforms.useSelectionSourceSecondaryPolygon.value = Boolean(sourceSecondaryMask);
-        uniforms.selectionSourceSecondaryViewProjectionMatrix.value.copy(
-          sourceSecondaryMask ? sourceSecondaryMask.viewProjectionMatrix : new THREE.Matrix4()
+        ) ? ovizStateSelectionTransition : (
+          typeof ovizHeldSelectionTransition !== "undefined"
+          && ovizHeldSelectionTransition
+            ? ovizHeldSelectionTransition
+            : null
         );
-        uniforms.selectionSourceSecondaryMaskTexture.value = sourceSecondaryMask
-          ? sourceSecondaryMask.maskTexture
-          : null;
-        uniforms.selectionSourceBlend.value = transition
-          ? clampRange(Number(transition.fromMaskBlend) || 0.0, 0.0, 1.0)
+        const fallbackMask = activeVolumeLassoSelectionMask();
+        const sourceComponents = (
+          typeof ovizVolumeMaskTransitionSourceComponents === "function"
+        )
+          ? ovizVolumeMaskTransitionSourceComponents(transition, fallbackMask)
+          : [{ mask: transition ? transition.fromMask : fallbackMask, weight: 1.0 }];
+        const componentAt = (index) => sourceComponents[index] || { mask: null, weight: 0.0 };
+        const runtimeMaskAt = (index) => {
+          const mask = componentAt(index).mask;
+          return mask && mask.maskTexture && mask.viewProjectionMatrix ? mask : null;
+        };
+        applyLassoSelectionMaskUniforms(uniforms, runtimeMaskAt(0));
+        const applySourceSlot = (index, prefix) => {
+          const mask = runtimeMaskAt(index);
+          uniforms[`useSelectionSource${prefix}Polygon`].value = Boolean(mask);
+          const matrix = uniforms[`selectionSource${prefix}ViewProjectionMatrix`].value;
+          if (mask) matrix.copy(mask.viewProjectionMatrix);
+          else matrix.identity();
+          uniforms[`selectionSource${prefix}MaskTexture`].value = mask ? mask.maskTexture : null;
+        };
+        applySourceSlot(1, "Secondary");
+        applySourceSlot(2, "Tertiary");
+        applySourceSlot(3, "Quaternary");
+        const sourceWeights = sourceComponents.slice(0, 4).map((component) => (
+          Math.max(0.0, Number(component.weight) || 0.0)
+        ));
+        while (sourceWeights.length < 4) sourceWeights.push(0.0);
+        const sourceWeightTotal = sourceWeights.reduce((sum, value) => sum + value, 0.0) || 1.0;
+        uniforms.selectionSourceWeights.value.set(
+          sourceWeights[0] / sourceWeightTotal,
+          sourceWeights[1] / sourceWeightTotal,
+          sourceWeights[2] / sourceWeightTotal,
+          sourceWeights[3] / sourceWeightTotal
+        );
+        const primarySecondaryWeight = sourceWeights[0] + sourceWeights[1];
+        uniforms.selectionSourceBlend.value = primarySecondaryWeight > 1e-8
+          ? sourceWeights[1] / primarySecondaryWeight
           : 0.0;
         const targetMask = transition && transition.toMask
           && transition.toMask.maskTexture
@@ -9561,9 +9598,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           ? transition.toMask
           : null;
         uniforms.useSelectionTargetPolygon.value = Boolean(targetMask);
-        uniforms.selectionTargetViewProjectionMatrix.value.copy(
-          targetMask ? targetMask.viewProjectionMatrix : new THREE.Matrix4()
-        );
+        if (targetMask) {
+          uniforms.selectionTargetViewProjectionMatrix.value.copy(targetMask.viewProjectionMatrix);
+        } else {
+          uniforms.selectionTargetViewProjectionMatrix.value.identity();
+        }
         uniforms.selectionTargetMaskTexture.value = targetMask ? targetMask.maskTexture : null;
         uniforms.selectionTransitionActive.value = Boolean(transition);
         uniforms.selectionTransitionProgress.value = transition
@@ -13938,7 +13977,14 @@ __SKY_RUNTIME_JS__
             useSelectionSourceSecondaryPolygon: { value: false },
             selectionSourceSecondaryViewProjectionMatrix: { value: new THREE.Matrix4() },
             selectionSourceSecondaryMaskTexture: { value: null },
+            useSelectionSourceTertiaryPolygon: { value: false },
+            selectionSourceTertiaryViewProjectionMatrix: { value: new THREE.Matrix4() },
+            selectionSourceTertiaryMaskTexture: { value: null },
+            useSelectionSourceQuaternaryPolygon: { value: false },
+            selectionSourceQuaternaryViewProjectionMatrix: { value: new THREE.Matrix4() },
+            selectionSourceQuaternaryMaskTexture: { value: null },
             selectionSourceBlend: { value: 0.0 },
+            selectionSourceWeights: { value: new THREE.Vector4(1.0, 0.0, 0.0, 0.0) },
             useSelectionTargetPolygon: { value: false },
             selectionTargetViewProjectionMatrix: { value: new THREE.Matrix4() },
             selectionTargetMaskTexture: { value: null },
@@ -14127,7 +14173,11 @@ __SKY_RUNTIME_JS__
                 if (!material || material.userData?.cached) {
                   return;
                 }
-                if (material.map && !persistentImagePlaneTextures.has(material.map)) {
+                if (
+                  material.map
+                  && !material.userData?.ovizSharedTexture
+                  && !persistentImagePlaneTextures.has(material.map)
+                ) {
                   material.map.dispose();
                 }
                 material.dispose();
@@ -14136,6 +14186,7 @@ __SKY_RUNTIME_JS__
               if (
                 !child.material.userData?.cached
                 && child.material.map
+                && !child.material.userData?.ovizSharedTexture
                 && !persistentImagePlaneTextures.has(child.material.map)
               ) {
                 child.material.map.dispose();
@@ -14424,6 +14475,9 @@ __SKY_RUNTIME_JS__
           baseScale: Math.max(Number(pointScaleValue) || 0.0, 0.0),
           selectionKey: selectionKey ? String(selectionKey) : "",
         };
+        if (sprite.userData && typeof sprite.userData === "object") {
+          sprite.userData.ovizResponsivePointEntry = entry;
+        }
         cameraResponsivePointEntries.push(entry);
         if (entry.selectionKey) {
           if (!selectionSpriteEntriesByKey.has(entry.selectionKey)) {
@@ -14488,10 +14542,14 @@ __SKY_RUNTIME_JS__
           mesh,
           baseOpacity: clamp01(Number(options.baseOpacity) || 0.0),
           timeOpacityScale: clamp01(Number(options.timeOpacityScale ?? 1.0)),
+          transitionOpacityScale: 1.0,
           milkyWayImage: Boolean(options.milkyWayImage),
           hideBelowScaleBarPc: Math.max(Number(options.hideBelowScaleBarPc) || 0.0, 0.0),
           fadeStartScaleBarPc: Math.max(Number(options.fadeStartScaleBarPc) || 0.0, 0.0),
         };
+        if (mesh.userData && typeof mesh.userData === "object") {
+          mesh.userData.ovizResponsiveImagePlaneEntry = entry;
+        }
         cameraResponsiveImagePlaneEntries.push(entry);
         return entry;
       }
@@ -14531,6 +14589,7 @@ __SKY_RUNTIME_JS__
           const viewOpacityScale = entry.milkyWayImage ? milkyWayViewOpacityScale : 1.0;
           const effectiveOpacity = clamp01(Number(entry.baseOpacity) || 0.0)
             * clamp01(Number(entry.timeOpacityScale ?? 1.0))
+            * clamp01(Number(entry.transitionOpacityScale ?? 1.0))
             * clamp01(fadeFactor)
             * clamp01(viewOpacityScale);
           material.opacity = effectiveOpacity;
@@ -14592,6 +14651,9 @@ __SKY_RUNTIME_JS__
           depthWrite: false,
           depthTest: true,
         });
+        // Text textures are content-addressed and shared by the cache.  The
+        // per-sprite material is disposable, but its map is not.
+        material.userData = { ovizSharedTexture: true };
         const sprite = new THREE.Sprite(material);
         const aspect = texture.userData.width / Math.max(texture.userData.height, 1);
         const baseScale = (sceneSpec.max_span || 1) / 1400.0;
@@ -15399,6 +15461,7 @@ __SKY_RUNTIME_JS__
         const lineColor = (traceState && traceState.color) || (trace.line || {}).color || "#ffffff";
         let lineOpacity = traceState ? clamp01(traceState.opacity) : (trace.opacity ?? 1.0);
         lineOpacity *= traceVisibilityOpacityMultiplier(trace);
+        lineOpacity *= clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
         const focusedTraceKey = dendrogramFocusTraceKey();
         if (focusedTraceKey && String(trace.key) !== focusedTraceKey) {
           lineOpacity *= 0.16;
@@ -15422,6 +15485,8 @@ __SKY_RUNTIME_JS__
         material.resolution.set(root.clientWidth, root.clientHeight);
         const line = new LineSegments2(geometry, material);
         line.computeLineDistances();
+        line.userData.ovizRetainedTrace = trace;
+        line.userData.ovizRetainedKind = "segments";
         materialBucket.push(material);
         return line;
       }
@@ -15593,12 +15658,16 @@ __SKY_RUNTIME_JS__
         return group;
       }
 
-      function buildSelectionBoxGroupForFrame(timeMyr) {
-        selectionBoxHitObjects = [];
-        if (!selectionBoxShouldRender()) {
+      function buildSelectionBoxGroupForFrame(timeMyr, stateOverride = null, options = {}) {
+        const interactive = options.interactive !== false;
+        if (interactive) selectionBoxHitObjects = [];
+        if (
+          !selectionBoxSpec.enabled
+          || (stateOverride ? stateOverride.visible === false : !selectionBoxShouldRender())
+        ) {
           return null;
         }
-        const displayState = selectionBoxDisplayStateAtTime(timeMyr);
+        const displayState = selectionBoxDisplayStateAtTime(timeMyr, stateOverride);
         if (!displayState) {
           return null;
         }
@@ -15615,6 +15684,10 @@ __SKY_RUNTIME_JS__
         }, frameLineMaterials);
         if (line) {
           group.add(line);
+        }
+
+        if (!interactive) {
+          return group;
         }
 
         const cubeSidePc = 2.0 * displayState.halfWidthPc;
@@ -15791,7 +15864,7 @@ __SKY_RUNTIME_JS__
         return 0.0;
       }
 
-      function animatedPointState(point, trace = null) {
+      function animatedPointState(point, trace = null, timeOverride = null) {
         const motion = point && typeof point.motion === "object" ? point.motion : null;
         const baseSize = pointSizeForTrace(point, trace);
         const baseOpacity = pointOpacityForTrace(point, trace);
@@ -15802,7 +15875,7 @@ __SKY_RUNTIME_JS__
           };
         }
         const birthFadeFactor = fadeVisibilityFactor(
-          motion.time_myr,
+          Number.isFinite(Number(timeOverride)) ? Number(timeOverride) : motion.time_myr,
           motion.age_now_myr,
           fadeInTimeMyr,
           fadeInAndOutEnabled
@@ -15894,10 +15967,22 @@ __SKY_RUNTIME_JS__
         return traceState.sizeByNStarsDefault ? (1.0 / factor) : 1.0;
       }
 
+      function ovizRetainedSpriteMaterial(baseMaterial) {
+        const material = baseMaterial.clone();
+        material.userData = Object.assign({}, baseMaterial.userData || {}, {
+          cached: false,
+          ovizSharedTexture: true,
+          ovizRetainedOwned: true,
+        });
+        return material;
+      }
+
       function addMarkerTrace(parent, trace) {
+        const options = arguments.length > 2 && arguments[2] ? arguments[2] : {};
         if (!trace.points || !trace.points.length) {
           return;
         }
+        const forceResident = options.forceResident === true;
         const group = new THREE.Group();
         const traceState = traceStyleStateForKey(trace.key);
         const traceOpacityMultiplier = traceState
@@ -15905,12 +15990,13 @@ __SKY_RUNTIME_JS__
           : 1.0;
         const traceVisibilityMultiplier = traceVisibilityOpacityMultiplier(trace);
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
-        trace.points.forEach((point) => {
-          if (!clusterFilterPassesPoint(point)) {
+        const stableKeyCounts = new Map();
+        trace.points.forEach((point, pointIndex) => {
+          if (!clusterFilterPassesPoint(point) && !forceResident) {
             return;
           }
           const pointState = animatedPointState(point, trace);
-          if (!Number.isFinite(pointState.size) || pointState.size <= 0) {
+          if ((!Number.isFinite(pointState.size) || pointState.size <= 0) && !forceResident) {
             return;
           }
           let opacityMultiplier = 1.0;
@@ -15928,12 +16014,17 @@ __SKY_RUNTIME_JS__
             opacityMultiplier *= ovizSelectionMembershipOpacity(pointKey, point);
           } else if (lassoSelectionFilterActive()) {
             if (!pointKey || !selectedClusterKeys.has(pointKey)) {
-              return;
+              if (!forceResident) {
+                return;
+              }
+              opacityMultiplier = 0.0;
             }
           }
           const baseOpacity = Number(pointState.opacity ?? pointOpacityForTrace(point, trace));
-          const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * traceVisibilityMultiplier * opacityMultiplier * globalPointOpacityScale));
-          if (effectiveOpacity <= 0.001) {
+          const presenceOpacity = clamp01(Number(point.oviz_presence_opacity ?? 1.0))
+            * clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
+          const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * traceVisibilityMultiplier * opacityMultiplier * globalPointOpacityScale * presenceOpacity));
+          if (effectiveOpacity <= 0.001 && !forceResident) {
             return;
           }
           const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05);
@@ -15947,9 +16038,30 @@ __SKY_RUNTIME_JS__
           const pointPosition = new THREE.Vector3(point.x, point.y, point.z);
           const glowStrength = Math.max(globalPointGlowStrength, 0.0);
           const pointColor = pointColorForTrace(point, trace, traceState);
-          if (glowStrength > 0.02) {
+          const stablePointKey = typeof ovizTransitionStablePointKey === "function"
+            ? ovizTransitionStablePointKey(point, trace)
+            : (motionKeyForPoint(point) || normalizedSelectionKeyFor(point.selection));
+          const stableOccurrence = stablePointKey
+            ? Number(stableKeyCounts.get(stablePointKey) || 0)
+            : 0;
+          if (stablePointKey) {
+            stableKeyCounts.set(stablePointKey, stableOccurrence + 1);
+          }
+          const retainedMetadata = (component) => ({
+            trace,
+            point,
+            traceKey: String(trace.key || ""),
+            stablePointKey,
+            stableOccurrence,
+            pointIndex,
+            component,
+          });
+          if (glowStrength > 0.02 || forceResident) {
             const glowOpacity = clampRange(effectiveOpacity * (0.34 + 0.18 * glowStrength), 0.0, 0.78);
-            const glowSprite = new THREE.Sprite(starGlowMaterialFor(pointColor, glowOpacity));
+            const glowBaseMaterial = starGlowMaterialFor(pointColor, glowOpacity);
+            const glowSprite = new THREE.Sprite(
+              forceResident ? ovizRetainedSpriteMaterial(glowBaseMaterial) : glowBaseMaterial
+            );
             const glowScale = glowScaleForPoint(
               scale,
               pointPosition,
@@ -15963,12 +16075,16 @@ __SKY_RUNTIME_JS__
               selectionKey,
               baseScale: glowScale,
               isGlow: true,
+              ovizRetainedPoint: retainedMetadata("glow"),
             };
             group.add(glowSprite);
             registerCameraResponsivePointSprite(glowSprite, "glow", pointPosition, scale, selectionKey);
 
             const coreOpacity = clampRange(effectiveOpacity * (1.00 + 0.24 * glowStrength), 0.0, 1.0);
-            const coreSprite = new THREE.Sprite(starCoreMaterialFor("#ffffff", coreOpacity));
+            const coreBaseMaterial = starCoreMaterialFor("#ffffff", coreOpacity);
+            const coreSprite = new THREE.Sprite(
+              forceResident ? ovizRetainedSpriteMaterial(coreBaseMaterial) : coreBaseMaterial
+            );
             const coreScale = starCoreScaleForPoint(
               scale,
               pointPosition,
@@ -15985,12 +16101,21 @@ __SKY_RUNTIME_JS__
               baseScale: coreScale,
               pickWorldScale: nonGlowMarkerScaleForPoint(scale, pointPosition),
               isGlowCore: true,
+              ovizRetainedPoint: retainedMetadata("core"),
             };
             group.add(coreSprite);
             hoverTargets.push(coreSprite);
             registerCameraResponsivePointSprite(coreSprite, "core", pointPosition, scale, selectionKey);
-          } else {
-            const sprite = new THREE.Sprite(markerMaterialFor(pointSymbolForTrace(point, trace), pointColor, effectiveOpacity));
+          }
+          if (glowStrength <= 0.02 || forceResident) {
+            const markerBaseMaterial = markerMaterialFor(
+              pointSymbolForTrace(point, trace),
+              pointColor,
+              effectiveOpacity,
+            );
+            const sprite = new THREE.Sprite(
+              forceResident ? ovizRetainedSpriteMaterial(markerBaseMaterial) : markerBaseMaterial
+            );
             const markerScale = nonGlowMarkerScaleForPoint(scale, pointPosition);
             sprite.position.copy(pointPosition);
             sprite.scale.set(markerScale, markerScale, 1.0);
@@ -16002,6 +16127,7 @@ __SKY_RUNTIME_JS__
               tooltipColor: pointColor || "#ffffff",
               baseScale: markerScale,
               pickWorldScale: markerScale,
+              ovizRetainedPoint: retainedMetadata("marker"),
             };
             group.add(sprite);
             hoverTargets.push(sprite);
@@ -16012,26 +16138,35 @@ __SKY_RUNTIME_JS__
       }
 
       function addTextTrace(parent, trace) {
+        const options = arguments.length > 2 && arguments[2] ? arguments[2] : {};
         if (!trace.labels || !trace.labels.length) {
           return;
         }
         const group = new THREE.Group();
         const traceState = traceStyleStateForKey(trace.key);
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
-        const opacityValue = (traceState ? clamp01(traceState.opacity) : 1.0) * traceVisibilityOpacityMultiplier(trace);
+        const opacityValue = (traceState ? clamp01(traceState.opacity) : 1.0)
+          * traceVisibilityOpacityMultiplier(trace)
+          * clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
         trace.labels.forEach((label) => {
           if (!label.text) {
             return;
           }
           const sprite = makeTextSprite(label.text, {
-            color: (traceState && traceState.color) || label.color || theme.axis_color,
+            color: options.forceResident === true
+              ? "#ffffff"
+              : ((traceState && traceState.color) || label.color || theme.axis_color),
             size: (label.size ?? 12) * sizeScaleFactor,
             family: label.family ?? "Helvetica",
             screenStable: label.screen_stable === true,
             screenPixels: label.screen_px,
             screenScaleMultiplier: sizeScaleFactor,
           });
-          sprite.material.opacity = opacityValue;
+          sprite.material.opacity = opacityValue * clamp01(Number(label.oviz_presence_opacity ?? 1.0));
+          sprite.userData.ovizRetainedLabel = { trace, label };
+          if (options.forceResident === true) {
+            sprite.material.userData.ovizRetainedBaseOpacity = opacityValue;
+          }
           sprite.position.set(label.x, label.y, label.z);
           if (label.screen_stable === true) {
             screenStableTextSprites.push(sprite);
@@ -16041,12 +16176,15 @@ __SKY_RUNTIME_JS__
         parent.add(group);
       }
 
-      function addManualLabels(parent) {
-        if (!manualLabels.length) {
-          return;
+      function addManualLabels(parent, options = {}) {
+        const labels = Array.isArray(options.labels) ? options.labels : manualLabels;
+        const opacityScale = clamp01(options.opacity ?? 1.0);
+        const interactive = options.interactive !== false;
+        if (!labels.length) {
+          return null;
         }
         const group = new THREE.Group();
-        manualLabels.forEach((label, index) => {
+        labels.forEach((label, index) => {
           if (!label || !label.text) {
             return;
           }
@@ -16057,19 +16195,25 @@ __SKY_RUNTIME_JS__
             screenStable: true,
             screenPixels: clampManualLabelSize(label.size ?? DEFAULT_MANUAL_LABEL_SIZE),
           });
+          sprite.material.transparent = true;
+          sprite.material.opacity = opacityScale;
           sprite.position.set(label.x, label.y, label.z);
           sprite.userData = {
             hovertext: `<strong>${escapeHtml(label.text)}</strong><br/>Drag to reposition`,
             manualLabelId: String(label.id || `manual-label-${index + 1}`),
+            ovizRetainedManualLabel: { label },
           };
           screenStableTextSprites.push(sprite);
-          hoverTargets.push(sprite);
+          if (interactive) hoverTargets.push(sprite);
           group.add(sprite);
         });
         parent.add(group);
+        return group;
       }
 
       function addDecoration(parent, decoration) {
+        const options = arguments.length > 2 && arguments[2] ? arguments[2] : {};
+        const forceResident = options.forceResident === true;
         if (!decoration || !decoration.kind) {
           return;
         }
@@ -16079,11 +16223,11 @@ __SKY_RUNTIME_JS__
             return;
           }
           const stateKey = volumeStateKeyForLayer(layer);
-          if (legendState[stateKey] === false) {
+          if (legendState[stateKey] === false && !forceResident) {
             return;
           }
           const state = volumeStateByKey[stateKey];
-          if (!state || !volumeVisibleForFrame(layer, state, currentFrame())) {
+          if (!state || (!forceResident && !volumeVisibleForFrame(layer, state, currentFrame()))) {
             return;
           }
           const runtime = createVolumeRuntime(layer);
@@ -16091,6 +16235,9 @@ __SKY_RUNTIME_JS__
             return;
           }
           volumeRuntimeByKey.set(String(layer.key), runtime);
+          if (forceResident) {
+            runtime.mesh.visible = true;
+          }
           parent.add(runtime.mesh);
           return;
         }
@@ -16580,7 +16727,9 @@ __SKY_RUNTIME_JS__
           return false;
         }
         if (trace.showlegend) {
-          return Boolean(legendState[trace.key]);
+          return Object.prototype.hasOwnProperty.call(legendState, trace.key)
+            ? Boolean(legendState[trace.key])
+            : mode === true;
         }
         return mode === true;
       }
@@ -17061,6 +17210,54 @@ __VIEWER_RUNTIME_JS__
 __ACTION_RUNTIME_JS__
 
 __STATE_RUNTIME_JS__
+
+      let ovizUnifiedTransitionFrameSerial = 0;
+      const ovizUnifiedTransitionSession = OvizTransitionRuntime.createFrameCoordinator({
+        onError: (error, context) => {
+          const stateTransition = typeof ovizStateTransition !== "undefined"
+            ? ovizStateTransition
+            : null;
+          if (context.owner === "state" && stateTransition) {
+            ovizFailStateTransition(stateTransition, error);
+          } else if (context.owner === "action" && activeActionRun) {
+            failActionRun(error, null);
+          } else {
+            console.error("Oviz unified transition frame failed", error);
+          }
+        },
+      });
+
+      function updateOvizUnifiedTransitionSession(now) {
+        ovizUnifiedTransitionFrameSerial += 1;
+        const stateTransition = typeof ovizStateTransition !== "undefined"
+          ? ovizStateTransition
+          : null;
+        const actionRun = typeof activeActionRun !== "undefined" ? activeActionRun : null;
+        const owner = stateTransition ? "state" : (actionRun ? "action" : "idle");
+        const runId = stateTransition
+          ? String(stateTransition.transitionId || "")
+          : (actionRun ? String(actionRun.id || "") : "");
+        const updated = ovizUnifiedTransitionSession.update(
+          ovizUnifiedTransitionFrameSerial,
+          { owner, runId },
+          () => {
+            if (stateTransition) {
+              // A State-backed Action still needs scheduling/progress events,
+              // but the State controller is the only visual writer this frame.
+              if (actionRun) updateViewerActions(now, { schedulerOnly: true });
+              return updateOvizStateTransition(now);
+            }
+            return updateViewerActions(now);
+          },
+        );
+        if (root && root.dataset) {
+          const diagnostics = ovizUnifiedTransitionSession.snapshot();
+          root.dataset.transitionOwner = diagnostics.owner;
+          root.dataset.transitionRunId = diagnostics.runId;
+          root.dataset.transitionFrameUpdates = String(diagnostics.updateCount);
+        }
+        return updated;
+      }
 
       function manualLabelHitFromEvent(event) {
         const hitObject = pickSprite(event);
@@ -17921,17 +18118,17 @@ __STATE_RUNTIME_JS__
           ? 0.0
           : clampRange((now - lastAnimationTimestamp) / 1000.0, 0.0, 0.05);
         lastAnimationTimestamp = now;
-        updateViewerActions(now);
-        updateOvizStateTransition(now);
-        const stateOwnsCameraAndTime = Boolean(
-          typeof ovizStateTransition !== "undefined" && ovizStateTransition
+        updateOvizUnifiedTransitionSession(now);
+        const transitionOwnsCameraAndTime = Boolean(
+          (typeof ovizStateTransition !== "undefined" && ovizStateTransition)
+          || (typeof activeActionRun !== "undefined" && activeActionRun)
         );
-        if (!stateOwnsCameraAndTime) {
+        if (!transitionOwnsCameraAndTime) {
           updateAnimatedFramePlayback(now);
           updateKeyboardMotion(deltaSeconds);
           updateGalacticSimpleDefaultOrbit(deltaSeconds);
         }
-        if (controls.enabled && !stateOwnsCameraAndTime) {
+        if (controls.enabled && !transitionOwnsCameraAndTime) {
           controls.update();
         } else if (
           cameraViewMode === "earth"
@@ -18070,7 +18267,11 @@ class ThreeJSFigure:
             scene_runtime_js=THREEJS_SCENE_RUNTIME_JS,
             sky_runtime_js=THREEJS_SKY_RUNTIME_JS,
             viewer_runtime_js=THREEJS_VIEWER_RUNTIME_JS,
-            action_runtime_js=THREEJS_ACTION_RUNTIME_JS,
+            action_runtime_js=(
+                THREEJS_TRANSITION_RUNTIME_JS
+                + "\n\n"
+                + THREEJS_ACTION_RUNTIME_JS
+            ),
             state_runtime_js=THREEJS_STATE_RUNTIME_JS,
             compress_scene_spec=(
                 self.compress_scene_spec

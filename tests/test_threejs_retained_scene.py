@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+import unittest
+
+from oviz.threejs_figure import ThreeJSFigure
+
+
+def _runtime_html() -> str:
+    return ThreeJSFigure(
+        {
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }
+    ).to_html(compress_scene_spec=False)
+
+
+class ThreeJSRetainedSceneTests(unittest.TestCase):
+    def test_transition_updates_do_not_rebuild_the_plot_group(self):
+        html = _runtime_html()
+        update_body = html.split(
+            "function ovizUpdateRetainedTransitionScene(", 1
+        )[1].split("function renderInterpolatedFrameValue(", 1)[0]
+        prepare_body = html.split(
+            "function ovizPrepareRetainedTransitionScene(", 1
+        )[1].split("function ovizUpdateRetainedTransitionScene(", 1)[0]
+
+        self.assertNotIn("clearGroup(plotGroup)", update_body)
+        self.assertNotIn("clearGroup(runtime.overlayRoot)", update_body)
+        self.assertNotIn("ovizRefreshRetainedSelectionOverlay", html)
+        self.assertIn("ovizApplyRetainedSelectionOverlay(runtime, alpha)", update_body)
+        self.assertIn("actionHeldAppearanceRollback", html)
+        self.assertIn("sourceAppearanceComposite", html)
+        self.assertIn("retainedOverlayLineMaterials", html)
+        self.assertIn("actualOpacityByPoint", html)
+        self.assertIn("rendered_selection_extra", html)
+        self.assertIn("expectedVisiblePointCount", html)
+        self.assertIn("clearGroup(plotGroup)", prepare_body)
+        self.assertIn("intervalKey", update_body)
+        self.assertIn("retainedSceneMetrics", update_body)
+
+    def test_trace_and_point_interpolation_use_stable_keys(self):
+        html = _runtime_html()
+        interpolation_body = html.split(
+            "function interpolatedFrameSpecForValue(", 1
+        )[1].split("function makeVectorObject(", 1)[0]
+
+        self.assertIn("upperTraceByKey", interpolation_body)
+        self.assertIn("cloneTraceWithPresence", interpolation_body)
+        self.assertNotIn("index < upperTraces.length", interpolation_body)
+        self.assertIn("ovizTransitionStablePointKey", html)
+        self.assertIn("motion:", html)
+        self.assertIn("selection:", html)
+
+    def test_retained_endpoints_keep_hidden_items_resident(self):
+        html = _runtime_html()
+        render_body = html.split("function renderFrameScene(", 1)[1].split(
+            "let ovizRetainedTransitionScene", 1
+        )[0]
+        marker_body = html.split("function addMarkerTrace(parent, trace)", 1)[1].split(
+            "function addTextTrace(parent, trace)", 1
+        )[0]
+
+        self.assertIn("forceResident", render_body)
+        self.assertIn("addMarkerTrace(traceParent, trace, { forceResident })", render_body)
+        self.assertIn("effectiveOpacity <= 0.001 && !forceResident", marker_body)
+        self.assertIn("ovizRetainedPoint", marker_body)
+
+    def test_cached_textures_are_not_disposed_with_retained_materials(self):
+        html = _runtime_html()
+        clear_body = html.split("function clearGroup(group)", 1)[1].split(
+            "function markerTextureFor(", 1
+        )[0]
+        text_body = html.split("function makeTextSprite(", 1)[1].split(
+            "function updateScreenStableTextSprite(", 1
+        )[0]
+
+        self.assertIn("ovizSharedTexture", clear_body)
+        self.assertIn("ovizSharedTexture", text_body)
+
+    def test_manual_labels_and_selection_boxes_remain_resident(self):
+        html = _runtime_html()
+        prepare_body = html.split(
+            "function ovizPrepareRetainedSelectionOverlay(", 1
+        )[1].split("function ovizApplyRetainedSelectionOverlay(", 1)[0]
+        apply_body = html.split(
+            "function ovizApplyRetainedSelectionOverlay(", 1
+        )[1].split("function ovizPrepareRetainedTransitionScene(", 1)[0]
+
+        self.assertIn("createManualLabelEndpoint", prepare_body)
+        self.assertIn("createSelectionBoxEndpoint", prepare_body)
+        self.assertIn("fromLower", prepare_body)
+        self.assertIn("toUpper", prepare_body)
+        self.assertIn("overlay.manualFrom", apply_body)
+        self.assertIn("overlay.manualTo", apply_body)
+        self.assertIn("boxFromWeight * lowerWeight", apply_body)
+        self.assertIn("boxToWeight * upperWeight", apply_body)
+        self.assertIn("boxCompositeWeight * lowerWeight", apply_body)
+
+
+if __name__ == "__main__":
+    unittest.main()
