@@ -15887,8 +15887,17 @@ __SKY_RUNTIME_JS__
             opacity: baseOpacity,
           };
         }
+        // Number(null) is 0, so treating a missing override as a numeric value
+        // silently rendered every exact timeline frame with present-day birth
+        // visibility.  Retained transitions pass an explicit time and looked
+        // correct until their final exact render, where points then popped.
+        const numericTimeOverride = timeOverride === null || timeOverride === undefined
+          ? null
+          : Number(timeOverride);
         const birthFadeFactor = fadeVisibilityFactor(
-          Number.isFinite(Number(timeOverride)) ? Number(timeOverride) : motion.time_myr,
+          numericTimeOverride !== null && Number.isFinite(numericTimeOverride)
+            ? numericTimeOverride
+            : motion.time_myr,
           motion.age_now_myr,
           fadeInTimeMyr,
           fadeInAndOutEnabled

@@ -21,6 +21,40 @@ def _runtime_html() -> str:
 
 class ThreeJSRetainedSceneTests(unittest.TestCase):
     @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_exact_frame_birth_visibility_uses_motion_time_when_override_is_missing(self):
+        html = _runtime_html()
+        helper_source = (
+            "function animatedPointState(point, trace = null, timeOverride = null)"
+            + html.split(
+                "function animatedPointState(point, trace = null, timeOverride = null)", 1
+            )[1].split("function pointHoverText", 1)[0]
+        )
+        script = f"""
+        let fadeOpacityByBirthTimeEnabled = false;
+        let fadeInTimeMyr = 8;
+        let fadeInAndOutEnabled = false;
+        function pointSizeForTrace() {{ return 10; }}
+        function pointOpacityForTrace() {{ return 0.75; }}
+        function birthOpacityFadePointSize() {{ return 10; }}
+        function fadeVisibilityFactor(time) {{ return time === -20 ? 0.25 : (time === -10 ? 0.5 : 1); }}
+        {helper_source}
+        const point = {{ motion: {{ time_myr: -20 }} }};
+        const implicit = animatedPointState(point, {{}});
+        const explicit = animatedPointState(point, {{}}, -10);
+        process.stdout.write(JSON.stringify({{ implicit, explicit }}));
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["implicit"], {"size": 2.5, "opacity": 0.75})
+        self.assertEqual(payload["explicit"], {"size": 5, "opacity": 0.75})
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
     def test_birth_time_presence_reaches_zero_before_exact_frame(self):
         html = _runtime_html()
         helper_source = (
@@ -79,6 +113,8 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
         self.assertIn("* birthVisibility;", html)
         self.assertIn("ovizPointBirthVisibility(pointState, point, trace)", html)
         self.assertIn("presenceOpacity * birthVisibility", html)
+        self.assertIn("material.opacity > 0.001", html)
+        self.assertIn("expectedPointOpacity > 0.001", html)
 
     def test_trace_and_point_interpolation_use_stable_keys(self):
         html = _runtime_html()

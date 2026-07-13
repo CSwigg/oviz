@@ -1940,7 +1940,10 @@ THREEJS_SCENE_RUNTIME_JS = """
           responsive.position.copy(object.position);
           responsive.pointScale = Math.max(Number(visual.pointScale) || 0.0, 0.0);
         }
-        object.visible = Boolean(material && material.opacity > 0.0001);
+        // Match addMarkerTrace(), which omits exact-frame sprites at or below
+        // 0.001 opacity.  Keeping a fainter retained sprite visible would
+        // create a tiny endpoint pop and a false final-fidelity failure.
+        object.visible = Boolean(material && material.opacity > 0.001);
       }
 
       function ovizApplyRetainedEndpointWeight(endpoint, weight, displayedTimeMyr) {
@@ -2440,10 +2443,10 @@ THREEJS_SCENE_RUNTIME_JS = """
             const expectedPointOpacity = ovizExpectedPointOpacity(trace, point, displayedTimeMyr);
             const actualPointOpacity = Number(actualOpacityByPoint.get(pointKey)) || 0.0;
             expectedOpacityByPoint[pointKey] = expectedPointOpacity;
-            const requiredPointOpacity = Math.min(0.0001, expectedPointOpacity * 0.01);
-            if (expectedPointOpacity > 0.0001 && actualPointOpacity <= requiredPointOpacity) {
+            const requiredPointOpacity = Math.min(0.001, expectedPointOpacity * 0.01);
+            if (expectedPointOpacity > 0.001 && actualPointOpacity <= requiredPointOpacity) {
               differences.push(`rendered_point:${pointKey}`);
-            } else if (expectedPointOpacity <= 0.0001 && actualPointOpacity > 0.0001) {
+            } else if (expectedPointOpacity <= 0.001 && actualPointOpacity > 0.001) {
               differences.push(`rendered_selection_extra:${pointKey}`);
             }
           });
@@ -2481,8 +2484,8 @@ THREEJS_SCENE_RUNTIME_JS = """
             differences,
             expectedOpacityByTrace,
             actualOpacityByTrace: Object.fromEntries(actualOpacityByTrace),
-            expectedVisiblePointCount: Object.values(expectedOpacityByPoint).filter((value) => value > 0.0001).length,
-            actualVisiblePointCount: Array.from(actualOpacityByPoint.values()).filter((value) => value > 0.0001).length,
+            expectedVisiblePointCount: Object.values(expectedOpacityByPoint).filter((value) => value > 0.001).length,
+            actualVisiblePointCount: Array.from(actualOpacityByPoint.values()).filter((value) => value > 0.001).length,
             renderedManualLabelCount,
             expectedManualLabelCount,
           });
