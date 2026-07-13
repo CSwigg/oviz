@@ -48,6 +48,17 @@ THREEJS_STATE_RUNTIME_JS = r"""
         root.dataset.transitionOwner = transition ? "state" : "";
         root.dataset.transitionRunId = transition ? String(transition.transitionId || "") : "";
         if (!ovizTransitionDebugEnabled()) return;
+        if (transition) {
+          const now = (typeof performance !== "undefined" && performance.now)
+            ? performance.now()
+            : Date.now();
+          const forceWrite = Number(values && values.phaseProgress) === 0.0
+            || Number(values && values.phaseProgress) === 1.0;
+          if (!forceWrite && now - Number(transition.lastDiagnosticsAt || -Infinity) < 100.0) {
+            return;
+          }
+          transition.lastDiagnosticsAt = now;
+        }
         const diagnostics = Object.assign({
           owner: transition ? "state" : "",
           runId: transition ? String(transition.transitionId || "") : "",
@@ -1445,6 +1456,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           fromViewMode,
           toViewMode,
           lastProgressEventAt: -Infinity,
+          lastDiagnosticsAt: -Infinity,
           sceneRenderCount: 0,
           appearancePrepared: false,
           lassoReady: !destination.lasso_selection_mask,
@@ -1453,6 +1465,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           selectionTransition: null,
           currentPhase: phasePlan.phases[0].name,
           currentAppearanceProgress: 0.0,
+          lastAppliedAppearanceProgress: null,
           // The exact target renderer must not replace the first retained
           // frame that reaches the destination before that frame is painted.
           // Latch it for one animation frame so time-dependent point fades
@@ -1816,18 +1829,24 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const toFrame = ovizStateFrameValue(to);
           const interpolatedFrameValue = ovizLerp(fromFrame, toFrame, timeProgress);
           ovizStateTimelineMotionActive = transition.phasePlan.changed.time && timeRaw > 0.0 && timeRaw < 1.0;
-          ovizApplyTransitionNumericControls(from, to, appearanceProgress);
-          ovizApplyTransitionTraceStyles(from, to, appearanceProgress);
-          ovizApplyTransitionVolumes(from, to, appearanceProgress);
-          ovizApplyTransitionPanelGeometry(from, to, appearanceProgress);
-          transition.traceOpacity.forEach((value, key) => {
-            ovizStateTransitionTraceOpacity.set(
-              key,
-              ovizLerp(value.from, value.to, appearanceProgress)
-            );
-          });
-          if (transition.selectionTransition) {
-            transition.selectionTransition.progress = appearanceProgress;
+          if (
+            transition.lastAppliedAppearanceProgress === null
+            || Math.abs(transition.lastAppliedAppearanceProgress - appearanceProgress) > 1e-7
+          ) {
+            ovizApplyTransitionNumericControls(from, to, appearanceProgress);
+            ovizApplyTransitionTraceStyles(from, to, appearanceProgress);
+            ovizApplyTransitionVolumes(from, to, appearanceProgress);
+            ovizApplyTransitionPanelGeometry(from, to, appearanceProgress);
+            transition.traceOpacity.forEach((value, key) => {
+              ovizStateTransitionTraceOpacity.set(
+                key,
+                ovizLerp(value.from, value.to, appearanceProgress)
+              );
+            });
+            if (transition.selectionTransition) {
+              transition.selectionTransition.progress = appearanceProgress;
+            }
+            transition.lastAppliedAppearanceProgress = appearanceProgress;
           }
           if (transition.viewTransitionKind === "enter-earth") {
             const milkyWayFade = 1.0 - ovizEasing(
@@ -1854,8 +1873,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
           }
           displayedFrameValue = clampFrameValue(interpolatedFrameValue);
           currentFrameIndex = clampFrameIndex(displayedFrameValue);
-          updateTimelineUi(displayedFrameValue, frameTimeForValue(displayedFrameValue));
-          updateTimelineMotionOpacity();
           renderer.domElement.style.opacity = "1";
           if (appearanceRaw > 0.0 || timeRaw > 0.0) {
             renderInterpolatedFrameValue(displayedFrameValue, {

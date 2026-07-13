@@ -479,6 +479,29 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             marker_body,
         )
 
+    def test_transition_only_work_is_dirty_driven_and_diagnostics_are_throttled(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        update_body = html.split("function updateOvizStateTransition(now)", 1)[1].split(
+            "async function ovizFinishStateTransition", 1
+        )[0]
+        diagnostics_body = html.split("function ovizWriteTransitionDiagnostics", 1)[1].split(
+            "function ovizStatesClone", 1
+        )[0]
+
+        self.assertIn("lastAppliedAppearanceProgress", update_body)
+        self.assertIn(
+            "Math.abs(transition.lastAppliedAppearanceProgress - appearanceProgress)",
+            update_body,
+        )
+        self.assertEqual(update_body.count("updateTimelineUi("), 0)
+        self.assertEqual(update_body.count("updateTimelineMotionOpacity();"), 0)
+        self.assertIn("< 100.0", diagnostics_body)
+
     def test_embedded_scene_state_schema_round_trips_to_payload(self):
         scene = {
             "width": 640,
