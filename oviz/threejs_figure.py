@@ -16012,6 +16012,9 @@ __SKY_RUNTIME_JS__
           if ((!Number.isFinite(pointState.size) || pointState.size <= 0) && !forceResident) {
             return;
           }
+          const birthVisibility = typeof ovizPointBirthVisibility === "function"
+            ? ovizPointBirthVisibility(pointState, point, trace)
+            : 1.0;
           let opacityMultiplier = 1.0;
           const pointKey = clusterFilterSelectionKeyForPoint(point) || normalizedSelectionKeyFor(point.selection);
           const focusedTraceKey = dendrogramFocusTraceKey();
@@ -16036,11 +16039,11 @@ __SKY_RUNTIME_JS__
           const baseOpacity = Number(pointState.opacity ?? pointOpacityForTrace(point, trace));
           const presenceOpacity = clamp01(Number(point.oviz_presence_opacity ?? 1.0))
             * clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
-          const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * traceVisibilityMultiplier * opacityMultiplier * globalPointOpacityScale * presenceOpacity));
+          const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * traceVisibilityMultiplier * opacityMultiplier * globalPointOpacityScale * presenceOpacity * birthVisibility));
           if (effectiveOpacity <= 0.001 && !forceResident) {
             return;
           }
-          const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05);
+          const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05) * birthVisibility;
           const starsFactor = sizeByStarsFactorForPoint(point, trace, traceState);
           const scale = Math.max(
             pointState.size * sizeScaleFactor * starsFactor * globalPointSizeScale * pointScale,

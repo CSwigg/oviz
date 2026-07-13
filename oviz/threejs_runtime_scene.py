@@ -1817,6 +1817,23 @@ THREEJS_SCENE_RUNTIME_JS = """
         return livePoint;
       }
 
+      function ovizPointBirthVisibility(pointState, point, trace) {
+        // In the normal birth-time mode animatedPointState() expresses a
+        // not-yet-born point by shrinking its size to zero.  Retained points
+        // must carry that same presence into opacity and into the responsive
+        // size floor; otherwise forceResident keeps them visible until the
+        // exact final frame removes them in a single-frame pop.
+        if (fadeOpacityByBirthTimeEnabled) {
+          return 1.0;
+        }
+        const baseSize = Math.max(Number(pointSizeForTrace(point, trace)) || 0.0, 0.0);
+        const animatedSize = Math.max(Number(pointState && pointState.size) || 0.0, 0.0);
+        if (baseSize <= 1e-12) {
+          return animatedSize > 1e-12 ? 1.0 : 0.0;
+        }
+        return clamp01(animatedSize / baseSize);
+      }
+
       function ovizRetainedPointVisual(entry, livePoint, displayedTimeMyr) {
         if (!entry || !entry.object || !entry.metadata) {
           return { opacity: 0.0, pointScale: 0.0, color: "#ffffff" };
@@ -1826,6 +1843,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         const point = metadata.point || livePoint || {};
         const traceState = traceStyleStateForKey(trace.key);
         const pointState = animatedPointState(point, trace, displayedTimeMyr);
+        const birthVisibility = ovizPointBirthVisibility(pointState, point, trace);
         const traceOpacityMultiplier = traceState
           ? clamp01(traceState.opacity) / Math.max(clamp01(Number(trace.default_opacity ?? 1.0)), 1e-6)
           : 1.0;
@@ -1858,10 +1876,11 @@ THREEJS_SCENE_RUNTIME_JS = """
           * opacityMultiplier
           * globalPointOpacityScale
           * presenceOpacity
+          * birthVisibility
         );
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
         const starsFactor = sizeByStarsFactorForPoint(point, trace, traceState);
-        const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05);
+        const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05) * birthVisibility;
         const baseScale = Math.max(
           Math.max(Number(pointState.size) || 0.0, 0.0)
             * sizeScaleFactor
@@ -2327,6 +2346,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           const visibility = traceVisibilityOpacityMultiplier(trace);
           const presence = clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
           const pointState = animatedPointState(point, trace, displayedTimeMyr);
+          const birthVisibility = ovizPointBirthVisibility(pointState, point, trace);
           const defaultOpacity = Math.max(clamp01(Number(trace.default_opacity ?? 1.0)), 1e-6);
           const traceOpacityMultiplier = traceState
             ? clamp01(traceState.opacity) / defaultOpacity
@@ -2356,6 +2376,7 @@ THREEJS_SCENE_RUNTIME_JS = """
             * globalPointOpacityScale
             * presence
             * clamp01(Number(point.oviz_presence_opacity ?? 1.0))
+            * birthVisibility
           );
       }
 

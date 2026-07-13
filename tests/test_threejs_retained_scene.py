@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 import unittest
 
 from oviz.threejs_figure import ThreeJSFigure
@@ -17,6 +20,39 @@ def _runtime_html() -> str:
 
 
 class ThreeJSRetainedSceneTests(unittest.TestCase):
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_birth_time_presence_reaches_zero_before_exact_frame(self):
+        html = _runtime_html()
+        helper_source = (
+            "function ovizPointBirthVisibility(pointState, point, trace)"
+            + html.split("function ovizPointBirthVisibility(pointState, point, trace)", 1)[1].split(
+                "function ovizRetainedPointVisual", 1
+            )[0]
+        )
+        script = f"""
+        let fadeOpacityByBirthTimeEnabled = false;
+        function clamp01(value) {{ return Math.min(Math.max(Number(value) || 0, 0), 1); }}
+        function pointSizeForTrace(point) {{ return Number(point.baseSize); }}
+        {helper_source}
+        const point = {{ baseSize: 10 }};
+        const sizeFade = [10, 5, 0].map((size) =>
+          ovizPointBirthVisibility({{ size }}, point, {{}})
+        );
+        fadeOpacityByBirthTimeEnabled = true;
+        const opacityFade = ovizPointBirthVisibility({{ size: 0 }}, point, {{}});
+        process.stdout.write(JSON.stringify({{ sizeFade, opacityFade }}));
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["sizeFade"], [1, 0.5, 0])
+        self.assertEqual(payload["opacityFade"], 1)
+
     def test_transition_updates_do_not_rebuild_the_plot_group(self):
         html = _runtime_html()
         update_body = html.split(
@@ -39,6 +75,10 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
         self.assertIn("clearGroup(plotGroup)", prepare_body)
         self.assertIn("intervalKey", update_body)
         self.assertIn("retainedSceneMetrics", update_body)
+        self.assertIn("* birthVisibility", html)
+        self.assertIn("* birthVisibility;", html)
+        self.assertIn("ovizPointBirthVisibility(pointState, point, trace)", html)
+        self.assertIn("presenceOpacity * birthVisibility", html)
 
     def test_trace_and_point_interpolation_use_stable_keys(self):
         html = _runtime_html()
