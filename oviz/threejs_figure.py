@@ -11147,6 +11147,7 @@ __SKY_RUNTIME_JS__
         let pendingSkyBackgroundSemanticCompletion = null;
         let currentSkyBackgroundView = null;
         let lastAppliedSkyBackgroundSignature = "";
+        let lastAppliedSkyBackgroundFovDeg = null;
         let activeImageSurvey = ${survey};
         let activeSkyLayerStackSignature = "";
         let activeSkyLayerStackGeneration = 0;
@@ -11437,8 +11438,18 @@ __SKY_RUNTIME_JS__
           } else if (Number.isFinite(ra) && Number.isFinite(dec) && typeof aladinInstance.gotoRaDec === "function") {
             aladinInstance.gotoRaDec(ra, dec);
           }
-          if (Number.isFinite(fovDeg) && fovDeg > 0.0 && typeof aladinInstance.setFoV === "function") {
-            aladinInstance.setFoV(Math.min(Math.max(fovDeg, 0.05), 179.0));
+          const clampedFovDeg = Math.min(Math.max(fovDeg, 0.05), 179.0);
+          if (
+            Number.isFinite(clampedFovDeg)
+            && clampedFovDeg > 0.0
+            && typeof aladinInstance.setFoV === "function"
+            && (
+              !Number.isFinite(Number(lastAppliedSkyBackgroundFovDeg))
+              || Math.abs(clampedFovDeg - Number(lastAppliedSkyBackgroundFovDeg)) > 1e-5
+            )
+          ) {
+            aladinInstance.setFoV(clampedFovDeg);
+            lastAppliedSkyBackgroundFovDeg = clampedFovDeg;
           }
           currentSkyBackgroundView = view;
           return view;
@@ -12468,6 +12479,31 @@ __SKY_RUNTIME_JS__
             postSkyBackgroundViewAppliedAfterPaint(nextView);
           });
         }
+        function applySkyBackgroundViewDirect(data) {
+          if (activeSkyBackgroundSemanticTransition || pendingSkyBackgroundSemanticCompletion) {
+            if (data && data.cancelSemanticTransition === true) {
+              cancelSkyBackgroundSemanticTransition("ordinary-view", true);
+            } else {
+              return false;
+            }
+          }
+          pendingSkyBackgroundView = null;
+          if (skyBackgroundViewAnimationFrame) {
+            window.cancelAnimationFrame(skyBackgroundViewAnimationFrame);
+            skyBackgroundViewAnimationFrame = 0;
+          }
+          const applied = applySkyBackgroundViewNow(data);
+          if (!applied) {
+            return false;
+          }
+          postSkyBackgroundViewAppliedAfterPaint(data);
+          return true;
+        }
+        window.OvizSkyBackgroundBridge = {
+          applyView(data) {
+            return applySkyBackgroundViewDirect(data);
+          },
+        };
         function setHoveredClusterKey(clusterKey, emitToParent) {
           const nextKey = normalizeClusterKey(clusterKey);
           if (nextKey === hoveredClusterKey) {
@@ -12514,7 +12550,10 @@ __SKY_RUNTIME_JS__
             showZoomControl: !skyDomeCaptureOnly,
             showFullscreenControl: !skyDomeCaptureOnly,
             showShareControl: false,
-            showContextMenu: false
+            showContextMenu: false,
+            lockNorthUp: skyDomeBackgroundOnly,
+            northPoleOrientation: 0,
+            inertia: !skyDomeBackgroundOnly
           };
           if (viewMode !== "click") {
             aladinOptions.projection = skyDomeBackgroundOnly ? "TAN" : "MOL";

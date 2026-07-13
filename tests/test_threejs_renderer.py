@@ -1437,7 +1437,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertNotIn("function skyBackgroundPredictiveTransformForAlignedView", html)
         self.assertIn("clearSkyDomeBackgroundPredictiveTransform();", html)
         self.assertNotIn("skyDomeFrameEl.style.transform = transform;", html)
-        self.assertIn("aladinInstance.setFoV(Math.min(Math.max(fovDeg, 0.05), 179.0));", html)
+        self.assertIn("aladinInstance.setFoV(clampedFovDeg);", html)
+        self.assertIn("lastAppliedSkyBackgroundFovDeg = clampedFovDeg;", html)
         self.assertIn("pendingSkyBackgroundView = data;", html)
         self.assertIn("applySkyBackgroundViewNow(nextView);", html)
         self.assertIn("function zoomEarthViewByWheelDelta(deltaY)", html)
@@ -1543,8 +1544,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertNotIn("Keep sky visible", html)
         self.assertIn("aladinInstance.stopAnimation()", html)
         self.assertIn("aladinInstance.gotoPosition(lDeg, bDeg)", html)
-        self.assertIn("skyDomeBackgroundUserCameraActive ? 16.0 : 50.0", html)
-        self.assertNotIn("skyDomeBackgroundUserCameraActive || stateCameraTransitionActive", html)
+        self.assertIn("skyDomeBackgroundUserCameraActive || stateCameraTransitionActive", html)
+        self.assertIn(") ? 16.0 : 50.0", html)
         self.assertIn("updateSkyDomeBackgroundFrame(\n            (typeof performance", html)
 
     def test_threejs_renderer_exposes_opt_in_sky_debug_instrumentation(self):

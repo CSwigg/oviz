@@ -85,14 +85,48 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
 
         self.assertNotIn("startSkyDomeBackgroundProgrammaticTransition({", begin_transition)
         self.assertIn("ovizStateTransition.skyBackgroundPromise = null;", begin_transition)
-        self.assertIn("skyDomeBackgroundUserCameraActive ? 16.0 : 50.0", update_background)
-        self.assertNotIn("stateCameraTransitionActive", update_background)
+        self.assertIn("stateCameraTransitionActive", update_background)
+        self.assertIn("skyDomeBackgroundUserCameraActive || stateCameraTransitionActive", update_background)
+        self.assertIn(") ? 16.0 : 50.0", update_background)
         self.assertIn('type: "oviz-sky-background-view"', update_background)
         self.assertIn(
             "signature === skyDomeBackgroundViewSignature",
             update_background,
         )
         self.assertNotIn("< 500.0", update_background)
+
+    def test_live_aladin_background_keeps_the_same_north_up_roll_as_threejs(self):
+        self.assertHtmlContains("lockNorthUp: skyDomeBackgroundOnly")
+        self.assertHtmlContains("northPoleOrientation: 0")
+        self.assertHtmlContains("inertia: !skyDomeBackgroundOnly")
+
+    def test_live_aladin_background_uses_same_origin_direct_pose_updates(self):
+        direct_apply = _function_region(
+            self.html,
+            "applySkyBackgroundViewDirect",
+            "setHoveredClusterKey",
+        )
+        update_background = _function_region(
+            self.html,
+            "updateSkyDomeBackgroundFrame",
+            "normalizeSkyAperturePreset",
+        )
+        self.assertIn("applySkyBackgroundViewNow(data)", direct_apply)
+        self.assertIn("window.OvizSkyBackgroundBridge", direct_apply)
+        self.assertIn("skyDomeFrameEl.contentWindow.OvizSkyBackgroundBridge", update_background)
+        self.assertIn("bridge.applyView(viewPayload)", update_background)
+        self.assertIn("if (!appliedDirectly)", update_background)
+        self.assertIn("postMessage(viewPayload", update_background)
+
+    def test_pan_does_not_force_redundant_aladin_fov_redraws(self):
+        apply_view = _function_region(
+            self.html,
+            "applySkyBackgroundViewNow",
+            "postSkyBackgroundViewAppliedAfterPaint",
+        )
+        self.assertIn("lastAppliedSkyBackgroundFovDeg", apply_view)
+        self.assertIn("Math.abs(clampedFovDeg - Number(lastAppliedSkyBackgroundFovDeg)) > 1e-5", apply_view)
+        self.assertIn("lastAppliedSkyBackgroundFovDeg = clampedFovDeg", apply_view)
 
     def test_state_finish_does_not_force_duplicate_aladin_redraw(self):
         finish_transition = _function_region(

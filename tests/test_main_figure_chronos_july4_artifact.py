@@ -147,6 +147,8 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert "return Boolean(isiPhoneLike || isAndroidPhone || (coarsePointer && narrowViewport));" in html
     assert "mobileVolumesDeferred" in html
     assert "mobile_active_volume_key" in html
+    assert "lockNorthUp: skyDomeBackgroundOnly" in html
+    assert "window.OvizSkyBackgroundBridge" in html
     assert "setExclusiveVolumeVariantSelection(activeVolumeKey)" in html
     assert "oviz-three-mobile-sky-view" in html
     assert "oviz-three-mobile-lasso" in html

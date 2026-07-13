@@ -1556,12 +1556,17 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!forceUpdate && signature === skyDomeBackgroundViewSignature) {
           return;
         }
-        // Aladin redraws its spherical projection asynchronously.  Feeding it
-        // a new gotoPosition/setFoV pair every animation frame can overrun that
-        // renderer and expose partially cleared canvas tiles.  State camera
-        // transitions therefore use the same 50 ms cadence as the normal View
-        // transition; direct pointer motion remains at 16 ms for responsiveness.
-        const minUpdateIntervalMs = skyDomeBackgroundUserCameraActive ? 16.0 : 50.0;
+        const stateCameraTransitionActive = Boolean(
+          typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+          && ovizStateTransition.nativeViewTransition
+        );
+        // Keep Aladin on the display cadence while either the user or the
+        // States camera is moving. Settled programmatic updates remain
+        // throttled to avoid redundant redraws.
+        const minUpdateIntervalMs = (
+          skyDomeBackgroundUserCameraActive || stateCameraTransitionActive
+        ) ? 16.0 : 50.0;
         if (!forceUpdate && (now - skyDomeBackgroundLastSentAt) < minUpdateIntervalMs) {
           return;
         }
@@ -1573,7 +1578,7 @@ THREEJS_SKY_RUNTIME_JS = """
         if (typeof ovizDebugTrackSkyViewSent === "function") {
           ovizDebugTrackSkyViewSent(viewSeq, view);
         }
-        skyDomeFrameEl.contentWindow.postMessage({
+        const viewPayload = {
           type: "oviz-sky-background-view",
           seq: viewSeq,
           ra: view.ra,
@@ -1582,7 +1587,19 @@ THREEJS_SKY_RUNTIME_JS = """
           b: view.b,
           fovDeg: view.fovDeg,
           cameraFovDeg: view.cameraFovDeg,
-        }, "*");
+        };
+        let appliedDirectly = false;
+        try {
+          const bridge = skyDomeFrameEl.contentWindow.OvizSkyBackgroundBridge;
+          if (bridge && typeof bridge.applyView === "function") {
+            appliedDirectly = Boolean(bridge.applyView(viewPayload));
+          }
+        } catch (_err) {
+          appliedDirectly = false;
+        }
+        if (!appliedDirectly) {
+          skyDomeFrameEl.contentWindow.postMessage(viewPayload, "*");
+        }
         skyApertureInstances.forEach((instance) => {
           if (!instance || !instance.state || !instance.state.open) {
             return;
