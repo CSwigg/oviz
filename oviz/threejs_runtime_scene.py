@@ -1746,6 +1746,66 @@ THREEJS_SCENE_RUNTIME_JS = """
         };
       }
 
+      function ovizRetainedTraceShouldBeResident(trace) {
+        if (!trace || !trace.key) return false;
+        const key = String(trace.key);
+        if (
+          typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+          && ovizStateTransition.traceOpacity instanceof Map
+        ) {
+          const track = ovizStateTransition.traceOpacity.get(key);
+          if (track) return Number(track.from) > 0.0001 || Number(track.to) > 0.0001;
+        }
+        if (
+          typeof legendTransitionState !== "undefined"
+          && legendTransitionState
+          && typeof traceVisibleForGroupState === "function"
+        ) {
+          const fromVisible = traceVisibleForGroupState(
+            trace,
+            legendTransitionState.fromGroup,
+            legendTransitionState.fromLegendState,
+          );
+          const toVisible = traceVisibleForGroupState(
+            trace,
+            legendTransitionState.toGroup,
+            legendTransitionState.toLegendState,
+          );
+          const heldOpacity = legendTransitionState.fromOpacityByKey
+            && Object.prototype.hasOwnProperty.call(legendTransitionState.fromOpacityByKey, key)
+            ? Number(legendTransitionState.fromOpacityByKey[key])
+            : 0.0;
+          return fromVisible || toVisible || heldOpacity > 0.0001;
+        }
+        if (
+          typeof actionHeldTraceOpacityByKey !== "undefined"
+          && actionHeldTraceOpacityByKey
+          && Object.prototype.hasOwnProperty.call(actionHeldTraceOpacityByKey, key)
+          && Number(actionHeldTraceOpacityByKey[key]) > 0.0001
+        ) return true;
+        return traceVisible(trace);
+      }
+
+      function ovizRetainedTraceKeySet(fromFrame, toFrame) {
+        const keys = new Set();
+        [fromFrame, toFrame].forEach((frame) => {
+          (frame && Array.isArray(frame.traces) ? frame.traces : []).forEach((trace) => {
+            if (ovizRetainedTraceShouldBeResident(trace)) keys.add(String(trace.key));
+          });
+        });
+        return keys;
+      }
+
+      function ovizRetainedFrameWithResidentTraces(frame, residentTraceKeys) {
+        if (!frame || !(residentTraceKeys instanceof Set)) return frame;
+        const sourceTraces = Array.isArray(frame.traces) ? frame.traces : [];
+        const traces = sourceTraces.filter((trace) => (
+          residentTraceKeys.has(String(trace && trace.key || ""))
+        ));
+        return traces.length === sourceTraces.length ? frame : Object.assign({}, frame, { traces });
+      }
+
       function ovizPointComponentIdentity(metadata, allowIndex) {
         if (!metadata) return "";
         const pointIdentity = metadata.stablePointKey
@@ -1797,7 +1857,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           pairs.push({
             from: fromEntry,
             to: toEntry || null,
-            livePoint: Object.assign({}, fromEntry.metadata.point || {}),
+            livePoint: cloneTracePoint(fromEntry.metadata.point || {}) || {},
           });
         });
         toEndpoint.pointEntries.forEach((toEntry) => {
@@ -1805,7 +1865,7 @@ THREEJS_SCENE_RUNTIME_JS = """
             pairs.push({
               from: null,
               to: toEntry,
-              livePoint: Object.assign({}, toEntry.metadata.point || {}),
+              livePoint: cloneTracePoint(toEntry.metadata.point || {}) || {},
             });
           }
         });
@@ -1817,16 +1877,17 @@ THREEJS_SCENE_RUNTIME_JS = """
         const toPoint = pair.to && pair.to.metadata.point;
         const fallback = fromPoint || toPoint || {};
         const livePoint = pair.livePoint;
-        Object.assign(livePoint, fallback);
         if (fromPoint && toPoint) {
           livePoint.x = interpolateNumber(fromPoint.x, toPoint.x, alpha, fallback.x);
           livePoint.y = interpolateNumber(fromPoint.y, toPoint.y, alpha, fallback.y);
           livePoint.z = interpolateNumber(fromPoint.z, toPoint.z, alpha, fallback.z);
-          livePoint.size = interpolateNumber(fromPoint.size, toPoint.size, alpha, fallback.size);
-          livePoint.opacity = interpolateNumber(fromPoint.opacity, toPoint.opacity, alpha, fallback.opacity);
+          interpolateOptionalNumberField(livePoint, fromPoint, toPoint, "size", alpha);
+          interpolateOptionalNumberField(livePoint, fromPoint, toPoint, "opacity", alpha);
         }
         if (fallback.motion && typeof fallback.motion === "object") {
-          livePoint.motion = Object.assign({}, fallback.motion, { time_myr: displayedTimeMyr });
+          if (!livePoint.motion || typeof livePoint.motion !== "object") livePoint.motion = {};
+          Object.assign(livePoint.motion, fallback.motion);
+          livePoint.motion.time_myr = displayedTimeMyr;
         }
         return livePoint;
       }
@@ -1854,7 +1915,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         }
         const metadata = entry.metadata;
         const trace = metadata.trace || {};
-        const point = metadata.point || livePoint || {};
+        const point = livePoint || metadata.point || {};
         const traceState = traceStyleStateForKey(trace.key);
         const pointState = animatedPointState(point, trace, displayedTimeMyr);
         const birthVisibility = ovizPointBirthVisibility(pointState, point, trace);
@@ -2242,8 +2303,11 @@ THREEJS_SCENE_RUNTIME_JS = """
         plotGroup.add(fromRoot);
         plotGroup.add(toRoot);
         plotGroup.add(overlayRoot);
-        const fromFrame = frameSpecs[frameState.lowerIndex] || null;
-        const toFrame = frameSpecs[frameState.upperIndex] || fromFrame;
+        const sourceFromFrame = frameSpecs[frameState.lowerIndex] || null;
+        const sourceToFrame = frameSpecs[frameState.upperIndex] || sourceFromFrame;
+        const residentTraceKeys = ovizRetainedTraceKeySet(sourceFromFrame, sourceToFrame);
+        const fromFrame = ovizRetainedFrameWithResidentTraces(sourceFromFrame, residentTraceKeys);
+        const toFrame = ovizRetainedFrameWithResidentTraces(sourceToFrame, residentTraceKeys);
         renderFrameScene(fromFrame, Number(fromFrame && fromFrame.time) || 0.0, {
           updateWidgets: false,
           preserveCamera: true,
@@ -2277,6 +2341,8 @@ THREEJS_SCENE_RUNTIME_JS = """
           buildSerial: ovizRetainedSceneBuildSerial,
           updateCount: 0,
           materialCount: fromEndpoint.materialCount + toEndpoint.materialCount,
+          residentTraceCount: residentTraceKeys.size,
+          residentTraceKeys,
         };
         runtime.selectionOverlay = ovizPrepareRetainedSelectionOverlay(runtime);
         ovizRetainedTransitionScene = runtime;
@@ -2552,6 +2618,7 @@ THREEJS_SCENE_RUNTIME_JS = """
             intervalUpdates: runtime.updateCount,
             materials: runtime.materialCount,
             pointEntries: runtime.pointPairs.length,
+            residentTraces: runtime.residentTraceCount,
           });
           if (typeof ovizTransitionDebugEnabled === "function" && ovizTransitionDebugEnabled()) {
             root.dataset.retainedSceneDebug = JSON.stringify(ovizRetainedDebugSnapshot(runtime));

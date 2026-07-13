@@ -21,6 +21,45 @@ def _runtime_html() -> str:
 
 class ThreeJSRetainedSceneTests(unittest.TestCase):
     @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_retained_live_motion_cannot_mutate_source_frame_points(self):
+        html = _runtime_html()
+        interpolation_helpers = (
+            "function interpolateNumber(fromValue, toValue, alpha, fallbackValue = 0.0)"
+            + html.split(
+                "function interpolateNumber(fromValue, toValue, alpha, fallbackValue = 0.0)", 1
+            )[1].split("function cloneTraceLabel", 1)[0]
+        )
+        retained_clone = (
+            "function ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr)"
+            + html.split(
+                "function ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr)", 1
+            )[1].split("function ovizPointBirthVisibility", 1)[0]
+        )
+        script = f"""
+        {interpolation_helpers}
+        {retained_clone}
+        const source = {{ motion: {{ key: "cluster-a", time_myr: 0 }} }};
+        const pair = {{
+          from: {{ metadata: {{ point: source }} }},
+          to: null,
+          livePoint: cloneTracePoint(source),
+        }};
+        const rendered = ovizRetainedCloneLivePoint(pair, 0.5, -12.5);
+        process.stdout.write(JSON.stringify({{
+          sourceTime: source.motion.time_myr,
+          renderedTime: rendered.motion.time_myr,
+          motionIsOwned: rendered.motion !== source.motion,
+        }}));
+        """
+        result = subprocess.run(
+            ["node"], input=script, text=True, capture_output=True, check=True
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["sourceTime"], 0)
+        self.assertEqual(payload["renderedTime"], -12.5)
+        self.assertTrue(payload["motionIsOwned"])
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
     def test_exact_frame_birth_visibility_uses_motion_time_when_override_is_missing(self):
         html = _runtime_html()
         helper_source = (
@@ -195,6 +234,18 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
         self.assertIn("addMarkerTrace(traceParent, trace, { forceResident })", render_body)
         self.assertIn("effectiveOpacity <= 0.001 && !forceResident", marker_body)
         self.assertIn("ovizRetainedPoint", marker_body)
+
+    def test_retained_transition_filters_nonresident_traces_without_touching_frame_renderer(self):
+        html = _runtime_html()
+        prepare_body = html.split(
+            "function ovizPrepareRetainedTransitionScene(", 1
+        )[1].split("function ovizRetainedDebugSnapshot", 1)[0]
+
+        self.assertIn("ovizRetainedTraceKeySet(sourceFromFrame, sourceToFrame)", prepare_body)
+        self.assertIn("ovizRetainedFrameWithResidentTraces", prepare_body)
+        self.assertIn("residentTraceCount", prepare_body)
+        self.assertIn("livePoint: cloneTracePoint(fromEntry.metadata.point || {}) || {}", html)
+        self.assertIn("const point = livePoint || metadata.point || {}", html)
 
     def test_cached_textures_are_not_disposed_with_retained_materials(self):
         html = _runtime_html()
