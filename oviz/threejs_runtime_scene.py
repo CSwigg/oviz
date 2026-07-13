@@ -1773,6 +1773,7 @@ THREEJS_SCENE_RUNTIME_JS = """
 
       function ovizPrepareRetainedEndpoint(rootGroup, frame, frameIndex) {
         const pointEntries = [];
+        const nonPointEntries = [];
         let materialCount = 0;
         rootGroup.traverse((object) => {
           if (!object || !object.material) {
@@ -1797,6 +1798,15 @@ THREEJS_SCENE_RUNTIME_JS = """
           const pointMetadata = object.userData && object.userData.ovizRetainedPoint;
           if (pointMetadata) {
             pointEntries.push({ object, metadata: pointMetadata });
+          } else {
+            nonPointEntries.push({
+              object,
+              materials: ovizRetainedMaterials(object),
+              responsiveImage: object.userData && object.userData.ovizResponsiveImagePlaneEntry,
+              volumeRuntime: object.userData && object.userData.ovizVolumeRuntime,
+              trace: object.userData && object.userData.ovizRetainedTrace,
+              labelMetadata: object.userData && object.userData.ovizRetainedLabel,
+            });
           }
         });
         return {
@@ -1805,6 +1815,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           frame,
           frameIndex,
           pointEntries,
+          nonPointEntries,
           materialCount,
         };
       }
@@ -1892,6 +1903,14 @@ THREEJS_SCENE_RUNTIME_JS = """
         return `${String(metadata.traceKey || "")}\n${pointIdentity}\n${String(metadata.component || "")}`;
       }
 
+      function ovizPointVisualIdentity(metadata, allowIndex = true) {
+        if (!metadata) return "";
+        const pointIdentity = metadata.stablePointKey
+          ? `stable:${metadata.stablePointKey}#${Number(metadata.stableOccurrence) || 0}`
+          : (allowIndex ? `index:${Number(metadata.pointIndex) || 0}` : "");
+        return pointIdentity ? `${String(metadata.traceKey || "")}\n${pointIdentity}` : "";
+      }
+
       function ovizFramePointTopologyByTrace(frame) {
         const topology = new Map();
         (frame && Array.isArray(frame.traces) ? frame.traces : []).forEach((trace) => {
@@ -1935,6 +1954,7 @@ THREEJS_SCENE_RUNTIME_JS = """
             from: fromEntry,
             to: toEntry || null,
             livePoint: cloneTracePoint(fromEntry.metadata.point || {}) || {},
+            logicalIdentity: ovizPointVisualIdentity(fromEntry.metadata, true),
           });
         });
         toEndpoint.pointEntries.forEach((toEntry) => {
@@ -1943,6 +1963,7 @@ THREEJS_SCENE_RUNTIME_JS = """
               from: null,
               to: toEntry,
               livePoint: cloneTracePoint(toEntry.metadata.point || {}) || {},
+              logicalIdentity: ovizPointVisualIdentity(toEntry.metadata, true),
             });
           }
         });
@@ -1986,9 +2007,9 @@ THREEJS_SCENE_RUNTIME_JS = """
         return clamp01(animatedSize / baseSize);
       }
 
-      function ovizRetainedPointVisual(entry, livePoint, displayedTimeMyr) {
+      function ovizRetainedCommonPointVisual(entry, livePoint, displayedTimeMyr) {
         if (!entry || !entry.object || !entry.metadata) {
-          return { opacity: 0.0, pointScale: 0.0, color: "#ffffff" };
+          return { effectiveOpacity: 0.0, baseScale: 0.0, glowStrength: 0.0, color: "#ffffff" };
         }
         const metadata = entry.metadata;
         const trace = metadata.trace || {};
@@ -2041,7 +2062,23 @@ THREEJS_SCENE_RUNTIME_JS = """
             * pointScale,
           scaleFloor,
         );
-        const glowStrength = Math.max(Number(globalPointGlowStrength) || 0.0, 0.0);
+        return {
+          effectiveOpacity,
+          baseScale,
+          glowStrength: Math.max(Number(globalPointGlowStrength) || 0.0, 0.0),
+          color: pointColorForTrace(point, trace, traceState),
+        };
+      }
+
+      function ovizRetainedPointVisual(entry, livePoint, displayedTimeMyr, commonVisual = null) {
+        if (!entry || !entry.object || !entry.metadata) {
+          return { opacity: 0.0, pointScale: 0.0, color: "#ffffff" };
+        }
+        const metadata = entry.metadata;
+        const common = commonVisual || ovizRetainedCommonPointVisual(entry, livePoint, displayedTimeMyr);
+        const effectiveOpacity = common.effectiveOpacity;
+        const baseScale = common.baseScale;
+        const glowStrength = common.glowStrength;
         const glowMix = clampRange(glowStrength / 0.15, 0.0, 1.0);
         let componentOpacity = effectiveOpacity;
         let responsivePointScale = nonGlowMarkerScaleForPoint(baseScale, entry.object.position);
@@ -2067,24 +2104,32 @@ THREEJS_SCENE_RUNTIME_JS = """
           pointScale: responsivePointScale,
           color: metadata.component === "core"
             ? "#ffffff"
-            : pointColorForTrace(point, trace, traceState),
+            : common.color,
         };
       }
 
       function ovizApplyRetainedPointEntry(entry, visual, endpointWeight, livePoint) {
         if (!entry || !entry.object) return;
         const object = entry.object;
-        object.position.set(
-          Number(livePoint && livePoint.x) || 0.0,
-          Number(livePoint && livePoint.y) || 0.0,
-          Number(livePoint && livePoint.z) || 0.0,
-        );
+        const nextX = Number(livePoint && livePoint.x) || 0.0;
+        const nextY = Number(livePoint && livePoint.y) || 0.0;
+        const nextZ = Number(livePoint && livePoint.z) || 0.0;
+        if (object.position.x !== nextX || object.position.y !== nextY || object.position.z !== nextZ) {
+          object.position.set(nextX, nextY, nextZ);
+        }
         const material = object.material;
         if (material) {
           material.transparent = true;
-          material.opacity = clamp01(Number(visual.opacity) || 0.0) * clamp01(endpointWeight);
-          if (material.color && typeof material.color.set === "function") {
-            material.color.set(String(visual.color || "#ffffff"));
+          const nextOpacity = clamp01(Number(visual.opacity) || 0.0) * clamp01(endpointWeight);
+          if (Math.abs(Number(material.opacity) - nextOpacity) > 1e-7) material.opacity = nextOpacity;
+          const nextColor = String(visual.color || "#ffffff");
+          if (
+            material.color
+            && typeof material.color.set === "function"
+            && material.userData.ovizRetainedLastColor !== nextColor
+          ) {
+            material.color.set(nextColor);
+            material.userData.ovizRetainedLastColor = nextColor;
           }
         }
         const responsive = object.userData && object.userData.ovizResponsivePointEntry;
@@ -2100,16 +2145,15 @@ THREEJS_SCENE_RUNTIME_JS = """
 
       function ovizApplyRetainedEndpointWeight(endpoint, weight, displayedTimeMyr) {
         const endpointWeight = clamp01(weight);
-        endpoint.root.traverse((object) => {
-          if (!object || !object.material || (object.userData && object.userData.ovizRetainedPoint)) {
-            return;
-          }
-          const responsiveImage = object.userData && object.userData.ovizResponsiveImagePlaneEntry;
+        endpoint.nonPointEntries.forEach((entry) => {
+          const object = entry.object;
+          if (!object || !object.material) return;
+          const responsiveImage = entry.responsiveImage;
           if (responsiveImage) {
             responsiveImage.transitionOpacityScale = endpointWeight;
             return;
           }
-          const volumeRuntime = object.userData && object.userData.ovizVolumeRuntime;
+          const volumeRuntime = entry.volumeRuntime;
           if (volumeRuntime) {
             applyVolumeStateToRuntime(volumeRuntime.layer, volumeRuntime, endpoint.frame);
             const opacityUniform = volumeRuntime.material
@@ -2121,9 +2165,9 @@ THREEJS_SCENE_RUNTIME_JS = """
             }
             return;
           }
-          const trace = object.userData && object.userData.ovizRetainedTrace;
-          const labelMetadata = object.userData && object.userData.ovizRetainedLabel;
-          ovizRetainedMaterials(object).forEach((material) => {
+          const trace = entry.trace;
+          const labelMetadata = entry.labelMetadata;
+          entry.materials.forEach((material) => {
             if (!material) return;
             let baseOpacity = Number(material.userData && material.userData.ovizRetainedBaseOpacity);
             if (!Number.isFinite(baseOpacity)) baseOpacity = Number(material.opacity ?? 1.0);
@@ -2442,6 +2486,10 @@ THREEJS_SCENE_RUNTIME_JS = """
           residentTraceCount: residentTraceKeys.size,
           residentTraceKeys,
           reusedEndpoint: Boolean(reusedEndpoint),
+          livePointByIdentity: new Map(),
+          commonVisualByIdentity: new Map(),
+          pointEvaluationCount: 0,
+          lastDiagnosticsAt: -Infinity,
         };
         runtime.selectionOverlay = ovizPrepareRetainedSelectionOverlay(runtime);
         ovizRetainedTransitionScene = runtime;
@@ -2694,21 +2742,50 @@ THREEJS_SCENE_RUNTIME_JS = """
         // reapply the endpoint weight after they have updated their base state.
         ovizApplyRetainedEndpointWeight(runtime.fromEndpoint, fromWeight, displayedTimeMyr);
         ovizApplyRetainedEndpointWeight(runtime.toEndpoint, toWeight, displayedTimeMyr);
+        runtime.livePointByIdentity.clear();
+        runtime.commonVisualByIdentity.clear();
         runtime.pointPairs.forEach((pair) => {
-          const livePoint = ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr);
+          const logicalIdentity = pair.logicalIdentity || "";
+          let livePoint = logicalIdentity ? runtime.livePointByIdentity.get(logicalIdentity) : null;
+          if (!livePoint) {
+            livePoint = ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr);
+            if (logicalIdentity) runtime.livePointByIdentity.set(logicalIdentity, livePoint);
+          }
+          let common = logicalIdentity ? runtime.commonVisualByIdentity.get(logicalIdentity) : null;
           if (pair.from) {
-            const visual = ovizRetainedPointVisual(pair.from, livePoint, displayedTimeMyr);
+            if (!common) {
+              common = ovizRetainedCommonPointVisual(pair.from, livePoint, displayedTimeMyr);
+              runtime.pointEvaluationCount += 1;
+              if (logicalIdentity) runtime.commonVisualByIdentity.set(logicalIdentity, common);
+            }
+            const visual = ovizRetainedPointVisual(pair.from, livePoint, displayedTimeMyr, common);
             ovizApplyRetainedPointEntry(pair.from, visual, fromWeight, livePoint);
           }
           if (pair.to) {
-            const visual = ovizRetainedPointVisual(pair.to, livePoint, displayedTimeMyr);
+            if (!common) {
+              common = ovizRetainedCommonPointVisual(pair.to, livePoint, displayedTimeMyr);
+              runtime.pointEvaluationCount += 1;
+              if (logicalIdentity) runtime.commonVisualByIdentity.set(logicalIdentity, common);
+            }
+            const visual = ovizRetainedPointVisual(pair.to, livePoint, displayedTimeMyr, common);
             ovizApplyRetainedPointEntry(pair.to, visual, toWeight, livePoint);
           }
         });
-        updateCameraResponsiveImagePlanes();
         runtime.updateCount += 1;
         ovizRetainedSceneUpdateSerial += 1;
         if (root && root.dataset) {
+          root.dataset.retainedSceneUpdates = String(ovizRetainedSceneUpdateSerial);
+          root.dataset.retainedEndpointBuilds = String(ovizRetainedEndpointBuildSerial);
+          root.dataset.retainedEndpointReuses = String(ovizRetainedEndpointReuseSerial);
+          const now = (typeof performance !== "undefined" && performance.now)
+            ? performance.now()
+            : Date.now();
+          if (
+            typeof ovizTransitionDebugEnabled !== "function"
+            || !ovizTransitionDebugEnabled()
+            || now - runtime.lastDiagnosticsAt < 100.0
+          ) return runtime;
+          runtime.lastDiagnosticsAt = now;
           root.dataset.retainedSceneMetrics = JSON.stringify({
             owner: ownerToken,
             interval: intervalKey,
@@ -2721,10 +2798,9 @@ THREEJS_SCENE_RUNTIME_JS = """
             endpointBuilds: ovizRetainedEndpointBuildSerial,
             endpointReuses: ovizRetainedEndpointReuseSerial,
             reusedEndpoint: runtime.reusedEndpoint,
+            pointEvaluations: runtime.pointEvaluationCount,
           });
-          if (typeof ovizTransitionDebugEnabled === "function" && ovizTransitionDebugEnabled()) {
-            root.dataset.retainedSceneDebug = JSON.stringify(ovizRetainedDebugSnapshot(runtime));
-          }
+          root.dataset.retainedSceneDebug = JSON.stringify(ovizRetainedDebugSnapshot(runtime));
         }
         return runtime;
       }

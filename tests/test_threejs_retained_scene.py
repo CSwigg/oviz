@@ -260,6 +260,24 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
         self.assertIn("ovizBuildRetainedEndpoint", prepare_body)
         self.assertNotIn("clearGroup(plotGroup);\n        plotGroup.position", prepare_body)
 
+    def test_retained_hot_loop_shares_point_evaluations_and_avoids_traversal(self):
+        html = _runtime_html()
+        update_body = html.split(
+            "function ovizUpdateRetainedTransitionScene(", 1
+        )[1].split("function renderInterpolatedFrameValue", 1)[0]
+        endpoint_body = html.split(
+            "function ovizApplyRetainedEndpointWeight(", 1
+        )[1].split("function ovizPrepareRetainedSelectionOverlay", 1)[0]
+
+        self.assertIn("runtime.livePointByIdentity.clear()", update_body)
+        self.assertIn("runtime.commonVisualByIdentity.clear()", update_body)
+        self.assertIn("ovizRetainedCommonPointVisual", update_body)
+        self.assertIn("pointEvaluations", update_body)
+        self.assertNotIn("updateCameraResponsiveImagePlanes()", update_body)
+        self.assertIn("endpoint.nonPointEntries.forEach", endpoint_body)
+        self.assertNotIn("endpoint.root.traverse", endpoint_body)
+        self.assertIn("now - runtime.lastDiagnosticsAt < 100.0", update_body)
+
     def test_cached_textures_are_not_disposed_with_retained_materials(self):
         html = _runtime_html()
         clear_body = html.split("function clearGroup(group)", 1)[1].split(
