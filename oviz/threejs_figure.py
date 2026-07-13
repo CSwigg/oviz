@@ -8458,6 +8458,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         );
       }
 
+      function restoreEarthViewDerivedState(savedGlobalControls) {
+        if (!savedGlobalControls || typeof savedGlobalControls !== "object") {
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(savedGlobalControls, "earth_view_focus_distance_pc")) {
+          if (savedGlobalControls.earth_view_focus_distance_pc === null) {
+            earthViewFocusDistance = null;
+          } else if (Number.isFinite(Number(savedGlobalControls.earth_view_focus_distance_pc))) {
+            earthViewFocusDistance = Number(savedGlobalControls.earth_view_focus_distance_pc);
+          }
+        }
+        if (Object.prototype.hasOwnProperty.call(savedGlobalControls, "earth_view_return_camera_state")) {
+          earthViewReturnCameraState = cameraReturnStateFromPlainObject(
+            savedGlobalControls.earth_view_return_camera_state
+          );
+        }
+      }
+
       function applyViewerStateSyncInternal(initialState, options = {}) {
         resetLegendState(currentGroup);
         if (!initialState || typeof initialState !== "object") {
@@ -8596,12 +8614,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedGlobalControls.camera_view_mode === "string" && savedGlobalControls.camera_view_mode) {
             cameraViewMode = String(savedGlobalControls.camera_view_mode);
           }
-          if (Number.isFinite(Number(savedGlobalControls.earth_view_focus_distance_pc))) {
-            earthViewFocusDistance = Number(savedGlobalControls.earth_view_focus_distance_pc);
-          }
-          if (savedGlobalControls.earth_view_return_camera_state) {
-            earthViewReturnCameraState = cameraReturnStateFromPlainObject(savedGlobalControls.earth_view_return_camera_state);
-          }
+          restoreEarthViewDerivedState(savedGlobalControls);
           if (typeof restoreSkyApertureState === "function") {
             restoreSkyApertureState(
               savedGlobalControls.sky_apertures

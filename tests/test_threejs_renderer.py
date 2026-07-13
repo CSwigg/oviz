@@ -1507,7 +1507,11 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("function serializableEarthViewReturnCameraState()", html)
         self.assertIn("function cameraReturnStateFromPlainObject(value)", html)
         self.assertIn("earth_view_return_camera_state: serializableEarthViewReturnCameraState()", html)
-        self.assertIn("earthViewReturnCameraState = cameraReturnStateFromPlainObject(savedGlobalControls.earth_view_return_camera_state);", html)
+        self.assertIn(
+            'Object.prototype.hasOwnProperty.call(savedGlobalControls, "earth_view_return_camera_state")',
+            html,
+        )
+        self.assertIn("earthViewReturnCameraState = cameraReturnStateFromPlainObject(", html)
         self.assertIn("function resetToSunReferenceFrameForSkyView()", html)
         self.assertIn("resetToSunReferenceFrameForSkyView();", html)
         self.assertIn("oviz-three-earth-view-toggle", html)

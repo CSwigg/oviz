@@ -19,6 +19,47 @@ from oviz.threejs_scene import _round_scene_floats
 
 class ThreeJSStatesSchemaTests(unittest.TestCase):
     @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_free_view_null_sky_camera_fields_restore_as_null(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        restore_source = (
+            "function restoreEarthViewDerivedState(savedGlobalControls)"
+            + html.split("function restoreEarthViewDerivedState(savedGlobalControls)", 1)[1].split(
+                "function applyViewerStateSyncInternal", 1
+            )[0]
+        )
+        script = f"""
+        let earthViewFocusDistance = 8122;
+        let earthViewReturnCameraState = {{ stale: true }};
+        function cameraReturnStateFromPlainObject(value) {{
+          return value && typeof value === "object" ? value : null;
+        }}
+        {restore_source}
+        restoreEarthViewDerivedState({{
+          earth_view_focus_distance_pc: null,
+          earth_view_return_camera_state: null,
+        }});
+        process.stdout.write(JSON.stringify({{
+          focusDistance: earthViewFocusDistance,
+          returnCamera: earthViewReturnCameraState,
+        }}));
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertIsNone(payload["focusDistance"])
+        self.assertIsNone(payload["returnCamera"])
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
     def test_state_navigation_clears_cancelled_action_trace_hold(self):
         html = ThreeJSFigure({
             "width": 640,
@@ -195,6 +236,11 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn('differences.push("transient_action_trace_opacity")', html)
         self.assertIn("ovizStateFidelityDifferences", html)
         self.assertIn("ovizApplyCapturedCameraState", html)
+        self.assertIn("savedGlobalControls.earth_view_focus_distance_pc === null", html)
+        self.assertIn(
+            'Object.prototype.hasOwnProperty.call(savedGlobalControls, "earth_view_return_camera_state")',
+            html,
+        )
         self.assertIn("ovizCancelStateTransitionWithoutSnap", html)
         self.assertIn("ovizStateTransition.targetIndex", html)
         self.assertIn("startStateAction", html)
