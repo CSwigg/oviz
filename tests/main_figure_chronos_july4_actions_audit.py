@@ -23,6 +23,43 @@ HERE = Path(__file__).resolve().parent
 DEFAULT_INPUT = HERE / "main_figure_chronos_july4.html"
 DEFAULT_OUTPUT = HERE / "main_figure_chronos_july4_actions_audit.html"
 
+RUNTIME_SNAPSHOT_KEYS = {
+    "current_group",
+    "current_frame_index",
+    "current_frame_value",
+    "playback_state",
+    "manual_labels",
+    "active_manual_label_id",
+    "legend_state",
+    "trace_style_state",
+    "click_selection_enabled",
+    "lasso_volume_selection_enabled",
+    "lasso_selection_filter_enabled",
+    "lasso_armed",
+    "current_selection",
+    "current_selections",
+    "current_selection_mode",
+    "selected_cluster_keys",
+    "active_volume_key",
+    "volume_state_by_key",
+    "global_controls",
+    "camera",
+    "drawers",
+    "legend_open",
+    "legend_panel_state",
+    "legend_panel_user_sized",
+    "legend_sections_open",
+    "sky_layers",
+    "active_sky_layer_key",
+    "zen_mode_enabled",
+    "widgets",
+    "scale_bar_state",
+    "selection_box_state",
+    "cluster_filter_state",
+    "dendrogram_state",
+    "lasso_selection_mask",
+}
+
 
 def read_embedded_scene_spec(path: Path) -> dict[str, Any]:
     html = Path(path).read_text(encoding="utf-8")
@@ -99,7 +136,12 @@ def _snapshot(
     frames = scene["frames"]
     frame_index = max(0, min(int(frame_index), len(frames) - 1))
     frame = frames[frame_index]
-    snapshot = copy.deepcopy(scene.get("initial_state") or {})
+    initial_state = scene.get("initial_state") or {}
+    snapshot = {
+        key: copy.deepcopy(value)
+        for key, value in initial_state.items()
+        if key in RUNTIME_SNAPSHOT_KEYS
+    }
     snapshot.update(
         {
             "current_group": "Clusters" if "Clusters" in scene.get("group_order", []) else scene.get("default_group", "All"),
@@ -108,6 +150,8 @@ def _snapshot(
             "playback_state": {"direction": 0, "interval_ms": int(scene.get("playback_interval_ms") or 160)},
             "camera": {key: value for key, value in camera.items() if key != "fov"},
             "trace_style_state": {},
+            "click_selection_enabled": False,
+            "lasso_volume_selection_enabled": False,
             "current_selection": None,
             "current_selections": [],
             "current_selection_mode": "none",
@@ -197,7 +241,7 @@ def _snapshot(
         snapshot["legend_state"] = legend
         if young_key:
             snapshot["trace_style_state"] = {
-                young_key: {"color": "#ff3038", "opacity": 1.0, "size": 1.15}
+                young_key: {"color": "#ff3038", "opacity": 1.0, "sizeScale": 1.15}
             }
     return snapshot
 
@@ -212,6 +256,7 @@ def build_audit_scene(scene_spec: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("The Actions audit requires at least two timeline frames")
     present = len(frames) - 1
     lookback = max(0, present - 5)
+    past_time = max(0, present - 20)
     topology_boundary = max(0, present - 1)
     state_items = [
         {
@@ -235,6 +280,16 @@ def build_audit_scene(scene_spec: dict[str, Any]) -> dict[str, Any]:
                 topology_boundary,
                 camera=_camera(scene, azimuth=0.18, elevation=0.18, fov=48.0),
                 lasso_seed=7,
+            ),
+        },
+        {
+            "id": "audit-past-time",
+            "name": "Audit Past Time",
+            "transition": {"duration_ms": 2400, "easing": "easeInOutCubic"},
+            "snapshot": _snapshot(
+                scene,
+                past_time,
+                camera=_camera(scene, azimuth=-0.05, elevation=0.30, fov=46.0),
             ),
         },
         {
@@ -274,6 +329,12 @@ def build_audit_scene(scene_spec: dict[str, Any]) -> dict[str, Any]:
                 "label": "Audit: State Lookback",
                 "description": "State-backed camera, appearance, and time transition.",
                 "steps": [{"type": "state", "start": "after_previous", "delay_ms": 0, "state": "audit-lookback"}],
+            },
+            {
+                "key": "audit-state-past-time",
+                "label": "Audit: State Past Time",
+                "description": "Unfiltered state-backed transition to t = -20 Myr.",
+                "steps": [{"type": "state", "start": "after_previous", "delay_ms": 0, "state": "audit-past-time"}],
             },
             {
                 "key": "audit-sequential",

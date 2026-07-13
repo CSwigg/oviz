@@ -68,11 +68,13 @@ def test_audit_scene_seeds_deterministic_states_actions_and_topology_boundary():
     assert [item["id"] for item in scene["states"]["items"]] == [
         "audit-lookback",
         "audit-topology-boundary",
+        "audit-past-time",
         "audit-present",
     ]
-    assert len(scene["actions"]["items"]) == 4
+    assert len(scene["actions"]["items"]) == 5
     assert len(scene["frames"][119]["traces"]) == 19
     assert len(scene["frames"][120]["traces"]) == 23
+    assert scene["actions"]["items"][2]["steps"][0]["state"] == "audit-past-time"
     concurrent = scene["actions"]["items"][-1]["steps"]
     assert concurrent[0]["start"] == "after_previous"
     assert concurrent[1]["start"] == "with_previous"
@@ -80,6 +82,10 @@ def test_audit_scene_seeds_deterministic_states_actions_and_topology_boundary():
     assert lookback["current_selection_mode"] == "lasso"
     assert len(lookback["selected_cluster_keys"]) == 12
     assert lookback["lasso_selection_mask"]["data_url"].startswith("data:image/png;base64,")
+    past_time = scene["states"]["items"][2]["snapshot"]
+    assert past_time["current_frame_value"] == 100.0
+    assert past_time["current_selection_mode"] == "none"
+    assert past_time["selected_cluster_keys"] == []
     assert scene["debug_transitions"] is True
     assert scene["initial_state"]["minimal_mode_enabled"] is True
 

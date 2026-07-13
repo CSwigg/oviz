@@ -390,6 +390,24 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         )
         self.assertIn("ovizRenderedSceneFidelityDifferences", finish_body)
 
+    def test_final_retained_target_is_painted_before_exact_restoration(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        update_body = html.split(
+            "function updateOvizStateTransition(now)", 1
+        )[1].split("async function ovizFinishStateTransition", 1)[0]
+
+        self.assertIn("targetFrameLatched: false", html)
+        self.assertIn("if (!transition.targetFrameLatched)", update_body)
+        self.assertLess(
+            update_body.index("transition.targetFrameLatched = true"),
+            update_body.index("ovizFinishStateTransition(transition)"),
+        )
+
     def test_mask_only_lasso_states_keep_destination_points_visible(self):
         html = ThreeJSFigure({
             "width": 640,

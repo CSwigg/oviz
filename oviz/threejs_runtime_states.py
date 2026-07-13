@@ -1441,6 +1441,11 @@ THREEJS_STATE_RUNTIME_JS = r"""
           selectionTransition: null,
           currentPhase: phasePlan.phases[0].name,
           currentAppearanceProgress: 0.0,
+          // The exact target renderer must not replace the first retained
+          // frame that reaches the destination before that frame is painted.
+          // Latch it for one animation frame so time-dependent point fades
+          // and topology membership visibly reach their final values first.
+          targetFrameLatched: false,
           animationFrameCount: 0,
           lastAnimationAt: now,
           maxFrameGapMs: 0,
@@ -1861,7 +1866,11 @@ THREEJS_STATE_RUNTIME_JS = r"""
             });
           }
           if (raw >= 1) {
-            ovizFinishStateTransition(transition);
+            if (!transition.targetFrameLatched) {
+              transition.targetFrameLatched = true;
+            } else {
+              ovizFinishStateTransition(transition);
+            }
           }
           return true;
         } catch (err) {
