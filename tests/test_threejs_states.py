@@ -19,6 +19,56 @@ from oviz.threejs_scene import _round_scene_floats
 
 class ThreeJSStatesSchemaTests(unittest.TestCase):
     @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_exact_state_restore_preserves_captured_legend_panel_geometry(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        legend_source = (
+            "function setLegendPanelOpen(isOpen, options = {})"
+            + html.split("function setLegendPanelOpen(isOpen, options = {})", 1)[1].split(
+                "function visibleLegendItemsForCurrentGroup", 1
+            )[0]
+        )
+        script = f"""
+        let minimalModeEnabled = false;
+        let legendPanelOpen = false;
+        let legendPanelRectState = {{ left: 14, top: 22, width: 220, height: 300 }};
+        const legendPanelEl = {{ dataset: {{}}, style: {{}} }};
+        const legendPanelBodyEl = {{ style: {{}} }};
+        const legendPanelToggleEl = {{ setAttribute() {{}}, textContent: "" }};
+        const mobileLegendButtonEl = {{ dataset: {{}}, setAttribute() {{}}, title: "" }};
+        const legendResizeEls = [];
+        let receivedOptions = null;
+        function defaultLegendPanelRect() {{ return legendPanelRectState; }}
+        function applyLegendPanelRect(_rect, options) {{ receivedOptions = options; }}
+        function closeLegendPopover() {{}}
+        {legend_source}
+        setLegendPanelOpen(true, {{ allowAutoCap: false }});
+        process.stdout.write(JSON.stringify(receivedOptions));
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {"allowAutoCap": False})
+        self.assertIn("allowAutoCap: !hasSavedLegendPanelRect", html)
+        exact_apply_source = html.split("function ovizApplyStateImmediately", 1)[1].split(
+            "function ovizPointFrom", 1
+        )[0]
+        self.assertIn("applyLegendPanelRect(hydrated.legend_panel_state", exact_apply_source)
+        self.assertIn("allowAutoCap: false", exact_apply_source)
+        self.assertLess(
+            exact_apply_source.index("resize();"),
+            exact_apply_source.index("applyLegendPanelRect(hydrated.legend_panel_state"),
+        )
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
     def test_free_view_null_sky_camera_fields_restore_as_null(self):
         html = ThreeJSFigure({
             "width": 640,

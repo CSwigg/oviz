@@ -477,6 +477,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
           updatePlaybackButtons();
           renderLegend();
           resize();
+          if (
+            hydrated.legend_panel_state
+            && typeof hydrated.legend_panel_state === "object"
+            && typeof applyLegendPanelRect === "function"
+          ) {
+            // resize() normally adapts an automatic legend to its current
+            // contents.  During exact State restoration the captured rect is
+            // authoritative, so reapply it after resize without auto-sizing.
+            applyLegendPanelRect(hydrated.legend_panel_state, {
+              allowAutoCap: false,
+            });
+          }
           ovizApplyCapturedCameraState(hydrated);
           playbackDirection = targetPlaybackDirection;
           lastPlaybackAdvanceTimestamp = null;

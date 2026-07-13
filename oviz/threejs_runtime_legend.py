@@ -241,7 +241,7 @@ THREEJS_LEGEND_RUNTIME_JS = """
         syncLegendGroupChooser({ centerActive: true, smooth: false });
       }
 
-      function setLegendPanelOpen(isOpen) {
+      function setLegendPanelOpen(isOpen, options = {}) {
         legendPanelOpen = minimalModeEnabled ? true : Boolean(isOpen);
         if (legendPanelEl) {
           legendPanelEl.dataset.open = legendPanelOpen ? "true" : "false";
@@ -264,7 +264,9 @@ THREEJS_LEGEND_RUNTIME_JS = """
         }
         if (legendPanelEl) {
           const rect = legendPanelRectState || defaultLegendPanelRect();
-          applyLegendPanelRect(rect);
+          applyLegendPanelRect(rect, {
+            allowAutoCap: options.allowAutoCap !== false,
+          });
         }
         if (!legendPanelOpen) {
           closeLegendPopover();

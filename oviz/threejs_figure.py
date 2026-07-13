@@ -8647,13 +8647,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         const savedLegendPanelState = initialState.legend_panel_state;
-        if (
+        const hasSavedLegendPanelRect = Boolean(
           savedLegendPanelState
           && typeof savedLegendPanelState === "object"
           && Number.isFinite(Number(savedLegendPanelState.left))
           && Number.isFinite(Number(savedLegendPanelState.top))
           && Number.isFinite(Number(savedLegendPanelState.width))
           && Number.isFinite(Number(savedLegendPanelState.height))
+        );
+        if (
+          hasSavedLegendPanelRect
         ) {
           legendPanelRectState = {
             left: Number(savedLegendPanelState.left),
@@ -8974,7 +8977,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         applyCameraViewMode({ forceSkyBackground: options.forceSkyBackground !== false });
         applyThemePreset(activeThemeKey, { rerender: false, syncInput: false });
         renderSceneControls();
-        setLegendPanelOpen(legendPanelOpen);
+        // A captured panel rectangle is already the resolved on-screen
+        // geometry.  Auto-sizing it again during exact State restoration can
+        // change its height and clamp its top, causing an otherwise-correct
+        // transition to fail fidelity after the timeline reaches its target.
+        setLegendPanelOpen(legendPanelOpen, {
+          allowAutoCap: !hasSavedLegendPanelRect,
+        });
         setZenMode(zenModeEnabled);
       }
 
