@@ -384,6 +384,42 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             html,
         )
 
+    def test_states_export_button_prompts_for_filename(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        prompt_body = html.split(
+            "function ovizPromptExportStatesHtml()", 1
+        )[1].split("async function ovizExportStatesHtml", 1)[0]
+
+        self.assertIn("window.prompt(", prompt_body)
+        self.assertIn('"Name the exported HTML file"', prompt_body)
+        self.assertIn("ovizDefaultStatesExportFilename()", prompt_body)
+        self.assertIn("if (filename === null)", prompt_body)
+        self.assertIn("ovizNormalizeStatesExportFilename(filename)", prompt_body)
+        self.assertIn(
+            'ovizMakeButton("Export HTML", ovizPromptExportStatesHtml)',
+            html,
+        )
+
+    def test_states_export_filename_is_safe_and_gets_html_extension(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        normalize_body = html.split(
+            "function ovizNormalizeStatesExportFilename(value)", 1
+        )[1].split("function ovizPromptExportStatesHtml", 1)[0]
+
+        self.assertIn('.replace(/[\\\\/:*?"<>|]+/g, "_")', normalize_body)
+        self.assertIn(r"/\.html?$/i.test(cleaned)", normalize_body)
+        self.assertIn('cleaned + ".html"', normalize_body)
+
     def test_3d_camera_and_time_share_one_phase_by_default(self):
         html = ThreeJSFigure({
             "width": 640,

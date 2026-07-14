@@ -2377,6 +2377,32 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return { saved: true, filename: suggestedName };
       }
 
+      function ovizDefaultStatesExportFilename() {
+        return slugifyFilename(sceneSpec.title || "oviz") + "-states.html";
+      }
+
+      function ovizNormalizeStatesExportFilename(value) {
+        const fallback = ovizDefaultStatesExportFilename();
+        const cleaned = String(value || "")
+          .trim()
+          .replace(/[\\/:*?"<>|]+/g, "_");
+        if (!cleaned) return fallback;
+        return /\.html?$/i.test(cleaned) ? cleaned : cleaned + ".html";
+      }
+
+      function ovizPromptExportStatesHtml() {
+        const filename = window.prompt(
+          "Name the exported HTML file",
+          ovizDefaultStatesExportFilename(),
+        );
+        if (filename === null) {
+          return { saved: false, cancelled: true };
+        }
+        return ovizExportStatesHtml({
+          filename: ovizNormalizeStatesExportFilename(filename),
+        });
+      }
+
       async function ovizExportStatesHtml(options = {}) {
         const compact = await ovizCompactProjectForStorage(ovizStatesPublicProject());
         compact.default_mode = "present";
@@ -2599,7 +2625,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
         editbar.append(
           ovizMakeButton("Add", () => ovizAddState()),
           ovizMakeButton("Update", () => ovizUpdateState(ovizActiveStateId)),
-          ovizMakeButton("Export HTML", () => ovizExportStatesHtml()),
+          ovizMakeButton("Export HTML", ovizPromptExportStatesHtml),
           ovizMakeButton("Current view only", () => saveSceneStateToHtml())
         );
         if (ovizStateTransition) editbar.querySelectorAll("button").forEach((button, index) => { if (index < 2) button.disabled = true; });
