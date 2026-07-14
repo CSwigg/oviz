@@ -559,6 +559,10 @@ class ThreeJSRendererTests(unittest.TestCase):
         html = ThreeJSFigure(scene_spec).to_html(compress_scene_spec=True)
 
         self.assertIn("async function buildExportHtml(exportSceneSpec)", html)
+        self.assertIn("document.documentElement.cloneNode(true)", html)
+        self.assertIn('querySelectorAll(".oviz-states-shell")', html)
+        self.assertIn('"<!DOCTYPE html>\\n" + exportDocumentElement.outerHTML', html)
+        self.assertNotIn('"<!DOCTYPE html>\\n" + document.documentElement.outerHTML', html)
         self.assertIn("const currentHtml = removeExistingSceneSpecPayloadHtml(", html)
         self.assertIn("await gzipBase64EncodeText(sceneJsonText)", html)
         self.assertIn('new CompressionStream("gzip")', html)

@@ -2555,6 +2555,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
       function ovizBuildStatesDrawer() {
         if (!widgetMenuEl || minimalModeEnabled) return;
         ovizInstallStatesStyles();
+        // Older exported HTML may contain a serialized drawer whose event
+        // listeners could not survive serialization. Remove every stale
+        // shell before mounting the one live States controller.
+        widgetMenuEl.querySelectorAll(".oviz-states-shell").forEach((element) => element.remove());
         ovizStatesShellEl = document.createElement("div");
         ovizStatesShellEl.className = "oviz-states-shell";
         ovizStatesShellEl.dataset.open = "false";

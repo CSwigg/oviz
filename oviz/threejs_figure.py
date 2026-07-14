@@ -9141,8 +9141,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       async function buildExportHtml(exportSceneSpec) {
+        // Runtime-authored controls have live event listeners that cannot be
+        // serialized into HTML. Remove them from a detached clone so the
+        // exported runtime creates exactly one fresh, interactive copy.
+        const exportDocumentElement = document.documentElement.cloneNode(true);
+        exportDocumentElement.querySelectorAll(".oviz-states-shell").forEach((element) => element.remove());
         const currentHtml = removeExistingSceneSpecPayloadHtml(
-          "<!DOCTYPE html>\\n" + document.documentElement.outerHTML
+          "<!DOCTYPE html>\\n" + exportDocumentElement.outerHTML
         );
         const startMarker = "/*__SCENE_SPEC_START__*/";
         const endMarker = "/*__SCENE_SPEC_END__*/";

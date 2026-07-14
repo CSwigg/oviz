@@ -363,6 +363,27 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn('name: "camera+time"', html)
         self.assertIn('domains: ["camera", "time"]', html)
 
+    def test_states_drawer_mount_removes_serialized_or_stale_copy(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        build_body = html.split(
+            "function ovizBuildStatesDrawer()", 1
+        )[1].split("function ovizRenderStatesDrawer()", 1)[0]
+
+        remove_index = build_body.index('querySelectorAll(".oviz-states-shell")')
+        create_index = build_body.index('document.createElement("div")')
+        prepend_index = build_body.index("widgetMenuEl.prepend(ovizStatesShellEl)")
+        self.assertLess(remove_index, create_index)
+        self.assertLess(create_index, prepend_index)
+        self.assertIn(
+            'ovizStatesMode === "edit" ? "Present" : "Edit"',
+            html,
+        )
+
     def test_3d_camera_and_time_share_one_phase_by_default(self):
         html = ThreeJSFigure({
             "width": 640,
