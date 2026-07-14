@@ -822,34 +822,86 @@ THREEJS_STATE_RUNTIME_JS = r"""
           appearance: ovizStateAppearanceSignature(from) !== ovizStateAppearanceSignature(to),
           time: Math.abs(ovizStateFrameValue(from) - ovizStateFrameValue(to)) > 1e-9,
         };
-        const names = ["camera", "appearance", "time"].filter((name) => changed[name]);
+        const fromViewMode = String((from && from.global_controls || {}).camera_view_mode || "free");
+        const toViewMode = String((to && to.global_controls || {}).camera_view_mode || "free");
+        const exitsSkyBeforeTime = Boolean(
+          changed.time && fromViewMode === "earth" && toViewMode !== "earth"
+        );
+        const concurrent3dCameraTime = Boolean(
+          changed.camera
+          && changed.time
+          && fromViewMode !== "earth"
+          && toViewMode !== "earth"
+        );
+        // In ordinary 3D transitions, camera and timeline motion share one
+        // clock so they begin and finish on the same rendered frames.  The
+        // Sky -> 3D exception remains sequential: finish the registered Sky
+        // handoff before changing timeline topology in the Cartesian scene.
+        // Time-only transitions still precede any remaining appearance work.
+        let phaseSpecs;
+        if (exitsSkyBeforeTime) {
+          phaseSpecs = ["camera", "time", "appearance"]
+            .filter((name) => changed[name])
+            .map((name) => ({ name, domains: [name] }));
+        } else if (concurrent3dCameraTime) {
+          phaseSpecs = [{ name: "camera+time", domains: ["camera", "time"] }];
+          if (changed.appearance) {
+            phaseSpecs.push({ name: "appearance", domains: ["appearance"] });
+          }
+        } else {
+          phaseSpecs = ["time", "camera", "appearance"]
+            .filter((name) => changed[name])
+            .map((name) => ({ name, domains: [name] }));
+        }
         const requestedDurationMs = Math.max(Number(transitionSpec && transitionSpec.duration_ms) || 0.0, 0.0);
-        if (!names.length) {
+        if (!phaseSpecs.length) {
           return {
             changed,
-            phases: [{ name: "settle", startMs: 0.0, endMs: 0.0 }],
+            phases: [{ name: "settle", domains: [], startMs: 0.0, endMs: 0.0 }],
             effectiveDurationMs: 0.0,
             requestedDurationMs,
           };
         }
         const phaseMinimumDurationMs = 800.0;
-        const minimumDurationMs = names.length * phaseMinimumDurationMs;
+        const minimumDurationMs = phaseSpecs.length * phaseMinimumDurationMs;
         const effectiveDurationMs = Math.max(requestedDurationMs, minimumDurationMs);
-        const baseWeight = { camera: 0.35, appearance: 0.30, time: 0.35, settle: 1.0 };
-        const totalWeight = names.reduce((sum, name) => sum + baseWeight[name], 0.0) || 1.0;
+        const baseWeight = { "camera+time": 0.70, camera: 0.35, appearance: 0.30, time: 0.35, settle: 1.0 };
+        const totalWeight = phaseSpecs.reduce((sum, spec) => sum + baseWeight[spec.name], 0.0) || 1.0;
         const extraDurationMs = Math.max(effectiveDurationMs - minimumDurationMs, 0.0);
         let cursorMs = 0.0;
-        const phases = names.map((name, index) => {
-          const durationMs = phaseMinimumDurationMs + extraDurationMs * (baseWeight[name] / totalWeight);
+        const phases = phaseSpecs.map((spec, index) => {
+          const durationMs = phaseMinimumDurationMs + extraDurationMs * (baseWeight[spec.name] / totalWeight);
           const phase = {
-            name,
+            name: spec.name,
+            domains: spec.domains,
             startMs: cursorMs,
-            endMs: index === names.length - 1 ? effectiveDurationMs : cursorMs + durationMs,
+            endMs: index === phaseSpecs.length - 1 ? effectiveDurationMs : cursorMs + durationMs,
           };
           cursorMs = phase.endMs;
           return phase;
         });
         return { changed, phases, effectiveDurationMs, requestedDurationMs };
+      }
+
+      function ovizRenderStateTimelineFrameLikeSlider(transition, frameValue) {
+        const clampedValue = clampFrameValue(frameValue);
+        const stableFrameIndex = clampFrameIndex(clampedValue);
+        const shouldRender = transition.lastRenderedTimelineFrameIndex !== stableFrameIndex;
+        displayedFrameValue = clampedValue;
+        currentFrameIndex = stableFrameIndex;
+        if (shouldRender) {
+          ovizRetainedTransitionScene = null;
+          const frame = frameSpecs[stableFrameIndex] || null;
+          const stableTimeMyr = Number(frame && frame.time) || 0.0;
+          renderFrameScene(frame, stableTimeMyr, {
+            updateWidgets: false,
+            preserveCamera: true,
+          });
+          transition.lastRenderedTimelineFrameIndex = stableFrameIndex;
+        }
+        updateTimelineUi(clampedValue, frameTimeForValue(clampedValue));
+        updateTimelineMotionOpacity();
+        return shouldRender;
       }
 
       function ovizTransitionPhaseState(transition, elapsedMs) {
@@ -865,7 +917,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
       }
 
       function ovizTransitionPhaseProgress(transition, phaseName, elapsedMs) {
-        const phase = transition.phasePlan.phases.find((item) => item.name === phaseName);
+        const phase = transition.phasePlan.phases.find((item) => (
+          item.name === phaseName
+          || (Array.isArray(item.domains) && item.domains.includes(phaseName))
+        ));
         if (!phase) return 1.0;
         if (elapsedMs <= phase.startMs) return 0.0;
         if (elapsedMs >= phase.endMs) return 1.0;
@@ -1458,6 +1513,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           lastProgressEventAt: -Infinity,
           lastDiagnosticsAt: -Infinity,
           sceneRenderCount: 0,
+          skippedSceneUpdateCount: 0,
           appearancePrepared: false,
           lassoReady: !destination.lasso_selection_mask,
           lassoLoadPromise: null,
@@ -1466,6 +1522,11 @@ THREEJS_STATE_RUNTIME_JS = r"""
           currentPhase: phasePlan.phases[0].name,
           currentAppearanceProgress: 0.0,
           lastAppliedAppearanceProgress: null,
+          lastRenderedTimeProgress: 0.0,
+          lastRenderedAppearanceProgress: 0.0,
+          lastRenderedTimelineFrameIndex: clampFrameIndex(transitionFromFrame),
+          timelineFrameRenderCount: 0,
+          timelineUiUpdateCount: 0,
           // The exact target renderer must not replace the first retained
           // frame that reaches the destination before that frame is painted.
           // Latch it for one animation frame so time-dependent point fades
@@ -1874,12 +1935,38 @@ THREEJS_STATE_RUNTIME_JS = r"""
           displayedFrameValue = clampFrameValue(interpolatedFrameValue);
           currentFrameIndex = clampFrameIndex(displayedFrameValue);
           renderer.domElement.style.opacity = "1";
-          if (appearanceRaw > 0.0 || timeRaw > 0.0) {
+          const timeSceneDirty = Boolean(
+            transition.phasePlan.changed.time
+            && Math.abs(transition.lastRenderedTimeProgress - timeRaw) > 1e-7
+          );
+          const appearanceSceneDirty = Boolean(
+            transition.phasePlan.changed.appearance
+            && Math.abs(transition.lastRenderedAppearanceProgress - appearanceRaw) > 1e-7
+          );
+          if (timeSceneDirty && !appearanceSceneDirty) {
+            const timelineFrameRendered = ovizRenderStateTimelineFrameLikeSlider(
+              transition,
+              displayedFrameValue,
+            );
+            transition.timelineUiUpdateCount += 1;
+            if (timelineFrameRendered) {
+              transition.sceneRenderCount += 1;
+              transition.timelineFrameRenderCount += 1;
+            } else {
+              transition.skippedSceneUpdateCount += 1;
+            }
+            transition.lastRenderedTimeProgress = timeRaw;
+            transition.lastRenderedAppearanceProgress = appearanceRaw;
+          } else if (appearanceSceneDirty) {
             renderInterpolatedFrameValue(displayedFrameValue, {
               updateWidgets: false,
               preserveCamera: true,
             });
             transition.sceneRenderCount += 1;
+            transition.lastRenderedTimeProgress = timeRaw;
+            transition.lastRenderedAppearanceProgress = appearanceRaw;
+          } else {
+            transition.skippedSceneUpdateCount += 1;
           }
           if (now - transition.lastProgressEventAt >= 100 || raw >= 1) {
             transition.lastProgressEventAt = now;
@@ -2058,6 +2145,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
             effectiveDurationMs: transition.phasePlan.effectiveDurationMs,
             animationFrames: transition.animationFrameCount,
             sceneRenders: transition.sceneRenderCount,
+            skippedSceneUpdates: transition.skippedSceneUpdateCount,
+            timelineFrameRenders: transition.timelineFrameRenderCount,
+            timelineUiUpdates: transition.timelineUiUpdateCount,
             maxFrameGapMs: transition.maxFrameGapMs,
             longFrames: transition.longFrameCount,
             preApplyCameraError,

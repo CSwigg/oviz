@@ -327,7 +327,7 @@ def build_audit_scene(scene_spec: dict[str, Any]) -> dict[str, Any]:
             {
                 "key": "audit-state-lookback",
                 "label": "Audit: State Lookback",
-                "description": "State-backed camera, appearance, and time transition.",
+                "description": "State-backed time, camera, and appearance transition.",
                 "steps": [{"type": "state", "start": "after_previous", "delay_ms": 0, "state": "audit-lookback"}],
             },
             {
@@ -554,7 +554,7 @@ def _diagnostics_script(root_id: str, *, auto_run: bool) -> str:
           await waitFrames(2);
           requireStateFidelity("Original to all-domains");
           const allDomainPhases = orderedPhases(events.slice(allDomainEventStart));
-          requirePhaseOrder(allDomainPhases, ["camera", "appearance", "time"], "Original to all-domains");
+          requirePhaseOrder(allDomainPhases, ["camera+time", "appearance"], "Original to all-domains");
           const allDomainSamples = frameSamples.slice(allDomainSampleStart).filter(
             (sample) => sample.diagnostics && sample.diagnostics.targetId === "audit-lookback"
           );

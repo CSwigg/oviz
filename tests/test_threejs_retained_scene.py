@@ -270,13 +270,31 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
         )[1].split("function ovizPrepareRetainedSelectionOverlay", 1)[0]
 
         self.assertIn("runtime.livePointByIdentity.clear()", update_body)
-        self.assertIn("runtime.commonVisualByIdentity.clear()", update_body)
+        self.assertIn("runtime.commonVisualByEndpointIdentity.clear()", update_body)
         self.assertIn("ovizRetainedCommonPointVisual", update_body)
         self.assertIn("pointEvaluations", update_body)
         self.assertNotIn("updateCameraResponsiveImagePlanes()", update_body)
         self.assertIn("endpoint.nonPointEntries.forEach", endpoint_body)
         self.assertNotIn("endpoint.root.traverse", endpoint_body)
         self.assertIn("now - runtime.lastDiagnosticsAt < 100.0", update_body)
+
+    def test_retained_point_visual_cache_is_separate_for_each_endpoint(self):
+        html = _runtime_html()
+        update_body = html.split(
+            "function ovizUpdateRetainedTransitionScene(", 1
+        )[1].split("function renderInterpolatedFrameValue", 1)[0]
+
+        self.assertIn("const fromVisualIdentity = logicalIdentity", update_body)
+        self.assertIn("const toVisualIdentity = logicalIdentity", update_body)
+        self.assertIn(
+            "ovizRetainedCommonPointVisual(pair.from, livePoint, displayedTimeMyr)",
+            update_body,
+        )
+        self.assertIn(
+            "ovizRetainedCommonPointVisual(pair.to, livePoint, displayedTimeMyr)",
+            update_body,
+        )
+        self.assertNotIn("let common = logicalIdentity", update_body)
 
     def test_cached_textures_are_not_disposed_with_retained_materials(self):
         html = _runtime_html()

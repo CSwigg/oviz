@@ -360,6 +360,65 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertRegex(html, r'["\']camera["\']')
         self.assertRegex(html, r'["\']appearance["\']')
         self.assertRegex(html, r'["\']time["\']')
+        self.assertIn('name: "camera+time"', html)
+        self.assertIn('domains: ["camera", "time"]', html)
+
+    def test_3d_camera_and_time_share_one_phase_by_default(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        phase_builder = html.split(
+            "function ovizBuildTransitionPhases(", 1
+        )[1].split("function ovizTransitionPhaseState", 1)[0]
+
+        self.assertIn("const concurrent3dCameraTime = Boolean(", phase_builder)
+        self.assertIn('fromViewMode !== "earth"', phase_builder)
+        self.assertIn('toViewMode !== "earth"', phase_builder)
+        self.assertIn('{ name: "camera+time", domains: ["camera", "time"] }', phase_builder)
+        self.assertIn("const minimumDurationMs = phaseSpecs.length * phaseMinimumDurationMs", phase_builder)
+
+    def test_shared_3d_camera_time_phase_drives_both_domains_with_same_progress(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        progress_body = html.split(
+            "function ovizTransitionPhaseProgress(", 1
+        )[1].split("function ovizTraceCandidatesForFrameValue", 1)[0]
+
+        self.assertIn("Array.isArray(item.domains)", progress_body)
+        self.assertIn("item.domains.includes(phaseName)", progress_body)
+        self.assertIn(
+            'const cameraRaw = ovizTransitionPhaseProgress(transition, "camera", elapsedMs)',
+            html,
+        )
+        self.assertIn(
+            'const timeRaw = ovizTransitionPhaseProgress(transition, "time", elapsedMs)',
+            html,
+        )
+
+    def test_sky_to_3d_time_change_exits_sky_before_timeline_motion(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        phase_builder = html.split(
+            "function ovizBuildTransitionPhases(", 1
+        )[1].split("function ovizRenderStateTimelineFrameLikeSlider", 1)[0]
+
+        self.assertIn('fromViewMode === "earth" && toViewMode !== "earth"', phase_builder)
+        self.assertIn('["camera", "time", "appearance"]', phase_builder)
+        self.assertLess(
+            phase_builder.index('["camera", "time", "appearance"]'),
+            phase_builder.index('name: "camera+time"'),
+        )
 
     def test_legacy_time_actions_advance_fractional_frames_each_animation_frame(self):
         html = ThreeJSFigure({
@@ -498,9 +557,40 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             "Math.abs(transition.lastAppliedAppearanceProgress - appearanceProgress)",
             update_body,
         )
+        self.assertIn("const timeSceneDirty = Boolean(", update_body)
+        self.assertIn("transition.phasePlan.changed.time", update_body)
+        self.assertIn("transition.lastRenderedTimeProgress - timeRaw", update_body)
+        self.assertIn("const appearanceSceneDirty = Boolean(", update_body)
+        self.assertIn("transition.phasePlan.changed.appearance", update_body)
+        self.assertIn(
+            "transition.lastRenderedAppearanceProgress - appearanceRaw",
+            update_body,
+        )
+        self.assertIn("ovizRenderStateTimelineFrameLikeSlider", update_body)
+        self.assertIn("if (timeSceneDirty && !appearanceSceneDirty)", update_body)
+        self.assertIn("transition.skippedSceneUpdateCount += 1", update_body)
+        self.assertNotIn("if (appearanceRaw > 0.0 || timeRaw > 0.0)", update_body)
         self.assertEqual(update_body.count("updateTimelineUi("), 0)
         self.assertEqual(update_body.count("updateTimelineMotionOpacity();"), 0)
         self.assertIn("< 100.0", diagnostics_body)
+
+    def test_state_time_phase_uses_slider_style_stable_frame_rendering(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        timeline_body = html.split(
+            "function ovizRenderStateTimelineFrameLikeSlider(", 1
+        )[1].split("function ovizTransitionPhaseState", 1)[0]
+
+        self.assertIn("const stableFrameIndex = clampFrameIndex(clampedValue)", timeline_body)
+        self.assertIn("transition.lastRenderedTimelineFrameIndex !== stableFrameIndex", timeline_body)
+        self.assertIn("renderFrameScene(frame, stableTimeMyr", timeline_body)
+        self.assertIn("updateWidgets: false", timeline_body)
+        self.assertIn("updateTimelineUi(clampedValue, frameTimeForValue(clampedValue))", timeline_body)
+        self.assertNotIn("renderInterpolatedFrameValue", timeline_body)
 
     def test_embedded_scene_state_schema_round_trips_to_payload(self):
         scene = {

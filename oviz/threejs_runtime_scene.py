@@ -2487,7 +2487,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           residentTraceKeys,
           reusedEndpoint: Boolean(reusedEndpoint),
           livePointByIdentity: new Map(),
-          commonVisualByIdentity: new Map(),
+          commonVisualByEndpointIdentity: new Map(),
           pointEvaluationCount: 0,
           lastDiagnosticsAt: -Infinity,
         };
@@ -2743,7 +2743,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         ovizApplyRetainedEndpointWeight(runtime.fromEndpoint, fromWeight, displayedTimeMyr);
         ovizApplyRetainedEndpointWeight(runtime.toEndpoint, toWeight, displayedTimeMyr);
         runtime.livePointByIdentity.clear();
-        runtime.commonVisualByIdentity.clear();
+        runtime.commonVisualByEndpointIdentity.clear();
         runtime.pointPairs.forEach((pair) => {
           const logicalIdentity = pair.logicalIdentity || "";
           let livePoint = logicalIdentity ? runtime.livePointByIdentity.get(logicalIdentity) : null;
@@ -2751,23 +2751,34 @@ THREEJS_SCENE_RUNTIME_JS = """
             livePoint = ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr);
             if (logicalIdentity) runtime.livePointByIdentity.set(logicalIdentity, livePoint);
           }
-          let common = logicalIdentity ? runtime.commonVisualByIdentity.get(logicalIdentity) : null;
           if (pair.from) {
-            if (!common) {
-              common = ovizRetainedCommonPointVisual(pair.from, livePoint, displayedTimeMyr);
+            const fromVisualIdentity = logicalIdentity ? `from\n${logicalIdentity}` : "";
+            let fromCommon = fromVisualIdentity
+              ? runtime.commonVisualByEndpointIdentity.get(fromVisualIdentity)
+              : null;
+            if (!fromCommon) {
+              fromCommon = ovizRetainedCommonPointVisual(pair.from, livePoint, displayedTimeMyr);
               runtime.pointEvaluationCount += 1;
-              if (logicalIdentity) runtime.commonVisualByIdentity.set(logicalIdentity, common);
+              if (fromVisualIdentity) {
+                runtime.commonVisualByEndpointIdentity.set(fromVisualIdentity, fromCommon);
+              }
             }
-            const visual = ovizRetainedPointVisual(pair.from, livePoint, displayedTimeMyr, common);
+            const visual = ovizRetainedPointVisual(pair.from, livePoint, displayedTimeMyr, fromCommon);
             ovizApplyRetainedPointEntry(pair.from, visual, fromWeight, livePoint);
           }
           if (pair.to) {
-            if (!common) {
-              common = ovizRetainedCommonPointVisual(pair.to, livePoint, displayedTimeMyr);
+            const toVisualIdentity = logicalIdentity ? `to\n${logicalIdentity}` : "";
+            let toCommon = toVisualIdentity
+              ? runtime.commonVisualByEndpointIdentity.get(toVisualIdentity)
+              : null;
+            if (!toCommon) {
+              toCommon = ovizRetainedCommonPointVisual(pair.to, livePoint, displayedTimeMyr);
               runtime.pointEvaluationCount += 1;
-              if (logicalIdentity) runtime.commonVisualByIdentity.set(logicalIdentity, common);
+              if (toVisualIdentity) {
+                runtime.commonVisualByEndpointIdentity.set(toVisualIdentity, toCommon);
+              }
             }
-            const visual = ovizRetainedPointVisual(pair.to, livePoint, displayedTimeMyr, common);
+            const visual = ovizRetainedPointVisual(pair.to, livePoint, displayedTimeMyr, toCommon);
             ovizApplyRetainedPointEntry(pair.to, visual, toWeight, livePoint);
           }
         });
