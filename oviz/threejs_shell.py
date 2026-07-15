@@ -33,6 +33,44 @@ THREEJS_SHELL_HTML = """
             </button>
             <div class="oviz-three-legend oviz-three-legend-volume-list"></div>
           </div>
+          <div class="oviz-three-legend-section oviz-three-sky-controls-shell" data-open="false" data-visible="false" data-add-open="false">
+            <div class="oviz-three-sky-dock-head">
+              <button class="oviz-three-sky-controls-toggle" type="button" title="Show sky backgrounds" aria-expanded="false">
+                <span class="oviz-three-sky-controls-toggle-chevron" aria-hidden="true">⌄</span>
+                <span>Sky Backgrounds</span>
+              </button>
+              <button class="oviz-three-sky-add-toggle" type="button" title="Add a sky background" aria-label="Add a sky background" aria-expanded="false">+</button>
+            </div>
+            <div class="oviz-three-sky-controls-drawer" aria-hidden="true" inert>
+              <div class="oviz-three-controls oviz-three-sky-controls">
+                <label class="oviz-three-controls-field oviz-three-sky-source-field" hidden>
+                  <span>Sky image</span>
+                  <select class="oviz-three-sky-source-select" aria-label="Sky image"></select>
+                </label>
+                <div class="oviz-three-sky-dome-controls" hidden>
+                  <div class="oviz-three-sky-add-popover" aria-hidden="true" inert>
+                    <div class="oviz-three-sky-add-title">Add Background</div>
+                    <div class="oviz-three-sky-add-grid">
+                      <label class="oviz-three-controls-field">
+                        <span>Survey</span>
+                        <select class="oviz-three-sky-layer-preset-select" aria-label="Add sky image"></select>
+                      </label>
+                      <label class="oviz-three-controls-field">
+                        <span>Search HiPS</span>
+                        <input class="oviz-three-sky-layer-custom-input" type="text" placeholder="Search or paste HiPS ID" list="__ROOT_ID__-sky-hips-search" autocomplete="off" />
+                        <datalist class="oviz-three-sky-hips-search" id="__ROOT_ID__-sky-hips-search"></datalist>
+                      </label>
+                    </div>
+                    <div class="oviz-three-controls-actions">
+                      <button class="oviz-three-sky-layer-add" type="button">Add background</button>
+                    </div>
+                  </div>
+                  <div class="oviz-three-sky-layer-list" aria-label="Sky layer stack"></div>
+                  <div class="oviz-three-sky-dome-status"></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="oviz-three-legend-resize" data-dir="nw"></div>
         <div class="oviz-three-legend-resize" data-dir="ne"></div>

@@ -246,12 +246,19 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const current = Array.isArray(currentLayers) ? ovizStatesClone(currentLayers, []) : [];
         const layerKey = (layer) => String(layer && (layer.key || layer.survey) || "").trim();
         const currentByKey = new Map();
+        const currentOrder = [];
         current.forEach((layer) => {
           const key = layerKey(layer);
-          if (key) currentByKey.set(key, layer);
+          if (key) {
+            currentByKey.set(key, layer);
+            if (!currentOrder.includes(key)) currentOrder.push(key);
+          }
         });
-        if (!ovizResidentSkyBaseLayerKey && current.length) {
-          ovizResidentSkyBaseLayerKey = layerKey(current[current.length - 1]);
+        // The authored list owns the Aladin stack: first is top and last is
+        // base. Refreshing the base on every ordered list change is essential;
+        // otherwise the initially captured base can silently override a drag.
+        if (currentOrder.length) {
+          ovizResidentSkyBaseLayerKey = currentOrder[currentOrder.length - 1];
         }
         const residentByKey = new Map();
         const residentOrder = [];
@@ -275,7 +282,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
           resident.opacity = 0.0;
           return resident;
         };
-        const layers = residentOrder
+        const residentOnlyOrder = residentOrder.filter((key) => !currentByKey.has(key));
+        const layers = [...currentOrder, ...residentOnlyOrder]
           .filter((key) => key !== ovizResidentSkyBaseLayerKey)
           .map(materialize);
         if (ovizResidentSkyBaseLayerKey && residentByKey.has(ovizResidentSkyBaseLayerKey)) {

@@ -40,6 +40,22 @@ _THREEJS_TOPBAR_HTML = """
         </div>
         <div class="oviz-three-title"></div>
         <div class="oviz-three-widget-menu">
+          <div class="oviz-three-search-shell" data-open="false" data-results-open="false">
+            <button class="oviz-three-search-toggle" type="button" title="Search clusters" aria-label="Search clusters" aria-expanded="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="10.7" cy="10.7" r="5.7"></circle>
+                <path d="m15 15 4.4 4.4"></path>
+              </svg>
+            </button>
+            <div class="oviz-three-search-field">
+              <input class="oviz-three-search-input" type="search" placeholder="Search clusters" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" />
+              <button class="oviz-three-search-submit" type="button" title="Search" aria-label="Search">Go</button>
+            </div>
+            <div class="oviz-three-search-popover" role="listbox" aria-label="Search results" aria-hidden="true" inert>
+              <div class="oviz-three-search-results"></div>
+              <div class="oviz-three-search-status" aria-live="polite"></div>
+            </div>
+          </div>
           <div class="oviz-three-controls-shell" data-open="false">
             <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls" aria-expanded="false" aria-haspopup="true">Controls ▸</button>
             <div class="oviz-three-controls-drawer" aria-hidden="true" inert>
@@ -134,37 +150,6 @@ _THREEJS_TOPBAR_HTML = """
                   <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
                 </div>
                 <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
-              </div>
-            </div>
-          </div>
-          <div class="oviz-three-sky-controls-shell" data-open="false">
-            <button class="oviz-three-sky-controls-toggle" type="button" title="Show or hide sky controls" aria-expanded="false" aria-haspopup="true">Sky ▸</button>
-            <div class="oviz-three-sky-controls-drawer" aria-hidden="true" inert>
-              <div class="oviz-three-controls oviz-three-sky-controls">
-                <div class="oviz-three-controls-title">Sky</div>
-                <label class="oviz-three-controls-field oviz-three-sky-source-field" hidden>
-                  <span>Sky image</span>
-                  <select class="oviz-three-sky-source-select" aria-label="Sky image"></select>
-                </label>
-                <div class="oviz-three-sky-dome-controls" hidden>
-                  <div class="oviz-three-sky-add-grid">
-                  <label class="oviz-three-controls-field">
-                      <span>Add</span>
-                      <select class="oviz-three-sky-layer-preset-select" aria-label="Add sky image"></select>
-                  </label>
-                  <label class="oviz-three-controls-field">
-                      <span>HiPS ID / URL</span>
-                      <input class="oviz-three-sky-layer-custom-input" type="text" placeholder="Search or paste HiPS ID" list="__ROOT_ID__-sky-hips-search" autocomplete="off" />
-                      <datalist class="oviz-three-sky-hips-search" id="__ROOT_ID__-sky-hips-search"></datalist>
-                  </label>
-                  </div>
-                  <div class="oviz-three-controls-actions">
-                    <button class="oviz-three-sky-layer-add" type="button">Add</button>
-                  </div>
-                  <div class="oviz-three-sky-menu-heading">Layers</div>
-                  <div class="oviz-three-sky-layer-list" aria-label="Sky layer stack"></div>
-                  <div class="oviz-three-sky-dome-status"></div>
-                </div>
               </div>
             </div>
           </div>
@@ -2201,7 +2186,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-color: rgba(255, 255, 255, 0.10);
       }
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell,
-      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell {
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-search-shell {
         position: relative;
         min-height: auto;
         border: 0;
@@ -2211,6 +2197,139 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
         overflow: visible;
+      }
+      #__ROOT_ID__ .oviz-three-search-shell {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      #__ROOT_ID__ .oviz-three-search-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        min-width: 30px;
+        padding: 0;
+      }
+      #__ROOT_ID__ .oviz-three-search-toggle svg {
+        width: 15px;
+        height: 15px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+      }
+      #__ROOT_ID__ .oviz-three-search-field {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        width: 0;
+        min-width: 0;
+        overflow: hidden;
+        opacity: 0;
+        transition: width 180ms ease, opacity 130ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-search-shell[data-open="true"] .oviz-three-search-field {
+        width: min(238px, calc(100vw - 210px));
+        opacity: 1;
+      }
+      #__ROOT_ID__ .oviz-three-search-input {
+        box-sizing: border-box;
+        width: 100%;
+        height: 30px;
+        min-width: 0;
+        padding: 0 9px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 4px 0 0 4px;
+        outline: none;
+        background: rgba(10, 12, 16, 0.72);
+        color: var(--oviz-text);
+        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-search-input::placeholder {
+        color: var(--oviz-muted-text);
+      }
+      #__ROOT_ID__ .oviz-three-search-input:focus {
+        border-color: rgba(255, 255, 255, 0.22);
+        background: rgba(10, 12, 16, 0.90);
+      }
+      #__ROOT_ID__ .oviz-three-search-submit {
+        width: 34px;
+        min-width: 34px;
+        padding: 0 !important;
+        border-left: 0 !important;
+        border-radius: 0 4px 4px 0 !important;
+      }
+      #__ROOT_ID__ .oviz-three-search-popover {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        width: min(310px, calc(100vw - 28px));
+        padding: 5px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 8px;
+        background: rgba(18, 20, 24, 0.96);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+        backdrop-filter: blur(10px) saturate(110%);
+        -webkit-backdrop-filter: blur(10px) saturate(110%);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-3px);
+        transition: opacity 120ms ease, transform 120ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-search-shell[data-results-open="true"] .oviz-three-search-popover {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+      #__ROOT_ID__ .oviz-three-search-result {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        height: auto !important;
+        min-height: 34px;
+        padding: 6px 8px !important;
+        border: 0 !important;
+        border-radius: 5px !important;
+        background: transparent !important;
+        text-align: left;
+      }
+      #__ROOT_ID__ .oviz-three-search-result:hover,
+      #__ROOT_ID__ .oviz-three-search-result[data-active="true"] {
+        background: rgba(255, 255, 255, 0.075) !important;
+      }
+      #__ROOT_ID__ .oviz-three-search-result-label,
+      #__ROOT_ID__ .oviz-three-search-result-meta {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-three-search-result-label {
+        color: var(--oviz-text);
+        font: 520 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-search-result-meta {
+        max-width: 110px;
+        color: var(--oviz-muted-text);
+        font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-search-status {
+        display: none;
+        padding: 7px 8px 6px;
+        color: var(--oviz-muted-text);
+        font: 500 10px/1.25 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-search-status:not(:empty) {
+        display: block;
+      }
+      #__ROOT_ID__ .oviz-three-search-shell[data-loading="true"] .oviz-three-search-toggle {
+        opacity: 0.58;
+      }
+      #__ROOT_ID__[data-search-open="true"] .oviz-three-widget-menu > *:not(.oviz-three-search-shell) {
+        display: none !important;
       }
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-toggle,
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-toggle {
@@ -5026,6 +5145,554 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           font-size: 9.8px !important;
         }
       }
+
+      /* Sky backgrounds reuse the trace legend's visual and interaction
+         language. The existing Aladin layer model remains unchanged. */
+      #__ROOT_ID__ .oviz-three-sky-controls-shell {
+        position: static !important;
+        display: none !important;
+        flex: 0 0 auto;
+        flex-direction: column;
+        inset: auto !important;
+        top: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        left: auto !important;
+        width: min(260px, calc(100vw - 28px)) !important;
+        min-height: 0 !important;
+        margin: 14px 0 0 !important;
+        padding-top: 0;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        transition: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        overflow: visible !important;
+        pointer-events: auto;
+      }
+      #__ROOT_ID__[data-camera-view-mode="earth"] .oviz-three-sky-controls-shell[data-visible="true"] {
+        display: flex !important;
+      }
+      #__ROOT_ID__[data-camera-view-mode="earth"] .oviz-three-legend-panel-body {
+        max-height: calc(100vh - 28px);
+        overflow-y: auto !important;
+        overflow-x: visible !important;
+      }
+      #__ROOT_ID__[data-camera-view-mode="earth"] .oviz-three-legend-trace-list,
+      #__ROOT_ID__[data-camera-view-mode="earth"] .oviz-three-legend-volume-list {
+        flex: 0 0 auto;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-dock-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 24px;
+        align-items: center;
+        column-gap: 4px;
+        min-height: 25px;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-toggle {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 5px !important;
+        width: auto !important;
+        min-width: 0 !important;
+        height: auto !important;
+        padding: 2px 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.96) !important;
+        box-shadow: none !important;
+        font: 760 15px/1.16 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        letter-spacing: 0 !important;
+        text-align: left !important;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
+        pointer-events: auto !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-toggle-chevron {
+        flex: 0 0 auto;
+        color: rgba(255, 255, 255, 0.56);
+        font: 760 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        transform: rotate(-90deg);
+        transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), color 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-shell[data-open="true"] .oviz-three-sky-controls-toggle-chevron {
+        color: rgba(255, 255, 255, 0.9);
+        transform: rotate(0deg);
+      }
+      #__ROOT_ID__ .oviz-three-sky-add-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.56);
+        cursor: pointer;
+        font: 500 20px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-sky-add-toggle:hover,
+      #__ROOT_ID__ .oviz-three-sky-add-toggle[aria-expanded="true"] {
+        color: rgba(246, 200, 95, 0.96);
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-drawer {
+        position: static !important;
+        display: none !important;
+        box-sizing: border-box !important;
+        inset: auto !important;
+        top: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        left: auto !important;
+        width: 100% !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        transition: none !important;
+        will-change: auto !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-shell[data-open="true"] .oviz-three-sky-controls-drawer {
+        display: block !important;
+        pointer-events: auto !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls {
+        position: static !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-dome-controls {
+        position: static !important;
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-dome-controls[hidden] {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-list {
+        position: static !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 0 !important;
+        width: 100%;
+        max-height: none !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row {
+        position: static !important;
+        display: block;
+        width: 100%;
+        min-width: 0 !important;
+        min-height: 22px !important;
+        max-width: 100%;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        opacity: 1;
+        filter: none !important;
+        transform: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row:not([open]) {
+        height: 22px !important;
+        overflow: visible !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-list[data-dragging="true"] .oviz-three-sky-layer-row:not([open]),
+      #__ROOT_ID__ .oviz-three-sky-layer-list[data-dragging="true"] .oviz-three-sky-layer-summary {
+        height: 28px !important;
+        min-height: 28px !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-active="true"] {
+        background: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[open],
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-active="true"],
+      #__ROOT_ID__ .oviz-three-sky-layer-summary,
+      #__ROOT_ID__ .oviz-three-sky-layer-body,
+      #__ROOT_ID__ .oviz-three-sky-layer-grid,
+      #__ROOT_ID__ .oviz-three-sky-add-popover {
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-dragging="true"] {
+        opacity: 0.38;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-drop-target="true"][data-drop-position="before"] {
+        box-shadow: inset 0 3px 0 rgba(246, 200, 95, 0.94) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-drop-target="true"][data-drop-position="after"] {
+        box-shadow: inset 0 -3px 0 rgba(246, 200, 95, 0.94) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-summary {
+        display: grid !important;
+        grid-template-columns: 16px minmax(0, 1fr) 12px !important;
+        align-items: center !important;
+        column-gap: 5px !important;
+        min-height: 22px !important;
+        height: 22px !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 1px 0 !important;
+        cursor: pointer !important;
+        list-style: none;
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-summary:focus,
+      #__ROOT_ID__ .oviz-three-sky-layer-summary:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-summary::-webkit-details-marker {
+        display: none;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-summary::before {
+        content: "›";
+        grid-column: 1;
+        grid-row: 1;
+        color: rgba(255, 255, 255, 0.46);
+        font: 720 15px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        text-align: center;
+        transform: rotate(0deg);
+        transition: transform 180ms ease, color 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[open] > .oviz-three-sky-layer-summary::before {
+        color: rgba(255, 255, 255, 0.88);
+        transform: rotate(90deg);
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-grip {
+        grid-column: 3;
+        grid-row: 1;
+        color: rgba(225, 229, 236, 0.30);
+        font-size: 12px;
+        line-height: 1;
+        letter-spacing: -2px;
+        cursor: grab;
+        touch-action: none;
+        opacity: 0.55;
+        transition: color 140ms ease, opacity 140ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row:hover .oviz-three-sky-layer-grip,
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-dragging="true"] .oviz-three-sky-layer-grip {
+        color: rgba(246, 200, 95, 0.9);
+        opacity: 1;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-copy {
+        grid-column: 2;
+        grid-row: 1;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        width: auto !important;
+        min-width: 0 !important;
+        height: 20px !important;
+        min-height: 20px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: inherit !important;
+        font: inherit !important;
+        text-align: left !important;
+        cursor: grab !important;
+        touch-action: none !important;
+        user-select: none !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-dragging="true"] .oviz-three-sky-layer-copy {
+        cursor: grabbing !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-copy:focus,
+      #__ROOT_ID__ .oviz-three-sky-layer-copy:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-legend-item,
+      #__ROOT_ID__ .oviz-three-sky-layer-name {
+        font: 650 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-name {
+        display: block;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        color: var(--oviz-sky-layer-color, rgba(244, 246, 249, 0.96)) !important;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-order {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[data-visible="false"] .oviz-three-sky-layer-name {
+        opacity: 0.52 !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body {
+        position: static !important;
+        display: none !important;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px !important;
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0;
+        padding: 0 8px 0 18px !important;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body > label,
+      #__ROOT_ID__ .oviz-three-sky-layer-body .oviz-three-sky-layer-grid {
+        min-width: 0;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body > label,
+      #__ROOT_ID__ .oviz-three-sky-layer-grid > label,
+      #__ROOT_ID__ .oviz-three-sky-add-popover .oviz-three-controls-field {
+        display: grid !important;
+        grid-template-columns: minmax(70px, max-content) 154px !important;
+        align-items: center !important;
+        gap: 10px !important;
+        min-height: 32px !important;
+        color: rgba(238, 242, 247, 0.50) !important;
+        font: 620 10.5px/1.18 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-grid {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 8px !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input[type="number"],
+      #__ROOT_ID__ .oviz-three-sky-layer-body select,
+      #__ROOT_ID__ .oviz-three-sky-add-popover input[type="number"],
+      #__ROOT_ID__ .oviz-three-sky-add-popover input[type="text"],
+      #__ROOT_ID__ .oviz-three-sky-add-popover select {
+        width: 154px !important;
+        max-width: 154px !important;
+        min-height: 30px !important;
+        padding: 3px 0 4px !important;
+        border: 0 !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.16) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.84) !important;
+        font: 650 11.5px/1.16 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input[type="number"]:focus,
+      #__ROOT_ID__ .oviz-three-sky-layer-body select:focus,
+      #__ROOT_ID__ .oviz-three-sky-add-popover input:focus,
+      #__ROOT_ID__ .oviz-three-sky-add-popover select:focus {
+        outline: none !important;
+        border-bottom-color: rgba(246, 200, 95, 0.58) !important;
+        color: rgba(255, 255, 255, 0.95) !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input[type="range"] {
+        width: 140px !important;
+        min-width: 140px !important;
+        max-width: 140px !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        margin: 0 7px !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        border: 0 !important;
+        background: transparent !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        cursor: pointer !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input[type="range"]::-webkit-slider-runnable-track {
+        height: 2px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: rgba(238, 242, 247, 0.22) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        width: 12px !important;
+        height: 12px !important;
+        margin-top: -5px !important;
+        border: 1px solid rgba(255, 255, 255, 0.66) !important;
+        border-radius: 50% !important;
+        background: rgba(246, 200, 95, 0.92) !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.055) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input[type="range"]::-moz-range-track {
+        height: 2px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: rgba(238, 242, 247, 0.22) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body input[type="range"]::-moz-range-thumb {
+        width: 12px !important;
+        height: 12px !important;
+        border: 1px solid rgba(255, 255, 255, 0.66) !important;
+        border-radius: 50% !important;
+        background: rgba(246, 200, 95, 0.92) !important;
+        box-shadow: 0 0 0 4px rgba(246, 200, 95, 0.055) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-body .oviz-three-sky-layer-actions {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-actions button,
+      #__ROOT_ID__ .oviz-three-sky-add-popover .oviz-three-sky-layer-add {
+        width: auto !important;
+        min-width: 0 !important;
+        height: 25px !important;
+        padding: 0 0 2px !important;
+        border: 0 !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.16) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.66) !important;
+        box-shadow: none !important;
+        font: 650 10.5px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-actions button:hover,
+      #__ROOT_ID__ .oviz-three-sky-add-popover .oviz-three-sky-layer-add:hover {
+        border-bottom-color: rgba(246, 200, 95, 0.58) !important;
+        color: rgba(255, 255, 255, 0.94) !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-layer-row[open] .oviz-three-sky-layer-body {
+        display: grid !important;
+        margin: 1px 0 7px !important;
+        padding: 4px 0 5px 16px !important;
+        pointer-events: auto;
+      }
+      #__ROOT_ID__ .oviz-three-sky-add-popover {
+        position: static !important;
+        display: none !important;
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0;
+        padding: 0 8px 0 18px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-controls-shell[data-add-open="true"] .oviz-three-sky-add-popover {
+        display: block !important;
+        margin: 4px 0 9px;
+        padding: 7px 8px 9px 18px;
+        pointer-events: auto;
+      }
+      #__ROOT_ID__ .oviz-three-sky-add-title {
+        margin-bottom: 8px;
+        color: rgba(247, 248, 250, 0.9);
+        font: 700 11px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-sky-add-grid {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 9px !important;
+      }
+      #__ROOT_ID__ .oviz-three-sky-add-popover .oviz-three-controls-actions {
+        margin-top: 10px;
+      }
+      #__ROOT_ID__ .oviz-three-sky-add-popover .oviz-three-sky-layer-add {
+        width: 100%;
+      }
+      #__ROOT_ID__ .oviz-three-sky-dome-status {
+        min-height: 0 !important;
+        margin-top: 5px !important;
+        font-size: 9px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-shell {
+        position: static !important;
+        display: none !important;
+        width: 100% !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-camera-view-mode="earth"] .oviz-three-sky-controls-shell[data-visible="true"] {
+        display: flex !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-drawer {
+        width: 100% !important;
+      }
+      @media (max-width: 700px) {
+        #__ROOT_ID__ .oviz-three-sky-controls-shell {
+          width: min(260px, calc(100vw - 28px)) !important;
+        }
+      }
     </style>
   </head>
   <body>
@@ -5744,6 +6411,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const actionBarEl = root.querySelector(".oviz-three-action-bar");
       const titleEl = root.querySelector(".oviz-three-title");
       const widgetMenuEl = root.querySelector(".oviz-three-widget-menu");
+      const searchShellEl = root.querySelector(".oviz-three-search-shell");
+      const searchToggleEl = root.querySelector(".oviz-three-search-toggle");
+      const searchInputEl = root.querySelector(".oviz-three-search-input");
+      const searchSubmitEl = root.querySelector(".oviz-three-search-submit");
+      const searchPopoverEl = root.querySelector(".oviz-three-search-popover");
+      const searchResultsEl = root.querySelector(".oviz-three-search-results");
+      const searchStatusEl = root.querySelector(".oviz-three-search-status");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
       const fullscreenButtonEl = root.querySelector(".oviz-three-fullscreen");
       const fullscreenNoticeEl = root.querySelector(".oviz-three-fullscreen-notice");
@@ -5782,6 +6456,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const controlsToggleEl = root.querySelector(".oviz-three-controls-toggle");
       const skyControlsShellEl = root.querySelector(".oviz-three-sky-controls-shell");
       const skyControlsToggleEl = root.querySelector(".oviz-three-sky-controls-toggle");
+      const skyControlsCollapseEl = root.querySelector(".oviz-three-sky-controls-collapse");
+      const skyAddToggleEl = root.querySelector(".oviz-three-sky-add-toggle");
+      const skyAddPopoverEl = root.querySelector(".oviz-three-sky-add-popover");
       const skyApertureToggleEl = root.querySelector(".oviz-three-sky-aperture-toggle");
       const sliderEl = root.querySelector(".oviz-three-slider");
       const sliderTrackWrapEl = root.querySelector(".oviz-three-slider-track-wrap");
@@ -6307,6 +6984,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let skyLayerState = [];
       let skyLayerStateInitialized = false;
       let activeSkyLayerKey = "";
+      let skyLayerDragKey = "";
       const skyPanelImageCache = new Map();
       let skyPanelRenderSerial = 0;
       let currentZoomAnchorPoint = null;
@@ -10562,12 +11240,165 @@ __SKY_RUNTIME_JS__
         return skyLayerState.findIndex((layer) => layer.key === activeSkyLayerKey);
       }
 
+      function reorderSkyLayerByKey(draggedKey, targetKey, dropPosition = "before") {
+        const fromIndex = skyLayerState.findIndex((candidate) => candidate.key === draggedKey);
+        const toIndex = skyLayerState.findIndex((candidate) => candidate.key === targetKey);
+        if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+          return false;
+        }
+        const previousOrder = skyLayerState.map((candidate) => candidate.key);
+        const [movedLayer] = skyLayerState.splice(fromIndex, 1);
+        const targetIndex = skyLayerState.findIndex((candidate) => candidate.key === targetKey);
+        const insertionIndex = targetIndex + (dropPosition === "after" ? 1 : 0);
+        skyLayerState.splice(Math.max(0, Math.min(insertionIndex, skyLayerState.length)), 0, movedLayer);
+        const changed = skyLayerState.some((candidate, index) => candidate.key !== previousOrder[index]);
+        if (!changed) {
+          return false;
+        }
+        activeSkyLayerKey = movedLayer.key;
+        applySkyLayerState({ forceTiles: false, renderLegend: false });
+        return true;
+      }
+
+      function skyLayerDropPositionForPointer(draggedKey, targetRow, clientY) {
+        if (!targetRow) {
+          return "before";
+        }
+        const targetKey = String(targetRow.dataset.layerKey || "");
+        const targetRect = targetRow.getBoundingClientRect();
+        const targetHeight = Math.max(targetRect.height, 1.0);
+        const pointerRatio = Math.min(Math.max((Number(clientY) - targetRect.top) / targetHeight, 0.0), 1.0);
+        if (pointerRatio <= 0.35) {
+          return "before";
+        }
+        if (pointerRatio >= 0.65) {
+          return "after";
+        }
+        const draggedIndex = skyLayerState.findIndex((candidate) => candidate.key === draggedKey);
+        const targetIndex = skyLayerState.findIndex((candidate) => candidate.key === targetKey);
+        return draggedIndex > targetIndex ? "before" : "after";
+      }
+
+      function beginSkyLayerPointerReorder(event, layer, row, dragHandleEl, options = {}) {
+        if (!skyLayerListEl || !layer || !row || !dragHandleEl) {
+          return;
+        }
+        if (event.button !== undefined && event.button !== 0) {
+          return;
+        }
+        const activationDistancePx = Math.max(Number(options.activationDistancePx) || 0.0, 0.0);
+        const startX = Number(event.clientX) || 0.0;
+        const startY = Number(event.clientY) || 0.0;
+        let dragStarted = activationDistancePx <= 0.0;
+        let targetKey = layer.key;
+        let targetDropPosition = "before";
+        const markDragStarted = () => {
+          skyLayerDragKey = layer.key;
+          row.dataset.dragging = "true";
+          skyLayerListEl.dataset.dragging = "true";
+          setSkyAddPopoverOpen(false);
+          Array.from(skyLayerListEl.querySelectorAll(".oviz-three-sky-layer-row[open]")).forEach((openRow) => {
+            openRow.open = false;
+          });
+        };
+        if (dragStarted) {
+          event.preventDefault();
+          event.stopPropagation();
+          markDragStarted();
+        }
+        const clearDropTargets = () => {
+          Array.from(skyLayerListEl.querySelectorAll(".oviz-three-sky-layer-row")).forEach((candidateRow) => {
+            candidateRow.dataset.dropTarget = "false";
+            candidateRow.removeAttribute("data-drop-position");
+          });
+        };
+        const updatePointerTarget = (pointerEvent) => {
+          if (!dragStarted) {
+            const deltaX = (Number(pointerEvent.clientX) || 0.0) - startX;
+            const deltaY = (Number(pointerEvent.clientY) || 0.0) - startY;
+            if (Math.hypot(deltaX, deltaY) < activationDistancePx) {
+              return false;
+            }
+            dragStarted = true;
+            markDragStarted();
+          }
+          if (pointerEvent.cancelable) {
+            pointerEvent.preventDefault();
+          }
+          pointerEvent.stopPropagation();
+          const hitEl = document.elementFromPoint(pointerEvent.clientX, pointerEvent.clientY);
+          const targetRow = hitEl && hitEl.closest ? hitEl.closest(".oviz-three-sky-layer-row") : null;
+          clearDropTargets();
+          if (targetRow && targetRow !== row) {
+            targetDropPosition = skyLayerDropPositionForPointer(layer.key, targetRow, pointerEvent.clientY);
+            targetRow.dataset.dropTarget = "true";
+            targetRow.dataset.dropPosition = targetDropPosition;
+            targetKey = String(targetRow.dataset.layerKey || targetKey);
+          }
+          return true;
+        };
+        const cleanupPointerReorder = (pointerEvent) => {
+          try {
+            if (typeof dragHandleEl.releasePointerCapture === "function") {
+              dragHandleEl.releasePointerCapture(pointerEvent.pointerId);
+            }
+          } catch (_err) {
+          }
+          window.removeEventListener("pointermove", updatePointerTarget, true);
+          window.removeEventListener("pointerup", finishPointerReorder, true);
+          window.removeEventListener("pointercancel", cancelPointerReorder, true);
+          window.removeEventListener("mouseup", finishPointerReorder, true);
+        };
+        const finishPointerReorder = (pointerEvent) => {
+          if (dragStarted) {
+            updatePointerTarget(pointerEvent);
+            dragHandleEl.dataset.suppressClick = "true";
+            window.setTimeout(() => {
+              delete dragHandleEl.dataset.suppressClick;
+            }, 0);
+          }
+          cleanupPointerReorder(pointerEvent);
+          if (!dragStarted) {
+            return;
+          }
+          row.dataset.dragging = "false";
+          skyLayerListEl.dataset.dragging = "false";
+          clearDropTargets();
+          skyLayerDragKey = "";
+          reorderSkyLayerByKey(layer.key, targetKey, targetDropPosition);
+        };
+        const cancelPointerReorder = (pointerEvent) => {
+          cleanupPointerReorder(pointerEvent);
+          if (dragStarted) {
+            row.dataset.dragging = "false";
+            skyLayerListEl.dataset.dragging = "false";
+            clearDropTargets();
+            skyLayerDragKey = "";
+          }
+        };
+        window.addEventListener("pointermove", updatePointerTarget, true);
+        window.addEventListener("pointerup", finishPointerReorder, true);
+        window.addEventListener("pointercancel", cancelPointerReorder, true);
+        window.addEventListener("mouseup", finishPointerReorder, true);
+        try {
+          if (typeof dragHandleEl.setPointerCapture === "function") {
+            dragHandleEl.setPointerCapture(event.pointerId);
+          }
+        } catch (_err) {
+        }
+      }
+
       function renderSkyLayerList() {
         if (!skyLayerListEl) {
           return;
         }
         ensureInitialSkyLayers();
         skyLayerListEl.innerHTML = "";
+        skyLayerListEl.dataset.editorOpen = "false";
+        skyLayerListEl.dataset.dragging = "false";
+        if (root && root.dataset) {
+          root.dataset.skyBackgroundEditor = "false";
+        }
         skyLayerListEl.hidden = false;
         if (!skyLayerState.length) {
           const emptyEl = document.createElement("div");
@@ -10579,26 +11410,141 @@ __SKY_RUNTIME_JS__
         skyLayerState.forEach((layer, index) => {
           const row = document.createElement("details");
           row.className = "oviz-three-sky-layer-row";
+          row.dataset.layerKey = layer.key;
           row.dataset.active = layer.key === activeSkyLayerKey ? "true" : "false";
-          row.open = layer.key === activeSkyLayerKey || skyLayerState.length <= 2;
+          row.dataset.dragging = "false";
+          row.dataset.dropTarget = "false";
+          row.removeAttribute("data-drop-position");
+          row.dataset.visible = layer.visible !== false ? "true" : "false";
+          row.open = false;
+          row.draggable = false;
+          row.addEventListener("toggle", () => {
+            if (!row.open) {
+              skyLayerListEl.dataset.editorOpen = skyLayerListEl.querySelector(".oviz-three-sky-layer-row[open]")
+                ? "true"
+                : "false";
+              if (root && root.dataset) {
+                root.dataset.skyBackgroundEditor = skyLayerListEl.dataset.editorOpen;
+              }
+              return;
+            }
+            setSkyAddPopoverOpen(false);
+            activeSkyLayerKey = layer.key;
+            Array.from(skyLayerListEl.querySelectorAll(".oviz-three-sky-layer-row")).forEach((otherRow) => {
+              otherRow.dataset.active = otherRow === row ? "true" : "false";
+              if (otherRow !== row && otherRow.open) {
+                otherRow.open = false;
+              }
+            });
+            skyLayerListEl.dataset.editorOpen = "true";
+            if (root && root.dataset) {
+              root.dataset.skyBackgroundEditor = "true";
+            }
+          });
+          row.addEventListener("dragstart", (event) => {
+            skyLayerDragKey = layer.key;
+            row.dataset.dragging = "true";
+            skyLayerListEl.dataset.dragging = "true";
+            if (event.dataTransfer) {
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", layer.key);
+            }
+          });
+          row.addEventListener("dragover", (event) => {
+            if (!skyLayerDragKey || skyLayerDragKey === layer.key) {
+              return;
+            }
+            event.preventDefault();
+            row.dataset.dropPosition = skyLayerDropPositionForPointer(skyLayerDragKey, row, event.clientY);
+            row.dataset.dropTarget = "true";
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = "move";
+            }
+          });
+          row.addEventListener("dragleave", () => {
+            row.dataset.dropTarget = "false";
+            row.removeAttribute("data-drop-position");
+          });
+          row.addEventListener("drop", (event) => {
+            event.preventDefault();
+            const draggedKey = skyLayerDragKey || (event.dataTransfer ? event.dataTransfer.getData("text/plain") : "");
+            const dropPosition = row.dataset.dropPosition === "after" ? "after" : "before";
+            row.dataset.dropTarget = "false";
+            row.removeAttribute("data-drop-position");
+            reorderSkyLayerByKey(draggedKey, layer.key, dropPosition);
+          });
+          row.addEventListener("dragend", () => {
+            skyLayerDragKey = "";
+            skyLayerListEl.dataset.dragging = "false";
+            Array.from(skyLayerListEl.querySelectorAll(".oviz-three-sky-layer-row")).forEach((candidateRow) => {
+              candidateRow.dataset.dragging = "false";
+              candidateRow.dataset.dropTarget = "false";
+              candidateRow.removeAttribute("data-drop-position");
+            });
+          });
           const summaryEl = document.createElement("summary");
           summaryEl.className = "oviz-three-sky-layer-summary";
+          const gripEl = document.createElement("span");
+          gripEl.className = "oviz-three-sky-layer-grip";
+          gripEl.textContent = "⠿";
+          gripEl.setAttribute("aria-hidden", "true");
+          gripEl.title = "Drag to reorder";
+          gripEl.draggable = true;
+          gripEl.addEventListener("pointerdown", (event) => {
+            beginSkyLayerPointerReorder(event, layer, row, gripEl);
+          });
+          const copyEl = document.createElement("button");
+          copyEl.type = "button";
+          copyEl.className = "oviz-three-sky-layer-copy";
+          copyEl.draggable = false;
+          copyEl.dataset.visible = layer.visible !== false ? "true" : "false";
+          copyEl.addEventListener("pointerdown", (event) => {
+            beginSkyLayerPointerReorder(event, layer, row, copyEl, { activationDistancePx: 6 });
+          });
           const nameEl = document.createElement("div");
           nameEl.className = "oviz-three-sky-layer-name";
           const layerName = String(layer.label || layer.survey || layer.key);
           nameEl.textContent = layerName;
-          nameEl.title = String(layer.survey || layer.key || "");
+          nameEl.title = layerName;
+          nameEl.style.setProperty(
+            "--oviz-sky-layer-color",
+            String(layer.color || "rgba(244, 246, 249, 0.96)")
+          );
           const orderEl = document.createElement("div");
           orderEl.className = "oviz-three-sky-layer-order";
           orderEl.textContent = index === 0 ? "Top" : (index === skyLayerState.length - 1 ? "Base" : `Layer ${index + 1}`);
-          summaryEl.appendChild(nameEl);
-          summaryEl.appendChild(orderEl);
+          copyEl.appendChild(nameEl);
+          copyEl.appendChild(orderEl);
+          const syncLayerVisibilityControl = () => {
+            const isVisible = layer.visible !== false;
+            row.dataset.visible = isVisible ? "true" : "false";
+            copyEl.dataset.visible = isVisible ? "true" : "false";
+            copyEl.setAttribute("aria-pressed", isVisible ? "true" : "false");
+            copyEl.setAttribute("aria-label", `${isVisible ? "Hide" : "Show"} ${layerName}`);
+            copyEl.title = `${isVisible ? "Hide" : "Show"} ${layerName}; drag to reorder`;
+          };
+          syncLayerVisibilityControl();
+          copyEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (copyEl.dataset.suppressClick === "true") {
+              delete copyEl.dataset.suppressClick;
+              return;
+            }
+            activeSkyLayerKey = layer.key;
+            layer.visible = layer.visible === false;
+            syncLayerVisibilityControl();
+            applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });
+          });
+          summaryEl.appendChild(gripEl);
+          summaryEl.appendChild(copyEl);
           row.appendChild(summaryEl);
 
           const bodyEl = document.createElement("div");
           bodyEl.className = "oviz-three-sky-layer-body";
 
           const opacityLabel = document.createElement("label");
+          opacityLabel.className = "oviz-three-legend-field";
           const opacityTextEl = document.createElement("span");
           opacityTextEl.textContent = `Opacity (${clampSkyLayerOpacity(layer.opacity, skyDomeDefaultOpacity).toFixed(2)})`;
           const opacityInput = document.createElement("input");
@@ -10613,11 +11559,11 @@ __SKY_RUNTIME_JS__
             layer.opacity = clampSkyLayerOpacity(opacityInput.value, skyDomeDefaultOpacity);
             layer.visible = layer.opacity > 0.0;
             opacityTextEl.textContent = `Opacity (${layer.opacity.toFixed(2)})`;
+            syncLayerVisibilityControl();
             applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });
           });
           opacityInput.addEventListener("change", () => {
             activeSkyLayerKey = layer.key;
-            syncSkyLayerControls();
           });
           opacityLabel.appendChild(opacityTextEl);
           opacityLabel.appendChild(opacityInput);
@@ -10626,6 +11572,7 @@ __SKY_RUNTIME_JS__
           const stretchGridEl = document.createElement("div");
           stretchGridEl.className = "oviz-three-sky-layer-grid";
           const stretchLabel = document.createElement("label");
+          stretchLabel.className = "oviz-three-legend-field";
           stretchLabel.appendChild(document.createTextNode("Stretch"));
           const stretchSelect = document.createElement("select");
           stretchSelect.className = "oviz-three-sky-layer-stretch";
@@ -10639,12 +11586,13 @@ __SKY_RUNTIME_JS__
           stretchSelect.addEventListener("change", () => {
             activeSkyLayerKey = layer.key;
             layer.stretch = normalizeSkyLayerStretch(stretchSelect.value);
-            applySkyLayerState({ forceTiles: false, renderLegend: false });
+            applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });
           });
           stretchLabel.appendChild(stretchSelect);
           stretchGridEl.appendChild(stretchLabel);
 
           const colormapLabel = document.createElement("label");
+          colormapLabel.className = "oviz-three-legend-field";
           colormapLabel.appendChild(document.createTextNode("Colormap"));
           const colormapSelect = document.createElement("select");
           colormapSelect.className = "oviz-three-sky-layer-colormap";
@@ -10658,7 +11606,7 @@ __SKY_RUNTIME_JS__
           colormapSelect.addEventListener("change", () => {
             activeSkyLayerKey = layer.key;
             layer.colormap = normalizeSkyLayerColormap(colormapSelect.value);
-            applySkyLayerState({ forceTiles: false, renderLegend: false });
+            applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });
           });
           colormapLabel.appendChild(colormapSelect);
           stretchGridEl.appendChild(colormapLabel);
@@ -10667,6 +11615,7 @@ __SKY_RUNTIME_JS__
           const cutGridEl = document.createElement("div");
           cutGridEl.className = "oviz-three-sky-layer-grid";
           const minLabel = document.createElement("label");
+          minLabel.className = "oviz-three-legend-field";
           minLabel.appendChild(document.createTextNode("Min"));
           const minInput = document.createElement("input");
           minInput.type = "number";
@@ -10677,11 +11626,12 @@ __SKY_RUNTIME_JS__
           minInput.addEventListener("change", () => {
             activeSkyLayerKey = layer.key;
             layer.cutMin = skyLayerCutValue(minInput.value);
-            applySkyLayerState({ forceTiles: false, renderLegend: false });
+            applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });
           });
           minLabel.appendChild(minInput);
           cutGridEl.appendChild(minLabel);
           const maxLabel = document.createElement("label");
+          maxLabel.className = "oviz-three-legend-field";
           maxLabel.appendChild(document.createTextNode("Max"));
           const maxInput = document.createElement("input");
           maxInput.type = "number";
@@ -10692,7 +11642,7 @@ __SKY_RUNTIME_JS__
           maxInput.addEventListener("change", () => {
             activeSkyLayerKey = layer.key;
             layer.cutMax = skyLayerCutValue(maxInput.value);
-            applySkyLayerState({ forceTiles: false, renderLegend: false });
+            applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });
           });
           maxLabel.appendChild(maxInput);
           cutGridEl.appendChild(maxLabel);
@@ -11295,6 +12245,7 @@ __SKY_RUNTIME_JS__
         let currentSkyBackgroundView = null;
         let lastAppliedSkyBackgroundSignature = "";
         let lastAppliedSkyBackgroundFovDeg = null;
+        let skySearchResolveSerial = 0;
         let activeImageSurvey = ${survey};
         let activeSkyLayerStackSignature = "";
         let activeSkyLayerStackGeneration = 0;
@@ -12304,21 +13255,10 @@ __SKY_RUNTIME_JS__
           const stackLayers = residentStack
             ? layers
             : visibleLayers;
-          if (residentStack && residentSkyLayerState.length) {
-            const requestedByIdentity = new Map(stackLayers.map((layer) => [skyLayerIdentity(layer), layer]));
-            const residentIdentities = new Set(residentSkyLayerState.map((layer) => skyLayerIdentity(layer)));
-            const requestedAlreadyResident = Array.from(requestedByIdentity.keys()).every((identity) => residentIdentities.has(identity));
-            if (requestedAlreadyResident) {
-              const resolvedStackLayers = residentSkyLayerState.map((residentLayer) => {
-                const requestedLayer = requestedByIdentity.get(skyLayerIdentity(residentLayer));
-                return requestedLayer || Object.assign({}, residentLayer, {
-                  opacity: 0.0,
-                  visible: true,
-                });
-              });
-              stackLayers.splice(0, stackLayers.length, ...resolvedStackLayers);
-            }
-          }
+          // The parent list is authoritative: index 0 is the top overlay and
+          // the final item is the Aladin base layer. Hidden items stay
+          // resident, but their saved order must never override a user reorder
+          // or a newly added top layer.
           const aladinEl = document.getElementById("aladin-lite-div");
           latestSkyLayerStateByName.clear();
           stackLayers.forEach((layer) => {
@@ -12646,9 +13586,114 @@ __SKY_RUNTIME_JS__
           postSkyBackgroundViewAppliedAfterPaint(data);
           return true;
         }
+        function resolveSkySearchTarget(data) {
+          if (!skyDomeBackgroundOnly || !aladinInstance || !data || typeof data !== "object") {
+            return false;
+          }
+          const query = String(data.query || "").trim();
+          const requestId = String(data.requestId || "");
+          if (!query || typeof aladinInstance.gotoObject !== "function") {
+            return false;
+          }
+          const resolveSerial = ++skySearchResolveSerial;
+          let returnView = currentSkyBackgroundView
+            ? Object.assign({}, currentSkyBackgroundView)
+            : null;
+          if (!returnView && typeof aladinInstance.getRaDec === "function") {
+            const center = aladinInstance.getRaDec();
+            const fov = typeof aladinInstance.getFov === "function" ? aladinInstance.getFov() : null;
+            const horizontalFov = Array.isArray(fov) ? Number(fov[0]) : Number(fov);
+            if (Array.isArray(center) && Number.isFinite(Number(center[0])) && Number.isFinite(Number(center[1]))) {
+              returnView = {
+                ra: Number(center[0]),
+                dec: Number(center[1]),
+                fovDeg: Number.isFinite(horizontalFov) ? horizontalFov : 90.0,
+              };
+            }
+          }
+          const postResult = (type, payload = {}) => {
+            if (!window.parent || window.parent === window || resolveSerial !== skySearchResolveSerial) {
+              return;
+            }
+            window.parent.postMessage(Object.assign({
+              type,
+              requestId,
+              query,
+            }, payload), "*");
+          };
+          try {
+            aladinInstance.gotoObject(query, {
+              success: (coordinates) => {
+                if (resolveSerial !== skySearchResolveSerial) {
+                  return;
+                }
+                const liveCenter = typeof aladinInstance.getRaDec === "function"
+                  ? aladinInstance.getRaDec()
+                  : null;
+                const coordinateValue = (source, index, names) => {
+                  if (Array.isArray(source)) {
+                    return Number(source[index]);
+                  }
+                  if (source && typeof source === "object") {
+                    const indexedValue = Number(source[index]);
+                    if (Number.isFinite(indexedValue)) {
+                      return indexedValue;
+                    }
+                    for (const name of names) {
+                      const value = Number(source[name]);
+                      if (Number.isFinite(value)) {
+                        return value;
+                      }
+                    }
+                  }
+                  return NaN;
+                };
+                let ra = coordinateValue(coordinates, 0, ["ra", "lon", "jradeg"]);
+                let dec = coordinateValue(coordinates, 1, ["dec", "lat", "jdedeg"]);
+                if (!Number.isFinite(ra) || !Number.isFinite(dec)) {
+                  ra = coordinateValue(liveCenter, 0, ["ra", "lon", "jradeg"]);
+                  dec = coordinateValue(liveCenter, 1, ["dec", "lat", "jdedeg"]);
+                }
+                // gotoObject also moves Aladin. Restore the registered Oviz
+                // view in the same task, before the browser can paint, and let
+                // the parent camera own the visible motion.
+                const restoreView = currentSkyBackgroundView || returnView;
+                if (restoreView) {
+                  applySkyBackgroundViewNow(restoreView, {
+                    force: true,
+                    coordinateFrame: "equatorial",
+                  });
+                }
+                if (!Number.isFinite(ra) || !Number.isFinite(dec)) {
+                  postResult("oviz-aladin-search-error", { message: "The target resolved without valid coordinates." });
+                  return;
+                }
+                postResult("oviz-aladin-search-result", { ra, dec });
+              },
+              error: () => {
+                const restoreView = currentSkyBackgroundView || returnView;
+                if (restoreView) {
+                  applySkyBackgroundViewNow(restoreView, {
+                    force: true,
+                    coordinateFrame: "equatorial",
+                  });
+                }
+                postResult("oviz-aladin-search-error", { message: "No sky target found for “" + query + "”." });
+              },
+            });
+          } catch (error) {
+            postResult("oviz-aladin-search-error", {
+              message: error && error.message ? error.message : String(error || "Sky search failed."),
+            });
+          }
+          return true;
+        }
         window.OvizSkyBackgroundBridge = {
           applyView(data) {
             return applySkyBackgroundViewDirect(data);
+          },
+          resolveTarget(data) {
+            return resolveSkySearchTarget(data);
           },
         };
         function setHoveredClusterKey(clusterKey, emitToParent) {
@@ -12810,6 +13855,9 @@ __SKY_RUNTIME_JS__
               if (data.type === "oviz-sky-aperture-clip") {
                 applySkyApertureClip(data);
               }
+              if (data.type === "oviz-sky-search-resolve") {
+                resolveSkySearchTarget(data);
+              }
               return;
             }
             setHoveredClusterKey(data.clusterKey, false);
@@ -12968,7 +14016,7 @@ __SKY_RUNTIME_JS__
           controlsToggleEl.textContent = "Controls";
         }
         if (skyControlsToggleEl) {
-          skyControlsToggleEl.textContent = "Layers";
+          skyControlsToggleEl.title = "Show sky backgrounds";
         }
         if (resetCameraViewButtonEl) {
           resetCameraViewButtonEl.textContent = "Reset";
@@ -13005,6 +14053,14 @@ __SKY_RUNTIME_JS__
             return;
           }
           setSkyHoveredClusterKey(data.clusterKey);
+        } else if (
+          data.type === "oviz-aladin-search-result"
+          || data.type === "oviz-aladin-search-error"
+        ) {
+          if (!fromSkyDomeCapture) {
+            return;
+          }
+          handleOvizAladinSearchResult(data);
         } else if (data.type === "oviz-aladin-sky-background-view-applied") {
           if (fromSkyApertureFrame) {
             markSkyApertureFrameViewApplied(event.source, data.seq);
@@ -17246,6 +18302,407 @@ __SCENE_RUNTIME_JS__
 
 __VIEWER_RUNTIME_JS__
 
+      const ovizSearchEntries = (() => {
+        const entries = [];
+        selectionMetadataByKey.forEach((selection, key) => {
+          if (!selection || typeof selection !== "object") {
+            return;
+          }
+          const label = String(
+            selection.cluster_name
+            || selection.name_all
+            || selection.name
+            || selection.label
+            || ""
+          ).trim();
+          if (!label) {
+            return;
+          }
+          const traceName = String(selection.trace_name || "").trim();
+          const searchableValues = Object.values(selection)
+            .filter((value) => typeof value === "string" || typeof value === "number")
+            .map((value) => String(value).trim())
+            .filter(Boolean);
+          entries.push({
+            key: normalizeMemberKey(key),
+            label,
+            traceName,
+            selection: Object.assign({}, selection),
+            searchText: normalizeMemberKey([label, traceName].concat(searchableValues).join(" ")),
+          });
+        });
+        return entries.sort((left, right) => left.label.localeCompare(right.label, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }));
+      })();
+      let ovizSearchMatches = [];
+      let ovizSearchActiveIndex = -1;
+      let ovizSearchRequestSerial = 0;
+      let ovizSearchPendingRequestId = "";
+
+      function syncOvizSearchMode() {
+        if (!searchInputEl || !searchToggleEl) {
+          return;
+        }
+        const skyMode = cameraViewMode === "earth";
+        const placeholder = skyMode ? "Search clusters or sky" : "Search clusters";
+        searchInputEl.placeholder = placeholder;
+        searchToggleEl.title = placeholder;
+        searchToggleEl.setAttribute("aria-label", placeholder);
+        if (searchShellEl && searchShellEl.dataset.open === "true" && !searchInputEl.value.trim()) {
+          renderOvizSearchResults("");
+        }
+      }
+
+      function setOvizSearchPopoverOpen(open) {
+        if (!searchShellEl || !searchPopoverEl || !searchInputEl) {
+          return;
+        }
+        const nextOpen = Boolean(open);
+        searchShellEl.dataset.resultsOpen = nextOpen ? "true" : "false";
+        searchPopoverEl.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+        searchInputEl.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        if (nextOpen) {
+          searchPopoverEl.removeAttribute("inert");
+        } else {
+          searchPopoverEl.setAttribute("inert", "");
+        }
+      }
+
+      function setOvizSearchOpen(open, options = {}) {
+        if (!searchShellEl || !searchToggleEl || !searchInputEl) {
+          return;
+        }
+        const nextOpen = Boolean(open);
+        searchShellEl.dataset.open = nextOpen ? "true" : "false";
+        if (root && root.dataset) {
+          root.dataset.searchOpen = nextOpen ? "true" : "false";
+        }
+        searchToggleEl.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        if (!nextOpen) {
+          setOvizSearchPopoverOpen(false);
+          ovizSearchActiveIndex = -1;
+          return;
+        }
+        syncOvizSearchMode();
+        renderOvizSearchResults(searchInputEl.value);
+        if (!options || options.focus !== false) {
+          window.setTimeout(() => searchInputEl.focus(), 0);
+        }
+      }
+
+      function ovizSearchScore(entry, normalizedQuery) {
+        const label = normalizeMemberKey(entry && entry.label);
+        const traceName = normalizeMemberKey(entry && entry.traceName);
+        const searchText = String((entry && entry.searchText) || "");
+        if (!normalizedQuery) {
+          return Infinity;
+        }
+        if (label === normalizedQuery) {
+          return 0;
+        }
+        if (label.startsWith(normalizedQuery)) {
+          return 1;
+        }
+        if (label.split(" ").some((part) => part.startsWith(normalizedQuery))) {
+          return 2;
+        }
+        if (traceName.startsWith(normalizedQuery)) {
+          return 3;
+        }
+        const labelIndex = label.indexOf(normalizedQuery);
+        if (labelIndex >= 0) {
+          return 4 + Math.min(labelIndex / 100.0, 0.9);
+        }
+        if (searchText.includes(normalizedQuery)) {
+          return 5;
+        }
+        return Infinity;
+      }
+
+      function setOvizSearchStatus(message, loading = false) {
+        if (searchStatusEl) {
+          searchStatusEl.textContent = String(message || "");
+        }
+        if (searchShellEl) {
+          searchShellEl.dataset.loading = loading ? "true" : "false";
+        }
+      }
+
+      function renderOvizSearchResults(queryValue) {
+        if (!searchResultsEl || !searchInputEl) {
+          return;
+        }
+        const query = String(queryValue == null ? searchInputEl.value : queryValue).trim();
+        const normalizedQuery = normalizeMemberKey(query);
+        const localMatches = normalizedQuery
+          ? ovizSearchEntries
+            .map((entry) => ({ entry, score: ovizSearchScore(entry, normalizedQuery) }))
+            .filter((candidate) => Number.isFinite(candidate.score))
+            .sort((left, right) => (
+              left.score - right.score
+              || left.entry.label.localeCompare(right.entry.label, undefined, { numeric: true, sensitivity: "base" })
+            ))
+            .slice(0, 7)
+            .map((candidate) => ({ type: "cluster", entry: candidate.entry }))
+          : [];
+        ovizSearchMatches = localMatches;
+        if (cameraViewMode === "earth" && query) {
+          ovizSearchMatches.push({ type: "sky", query });
+        }
+        ovizSearchActiveIndex = ovizSearchMatches.length ? 0 : -1;
+        searchResultsEl.replaceChildren();
+        ovizSearchMatches.forEach((match, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "oviz-three-search-result";
+          button.dataset.searchIndex = String(index);
+          button.dataset.active = index === ovizSearchActiveIndex ? "true" : "false";
+          button.setAttribute("role", "option");
+          button.setAttribute("aria-selected", index === ovizSearchActiveIndex ? "true" : "false");
+          const label = document.createElement("span");
+          label.className = "oviz-three-search-result-label";
+          const meta = document.createElement("span");
+          meta.className = "oviz-three-search-result-meta";
+          if (match.type === "sky") {
+            label.textContent = `Search sky for “${match.query}”`;
+            meta.textContent = "Aladin";
+            button.title = `Resolve ${match.query} with Aladin`;
+          } else {
+            label.textContent = match.entry.label;
+            meta.textContent = match.entry.traceName || "Cluster";
+            button.title = match.entry.traceName
+              ? `${match.entry.label} — ${match.entry.traceName}`
+              : match.entry.label;
+          }
+          button.append(label, meta);
+          button.addEventListener("pointerdown", (event) => event.preventDefault());
+          button.addEventListener("click", () => activateOvizSearchMatch(index));
+          searchResultsEl.appendChild(button);
+        });
+        if (!query) {
+          setOvizSearchStatus(
+            cameraViewMode === "earth"
+              ? "Find an Oviz cluster, coordinate, or astronomical object."
+              : "Start typing an individual cluster name.",
+            false
+          );
+        } else if (!ovizSearchMatches.length) {
+          setOvizSearchStatus("No matching cluster.", false);
+        } else {
+          setOvizSearchStatus("", false);
+        }
+        setOvizSearchPopoverOpen(true);
+      }
+
+      function updateOvizSearchActiveResult(nextIndex) {
+        if (!ovizSearchMatches.length) {
+          ovizSearchActiveIndex = -1;
+          return;
+        }
+        const count = ovizSearchMatches.length;
+        ovizSearchActiveIndex = ((Number(nextIndex) || 0) + count) % count;
+        Array.from(searchResultsEl.querySelectorAll(".oviz-three-search-result")).forEach((button, index) => {
+          const active = index === ovizSearchActiveIndex;
+          button.dataset.active = active ? "true" : "false";
+          button.setAttribute("aria-selected", active ? "true" : "false");
+          if (active && typeof button.scrollIntoView === "function") {
+            button.scrollIntoView({ block: "nearest" });
+          }
+        });
+      }
+
+      function focusOvizSearchDirection(directionValue, options = {}) {
+        if (!directionValue || !directionValue.lengthSq || directionValue.lengthSq() <= 1e-12) {
+          return false;
+        }
+        const direction = directionValue.clone().normalize();
+        const durationMs = Math.max(Number(options.durationMs) || 620.0, 1.0);
+        const onComplete = typeof options.onComplete === "function" ? options.onComplete : null;
+        if (cameraViewMode === "earth") {
+          const earthPoint = earthViewPoint();
+          const orbitDistance = Math.max(camera.position.distanceTo(earthPoint), 1e-6);
+          const targetPosition = earthPoint.clone().sub(direction.clone().multiplyScalar(orbitDistance));
+          const startDirection = new THREE.Vector3();
+          camera.getWorldDirection(startDirection);
+          animateCameraTransition(
+            targetPosition,
+            earthPoint,
+            Number(camera.fov) || 90.0,
+            onComplete,
+            {
+              durationMs,
+              targetUp: skyViewUpVectorForDirection(direction),
+              lockDirection: true,
+              direction,
+              startDirection,
+              endDistance: orbitDistance,
+            }
+          );
+          return true;
+        }
+        const targetPoint = directionValue.clone();
+        const delta = new THREE.Vector3().subVectors(targetPoint, controls.target);
+        animateCameraTransition(
+          camera.position.clone().add(delta),
+          targetPoint,
+          Number(camera.fov) || 60.0,
+          onComplete,
+          { durationMs, targetUp: camera.up.clone() }
+        );
+        return true;
+      }
+
+      function focusOvizClusterSearchEntry(entry) {
+        if (!entry || !entry.key) {
+          return false;
+        }
+        const sprite = clusterInfoSpriteForKey(entry.key);
+        const spriteEntries = selectionSpriteEntriesByKey.get(entry.key) || [];
+        const worldPoint = centroidFromSpriteEntries(spriteEntries)
+          || selectionFallbackPoint(entry.selection);
+        if (!worldPoint) {
+          setOvizSearchStatus(`${entry.label} is not available at this time.`, false);
+          return false;
+        }
+        const direction = cameraViewMode === "earth"
+          ? worldPoint.clone().sub(earthViewPoint())
+          : worldPoint.clone();
+        setLocalHoveredClusterKey(entry.key);
+        const reveal = () => {
+          const liveSprite = clusterInfoSpriteForKey(entry.key) || sprite;
+          if (liveSprite) {
+            showClusterInfoTooltip(liveSprite);
+          }
+          setOvizSearchStatus(`Focused ${entry.label}.`, false);
+        };
+        const started = focusOvizSearchDirection(direction, {
+          durationMs: cameraViewMode === "earth" ? 700.0 : 520.0,
+          onComplete: reveal,
+        });
+        if (!started) {
+          reveal();
+        }
+        searchInputEl.value = entry.label;
+        setOvizSearchPopoverOpen(false);
+        return true;
+      }
+
+      function submitOvizSkySearch(queryValue) {
+        const query = String(queryValue || "").trim();
+        if (!query || cameraViewMode !== "earth" || !skyDomeFrameEl || !skyDomeFrameEl.contentWindow) {
+          return false;
+        }
+        const requestId = `sky-search-${Date.now()}-${++ovizSearchRequestSerial}`;
+        ovizSearchPendingRequestId = requestId;
+        setOvizSearchStatus(`Resolving “${query}” with Aladin…`, true);
+        setOvizSearchPopoverOpen(true);
+        const payload = {
+          type: "oviz-sky-search-resolve",
+          requestId,
+          query,
+        };
+        let submittedDirectly = false;
+        try {
+          const bridge = skyDomeFrameEl.contentWindow.OvizSkyBackgroundBridge;
+          if (bridge && typeof bridge.resolveTarget === "function") {
+            submittedDirectly = Boolean(bridge.resolveTarget(payload));
+          }
+        } catch (_err) {
+          submittedDirectly = false;
+        }
+        if (!submittedDirectly) {
+          skyDomeFrameEl.contentWindow.postMessage(payload, "*");
+        }
+        return true;
+      }
+
+      function handleOvizAladinSearchResult(data) {
+        const requestId = String((data && data.requestId) || "");
+        if (!requestId || requestId !== ovizSearchPendingRequestId) {
+          return;
+        }
+        ovizSearchPendingRequestId = "";
+        const query = String(data.query || "sky target");
+        if (data.type === "oviz-aladin-search-error") {
+          setOvizSearchStatus(String(data.message || `No sky target found for “${query}”.`), false);
+          setOvizSearchPopoverOpen(true);
+          return;
+        }
+        const ra = Number(data.ra);
+        const dec = Number(data.dec);
+        const direction = volumeSkyCartesianFromIcrsDeg(ra, dec);
+        if (!direction) {
+          setOvizSearchStatus("Aladin returned invalid sky coordinates.", false);
+          return;
+        }
+        setOvizSearchStatus(`Moving to ${query}…`, false);
+        focusOvizSearchDirection(direction, {
+          durationMs: 760.0,
+          onComplete: () => {
+            setOvizSearchStatus(`Centered ${query}.`, false);
+            setOvizSearchPopoverOpen(false);
+          },
+        });
+      }
+
+      function activateOvizSearchMatch(index = ovizSearchActiveIndex) {
+        const match = ovizSearchMatches[Number(index)];
+        if (!match) {
+          const query = searchInputEl ? searchInputEl.value : "";
+          if (cameraViewMode === "earth") {
+            return submitOvizSkySearch(query);
+          }
+          return false;
+        }
+        if (match.type === "sky") {
+          return submitOvizSkySearch(match.query);
+        }
+        return focusOvizClusterSearchEntry(match.entry);
+      }
+
+      function initOvizSearch() {
+        if (!searchShellEl || !searchToggleEl || !searchInputEl || !searchSubmitEl || !searchPopoverEl) {
+          return;
+        }
+        const resultsId = `${root.id || "oviz"}-search-results`;
+        searchPopoverEl.id = resultsId;
+        searchInputEl.setAttribute("aria-controls", resultsId);
+        syncOvizSearchMode();
+        searchToggleEl.addEventListener("click", () => {
+          setOvizSearchOpen(searchShellEl.dataset.open !== "true");
+        });
+        searchInputEl.addEventListener("focus", () => {
+          setOvizSearchOpen(true, { focus: false });
+        });
+        searchInputEl.addEventListener("input", () => {
+          renderOvizSearchResults(searchInputEl.value);
+        });
+        searchInputEl.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowDown") {
+            updateOvizSearchActiveResult(ovizSearchActiveIndex + 1);
+            event.preventDefault();
+          } else if (event.key === "ArrowUp") {
+            updateOvizSearchActiveResult(ovizSearchActiveIndex - 1);
+            event.preventDefault();
+          } else if (event.key === "Enter") {
+            activateOvizSearchMatch();
+            event.preventDefault();
+          } else if (event.key === "Escape") {
+            setOvizSearchOpen(false);
+            focusViewer();
+            event.preventDefault();
+          }
+        });
+        searchSubmitEl.addEventListener("click", () => activateOvizSearchMatch());
+        window.addEventListener("pointerdown", (event) => {
+          if (searchShellEl.dataset.open === "true" && !searchShellEl.contains(event.target)) {
+            setOvizSearchOpen(false);
+          }
+        });
+      }
+
 __ACTION_RUNTIME_JS__
 
 __STATE_RUNTIME_JS__
@@ -17661,6 +19118,21 @@ __STATE_RUNTIME_JS__
             setSkyControlsDrawerOpen(skyControlsShellEl.dataset.open !== "true");
           });
         }
+        if (skyControlsCollapseEl) {
+          skyControlsCollapseEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setSkyControlsDrawerOpen(false);
+            focusViewer();
+          });
+        }
+        if (skyAddToggleEl && skyControlsShellEl) {
+          skyAddToggleEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setSkyAddPopoverOpen(skyControlsShellEl.dataset.addOpen !== "true");
+          });
+        }
         if (skyApertureToggleEl) {
           skyApertureToggleEl.addEventListener("click", (event) => {
             event.preventDefault();
@@ -17725,6 +19197,7 @@ __STATE_RUNTIME_JS__
             if (skyLayerCustomInputEl) {
               skyLayerCustomInputEl.value = "";
             }
+            setSkyAddPopoverOpen(false);
             focusViewer();
           });
         }
@@ -18089,8 +19562,12 @@ __STATE_RUNTIME_JS__
           if (controlsShellEl && controlsShellEl.dataset.open === "true" && !controlsShellEl.contains(target)) {
             setControlsDrawerOpen(false);
           }
-          if (skyControlsShellEl && skyControlsShellEl.dataset.open === "true" && !skyControlsShellEl.contains(target)) {
-            setSkyControlsDrawerOpen(false);
+          if (
+            skyControlsShellEl
+            && skyControlsShellEl.dataset.addOpen === "true"
+            && !skyControlsShellEl.contains(target)
+          ) {
+            setSkyAddPopoverOpen(false);
           }
         }
         if (!activeLegendEditorKey || !target) {
@@ -18197,6 +19674,7 @@ __STATE_RUNTIME_JS__
       applyInitialStateSync();
       buildAxes();
       initControls();
+      initOvizSearch();
       initSkyPanel();
       updateSkyDomeCaptureFrame();
       initBoxMetricsPanel();

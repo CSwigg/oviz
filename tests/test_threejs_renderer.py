@@ -1616,6 +1616,41 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn(") ? 16.0 : 50.0", html)
         self.assertIn("updateSkyDomeBackgroundFrame(\n            (typeof performance", html)
 
+    def test_threejs_renderer_searches_point_traces_and_resolves_aladin_targets(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(
+            time=np.array([0.0, -1.0]),
+            renderer="threejs",
+            show=False,
+            enable_sky_panel=True,
+            sky_survey="P/DSS2/color",
+            threejs_initial_state={
+                "sky_dome_enabled": True,
+                "sky_dome_background_mode": "live_aladin",
+            },
+        )
+
+        html = fig.to_html()
+        self.assertIn('class="oviz-three-search-shell"', html)
+        self.assertIn('role="combobox"', html)
+        self.assertIn("const ovizSearchEntries = (() => {", html)
+        search_index = html[
+            html.index("const ovizSearchEntries = (() => {") :
+            html.index("let ovizSearchMatches", html.index("const ovizSearchEntries = (() => {"))
+        ]
+        self.assertIn("selectionMetadataByKey.forEach", search_index)
+        self.assertNotIn("volumeLayers", search_index)
+        self.assertIn("function renderOvizSearchResults(queryValue)", html)
+        self.assertIn('type: "sky", query', html)
+        self.assertIn('type: "oviz-sky-search-resolve"', html)
+        self.assertIn("aladinInstance.gotoObject(query", html)
+        self.assertIn("applySkyBackgroundViewNow(restoreView", html)
+        self.assertIn('"oviz-aladin-search-result"', html)
+        self.assertIn("function volumeSkyCartesianFromIcrsDeg", html)
+        self.assertIn("focusOvizSearchDirection(direction", html)
+        self.assertIn("animateCameraTransition(", html)
+        self.assertIn("initOvizSearch();", html)
+
     def test_threejs_renderer_exposes_opt_in_sky_debug_instrumentation(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         fig = viz.make_plot(
@@ -1937,6 +1972,64 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("oviz-three-sky-layer-preset-select", html)
         self.assertIn("oviz-three-sky-layer-list", html)
         self.assertIn("oviz-three-sky-layer-summary", html)
+        self.assertIn("Sky Backgrounds", html)
+        self.assertNotIn("oviz-three-sky-layer-swatch", html)
+        self.assertIn("oviz-three-sky-add-popover", html)
+        self.assertNotIn('<button class="oviz-three-sky-controls-collapse"', html)
+        self.assertNotIn("oviz-three-sky-layer-visible", html)
+        self.assertIn("skyLayerDragKey", html)
+        self.assertIn('function reorderSkyLayerByKey(draggedKey, targetKey, dropPosition = "before")', html)
+        self.assertIn('dropPosition === "after" ? 1 : 0', html)
+        self.assertIn('function skyLayerDropPositionForPointer(draggedKey, targetRow, clientY)', html)
+        self.assertIn('if (pointerRatio <= 0.35)', html)
+        self.assertIn('if (pointerRatio >= 0.65)', html)
+        self.assertIn('targetRow.dataset.dropPosition = targetDropPosition;', html)
+        self.assertIn('row.dataset.dropPosition = skyLayerDropPositionForPointer(skyLayerDragKey, row, event.clientY);', html)
+        self.assertIn("function beginSkyLayerPointerReorder(event, layer, row, dragHandleEl, options = {})", html)
+        self.assertIn('gripEl.addEventListener("pointerdown"', html)
+        self.assertIn("row.draggable = false;", html)
+        self.assertIn("gripEl.draggable = true;", html)
+        self.assertIn("copyEl.draggable = false;", html)
+        self.assertIn("beginSkyLayerPointerReorder(event, layer, row, copyEl, { activationDistancePx: 6 });", html)
+        self.assertIn('dragHandleEl.dataset.suppressClick = "true";', html)
+        self.assertIn('window.addEventListener("pointerup", finishPointerReorder, true);', html)
+        self.assertIn('window.addEventListener("mouseup", finishPointerReorder, true);', html)
+        self.assertIn('const copyEl = document.createElement("button");', html)
+        self.assertIn('copyEl.setAttribute("aria-pressed", isVisible ? "true" : "false");', html)
+        self.assertIn('layer.visible = layer.visible === false;', html)
+        self.assertNotIn('beginSkyLayerPointerReorder(event, layer, row, copyEl);', html)
+        self.assertIn("function setSkyAddPopoverOpen(isOpen)", html)
+        self.assertIn("function syncSkyBackgroundDockVisibility()", html)
+        self.assertIn('root.dataset.skyBackgroundEditor = "true";', html)
+        self.assertNotIn("legendPanelBodyEl.appendChild(skyControlsShellEl);", html)
+        self.assertEqual(html.count('class="oviz-three-legend-section oviz-three-sky-controls-shell"'), 1)
+        self.assertIn('root.dataset.skyBackgroundDock = nextOpen ? "open" : "closed";', html)
+        self.assertNotIn('[data-camera-view-mode="earth"][data-sky-background-dock="open"] .oviz-three-footer', html)
+        self.assertIn('grid-template-columns: 16px minmax(0, 1fr) 12px !important;', html)
+        self.assertGreaterEqual(html.count('grid-row: 1;'), 3)
+        self.assertIn('[data-drop-position="before"]', html)
+        self.assertIn('[data-drop-position="after"]', html)
+        self.assertIn('.oviz-three-sky-layer-list[data-dragging="true"] .oviz-three-sky-layer-row:not([open])', html)
+        self.assertIn('.oviz-three-legend-item,', html)
+        self.assertIn('margin: 14px 0 0 !important;', html)
+        self.assertIn('color: var(--oviz-sky-layer-color', html)
+        self.assertIn('max-width: 100%;', html)
+        self.assertIn('overflow: hidden;', html)
+        self.assertIn('text-overflow: ellipsis;', html)
+        self.assertIn('white-space: nowrap;', html)
+        self.assertIn('nameEl.title = layerName;', html)
+        self.assertIn('nameEl.style.setProperty(', html)
+        self.assertIn('"--oviz-sky-layer-color"', html)
+        self.assertIn('skyLayerState.unshift(layer);', html)
+        self.assertIn('the final item is the Aladin base layer', html)
+        self.assertIn('ovizResidentSkyBaseLayerKey = currentOrder[currentOrder.length - 1];', html)
+        self.assertIn('const residentOnlyOrder = residentOrder.filter((key) => !currentByKey.has(key));', html)
+        self.assertIn('const layers = [...currentOrder, ...residentOnlyOrder]', html)
+        self.assertNotIn('requestedAlreadyResident', html)
+        self.assertIn('.oviz-three-sky-layer-summary::before', html)
+        self.assertIn('.oviz-three-sky-layer-body input[type="range"]::-webkit-slider-thumb', html)
+        self.assertIn('font: 650 13px/1.2', html)
+        self.assertIn('.oviz-three-sky-layer-row[open],', html)
         self.assertIn("oviz-three-sky-layer-stretch", html)
         self.assertIn("oviz-three-sky-layer-colormap", html)
         self.assertNotIn("oviz-three-sky-layer-active-select", html)

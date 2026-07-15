@@ -187,6 +187,39 @@ THREEJS_SKY_RUNTIME_JS = """
         return galacticLonLatDegFromCartesian(transformed.x, transformed.y, transformed.z);
       }
 
+      function volumeSkyCartesianFromGalacticLonLatDeg(lDeg, bDeg) {
+        const transformed = galacticDirectionVectorFromLonLatDeg(lDeg, bDeg);
+        if (!transformed) {
+          return null;
+        }
+        const transform = volumeSkyAxisTransform || {};
+        const xyPermutation = Array.isArray(transform.xyPermutation) && transform.xyPermutation.length === 2
+          ? transform.xyPermutation
+          : [0, 1];
+        const xySigns = Array.isArray(transform.xySigns) && transform.xySigns.length === 2
+          ? transform.xySigns
+          : [1, 1];
+        const zSign = Number(transform.zSign);
+        const coords = [0.0, 0.0, 0.0];
+        const xIndex = Number(xyPermutation[0]) || 0;
+        const yIndex = Number(xyPermutation[1]) || 1;
+        coords[xIndex] = transformed.x / ((Number(xySigns[0]) || 1));
+        coords[yIndex] = transformed.y / ((Number(xySigns[1]) || 1));
+        coords[2] = transformed.z / (Number.isFinite(zSign) && Math.abs(zSign) > 0.5 ? zSign : 1);
+        if (!coords.every(Number.isFinite)) {
+          return null;
+        }
+        return new THREE.Vector3(coords[0], coords[1], coords[2]).normalize();
+      }
+
+      function volumeSkyCartesianFromIcrsDeg(raDeg, decDeg) {
+        const galactic = galacticDegFromIcrsDeg(raDeg, decDeg);
+        if (!galactic) {
+          return null;
+        }
+        return volumeSkyCartesianFromGalacticLonLatDeg(galactic.l, galactic.b);
+      }
+
       function icrsDegFromGalacticDeg(lDeg, bDeg) {
         const lon = Number(lDeg) * Math.PI / 180.0;
         const lat = Number(bDeg) * Math.PI / 180.0;

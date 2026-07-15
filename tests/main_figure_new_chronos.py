@@ -1580,7 +1580,7 @@ def patch_script_source(
             "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
             "'mobile_defer_volumes': False",
             "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
-            f"'volume_state_by_key': ({{'volume-0': {{'visible': False, 'opacity': {dust_opacity_literal}}}, 'supernova-density': {{'visible': True}}}} if supernova_volumes else {{'volume-0': {{'visible': True, 'opacity': {dust_opacity_literal}}}}})",
+            f"'volume_state_by_key': ({{'volume-0': {{'visible': False, 'opacity': {dust_opacity_literal}, 'stretch': 'asinh', 'vmax': 0.07}}, 'supernova-density': {{'visible': True}}}} if supernova_volumes else {{'volume-0': {{'visible': True, 'opacity': {dust_opacity_literal}, 'stretch': 'asinh', 'vmax': 0.07}}}})",
         ]
         initial_state_bits = [
             "'current_group': 'Clusters'",
@@ -1610,7 +1610,7 @@ def patch_script_source(
             "'sky_dome_fade_out_scale_bar_pc': 360.0",
             "'sky_layers': ["
             "{'key': 'P/Mellinger/color', 'label': 'Mellinger Color', 'survey': 'P/Mellinger/color', 'opacity': 1.0, 'visible': True}, "
-            "{'key': 'P/PLANCK/R2/HFI/color', 'label': 'Planck Dust Emission Color', 'survey': 'P/PLANCK/R2/HFI/color', 'opacity': 1.0, 'visible': True}"
+            "{'key': 'P/PLANCK/R2/HFI/color', 'label': 'Planck Dust Emission Color', 'survey': 'P/PLANCK/R2/HFI/color', 'opacity': 1.0, 'visible': True, 'stretch': 'asinh', 'cut_max': 0.07}"
             "]",
             "'active_sky_layer_key': 'P/Mellinger/color'",
         ]

@@ -330,6 +330,12 @@ THREEJS_VIEWER_RUNTIME_JS = """
           root.dataset.cameraViewMode = cameraViewMode;
           root.dataset.skyBackgroundHidden = skyBackgroundHidden ? "true" : "false";
         }
+        if (typeof syncSkyBackgroundDockVisibility === "function") {
+          syncSkyBackgroundDockVisibility();
+        }
+        if (typeof syncOvizSearchMode === "function") {
+          syncOvizSearchMode();
+        }
         if (earthViewToggleButtonEl) {
           earthViewToggleButtonEl.textContent = buttonText;
           earthViewToggleButtonEl.dataset.active = isEarthView ? "true" : "false";

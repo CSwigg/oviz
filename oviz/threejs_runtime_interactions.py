@@ -432,13 +432,6 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             setDrawerAccessibility(controlsShellEl, controlsToggleEl, ".oviz-three-controls-drawer", false);
           }
         }
-        if (nextOpen && skyControlsShellEl && skyControlsShellEl.dataset.open === "true") {
-          skyControlsShellEl.dataset.open = "false";
-          if (skyControlsToggleEl) {
-            skyControlsToggleEl.textContent = "Sky ▸";
-            setDrawerAccessibility(skyControlsShellEl, skyControlsToggleEl, ".oviz-three-sky-controls-drawer", false);
-          }
-        }
       }
 
       function setControlsDrawerOpen(isOpen) {
@@ -449,9 +442,6 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         controlsShellEl.dataset.open = nextOpen ? "true" : "false";
         controlsToggleEl.textContent = mobileModeEnabled ? "Controls" : (nextOpen ? "Controls ▾" : "Controls ▸");
         setDrawerAccessibility(controlsShellEl, controlsToggleEl, ".oviz-three-controls-drawer", nextOpen);
-        if (mobileModeEnabled && nextOpen) {
-          setLegendPanelOpen(false);
-        }
         if (nextOpen && toolsShellEl && toolsShellEl.dataset.open === "true") {
           toolsShellEl.dataset.open = "false";
           if (toolsToggleEl) {
@@ -459,12 +449,25 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             setDrawerAccessibility(toolsShellEl, toolsToggleEl, ".oviz-three-tools-drawer", false);
           }
         }
-        if (nextOpen && skyControlsShellEl && skyControlsShellEl.dataset.open === "true") {
-          skyControlsShellEl.dataset.open = "false";
-          if (skyControlsToggleEl) {
-            skyControlsToggleEl.textContent = "Sky ▸";
-            setDrawerAccessibility(skyControlsShellEl, skyControlsToggleEl, ".oviz-three-sky-controls-drawer", false);
+      }
+
+      function setSkyAddPopoverOpen(isOpen) {
+        if (!skyControlsShellEl || !skyAddToggleEl || !skyAddPopoverEl) {
+          return;
+        }
+        const nextOpen = Boolean(isOpen) && skyControlsShellEl.dataset.open === "true";
+        skyControlsShellEl.dataset.addOpen = nextOpen ? "true" : "false";
+        skyAddToggleEl.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        skyAddPopoverEl.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+        if (nextOpen) {
+          if (skyLayerListEl) {
+            Array.from(skyLayerListEl.querySelectorAll(".oviz-three-sky-layer-row[open]")).forEach((row) => {
+              row.open = false;
+            });
           }
+          skyAddPopoverEl.removeAttribute("inert");
+        } else {
+          skyAddPopoverEl.setAttribute("inert", "");
         }
       }
 
@@ -474,8 +477,14 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
         const nextOpen = minimalModeEnabled ? false : Boolean(isOpen);
         skyControlsShellEl.dataset.open = nextOpen ? "true" : "false";
-        skyControlsToggleEl.textContent = mobileModeEnabled ? "Layers" : (nextOpen ? "Sky ▾" : "Sky ▸");
+        if (root && root.dataset) {
+          root.dataset.skyBackgroundDock = nextOpen ? "open" : "closed";
+        }
+        skyControlsToggleEl.title = nextOpen ? "Hide sky backgrounds" : "Show sky backgrounds";
         setDrawerAccessibility(skyControlsShellEl, skyControlsToggleEl, ".oviz-three-sky-controls-drawer", nextOpen);
+        if (!nextOpen) {
+          setSkyAddPopoverOpen(false);
+        }
         if (mobileModeEnabled && nextOpen) {
           setLegendPanelOpen(false);
         }
@@ -492,6 +501,23 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             controlsToggleEl.textContent = "Controls ▸";
             setDrawerAccessibility(controlsShellEl, controlsToggleEl, ".oviz-three-controls-drawer", false);
           }
+        }
+      }
+
+      function syncSkyBackgroundDockVisibility() {
+        if (!skyControlsShellEl) {
+          return;
+        }
+        const isSkyView = cameraViewMode === "earth";
+        const wasVisible = skyControlsShellEl.dataset.visible === "true";
+        skyControlsShellEl.dataset.visible = isSkyView ? "true" : "false";
+        if (isSkyView && !wasVisible) {
+          if (!minimalModeEnabled) {
+            setLegendPanelOpen(true);
+          }
+          setSkyControlsDrawerOpen(true);
+        } else if (!isSkyView && wasVisible) {
+          setSkyControlsDrawerOpen(false);
         }
       }
 
