@@ -317,7 +317,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: none !important;
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
-      #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel {
+      #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel,
+      #__ROOT_ID__[data-zen="true"] .oviz-states-shell {
         display: none !important;
       }
       #__ROOT_ID__[data-zen="true"] .oviz-three-topbar {
@@ -3006,6 +3007,36 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: blur(4px) saturate(103%);
         -webkit-backdrop-filter: blur(4px) saturate(103%);
       }
+      #__ROOT_ID__ .oviz-three-aladin-attribution {
+        position: absolute;
+        left: 18px;
+        bottom: 82px;
+        z-index: 7;
+        display: none;
+        width: 142px;
+        line-height: 0;
+        opacity: 0.86;
+        pointer-events: auto;
+        transition: opacity 160ms ease;
+      }
+      #__ROOT_ID__[data-camera-view-mode="earth"] .oviz-three-aladin-attribution {
+        display: block;
+      }
+      #__ROOT_ID__ .oviz-three-aladin-attribution:hover,
+      #__ROOT_ID__ .oviz-three-aladin-attribution:focus-visible {
+        opacity: 1;
+      }
+      #__ROOT_ID__ .oviz-three-aladin-attribution:focus-visible {
+        outline: 1px solid rgba(255, 255, 255, 0.72);
+        outline-offset: 4px;
+        border-radius: 3px;
+      }
+      #__ROOT_ID__ .oviz-three-aladin-attribution img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 0;
+      }
       #__ROOT_ID__ .oviz-three-scale-bar[data-dragging="true"] {
         cursor: default;
       }
@@ -3663,6 +3694,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-zen="true"] .oviz-three-note,
       #__ROOT_ID__[data-zen="true"] .oviz-three-scale-bar {
         display: none !important;
+      }
+      #__ROOT_ID__[data-zen="true"] .oviz-three-aladin-attribution {
+        bottom: 22px;
       }
       #__ROOT_ID__ {
         --oviz-instrument-bg: rgba(6, 8, 12, 0.54);
@@ -4473,6 +4507,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         #__ROOT_ID__ .oviz-three-scale-bar {
           display: none;
         }
+        #__ROOT_ID__ .oviz-three-aladin-attribution {
+          left: 12px;
+          bottom: 14px;
+          width: 64px;
+        }
       }
       @media (max-width: 1100px), (max-height: 760px) {
         #__ROOT_ID__[data-minimal="true"][data-galactic-simple="true"] .oviz-three-footer {
@@ -4581,6 +4620,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-aperture-toggle,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-panel {
         display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-aladin-attribution {
+        left: calc(env(safe-area-inset-left, 0px) + 10px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+        width: 58px;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu {
         position: static !important;

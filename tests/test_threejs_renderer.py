@@ -295,6 +295,20 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Shift + W / A / S / D", html)
         self.assertIn("Toggle between 3D View and Sky View.", html)
         self.assertIn("In Sky View, toggle the sky background image on or off.", html)
+        self.assertIn("Toggle Zen mode.", html)
+        self.assertIn("const zenShortcutFromButton = (", html)
+        self.assertIn(
+            "keyboardTargetIsEditable(event.target) && !zenShortcutFromButton",
+            html,
+        )
+        self.assertIn('if (lowerKey === "z") {', html)
+        self.assertIn("setZenMode(!zenModeEnabled);", html)
+        self.assertIn(
+            '[data-zen="true"] .oviz-states-shell',
+            html,
+        )
+        self.assertIn('statesShellEl.dataset.open = "false";', html)
+        self.assertIn('statesToggleEl.textContent = "States ▸";', html)
         self.assertIn("Hide or show all legend items in the current group.", html)
         self.assertIn("function toggleAllLegendItems()", html)
         self.assertIn("keyboardLegendVisibilitySnapshotByGroup.set(snapshotKey, visibleSnapshot)", html)
@@ -1238,11 +1252,25 @@ class ThreeJSRendererTests(unittest.TestCase):
         html = fig.to_html()
 
         self.assertIn('class="oviz-three-scale-bar" data-dragging="false"', html)
+        self.assertIn('class="oviz-three-aladin-attribution"', html)
+        self.assertIn('href="https://aladin.cds.unistra.fr/AladinLite/"', html)
+        self.assertIn(
+            'src="https://raw.githubusercontent.com/cds-astro/aladin-lite/master/aladin-logo.png"',
+            html,
+        )
+        self.assertIn(
+            '[data-camera-view-mode="earth"] .oviz-three-aladin-attribution',
+            html,
+        )
+        self.assertIn("width: 142px;", html)
         self.assertIn("pointer-events: none;", html)
         self.assertIn("function onScaleBarPointerStart(event) {\n        return false;\n      }", html)
         self.assertIn("function captureScaleBarState()", html)
         self.assertIn("function captureScaleBarState() {\n        return null;\n      }", html)
         self.assertIn("scale_bar_state: captureScaleBarState()", html)
+        self.assertIn("function scaleBarAngularLengthDegForCurrentView()", html)
+        self.assertIn("formatAngularLabelDeg(displayedLength)", html)
+        self.assertIn("`${formatCompactNumber(value)}°`", html)
 
     def test_threejs_renderer_can_serialize_sky_panel_state(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")

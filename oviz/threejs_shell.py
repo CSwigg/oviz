@@ -115,6 +115,8 @@ THREEJS_SHELL_HTML = """
           <div>In Sky View, toggle the sky background image on or off.</div>
           <div class="oviz-three-key-help-keys">O</div>
           <div>Toggle automatic orbit around the current anchor point.</div>
+          <div class="oviz-three-key-help-keys">Z</div>
+          <div>Toggle Zen mode.</div>
           <div class="oviz-three-key-help-keys">?</div>
           <div>Open this keyboard help panel.</div>
           <div class="oviz-three-key-help-keys">Esc</div>
@@ -133,6 +135,19 @@ THREEJS_SHELL_HTML = """
         <button class="oviz-three-mobile-selection-clear" type="button" title="Clear current selection">Clear</button>
       </div>
       <div class="oviz-three-tooltip"></div>
+      <a
+        class="oviz-three-aladin-attribution"
+        href="https://aladin.cds.unistra.fr/AladinLite/"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Powered by Aladin Lite"
+        aria-label="Powered by Aladin Lite"
+      >
+        <img
+          src="https://raw.githubusercontent.com/cds-astro/aladin-lite/master/aladin-logo.png"
+          alt="Aladin Lite"
+        />
+      </a>
       <div class="oviz-three-scale-bar" data-dragging="false" title="Drag to reposition">
         <div class="oviz-three-scale-label"></div>
         <div class="oviz-three-scale-line"></div>

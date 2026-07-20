@@ -1821,6 +1821,14 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         if (zenModeEnabled) {
           tooltipEl.style.display = "none";
+          const statesShellEl = root.querySelector(".oviz-states-shell");
+          if (statesShellEl) {
+            statesShellEl.dataset.open = "false";
+            const statesToggleEl = statesShellEl.querySelector(".oviz-states-toggle");
+            if (statesToggleEl) {
+              statesToggleEl.textContent = "States ▸";
+            }
+          }
           if (mobileModeEnabled) {
             if (typeof setControlsDrawerOpen === "function") {
               setControlsDrawerOpen(false);
@@ -2354,11 +2362,19 @@ THREEJS_VIEWER_RUNTIME_JS = """
       }
 
       function onKeyDown(event) {
-        if (keyboardTargetIsEditable(event.target)) {
-          return;
-        }
         const key = String(event.key || "");
         const lowerKey = normalizedKeyboardKey(key);
+        const targetTagName = String(event.target && event.target.tagName || "").toLowerCase();
+        const zenShortcutFromButton = (
+          lowerKey === "z"
+          && targetTagName === "button"
+          && !event.metaKey
+          && !event.ctrlKey
+          && !event.altKey
+        );
+        if (keyboardTargetIsEditable(event.target) && !zenShortcutFromButton) {
+          return;
+        }
         if ((event.metaKey || event.ctrlKey) && !event.altKey && lowerKey === "z") {
           const handled = undoSelectionState();
           if (handled) {
@@ -2400,7 +2416,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
           return;
         }
 
-        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "b" || lowerKey === "o" || lowerKey === "t" || key === "?" || (key === "/" && event.shiftKey))) {
+        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "b" || lowerKey === "o" || lowerKey === "t" || lowerKey === "z" || key === "?" || (key === "/" && event.shiftKey))) {
           event.preventDefault();
           return;
         }
@@ -2453,6 +2469,12 @@ THREEJS_VIEWER_RUNTIME_JS = """
           if (handled) {
             event.preventDefault();
           }
+          return;
+        }
+
+        if (lowerKey === "z") {
+          setZenMode(!zenModeEnabled);
+          event.preventDefault();
           return;
         }
 
@@ -2558,15 +2580,39 @@ THREEJS_VIEWER_RUNTIME_JS = """
         return `${formatCompactNumber(value)} pc`;
       }
 
+      function scaleBarAngularLengthDegForCurrentView() {
+        const canvasHeight = Math.max(canvas.clientHeight || root.clientHeight || 0, 1);
+        const verticalFovRad = THREE.MathUtils.degToRad(
+          clampRange(Number(camera.fov) || 90.0, 0.05, 179.0)
+        );
+        const halfAngularSpan = Math.atan(
+          (120.0 / canvasHeight) * Math.tan(verticalFovRad * 0.5)
+        );
+        return THREE.MathUtils.radToDeg(2.0 * halfAngularSpan);
+      }
+
+      function formatAngularLabelDeg(angleDeg) {
+        const value = Number(angleDeg);
+        if (!Number.isFinite(value) || value <= 0.0) {
+          return "";
+        }
+        return `${formatCompactNumber(value)}°`;
+      }
+
       function updateScaleBar() {
         if (!scaleBarEl || !scaleLabelEl) {
           return;
         }
         const barLengthPc = scaleBarLengthPcForCurrentView();
         currentScaleBarLengthPc = barLengthPc;
-        scaleLabelEl.textContent = formatDistanceLabelPc(barLengthPc);
-        scaleBarEl.style.display = Number.isFinite(barLengthPc) ? "flex" : "none";
-        if (Number.isFinite(barLengthPc)) {
+        const displayedLength = cameraViewMode === "earth"
+          ? scaleBarAngularLengthDegForCurrentView()
+          : barLengthPc;
+        scaleLabelEl.textContent = cameraViewMode === "earth"
+          ? formatAngularLabelDeg(displayedLength)
+          : formatDistanceLabelPc(displayedLength);
+        scaleBarEl.style.display = Number.isFinite(displayedLength) ? "flex" : "none";
+        if (Number.isFinite(displayedLength)) {
           applyScaleBarPosition();
         }
       }
