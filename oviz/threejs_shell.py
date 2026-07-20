@@ -94,9 +94,9 @@ THREEJS_SHELL_HTML = """
           <div class="oviz-three-key-help-keys">Q / E</div>
           <div>Zoom out and in toward the current anchor point.</div>
           <div class="oviz-three-key-help-keys">Left / Right</div>
-          <div>Step the time slider backward or forward.</div>
+          <div>Step time backward or forward; in Presentation mode, move between saved States.</div>
           <div class="oviz-three-key-help-keys">Shift + Left / Right</div>
-          <div>Jump five time steps backward or forward.</div>
+          <div>Jump five time steps backward or forward outside Presentation mode.</div>
           <div class="oviz-three-key-help-keys">1 - 9</div>
           <div>Toggle the first nine legend items in the current group.</div>
           <div class="oviz-three-key-help-keys">Shift + 1 - 9</div>
@@ -117,6 +117,8 @@ THREEJS_SHELL_HTML = """
           <div>Toggle automatic orbit around the current anchor point.</div>
           <div class="oviz-three-key-help-keys">Z</div>
           <div>Toggle Zen mode.</div>
+          <div class="oviz-three-key-help-keys">P</div>
+          <div>Toggle Presentation mode.</div>
           <div class="oviz-three-key-help-keys">?</div>
           <div>Open this keyboard help panel.</div>
           <div class="oviz-three-key-help-keys">Esc</div>

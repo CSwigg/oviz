@@ -37,8 +37,10 @@ def test_write_zip_copy_contains_only_html_artifact(tmp_path):
 def test_main_writes_default_zip_for_rendered_html(tmp_path, monkeypatch):
     module = _load_runner_module()
     html_path = tmp_path / "chronos.html"
+    run_kwargs = {}
 
-    def fake_run_main_figure(**_kwargs):
+    def fake_run_main_figure(**kwargs):
+        run_kwargs.update(kwargs)
         html_path.write_text("<!doctype html><html>oviz</html>", encoding="utf-8")
         return html_path
 
@@ -62,3 +64,4 @@ def test_main_writes_default_zip_for_rendered_html(tmp_path, monkeypatch):
     with zipfile.ZipFile(html_path.with_suffix(".zip")) as archive:
         assert archive.namelist() == ["chronos.html"]
         assert archive.read("chronos.html") == html_path.read_bytes()
+    assert run_kwargs["include_background_cluster_trace"] is False

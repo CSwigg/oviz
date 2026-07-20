@@ -1373,6 +1373,7 @@ def patch_script_source(
     chronos_model: str = DEFAULT_CHRONOS_CLUSTER_MODEL,
     include_spiral_arms: bool = False,
     jun6_catalog: bool = False,
+    include_background_cluster_trace: bool = True,
 ) -> str:
     source = source.replace("/Users/cam", str(HOME_DIR))
     source = source.replace("/Users/cam/Desktop", str(DESKTOP_ROOT))
@@ -1491,6 +1492,32 @@ def patch_script_source(
         )
         if inserted_old_cluster_grouping != 1:
             raise RuntimeError("Could not add the 0-150 Myr trace to the cluster grouping.")
+
+        if not include_background_cluster_trace:
+            source, removed_old_cluster_trace = re.subn(
+                r"(?m)^old_sample_trace\s*=\s*Trace\(.*\)\s*$",
+                "",
+                source,
+                count=1,
+            )
+            if removed_old_cluster_trace != 1:
+                raise RuntimeError("Could not remove the 0-150 Myr cluster trace definition.")
+            source, removed_old_cluster_collection = re.subn(
+                r"(?m)^\s*old_sample_trace,\s*$",
+                "",
+                source,
+                count=1,
+            )
+            if removed_old_cluster_collection != 1:
+                raise RuntimeError("Could not remove the 0-150 Myr trace from the TraceCollection.")
+            source, removed_old_cluster_grouping = re.subn(
+                r'"Clusters"\s*:\s*\[\s*\'Sun\'\s*,\s*\'Clusters\s*\(0-150\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*60\s*Myr\)\'\s*,\s*\'Clusters\s*\(<\s*15\s*Myr\)\'\s*\]',
+                "\"Clusters\": ['Sun', 'Clusters (< 60 Myr)', 'Clusters (< 15 Myr)']",
+                source,
+                count=1,
+            )
+            if removed_old_cluster_grouping != 1:
+                raise RuntimeError("Could not remove the 0-150 Myr trace from the cluster grouping.")
 
         source, recolored_full_chronos_sample = re.subn(
             r"(full_sample_trace\s*=\s*Trace\([^\n]*?data_name\s*=\s*'Clusters\s*\(<\s*60\s*Myr\)'[^\n]*?color\s*=\s*)(['\"][^'\"]+['\"])",
@@ -1854,6 +1881,7 @@ def run_main_figure(
     chronos_model: str = DEFAULT_CHRONOS_CLUSTER_MODEL,
     include_spiral_arms: bool = False,
     jun6_catalog: bool = False,
+    include_background_cluster_trace: bool = True,
     website_output_html: Path | None = WEBSITE_OUTPUT_HTML,
 ) -> Path:
     output_html.parent.mkdir(parents=True, exist_ok=True)
@@ -1881,6 +1909,7 @@ def run_main_figure(
         chronos_model=chronos_model,
         include_spiral_arms=include_spiral_arms,
         jun6_catalog=jun6_catalog,
+        include_background_cluster_trace=include_background_cluster_trace,
     )
 
     run_script_source(patched_source)

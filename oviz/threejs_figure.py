@@ -148,6 +148,7 @@ _THREEJS_TOPBAR_HTML = """
                   <button class="oviz-three-auto-orbit" type="button" title="Rotate around the current camera target" aria-pressed="false">Orbit camera</button>
                   <button class="oviz-three-reset-camera" type="button" title="Reset the camera to the initial view">Reset camera</button>
                   <button class="oviz-three-reset-controls" type="button" title="Reset the global control sliders">Reset controls</button>
+                  <button class="oviz-three-presentation-mode" type="button" title="Hide all interface overlays except the scale bar and Sky attribution (P)" aria-pressed="false">Presentation mode</button>
                 </div>
                 <div class="oviz-three-controls-hint">Point size, glow, and opacity act as global multipliers on top of each trace's existing settings.</div>
               </div>
@@ -5737,10 +5738,37 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           width: min(260px, calc(100vw - 28px)) !important;
         }
       }
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-topbar,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-earth-view-toggle,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-fullscreen,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-fullscreen-notice,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-action-bar,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-legend-panel,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-legend-popover,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-key-help,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-widget-panel,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-footer,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-note,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-tooltip,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-lasso-overlay,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-mobile-selection-status,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-sky-apertures,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-states-shell {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-scale-bar {
+        display: flex !important;
+      }
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-aladin-attribution {
+        bottom: 82px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-aladin-attribution {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 82px) !important;
+      }
     </style>
   </head>
   <body>
-    <div id="__ROOT_ID__" tabindex="0" data-zen="false" __ROOT_MINIMAL_ATTR__ __ROOT_MOBILE_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__ __ROOT_AR_ATTR__>
+    <div id="__ROOT_ID__" tabindex="0" data-zen="false" data-presentation-mode="false" __ROOT_MINIMAL_ATTR__ __ROOT_MOBILE_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__ __ROOT_AR_ATTR__>
       __TOPBAR_HTML__
       <button class="oviz-three-earth-view-toggle" type="button" title="Current view: 3D. Click or press V to enter Sky view." aria-pressed="false" aria-label="Current view: 3D. Switch to Sky View.">View: 3D</button>
       <button class="oviz-three-fullscreen" type="button" title="Enter fullscreen" aria-label="Enter fullscreen">
@@ -6463,6 +6491,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const searchResultsEl = root.querySelector(".oviz-three-search-results");
       const searchStatusEl = root.querySelector(".oviz-three-search-status");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
+      const presentationModeButtonEl = root.querySelector(".oviz-three-presentation-mode");
       const fullscreenButtonEl = root.querySelector(".oviz-three-fullscreen");
       const fullscreenNoticeEl = root.querySelector(".oviz-three-fullscreen-notice");
       const mobileSkyViewButtonEl = root.querySelector(".oviz-three-mobile-sky-view");
@@ -7065,6 +7094,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled
       );
       let zenModeEnabled = Boolean(initialState.zen_mode_enabled);
+      let presentationModeEnabled = false;
       let legendPanelOpen = initialState.legend_open === undefined ? true : Boolean(initialState.legend_open);
       let fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
       let fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
@@ -18994,6 +19024,12 @@ __STATE_RUNTIME_JS__
             focusViewer();
           });
         }
+        if (presentationModeButtonEl) {
+          presentationModeButtonEl.addEventListener("click", () => {
+            setPresentationMode(!presentationModeEnabled);
+            focusViewer();
+          });
+        }
         if (fullscreenButtonEl) {
           fullscreenButtonEl.addEventListener("click", (event) => {
             event.preventDefault();
@@ -19546,6 +19582,7 @@ __STATE_RUNTIME_JS__
         widgetDragHandles.forEach((handle) => handle.addEventListener("pointerdown", onWidgetPointerStart));
         widgetResizeEls.forEach((handle) => handle.addEventListener("pointerdown", onWidgetPointerStart));
         setZenMode(zenModeEnabled);
+        setPresentationMode(presentationModeEnabled);
       }
 
       function onCanvasPointerDown(event) {

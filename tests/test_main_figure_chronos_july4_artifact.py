@@ -18,7 +18,7 @@ EXPECTED_FRAME_TIMES = [float(value) for value in range(-120, 1)]
 MAX_BACKGROUND_POINTS = 500
 MAX_BLUE_CLUSTER_POINTS = 650
 MIN_DESKTOP_VOLUME_AXIS_PIXELS = 256
-EXPECTED_FILTERED_RETAINED_BOUNDARY_COMPONENTS = 9624
+EXPECTED_FILTERED_RETAINED_BOUNDARY_COMPONENTS = 6624
 
 
 def _read_scene_spec(path: Path):
@@ -103,7 +103,7 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
         for trace in scene_spec["frames"][0]["traces"]
     }
     assert len(first_frame_traces["Full Cluster Catalog"]["points"]) <= MAX_BACKGROUND_POINTS
-    assert len(first_frame_traces["Clusters (0-150 Myr)"]["points"]) <= MAX_BACKGROUND_POINTS
+    assert "Clusters (0-150 Myr)" not in first_frame_traces
     assert len(first_frame_traces["Clusters (< 60 Myr)"]["points"]) <= MAX_BLUE_CLUSTER_POINTS
     assert len(first_frame_traces["Clusters (< 60 Myr)"]["points"]) >= 600
     assert len(first_frame_traces["Clusters (< 15 Myr)"]["points"]) >= 400

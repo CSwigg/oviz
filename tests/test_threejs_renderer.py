@@ -296,9 +296,10 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Toggle between 3D View and Sky View.", html)
         self.assertIn("In Sky View, toggle the sky background image on or off.", html)
         self.assertIn("Toggle Zen mode.", html)
-        self.assertIn("const zenShortcutFromButton = (", html)
+        self.assertIn("Toggle Presentation mode.", html)
+        self.assertIn("const viewerModeShortcutFromButton = (", html)
         self.assertIn(
-            "keyboardTargetIsEditable(event.target) && !zenShortcutFromButton",
+            "keyboardTargetIsEditable(event.target) && !viewerModeShortcutFromButton",
             html,
         )
         self.assertIn('if (lowerKey === "z") {', html)
@@ -309,6 +310,17 @@ class ThreeJSRendererTests(unittest.TestCase):
         )
         self.assertIn('statesShellEl.dataset.open = "false";', html)
         self.assertIn('statesToggleEl.textContent = "States ▸";', html)
+        self.assertIn('data-presentation-mode="false"', html)
+        self.assertIn("function setPresentationMode(enabled)", html)
+        self.assertIn('if (lowerKey === "p") {', html)
+        self.assertIn("setPresentationMode(!presentationModeEnabled);", html)
+        self.assertIn("Promise.resolve(ovizStatesPrevious())", html)
+        self.assertIn("Promise.resolve(ovizStatesNext())", html)
+        self.assertIn('[data-presentation-mode="true"] .oviz-three-topbar', html)
+        self.assertIn('[data-presentation-mode="true"] .oviz-three-legend-panel', html)
+        self.assertIn('[data-presentation-mode="true"] .oviz-states-shell', html)
+        self.assertIn('[data-presentation-mode="true"] .oviz-three-scale-bar', html)
+        self.assertIn("presentation-mode-changed", html)
         self.assertIn("Hide or show all legend items in the current group.", html)
         self.assertIn("function toggleAllLegendItems()", html)
         self.assertIn("keyboardLegendVisibilitySnapshotByGroup.set(snapshotKey, visibleSnapshot)", html)

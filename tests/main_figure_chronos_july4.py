@@ -81,6 +81,7 @@ def main() -> None:
         chronos_model="parsec",
         include_spiral_arms=bool(args.include_spiral_arms),
         jun6_catalog=True,
+        include_background_cluster_trace=False,
         website_output_html=None,
     )
     print(f"Wrote {output_html}")
