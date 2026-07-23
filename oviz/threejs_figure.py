@@ -19,17 +19,24 @@ from .threejs_runtime_ar import THREEJS_AR_RUNTIME_JS
 from .threejs_runtime_actions import THREEJS_ACTION_RUNTIME_JS
 from .threejs_transition_runtime import THREEJS_TRANSITION_RUNTIME_JS
 from .threejs_runtime_states import THREEJS_STATE_RUNTIME_JS
+from .threejs_runtime_deck import THREEJS_DECK_RUNTIME_JS
 from .threejs_runtime_scene import THREEJS_SCENE_RUNTIME_JS
 from .threejs_runtime_sky import THREEJS_SKY_RUNTIME_JS
 from .threejs_runtime_viewer import THREEJS_VIEWER_RUNTIME_JS
 from .threejs_runtime_widget_content import THREEJS_WIDGET_CONTENT_RUNTIME_JS
 from .threejs_runtime_widgets import THREEJS_WIDGET_RUNTIME_JS
 from .threejs_states import default_states_project_id, normalize_states_spec
+from .threejs_deck import normalize_deck_spec
 
 
 _THREEJS_AR_BUTTON_HTML = (
     '<button class="oviz-three-mobile-ar" type="button" title="Open AR export options" '
     'aria-haspopup="dialog" aria-expanded="false" data-has-selection="false">AR</button>'
+)
+
+_THREEJS_DECK_BUTTON_HTML = (
+    '<button class="oviz-three-deck-editor oviz-three-deck-toggle" type="button" '
+    'title="Open slide editor" aria-expanded="false" aria-pressed="false">Slides ▸</button>'
 )
 
 _THREEJS_TOPBAR_HTML = """
@@ -40,6 +47,48 @@ _THREEJS_TOPBAR_HTML = """
         </div>
         <div class="oviz-three-title"></div>
         <div class="oviz-three-widget-menu">
+          <div class="oviz-three-text-shell" data-open="false">
+            <button class="oviz-three-text-toggle" type="button" title="Add and edit text anchored in the 3D scene" aria-expanded="false" aria-haspopup="true">Text ▸</button>
+            <div class="oviz-three-text-drawer" aria-hidden="true" inert>
+              <div class="oviz-three-text-head">
+                <strong>3D Text</strong>
+                <small>Fixed in the scene</small>
+              </div>
+              <label class="oviz-three-text-field">
+                <span>Label</span>
+                <select class="oviz-three-manual-label-select" aria-label="Scene text label"></select>
+              </label>
+              <label class="oviz-three-text-field">
+                <span>Text</span>
+                <input class="oviz-three-manual-label-text" type="text" maxlength="80" placeholder="Type text" spellcheck="true" />
+              </label>
+              <div class="oviz-three-text-grid">
+                <label class="oviz-three-text-field oviz-three-text-size-field">
+                  <span>Size <output class="oviz-three-manual-label-size-readout">24 px</output></span>
+                  <input class="oviz-three-manual-label-size" type="range" min="1" max="180" step="0.5" value="24" />
+                </label>
+                <label class="oviz-three-text-field oviz-three-text-color-field">
+                  <span>Color</span>
+                  <input class="oviz-three-manual-label-color" type="color" value="#ffffff" aria-label="Scene text color" />
+                </label>
+              </div>
+              <div class="oviz-three-text-position-grid" aria-label="Scene text position in parsecs">
+                <label class="oviz-three-text-field"><span>X (pc)</span><input class="oviz-three-manual-label-x" type="number" step="any" /></label>
+                <label class="oviz-three-text-field"><span>Y (pc)</span><input class="oviz-three-manual-label-y" type="number" step="any" /></label>
+                <label class="oviz-three-text-field"><span>Z (pc)</span><input class="oviz-three-manual-label-z" type="number" step="any" /></label>
+              </div>
+              <div class="oviz-three-text-actions">
+                <button class="oviz-three-manual-label-add" type="button">Add at target</button>
+                <button class="oviz-three-manual-label-place" type="button" aria-pressed="false">Place in scene</button>
+                <button class="oviz-three-manual-label-apply" type="button">Update</button>
+                <button class="oviz-three-manual-label-visibility" type="button" aria-pressed="true">Hide text</button>
+                <button class="oviz-three-manual-label-move" type="button">Move to target</button>
+                <button class="oviz-three-manual-label-delete" type="button">Delete</button>
+              </div>
+              <div class="oviz-three-manual-label-readout" aria-live="polite"></div>
+            </div>
+          </div>
+          __DECK_BUTTON_HTML__
           <div class="oviz-three-search-shell" data-open="false" data-results-open="false">
             <button class="oviz-three-search-toggle" type="button" title="Search clusters" aria-label="Search clusters" aria-expanded="false">
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -335,7 +384,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-zen="true"] .oviz-three-title,
       #__ROOT_ID__[data-zen="true"] .oviz-three-tools-shell,
       #__ROOT_ID__[data-zen="true"] .oviz-three-controls-shell,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-text-shell,
       #__ROOT_ID__[data-zen="true"] .oviz-three-sky-controls-shell,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-deck-editor,
       #__ROOT_ID__[data-zen="true"] .oviz-three-widget-select,
       #__ROOT_ID__[data-zen="true"] .oviz-three-reset-camera-view,
       #__ROOT_ID__[data-zen="true"] .oviz-three-reset-selection,
@@ -2167,6 +2218,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: blur(4px) saturate(104%);
         -webkit-backdrop-filter: blur(4px) saturate(104%);
       }
+      #__ROOT_ID__ .oviz-three-widget-menu > * {
+        order: 40;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu > .oviz-states-shell {
+        order: 10;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu > .oviz-three-text-shell {
+        order: 20;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu > .oviz-three-deck-toggle {
+        order: 30;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu > .oviz-three-search-shell {
+        order: 100;
+      }
       #__ROOT_ID__ .oviz-three-widget-menu button,
       #__ROOT_ID__ .oviz-three-widget-menu select,
       #__ROOT_ID__ .oviz-three-tools-toggle,
@@ -2189,6 +2255,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-tools-shell,
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-controls-shell,
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-text-shell,
       #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-search-shell {
         position: relative;
         min-height: auto;
@@ -2199,6 +2266,130 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
         overflow: visible;
+      }
+      #__ROOT_ID__ .oviz-three-text-shell {
+        display: inline-flex;
+        align-items: center;
+      }
+      #__ROOT_ID__ .oviz-three-text-shell[data-open="true"] > .oviz-three-text-toggle {
+        background: rgba(54, 59, 67, 0.98);
+        border-color: rgba(255, 255, 255, 0.16);
+      }
+      #__ROOT_ID__ .oviz-three-text-drawer {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        z-index: 82;
+        display: none;
+        box-sizing: border-box;
+        width: min(320px, calc(100vw - 28px));
+        padding: 12px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 8px;
+        background: var(--oviz-panel-solid);
+        color: var(--oviz-text);
+        box-shadow: var(--oviz-shadow-md);
+        font: 500 11px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-text-shell[data-open="true"] .oviz-three-text-drawer {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      #__ROOT_ID__ .oviz-three-text-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding-bottom: 7px;
+        border-bottom: 1px solid var(--oviz-panel-border);
+      }
+      #__ROOT_ID__ .oviz-three-text-head strong {
+        font-size: 12px;
+        font-weight: 650;
+      }
+      #__ROOT_ID__ .oviz-three-text-head small,
+      #__ROOT_ID__ .oviz-three-manual-label-readout {
+        color: var(--oviz-muted-text);
+        font-size: 10px;
+      }
+      #__ROOT_ID__ .oviz-three-text-field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
+      }
+      #__ROOT_ID__ .oviz-three-text-field > span {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      #__ROOT_ID__ .oviz-three-text-field input[type="text"],
+      #__ROOT_ID__ .oviz-three-text-field input[type="number"],
+      #__ROOT_ID__ .oviz-three-text-field select {
+        box-sizing: border-box;
+        width: 100%;
+        height: 30px;
+        padding: 0 8px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 4px;
+        outline: 0;
+        background: rgba(29, 32, 37, 0.98);
+        color: var(--oviz-text);
+        font: inherit;
+      }
+      #__ROOT_ID__ .oviz-three-text-field input[type="text"]:focus,
+      #__ROOT_ID__ .oviz-three-text-field input[type="number"]:focus,
+      #__ROOT_ID__ .oviz-three-text-field select:focus {
+        border-color: rgba(140, 170, 255, 0.78);
+      }
+      #__ROOT_ID__ .oviz-three-text-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 54px;
+        gap: 12px;
+        align-items: end;
+      }
+      #__ROOT_ID__ .oviz-three-text-position-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
+      }
+      #__ROOT_ID__ .oviz-three-text-position-grid .oviz-three-text-field > span {
+        font-size: 9px;
+        color: var(--oviz-muted-text);
+      }
+      #__ROOT_ID__ .oviz-three-text-size-field input[type="range"] {
+        width: 100%;
+        margin: 3px 0;
+        accent-color: var(--oviz-axis);
+      }
+      #__ROOT_ID__ .oviz-three-text-color-field input[type="color"] {
+        box-sizing: border-box;
+        width: 100%;
+        height: 30px;
+        padding: 3px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 4px;
+        background: rgba(29, 32, 37, 0.98);
+        cursor: pointer;
+      }
+      #__ROOT_ID__ .oviz-three-text-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-text-actions button {
+        height: 28px;
+        padding: 0 9px;
+      }
+      #__ROOT_ID__ .oviz-three-widget-menu .oviz-three-manual-label-place[data-active="true"] {
+        border-color: rgba(140, 170, 255, 0.78);
+        background: rgba(75, 99, 170, 0.34);
+      }
+      #__ROOT_ID__ .oviz-three-manual-label-readout {
+        min-height: 26px;
+        line-height: 1.35;
       }
       #__ROOT_ID__ .oviz-three-search-shell {
         display: inline-flex;
@@ -2343,7 +2534,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-widget-menu {
         gap: 3px;
         padding: 3px;
-        max-width: min(calc(100vw - 24px), 520px);
+        max-width: min(calc(100vw - 24px), 680px);
       }
       #__ROOT_ID__[data-topbar-density="compact"] .oviz-three-action-bar {
         gap: 7px;
@@ -4439,6 +4630,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           width: min(calc(100vw - 28px), 920px);
         }
       }
+      @media (min-width: 861px) {
+        #__ROOT_ID__ .oviz-three-widget-menu {
+          flex-wrap: nowrap;
+          max-width: min(calc(100vw - 28px), 920px);
+        }
+      }
       @media (max-width: 860px) {
         #__ROOT_ID__ .oviz-three-widget-menu {
           row-gap: 4px;
@@ -4609,6 +4806,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-topbar-brand,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-title,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-text-shell,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-save-state,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-select,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-key-help,
@@ -5738,6 +5936,588 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           width: min(260px, calc(100vw - 28px)) !important;
         }
       }
+      #__ROOT_ID__ .oviz-deck-authoring-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 48;
+        display: none;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-deck-authoring-layer[data-visible="true"] {
+        display: block;
+        pointer-events: auto;
+      }
+      #__ROOT_ID__ .oviz-deck-authoring-layer[data-grid="true"] {
+        background-image:
+          linear-gradient(rgba(143, 220, 255, 0.055) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(143, 220, 255, 0.055) 1px, transparent 1px);
+        background-size: var(--oviz-deck-grid-x, 20px) var(--oviz-deck-grid-y, 20px);
+      }
+      #__ROOT_ID__ .oviz-deck-author-block {
+        position: absolute;
+        box-sizing: border-box;
+        min-height: 42px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 2px;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+        line-height: 1.08;
+        transform-origin: center center;
+        pointer-events: auto;
+      }
+      #__ROOT_ID__ .oviz-deck-author-block[data-kind="shape"] {
+        cursor: move;
+      }
+      #__ROOT_ID__ .oviz-deck-author-block[data-locked="true"] {
+        cursor: not-allowed;
+      }
+      #__ROOT_ID__ .oviz-deck-author-block:hover,
+      #__ROOT_ID__ .oviz-deck-author-block[data-selected="true"] {
+        border-color: rgba(143, 220, 255, 0.30);
+      }
+      #__ROOT_ID__ .oviz-deck-author-content {
+        position: relative;
+        z-index: 2;
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
+        min-height: 1em;
+        padding: 8px 10px;
+        outline: none;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        cursor: text;
+      }
+      #__ROOT_ID__ .oviz-deck-author-block[data-kind="shape"] .oviz-deck-author-content {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: move;
+      }
+      #__ROOT_ID__ .oviz-deck-author-block[data-kind="shape"] .oviz-deck-author-content[contenteditable="true"] {
+        cursor: text;
+      }
+      #__ROOT_ID__ .oviz-deck-author-content:focus {
+        outline: 1px solid rgba(143, 220, 255, 0.48);
+        outline-offset: 4px;
+      }
+      #__ROOT_ID__ .oviz-deck-text-list {
+        margin: 0;
+        padding-left: 1.2em;
+      }
+      #__ROOT_ID__ .oviz-deck-text-list > li {
+        padding-left: 0.12em;
+      }
+      #__ROOT_ID__ .oviz-deck-block-move {
+        position: absolute;
+        top: -20px;
+        left: 0;
+        display: none;
+        height: 19px;
+        padding: 0 7px;
+        border: 1px solid rgba(143, 220, 255, 0.64);
+        border-radius: 5px 5px 0 0;
+        background: rgba(8, 12, 18, 0.92);
+        color: rgba(239, 247, 255, 0.94);
+        font: 600 9px/17px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+        cursor: grab;
+      }
+      #__ROOT_ID__ .oviz-deck-shape-visual {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-deck-selection-frame {
+        position: absolute;
+        z-index: 8;
+        box-sizing: border-box;
+        border: 1px solid #8fdcff;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-deck-selection-frame[data-locked="true"] {
+        border-style: dashed;
+        border-color: rgba(143, 220, 255, 0.58);
+      }
+      #__ROOT_ID__ .oviz-deck-resize-handle,
+      #__ROOT_ID__ .oviz-deck-rotate-handle {
+        position: absolute;
+        z-index: 2;
+        display: block;
+        box-sizing: border-box;
+        width: 9px;
+        height: 9px;
+        padding: 0;
+        border: 1px solid #8fdcff;
+        border-radius: 2px;
+        background: #09121a;
+        pointer-events: auto;
+      }
+      #__ROOT_ID__ .oviz-deck-resize-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+      #__ROOT_ID__ .oviz-deck-resize-n { left: calc(50% - 4px); top: -5px; cursor: ns-resize; }
+      #__ROOT_ID__ .oviz-deck-resize-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+      #__ROOT_ID__ .oviz-deck-resize-e { right: -5px; top: calc(50% - 4px); cursor: ew-resize; }
+      #__ROOT_ID__ .oviz-deck-resize-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+      #__ROOT_ID__ .oviz-deck-resize-s { left: calc(50% - 4px); bottom: -5px; cursor: ns-resize; }
+      #__ROOT_ID__ .oviz-deck-resize-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+      #__ROOT_ID__ .oviz-deck-resize-w { left: -5px; top: calc(50% - 4px); cursor: ew-resize; }
+      #__ROOT_ID__ .oviz-deck-rotate-handle {
+        left: calc(50% - 5px);
+        top: -26px;
+        border-radius: 50%;
+        cursor: grab;
+      }
+      #__ROOT_ID__ .oviz-deck-rotate-handle::after {
+        position: absolute;
+        top: 8px;
+        left: 3px;
+        width: 1px;
+        height: 16px;
+        background: #8fdcff;
+        content: "";
+      }
+      #__ROOT_ID__ .oviz-deck-guide-line {
+        position: absolute;
+        z-index: 20;
+        background: #59d8ff;
+        box-shadow: 0 0 5px rgba(89, 216, 255, 0.55);
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-deck-guide-x { top: 0; bottom: 0; width: 1px; }
+      #__ROOT_ID__ .oviz-deck-guide-y { left: 0; right: 0; height: 1px; }
+      #__ROOT_ID__ .oviz-deck-marquee {
+        position: absolute;
+        z-index: 21;
+        border: 1px solid rgba(89, 216, 255, 0.9);
+        background: rgba(89, 216, 255, 0.10);
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-deck-author-block:hover .oviz-deck-block-move,
+      #__ROOT_ID__ .oviz-deck-author-block[data-selected="true"] .oviz-deck-block-move {
+        display: block;
+      }
+      #__ROOT_ID__ .oviz-deck-editor {
+        position: absolute;
+        top: 58px;
+        right: 14px;
+        left: auto;
+        z-index: 72;
+        display: none;
+        box-sizing: border-box;
+        width: min(328px, calc(100% - 28px));
+        max-height: calc(100% - 132px);
+        padding: 11px;
+        overflow: auto;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 8px;
+        background: var(--oviz-panel-bg);
+        color: var(--oviz-text);
+        box-shadow: var(--oviz-panel-shadow);
+        backdrop-filter: blur(16px) saturate(120%);
+        -webkit-backdrop-filter: blur(16px) saturate(120%);
+        font: 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-deck-editor[data-open="true"] {
+        display: block;
+      }
+      #__ROOT_ID__ .oviz-deck-editor-head,
+      #__ROOT_ID__ .oviz-deck-toolbar,
+      #__ROOT_ID__ .oviz-deck-inspector-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      #__ROOT_ID__ .oviz-deck-editor-head {
+        padding: 1px 1px 8px;
+        border-bottom: 1px solid var(--oviz-panel-border);
+      }
+      #__ROOT_ID__ .oviz-deck-editor-head strong {
+        font-size: 13px;
+        font-weight: 650;
+      }
+      #__ROOT_ID__ .oviz-deck-editor-head small {
+        flex: 1 1 auto;
+        color: var(--oviz-muted);
+        font-size: 10px;
+      }
+      #__ROOT_ID__ .oviz-deck-editor button,
+      #__ROOT_ID__ .oviz-deck-editor select {
+        box-sizing: border-box;
+        min-height: 25px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.055);
+        color: var(--oviz-text);
+        font: 600 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-deck-editor button {
+        padding: 4px 7px;
+        cursor: pointer;
+      }
+      #__ROOT_ID__ .oviz-deck-editor button:hover,
+      #__ROOT_ID__ .oviz-deck-editor button:focus-visible {
+        border-color: rgba(143, 220, 255, 0.62);
+        background: rgba(143, 220, 255, 0.10);
+        outline: none;
+      }
+      #__ROOT_ID__ .oviz-deck-editor button:disabled {
+        opacity: 0.32;
+        cursor: default;
+      }
+      #__ROOT_ID__ .oviz-deck-history-button {
+        width: 25px;
+        min-height: 25px !important;
+        padding: 0 !important;
+        font-size: 14px !important;
+      }
+      #__ROOT_ID__ .oviz-deck-toolbar {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        padding: 9px 0 5px;
+      }
+      #__ROOT_ID__ .oviz-deck-toolbar button {
+        min-width: 0;
+        padding-inline: 4px;
+      }
+      #__ROOT_ID__ .oviz-deck-add-menu {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+        margin: 1px 0 7px;
+        padding: 7px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.025);
+      }
+      #__ROOT_ID__ .oviz-deck-add-menu button:first-child {
+        grid-column: 1 / -1;
+      }
+      #__ROOT_ID__ .oviz-deck-hint {
+        padding: 1px 1px 8px;
+        color: var(--oviz-muted);
+        font-size: 9.5px;
+      }
+      #__ROOT_ID__ .oviz-deck-slide-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 1px 0 8px;
+      }
+      #__ROOT_ID__ .oviz-deck-slide-row {
+        position: relative;
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) 26px;
+        align-items: center;
+        gap: 4px;
+        min-height: 31px;
+        padding: 3px;
+        border: 1px solid transparent;
+        border-radius: 6px;
+      }
+      #__ROOT_ID__ .oviz-deck-slide-row[data-active="true"] {
+        border-color: rgba(143, 220, 255, 0.34);
+        background: rgba(143, 220, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-deck-slide-number {
+        flex: 0 0 18px;
+        color: var(--oviz-muted);
+        text-align: center;
+        font-size: 10px;
+      }
+      #__ROOT_ID__ .oviz-deck-slide-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        border: 0 !important;
+        background: transparent !important;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-deck-slide-actions {
+        position: relative;
+        justify-self: end;
+      }
+      #__ROOT_ID__ .oviz-deck-slide-actions summary {
+        display: grid;
+        place-items: center;
+        box-sizing: border-box;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        color: var(--oviz-muted);
+        cursor: pointer;
+        list-style: none;
+      }
+      #__ROOT_ID__ .oviz-deck-slide-actions summary::-webkit-details-marker {
+        display: none;
+      }
+      #__ROOT_ID__ .oviz-deck-slide-actions summary:hover,
+      #__ROOT_ID__ .oviz-deck-slide-actions[open] summary {
+        border-color: var(--oviz-panel-border);
+        color: var(--oviz-text);
+        background: rgba(255, 255, 255, 0.055);
+      }
+      #__ROOT_ID__ .oviz-deck-slide-action-menu {
+        position: absolute;
+        top: calc(100% + 3px);
+        right: 0;
+        z-index: 4;
+        display: grid;
+        width: 116px;
+        padding: 4px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 7px;
+        background: rgba(14, 17, 22, 0.98);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+      }
+      #__ROOT_ID__ .oviz-deck-slide-action-menu button {
+        width: 100%;
+        min-height: 25px;
+        padding: 4px 7px;
+        border-color: transparent;
+        background: transparent;
+        text-align: left;
+      }
+      #__ROOT_ID__ .oviz-deck-slide-action-menu button[data-danger="true"] {
+        color: #ffb2a8;
+      }
+      #__ROOT_ID__ .oviz-deck-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 7px 0;
+        color: var(--oviz-muted);
+        font-size: 10px;
+      }
+      #__ROOT_ID__ .oviz-deck-field select,
+      #__ROOT_ID__ .oviz-deck-field input[type="range"],
+      #__ROOT_ID__ .oviz-deck-field input[type="number"] {
+        width: 100%;
+      }
+      #__ROOT_ID__ .oviz-deck-field input[type="text"] {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 25px;
+        padding: 3px 6px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.055);
+        color: var(--oviz-text);
+        font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-deck-field input[type="number"] {
+        box-sizing: border-box;
+        min-height: 25px;
+        padding: 3px 6px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.055);
+        color: var(--oviz-text);
+        font: 500 10px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-deck-capture-view {
+        width: 100%;
+      }
+      #__ROOT_ID__ .oviz-deck-block-inspector {
+        margin-top: 9px;
+        padding-top: 9px;
+        border-top: 1px solid var(--oviz-panel-border);
+      }
+      #__ROOT_ID__ .oviz-deck-block-inspector > strong {
+        font-size: 11px;
+      }
+      #__ROOT_ID__ .oviz-deck-inspector-section,
+      #__ROOT_ID__ .oviz-deck-objects-panel {
+        margin-top: 7px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-deck-inspector-section > summary,
+      #__ROOT_ID__ .oviz-deck-objects-panel > summary {
+        padding: 7px 1px 5px;
+        color: var(--oviz-text);
+        font-size: 10px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      #__ROOT_ID__ .oviz-deck-geometry-grid,
+      #__ROOT_ID__ .oviz-deck-arrange-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+      }
+      #__ROOT_ID__ .oviz-deck-geometry-grid .oviz-deck-field {
+        padding: 2px 0;
+      }
+      #__ROOT_ID__ .oviz-deck-arrange-grid button {
+        min-width: 0;
+        padding-inline: 3px;
+      }
+      #__ROOT_ID__ .oviz-deck-color-field {
+        display: flex;
+        flex: 1 1 0;
+        align-items: center;
+        justify-content: space-between;
+        gap: 5px;
+        color: var(--oviz-muted);
+        font-size: 10px;
+      }
+      #__ROOT_ID__ .oviz-deck-inspector-row select {
+        flex: 1 1 auto;
+        min-width: 72px;
+      }
+      #__ROOT_ID__ .oviz-deck-inspector-row input[type="color"] {
+        width: 29px;
+        height: 25px;
+        padding: 2px;
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 6px;
+        background: transparent;
+      }
+      #__ROOT_ID__ .oviz-deck-text-toggle {
+        width: 27px;
+        min-width: 27px;
+        padding: 0 !important;
+        font-size: 11px !important;
+      }
+      #__ROOT_ID__ .oviz-deck-text-toggle[aria-label="Italic"] {
+        font-style: italic !important;
+      }
+      #__ROOT_ID__ .oviz-deck-text-toggle[aria-label="Underline"] {
+        text-decoration-line: underline;
+      }
+      #__ROOT_ID__ .oviz-deck-text-toggle[data-active="true"] {
+        border-color: rgba(143, 220, 255, 0.58);
+        background: rgba(143, 220, 255, 0.14);
+        color: #ffffff;
+      }
+      #__ROOT_ID__ .oviz-deck-delete-text {
+        width: 100%;
+        margin-top: 7px;
+        color: #ffb2a8 !important;
+      }
+      #__ROOT_ID__ .oviz-deck-object-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        max-height: 180px;
+        overflow: auto;
+      }
+      #__ROOT_ID__ .oviz-deck-object-row {
+        display: grid;
+        grid-template-columns: 18px minmax(0, 1fr) 27px;
+        align-items: center;
+        gap: 3px;
+        min-height: 30px;
+        padding: 2px;
+        border: 1px solid transparent;
+        border-radius: 5px;
+      }
+      #__ROOT_ID__ .oviz-deck-object-row[data-selected="true"] {
+        border-color: rgba(143, 220, 255, 0.34);
+        background: rgba(143, 220, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-deck-object-grip {
+        color: var(--oviz-muted);
+        text-align: center;
+        cursor: grab;
+      }
+      #__ROOT_ID__ .oviz-deck-object-label {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+      }
+      #__ROOT_ID__ .oviz-deck-object-label button {
+        min-height: 15px;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-deck-object-label small {
+        overflow: hidden;
+        color: var(--oviz-muted);
+        font-size: 8.5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-deck-guides-controls {
+        display: flex;
+        gap: 12px;
+        padding: 7px 1px 2px;
+        color: var(--oviz-muted);
+        font-size: 9.5px;
+      }
+      #__ROOT_ID__ .oviz-deck-guides-controls label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      #__ROOT_ID__ .oviz-deck-empty,
+      #__ROOT_ID__ .oviz-deck-status {
+        padding: 9px 2px 2px;
+        color: var(--oviz-muted);
+        font-size: 10px;
+      }
+      #__ROOT_ID__ .oviz-deck-status[data-error="true"] {
+        color: #ffb2a8;
+      }
+      #__ROOT_ID__ .oviz-deck-status:empty {
+        display: none;
+      }
+      #__ROOT_ID__ .oviz-deck-reveal {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 58;
+        display: none !important;
+        width: 100% !important;
+        height: 100% !important;
+        color: #ffffff;
+        background: transparent !important;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-deck-reveal[data-visible="true"] {
+        display: block !important;
+      }
+      #__ROOT_ID__ .oviz-deck-reveal .slides,
+      #__ROOT_ID__ .oviz-deck-reveal .slides section {
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-deck-reveal .slides section {
+        box-sizing: border-box;
+        height: 100%;
+        padding: 0;
+        text-align: left;
+      }
+      #__ROOT_ID__ .oviz-deck-present-block {
+        position: absolute;
+        box-sizing: border-box;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+        line-height: 1.08;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        transform-origin: center center;
+      }
+      #__ROOT_ID__ .oviz-deck-present-shape {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 10px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-deck-editor,
+      #__ROOT_ID__[data-mobile="true"] .oviz-deck-editor,
+      #__ROOT_ID__[data-mobile="true"] .oviz-deck-authoring-layer {
+        display: none !important;
+      }
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-topbar,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-earth-view-toggle,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-fullscreen,
@@ -5753,14 +6533,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-lasso-overlay,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-mobile-selection-status,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-sky-apertures,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-deck-editor,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-deck-authoring-layer,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-states-shell {
         display: none !important;
       }
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-scale-bar {
         display: flex !important;
+        z-index: 84 !important;
       }
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-aladin-attribution {
         bottom: 82px !important;
+        z-index: 84 !important;
       }
       #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-aladin-attribution {
         bottom: calc(env(safe-area-inset-bottom, 0px) + 82px) !important;
@@ -6490,6 +7274,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const searchPopoverEl = root.querySelector(".oviz-three-search-popover");
       const searchResultsEl = root.querySelector(".oviz-three-search-results");
       const searchStatusEl = root.querySelector(".oviz-three-search-status");
+      const manualLabelShellEl = root.querySelector(".oviz-three-text-shell");
+      const manualLabelToggleEl = root.querySelector(".oviz-three-text-toggle");
+      const manualLabelDrawerEl = root.querySelector(".oviz-three-text-drawer");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
       const presentationModeButtonEl = root.querySelector(".oviz-three-presentation-mode");
       const fullscreenButtonEl = root.querySelector(".oviz-three-fullscreen");
@@ -6592,8 +7379,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const manualLabelSelectEl = root.querySelector(".oviz-three-manual-label-select");
       const manualLabelTextEl = root.querySelector(".oviz-three-manual-label-text");
       const manualLabelSizeEl = root.querySelector(".oviz-three-manual-label-size");
+      const manualLabelSizeReadoutEl = root.querySelector(".oviz-three-manual-label-size-readout");
+      const manualLabelColorEl = root.querySelector(".oviz-three-manual-label-color");
+      const manualLabelXEl = root.querySelector(".oviz-three-manual-label-x");
+      const manualLabelYEl = root.querySelector(".oviz-three-manual-label-y");
+      const manualLabelZEl = root.querySelector(".oviz-three-manual-label-z");
       const manualLabelAddButtonEl = root.querySelector(".oviz-three-manual-label-add");
+      const manualLabelPlaceButtonEl = root.querySelector(".oviz-three-manual-label-place");
       const manualLabelApplyButtonEl = root.querySelector(".oviz-three-manual-label-apply");
+      const manualLabelVisibilityButtonEl = root.querySelector(".oviz-three-manual-label-visibility");
+      const manualLabelMoveButtonEl = root.querySelector(".oviz-three-manual-label-move");
       const manualLabelDeleteButtonEl = root.querySelector(".oviz-three-manual-label-delete");
       const manualLabelReadoutEl = root.querySelector(".oviz-three-manual-label-readout");
       const orbitCameraButtons = Array.from(root.querySelectorAll(".oviz-three-auto-orbit"));
@@ -6925,9 +7720,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const volumeColorBytesCache = new Map();
       const volumeRuntimeByKey = new Map();
       const DEFAULT_MANUAL_LABEL_SIZE = 24.0;
+      const DEFAULT_MANUAL_LABEL_COLOR = "#ffffff";
       const LEGEND_MAX_VISIBLE_ITEMS = 5;
-      const MIN_MANUAL_LABEL_SIZE = 8.0;
-      const MAX_MANUAL_LABEL_SIZE = 120.0;
+      const MIN_MANUAL_LABEL_SIZE = 1.0;
+      const MAX_MANUAL_LABEL_SIZE = 180.0;
       const MAX_MANUAL_LABEL_TEXT_LENGTH = 80;
       let volumeJitterTexture = null;
       let legendState = {};
@@ -7080,6 +7876,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let activeManualLabelId = "";
       let manualLabelDraftText = "";
       let manualLabelDraftSize = DEFAULT_MANUAL_LABEL_SIZE;
+      let manualLabelDraftColor = DEFAULT_MANUAL_LABEL_COLOR;
+      let manualLabelPlacementArmed = false;
       let manualLabelPointerState = null;
       let manualLabelIdCounter = 0;
       let globalPointSizeScale = 1.0;
@@ -9898,6 +10696,32 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         // exported runtime creates exactly one fresh, interactive copy.
         const exportDocumentElement = document.documentElement.cloneNode(true);
         exportDocumentElement.querySelectorAll(".oviz-states-shell").forEach((element) => element.remove());
+        const exportRoot = exportDocumentElement.querySelector(`#${root.id}`);
+        if (exportRoot) {
+          exportRoot.dataset.presentationMode = "false";
+          exportRoot.dataset.deckPresenting = "false";
+          exportRoot.dataset.deckEditing = "false";
+        }
+        const exportDeckEditor = exportDocumentElement.querySelector(".oviz-deck-editor");
+        if (exportDeckEditor) {
+          exportDeckEditor.innerHTML = "";
+          exportDeckEditor.dataset.open = "false";
+          exportDeckEditor.setAttribute("aria-hidden", "true");
+        }
+        const exportDeckAuthoring = exportDocumentElement.querySelector(".oviz-deck-authoring-layer");
+        if (exportDeckAuthoring) {
+          exportDeckAuthoring.innerHTML = "";
+          exportDeckAuthoring.dataset.visible = "false";
+          exportDeckAuthoring.setAttribute("aria-hidden", "true");
+        }
+        const exportDeckReveal = exportDocumentElement.querySelector(".oviz-deck-reveal");
+        if (exportDeckReveal) {
+          exportDeckReveal.innerHTML = '<div class="slides"></div>';
+          exportDeckReveal.className = "reveal oviz-deck-reveal";
+          exportDeckReveal.removeAttribute("style");
+          exportDeckReveal.dataset.visible = "false";
+          exportDeckReveal.setAttribute("aria-hidden", "true");
+        }
         const currentHtml = removeExistingSceneSpecPayloadHtml(
           "<!DOCTYPE html>\\n" + exportDocumentElement.outerHTML
         );
@@ -15761,7 +16585,6 @@ __SKY_RUNTIME_JS__
           return textTextureCache.get(cacheKey);
         }
         const fontSize = Math.max(10, size ?? 12);
-        const resolutionScale = Math.max(3.0, Math.min((window.devicePixelRatio || 1.0) * boost, 8.0));
         const canvasEl = document.createElement("canvas");
         const ctx = canvasEl.getContext("2d");
         ctx.font = `${fontSize}px ${family ?? "Helvetica"}`;
@@ -15770,6 +16593,22 @@ __SKY_RUNTIME_JS__
         const paddingY = 12;
         const logicalWidth = Math.max(4, Math.ceil(metrics.width + 2 * paddingX));
         const logicalHeight = Math.max(4, Math.ceil(fontSize + 2 * paddingY));
+        const requestedResolutionScale = Math.max(
+          3.0,
+          Math.min((window.devicePixelRatio || 1.0) * boost, 16.0),
+        );
+        const maxTextureSize = Math.max(
+          Number(renderer && renderer.capabilities && renderer.capabilities.maxTextureSize) || 4096,
+          256,
+        );
+        const resolutionScale = Math.max(
+          1.0,
+          Math.min(
+            requestedResolutionScale,
+            maxTextureSize / logicalWidth,
+            maxTextureSize / logicalHeight,
+          ),
+        );
         canvasEl.width = Math.max(4, Math.ceil(logicalWidth * resolutionScale));
         canvasEl.height = Math.max(4, Math.ceil(logicalHeight * resolutionScale));
         const drawCtx = canvasEl.getContext("2d");
@@ -15818,7 +16657,7 @@ __SKY_RUNTIME_JS__
         sprite.scale.set(baseScale * aspect * 120.0 * sizeScale, baseScale * 120.0 * sizeScale, 1.0);
         if (options.screenStable) {
           sprite.userData.screenStable = {
-            pixelHeight: Math.max(Number(options.screenPixels) || 12.0, 6.0),
+            pixelHeight: Math.max(Number(options.screenPixels) || 12.0, 1.0),
             scaleMultiplier: Math.max(Number(options.screenScaleMultiplier) || 1.0, 0.1),
           };
         }
@@ -15835,7 +16674,7 @@ __SKY_RUNTIME_JS__
         }
         const texture = sprite.material.map;
         const aspect = texture.userData.width / Math.max(texture.userData.height, 1);
-        const pixelHeight = Math.max(Number(settings.pixelHeight) || 12.0, 6.0);
+        const pixelHeight = Math.max(Number(settings.pixelHeight) || 12.0, 1.0);
         const scaleMultiplier = Math.max(Number(settings.scaleMultiplier) || 1.0, 0.1);
         let worldHeight = 0.0;
 
@@ -17354,13 +18193,14 @@ __SKY_RUNTIME_JS__
         }
         const group = new THREE.Group();
         labels.forEach((label, index) => {
-          if (!label || !label.text) {
+          if (!label || !label.text || label.visible === false) {
             return;
           }
           const sprite = makeTextSprite(label.text, {
-            color: theme.axis_color || "#808080",
+            color: sanitizeManualLabelColor(label.color, manualLabelDefaultColor()),
             size: label.size ?? DEFAULT_MANUAL_LABEL_SIZE,
             family: "Helvetica",
+            textureScale: 6.0,
             screenStable: true,
             screenPixels: clampManualLabelSize(label.size ?? DEFAULT_MANUAL_LABEL_SIZE),
           });
@@ -17368,6 +18208,7 @@ __SKY_RUNTIME_JS__
           sprite.material.opacity = opacityScale;
           sprite.position.set(label.x, label.y, label.z);
           sprite.userData = {
+            ...sprite.userData,
             hovertext: `<strong>${escapeHtml(label.text)}</strong><br/>Drag to reposition`,
             manualLabelId: String(label.id || `manual-label-${index + 1}`),
             ovizRetainedManualLabel: { label },
@@ -18459,6 +19300,9 @@ __VIEWER_RUNTIME_JS__
           ovizSearchActiveIndex = -1;
           return;
         }
+        if (typeof setManualLabelMenuOpen === "function") {
+          setManualLabelMenuOpen(false);
+        }
         syncOvizSearchMode();
         renderOvizSearchResults(searchInputEl.value);
         if (!options || options.focus !== false) {
@@ -19450,6 +20294,13 @@ __STATE_RUNTIME_JS__
             renderFrame(currentFrameIndex);
           });
         });
+        if (manualLabelToggleEl && manualLabelShellEl) {
+          manualLabelToggleEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setManualLabelMenuOpen(manualLabelShellEl.dataset.open !== "true");
+          });
+        }
         if (manualLabelSelectEl) {
           manualLabelSelectEl.addEventListener("change", () => {
             activeManualLabelId = String(manualLabelSelectEl.value || "");
@@ -19461,26 +20312,93 @@ __STATE_RUNTIME_JS__
         if (manualLabelTextEl) {
           manualLabelTextEl.addEventListener("input", () => {
             manualLabelDraftText = String(manualLabelTextEl.value || "").slice(0, MAX_MANUAL_LABEL_TEXT_LENGTH);
+            const selectedLabel = activeManualLabel();
+            const liveText = sanitizeManualLabelText(manualLabelDraftText);
+            if (selectedLabel && liveText) {
+              selectedLabel.text = liveText;
+              const selectedOption = manualLabelSelectEl && manualLabelSelectEl.selectedOptions
+                ? manualLabelSelectEl.selectedOptions[0]
+                : null;
+              const selectedIndex = manualLabels.indexOf(selectedLabel);
+              if (selectedOption && selectedIndex >= 0) {
+                selectedOption.textContent = `${selectedIndex + 1}. ${liveText}`;
+              }
+              updateManualLabelInstrumentation(selectedLabel);
+              renderFrame(currentFrameIndex);
+            }
           });
         }
         if (manualLabelSizeEl) {
           manualLabelSizeEl.addEventListener("input", () => {
             manualLabelDraftSize = clampManualLabelSize(manualLabelSizeEl.value);
+            if (manualLabelSizeReadoutEl) {
+              manualLabelSizeReadoutEl.textContent = `${formatManualLabelSize(manualLabelDraftSize)} px`;
+            }
+            const selectedLabel = activeManualLabel();
+            if (selectedLabel) {
+              selectedLabel.size = manualLabelDraftSize;
+              updateManualLabelInstrumentation(selectedLabel);
+              renderFrame(currentFrameIndex);
+            }
           });
           manualLabelSizeEl.addEventListener("change", () => {
             manualLabelDraftSize = clampManualLabelSize(manualLabelSizeEl.value);
             renderManualLabelControls();
           });
         }
+        if (manualLabelColorEl) {
+          manualLabelColorEl.addEventListener("input", () => {
+            manualLabelDraftColor = sanitizeManualLabelColor(manualLabelColorEl.value, manualLabelDefaultColor());
+            const selectedLabel = activeManualLabel();
+            if (selectedLabel) {
+              selectedLabel.color = manualLabelDraftColor;
+              updateManualLabelInstrumentation(selectedLabel);
+              renderFrame(currentFrameIndex);
+            }
+          });
+        }
+        const bindManualLabelCoordinate = (inputEl, coordinateKey) => {
+          if (!inputEl) return;
+          inputEl.addEventListener("input", () => {
+            const selectedLabel = activeManualLabel();
+            const value = Number(inputEl.value);
+            if (!selectedLabel || !Number.isFinite(value)) return;
+            selectedLabel[coordinateKey] = value;
+            updateManualLabelInstrumentation(selectedLabel);
+            renderFrame(currentFrameIndex);
+          });
+          inputEl.addEventListener("change", () => renderManualLabelControls());
+        };
+        bindManualLabelCoordinate(manualLabelXEl, "x");
+        bindManualLabelCoordinate(manualLabelYEl, "y");
+        bindManualLabelCoordinate(manualLabelZEl, "z");
         if (manualLabelAddButtonEl) {
           manualLabelAddButtonEl.addEventListener("click", () => {
             addManualLabelFromDraft();
             focusViewer();
           });
         }
+        if (manualLabelPlaceButtonEl) {
+          manualLabelPlaceButtonEl.addEventListener("click", () => {
+            setManualLabelPlacementArmed(!manualLabelPlacementArmed);
+            focusViewer();
+          });
+        }
         if (manualLabelApplyButtonEl) {
           manualLabelApplyButtonEl.addEventListener("click", () => {
             applyManualLabelDraftToSelection();
+            focusViewer();
+          });
+        }
+        if (manualLabelVisibilityButtonEl) {
+          manualLabelVisibilityButtonEl.addEventListener("click", () => {
+            toggleActiveManualLabelVisibility();
+            focusViewer();
+          });
+        }
+        if (manualLabelMoveButtonEl) {
+          manualLabelMoveButtonEl.addEventListener("click", () => {
+            moveActiveManualLabelToCurrentTarget();
             focusViewer();
           });
         }
@@ -19594,6 +20512,13 @@ __STATE_RUNTIME_JS__
         canvasPointerDownInfo = event.button === 0
           ? { x: Number(event.clientX), y: Number(event.clientY), button: event.button, pointerType: event.pointerType || "", pointerId: event.pointerId }
           : null;
+        if (manualLabelPlacementArmed && event.button === 0) {
+          placeManualLabelFromCanvasEvent(event);
+          suppressNextCanvasClick = true;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (startSkyViewTouchPinch(event)) {
           return;
         }
@@ -19642,6 +20567,9 @@ __STATE_RUNTIME_JS__
           }
           if (controlsShellEl && controlsShellEl.dataset.open === "true" && !controlsShellEl.contains(target)) {
             setControlsDrawerOpen(false);
+          }
+          if (manualLabelShellEl && manualLabelShellEl.dataset.open === "true" && !manualLabelShellEl.contains(target)) {
+            setManualLabelMenuOpen(false);
           }
           if (
             skyControlsShellEl
@@ -19773,7 +20701,12 @@ __STATE_RUNTIME_JS__
       setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);
       initialActionViewState = captureCurrentActionViewState();
       syncActionButtons();
-      initializeOvizStates().catch((err) => {
+      initializeOvizStates().then(() => {
+        initializeOvizDeck().catch((err) => {
+          if (root && root.dataset) root.dataset.deckReady = "error";
+          console.error("Oviz Deck initialization failed", err);
+        });
+      }).catch((err) => {
         if (root && root.dataset) {
           root.dataset.statesReady = "error";
         }
@@ -19832,6 +20765,7 @@ class ThreeJSFigure:
             self.scene_spec.get("states"),
             project_id=default_states_project_id(self.scene_spec),
         )
+        self.scene_spec["deck"] = normalize_deck_spec(self.scene_spec.get("deck"))
         self._root_id = f"oviz-three-{uuid.uuid4().hex}"
         self.compress_scene_spec = compress_scene_spec
         self.scene_spec_compression_threshold_bytes = (
@@ -19849,11 +20783,16 @@ class ThreeJSFigure:
         compress_scene_spec: bool | str | None = None,
         scene_spec_compression_threshold_bytes: int | None = None,
     ) -> str:
+        deck_available = bool(self.scene_spec.get("deck", {}).get("available", True))
+        topbar_html = _THREEJS_TOPBAR_HTML.replace(
+            "          __DECK_BUTTON_HTML__",
+            f"          {_THREEJS_DECK_BUTTON_HTML}" if deck_available else "",
+        )
         return render_threejs_html(
             self.scene_spec,
             root_id=self._root_id,
             html_template=_THREEJS_HTML_TEMPLATE,
-            topbar_html=_THREEJS_TOPBAR_HTML,
+            topbar_html=topbar_html,
             minimal_topbar_html=_THREEJS_MINIMAL_TOPBAR_HTML,
             ar_button_html=_THREEJS_AR_BUTTON_HTML,
             shell_html=THREEJS_SHELL_HTML,
@@ -19870,7 +20809,7 @@ class ThreeJSFigure:
                 + "\n\n"
                 + THREEJS_ACTION_RUNTIME_JS
             ),
-            state_runtime_js=THREEJS_STATE_RUNTIME_JS,
+            state_runtime_js=THREEJS_STATE_RUNTIME_JS + "\n\n" + THREEJS_DECK_RUNTIME_JS,
             compress_scene_spec=(
                 self.compress_scene_spec
                 if compress_scene_spec is None

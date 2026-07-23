@@ -417,6 +417,38 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
       }
 
+      function setManualLabelMenuOpen(isOpen) {
+        if (!manualLabelShellEl || !manualLabelToggleEl) {
+          return;
+        }
+        const nextOpen = !minimalModeEnabled && !mobileModeEnabled && Boolean(isOpen);
+        manualLabelShellEl.dataset.open = nextOpen ? "true" : "false";
+        manualLabelToggleEl.textContent = nextOpen ? "Text ▾" : "Text ▸";
+        setDrawerAccessibility(manualLabelShellEl, manualLabelToggleEl, ".oviz-three-text-drawer", nextOpen);
+        if (!nextOpen) {
+          return;
+        }
+        setToolsDrawerOpen(false);
+        setControlsDrawerOpen(false);
+        if (typeof setOvizSearchOpen === "function") setOvizSearchOpen(false);
+        const statesShellEl = root.querySelector(".oviz-states-shell");
+        if (statesShellEl) {
+          statesShellEl.dataset.open = "false";
+          const statesToggleEl = statesShellEl.querySelector(".oviz-states-toggle");
+          if (statesToggleEl) statesToggleEl.textContent = "States ▸";
+        }
+        if (typeof ovizDeckSetEditorOpen === "function") {
+          ovizDeckSetEditorOpen(false);
+        }
+        renderManualLabelControls();
+        window.setTimeout(() => {
+          if (manualLabelTextEl && manualLabelShellEl.dataset.open === "true") {
+            manualLabelTextEl.focus();
+            manualLabelTextEl.select();
+          }
+        }, 0);
+      }
+
       function setToolsDrawerOpen(isOpen) {
         if (!toolsShellEl || !toolsToggleEl) {
           return;
@@ -432,6 +464,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             setDrawerAccessibility(controlsShellEl, controlsToggleEl, ".oviz-three-controls-drawer", false);
           }
         }
+        if (nextOpen) setManualLabelMenuOpen(false);
       }
 
       function setControlsDrawerOpen(isOpen) {
@@ -449,6 +482,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             setDrawerAccessibility(toolsShellEl, toolsToggleEl, ".oviz-three-tools-drawer", false);
           }
         }
+        if (nextOpen) setManualLabelMenuOpen(false);
       }
 
       function setSkyAddPopoverOpen(isOpen) {
@@ -1195,6 +1229,44 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         return true;
       }
 
+      function placeManualLabelFromCanvasEvent(event) {
+        if (!manualLabelPlacementArmed || event.button !== 0) return false;
+        const hitObject = pickSprite(event);
+        const worldPoint = new THREE.Vector3();
+        let positioned = false;
+        if (hitObject && !(hitObject.userData && hitObject.userData.manualLabelId)) {
+          hitObject.getWorldPosition(worldPoint);
+          positioned = true;
+        }
+        if (!positioned) {
+          const cameraDirection = new THREE.Vector3();
+          camera.getWorldDirection(cameraDirection);
+          if (cameraDirection.lengthSq() <= 1e-12) cameraDirection.set(0.0, 0.0, -1.0);
+          cameraDirection.normalize();
+          const placementPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+            cameraDirection,
+            controls.target,
+          );
+          positioned = Boolean(pointerRayFromEvent(event).intersectPlane(placementPlane, worldPoint));
+        }
+        if (positioned) {
+          const localPoint = worldPoint.clone().sub(plotGroup.position);
+          const selectedLabel = activeManualLabel();
+          if (selectedLabel) {
+            selectedLabel.x = localPoint.x;
+            selectedLabel.y = localPoint.y;
+            selectedLabel.z = localPoint.z;
+            updateManualLabelInstrumentation(selectedLabel);
+          } else {
+            addManualLabelAtScenePosition(localPoint);
+          }
+          renderManualLabelControls();
+          renderFrame(currentFrameIndex);
+        }
+        setManualLabelPlacementArmed(false);
+        return positioned;
+      }
+
       function onCanvasClick(event) {
         if (suppressNextCanvasClick) {
           suppressNextCanvasClick = false;
@@ -1206,6 +1278,11 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           return;
         }
         canvasPointerDownInfo = null;
+        if (manualLabelPlacementArmed && event.button === 0) {
+          placeManualLabelFromCanvasEvent(event);
+          event.preventDefault();
+          return;
+        }
         if (minimalModeEnabled || widgetPointerState || lassoState || event.button !== 0) {
           hideClusterInfoTooltip();
           setLocalHoveredClusterKey("");

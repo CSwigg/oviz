@@ -18,6 +18,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
       let ovizStateControllerReady = false;
       let ovizStateTransition = null;
       let ovizStateTransitionSerial = 0;
+      let ovizPresentationStateNavigationQueue = Promise.resolve({ idle: true });
+      let ovizPresentationStateNavigationGeneration = 0;
+      let ovizPresentationStateNavigationPending = 0;
       let ovizStateTransitionTraceOpacity = null;
       let ovizStateSelectionTransition = null;
       let ovizHeldSelectionTransition = null;
@@ -404,6 +407,16 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const position = savedCamera.position || {};
         const target = savedCamera.target || {};
         const up = savedCamera.up || {};
+        // OrbitControls keeps private damping deltas even while a State
+        // transition owns the camera. Calling update() after restoring the
+        // saved pose applies those stale deltas and moves the camera away from
+        // the exact endpoint. Drain them against the disposable live pose,
+        // then restore the captured pose without another controls update.
+        const dampingWasEnabled = Boolean(controls.enableDamping);
+        controls.autoRotate = false;
+        controls.enableDamping = false;
+        controls.update();
+        controls.enableDamping = dampingWasEnabled;
         if ([position.x, position.y, position.z].every((value) => Number.isFinite(Number(value)))) {
           camera.position.set(Number(position.x), Number(position.y), Number(position.z));
         }
@@ -421,7 +434,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
         camera.updateProjectionMatrix();
         camera.lookAt(controls.target);
         camera.updateMatrixWorld(true);
-        controls.update();
       }
 
       function ovizStateFidelityDifferences(expected, actual, path = "state", differences = []) {
@@ -468,6 +480,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const targetOrbitEnabled = Boolean(
           hydrated.global_controls && hydrated.global_controls.camera_auto_orbit_enabled
         );
+        // Disable physical motion before any camera restoration. OrbitControls
+        // update() is called by the synchronous apply path; if autoRotate is
+        // still armed from the previous state, that update moves the freshly
+        // restored camera and makes fidelity fail nondeterministically.
+        playbackDirection = 0;
+        lastPlaybackAdvanceTimestamp = null;
+        setCameraAutoOrbitEnabled(false);
         applyViewerStateSyncInternal(hydrated, options);
         playbackDirection = 0;
         lastPlaybackAdvanceTimestamp = null;
@@ -512,6 +531,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
           playbackDirection = targetPlaybackDirection;
           lastPlaybackAdvanceTimestamp = null;
           setCameraAutoOrbitEnabled(targetOrbitEnabled);
+          if (options.deferMotionActivation === true && controls) {
+            // Preserve the saved logical motion state for fidelity while the
+            // transition still owns the camera and timeline. OrbitControls'
+            // autoRotate flag is the only part that must remain physically
+            // paused until the exact target frame has been validated.
+            controls.autoRotate = false;
+          }
           updatePlaybackButtons();
           updateTimelineMotionOpacity();
           return captureRuntimeState();
@@ -1546,6 +1572,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           longFrameCount: 0,
           resolve: resolvePromise,
           reject: rejectPromise,
+          promise,
         };
         if (root && root.dataset) {
           root.dataset.stateTransitionKind = viewTransitionKind;
@@ -2068,6 +2095,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             forceSkyBackground: false,
             postSkyLayersToAladin: false,
             runtimeLassoMask: transition.targetRuntimeLassoMask,
+            deferMotionActivation: true,
           });
           if (transition !== ovizStateTransition) {
             return;
@@ -2093,6 +2121,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
               forceSkyBackground: false,
               postSkyLayersToAladin: false,
               runtimeLassoMask: transition.targetRuntimeLassoMask,
+              deferMotionActivation: true,
             });
             if (transition !== ovizStateTransition) {
               return;
@@ -2128,6 +2157,14 @@ THREEJS_STATE_RUNTIME_JS = r"""
             return;
           }
           ovizStateTransition = null;
+          // The exact state is now committed and validated. Resume the saved
+          // playback/orbit only after the transition has released ownership,
+          // so motion cannot invalidate the fidelity frame or stop a queued
+          // presentation sequence.
+          syncCameraAutoOrbitMode();
+          syncCameraAutoOrbitUi();
+          lastPlaybackAdvanceTimestamp = null;
+          updatePlaybackButtons();
           if (finishedSelectionTransition) {
             const finishedMasks = new Set([
               finishedSelectionTransition.fromMask,
@@ -2269,6 +2306,103 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return activeIndex === 0 ? ovizGoToState("original") : ovizGoToState(activeIndex);
       }
 
+      function ovizSyncPresentationStateNavigationDiagnostics() {
+        if (!root || !root.dataset) return;
+        root.dataset.presentationStatePending = String(
+          Math.max(0, ovizPresentationStateNavigationPending)
+        );
+        root.dataset.presentationStateQueueGeneration = String(
+          ovizPresentationStateNavigationGeneration
+        );
+      }
+
+      function ovizResetPresentationStateNavigationQueue(reason = "mode-change") {
+        ovizPresentationStateNavigationGeneration += 1;
+        ovizPresentationStateNavigationPending = 0;
+        ovizPresentationStateNavigationQueue = Promise.resolve({
+          cancelled: true,
+          reason,
+        });
+        ovizSyncPresentationStateNavigationDiagnostics();
+      }
+
+      function ovizWaitForStatesControllerReady() {
+        if (ovizStateControllerReady) return Promise.resolve(true);
+        return new Promise((resolve, reject) => {
+          let settled = false;
+          const finish = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeoutId);
+            root.removeEventListener("states-ready", onReady);
+            callback(value);
+          };
+          const onReady = () => finish(resolve, true);
+          const timeoutId = window.setTimeout(() => {
+            finish(reject, new Error("Oviz States controller did not become ready for presentation."));
+          }, 30000);
+          root.addEventListener("states-ready", onReady, { once: true });
+          // Initialization may have completed between the first readiness
+          // check and listener installation.
+          if (ovizStateControllerReady) finish(resolve, true);
+        });
+      }
+
+      function ovizQueuePresentationStateNavigation(direction) {
+        const requestedDirection = Number(direction) < 0 ? -1 : 1;
+        const generation = ovizPresentationStateNavigationGeneration;
+        ovizPresentationStateNavigationPending += 1;
+        ovizSyncPresentationStateNavigationDiagnostics();
+        const queued = ovizPresentationStateNavigationQueue
+          .catch(() => ({ recovered: true }))
+          .then(async () => {
+            if (generation !== ovizPresentationStateNavigationGeneration) {
+              return { cancelled: true, reason: "presentation-queue-reset" };
+            }
+            await ovizWaitForStatesControllerReady();
+            if (generation !== ovizPresentationStateNavigationGeneration) {
+              return { cancelled: true, reason: "presentation-queue-reset" };
+            }
+            const activeTransition = ovizStateTransition;
+            if (activeTransition && activeTransition.promise) {
+              await activeTransition.promise;
+            }
+            if (generation !== ovizPresentationStateNavigationGeneration) {
+              return { cancelled: true, reason: "presentation-queue-reset" };
+            }
+            const stateCount = ovizStatesProject && Array.isArray(ovizStatesProject.items)
+              ? ovizStatesProject.items.length
+              : 0;
+            if (!stateCount) return { boundary: true, id: null };
+            const activeIndex = ovizActiveStateId === null
+              ? -1
+              : ovizStatesProject.items.findIndex((item) => item.id === ovizActiveStateId);
+            const targetIndex = requestedDirection > 0
+              ? (activeIndex < 0 ? 0 : (activeIndex + 1) % stateCount)
+              : (activeIndex < 0 ? stateCount - 1 : (activeIndex - 1 + stateCount) % stateCount);
+            return ovizGoToState(targetIndex + 1);
+          })
+          .finally(() => {
+            if (generation === ovizPresentationStateNavigationGeneration) {
+              ovizPresentationStateNavigationPending = Math.max(
+                0,
+                ovizPresentationStateNavigationPending - 1,
+              );
+              ovizSyncPresentationStateNavigationDiagnostics();
+            }
+          });
+        ovizPresentationStateNavigationQueue = queued;
+        return queued;
+      }
+
+      function ovizStatesPresentationNext() {
+        return ovizQueuePresentationStateNavigation(1);
+      }
+
+      function ovizStatesPresentationPrevious() {
+        return ovizQueuePresentationStateNavigation(-1);
+      }
+
       function ovizAssertEditable() {
         if (ovizStatesMode !== "edit") {
           throw new Error("Switch Oviz States to Edit mode first.");
@@ -2386,7 +2520,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
       }
 
       function ovizDefaultStatesExportFilename() {
-        return slugifyFilename(sceneSpec.title || "oviz") + "-states.html";
+        const hasDeck = typeof ovizDeckHasSlides === "function" && ovizDeckHasSlides();
+        return slugifyFilename(sceneSpec.title || "oviz") + (hasDeck ? "-presentation.html" : "-states.html");
       }
 
       function ovizNormalizeStatesExportFilename(value) {
@@ -2418,6 +2553,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const exportSceneSpec = safeJsonClone(sceneSpec, {});
         exportSceneSpec.initial_state = ovizStatesClone(ovizOriginalSceneInitialState, {});
         exportSceneSpec.states = compact;
+        if (typeof ovizDeckExportSpec === "function") {
+          exportSceneSpec.deck = ovizDeckExportSpec({ embedded: true });
+        }
         exportSceneSpec.width = Math.max(root.clientWidth || sceneSpec.width || 900, 1);
         exportSceneSpec.height = Math.max(root.clientHeight || sceneSpec.height || 700, 1);
         const html = await buildExportHtml(exportSceneSpec);
@@ -2426,8 +2564,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
         if (result.saved) {
           ovizStatesProject.synchronized_revision = ovizStatesProject.revision;
           ovizStateDirty = false;
+          if (typeof ovizDeckDirty !== "undefined") ovizDeckDirty = false;
           await ovizSaveDraftNow();
           ovizRenderStatesDrawer();
+          if (typeof ovizDeckRenderEditor === "function") ovizDeckRenderEditor();
         }
         return result;
       }
@@ -2598,6 +2738,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
         ovizStatesShellEl.dataset.open = "false";
         const toggle = ovizMakeButton("States ▸", () => {
           const open = ovizStatesShellEl.dataset.open !== "true";
+          if (open && typeof ovizDeckSetEditorOpen === "function") ovizDeckSetEditorOpen(false);
+          if (open && typeof setManualLabelMenuOpen === "function") setManualLabelMenuOpen(false);
           ovizStatesShellEl.dataset.open = open ? "true" : "false";
           toggle.textContent = open ? "States ▾" : "States ▸";
         }, "oviz-states-toggle");
@@ -2611,6 +2753,14 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       function ovizRenderStatesDrawer() {
         if (!ovizStatesDrawerEl || !ovizStatesProject) return;
+        if (root && root.dataset) {
+          const activeIndex = ovizActiveStateId === null
+            ? -1
+            : ovizStatesProject.items.findIndex((item) => item.id === ovizActiveStateId);
+          root.dataset.activeStateId = ovizActiveStateId || "original";
+          root.dataset.activeStatePosition = String(Math.max(activeIndex + 1, 0));
+          root.dataset.presentationStateCount = String(ovizStatesProject.items.length);
+        }
         ovizStatesDrawerEl.className = `oviz-states-drawer oviz-states-mode-${ovizStatesMode}`;
         ovizStatesDrawerEl.innerHTML = "";
         const head = document.createElement("div"); head.className = "oviz-states-head";

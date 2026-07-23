@@ -19,6 +19,135 @@ from oviz.threejs_scene import _round_scene_floats
 
 class ThreeJSStatesSchemaTests(unittest.TestCase):
     @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_state_only_presentation_navigation_cycles_authored_states(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        cycle_source = (
+            "function ovizSyncPresentationStateNavigationDiagnostics()"
+            + html.split("function ovizSyncPresentationStateNavigationDiagnostics()", 1)[1].split(
+                "function ovizAssertEditable", 1
+            )[0]
+        )
+        script = f"""
+        let ovizStatesProject = {{ items: [{{ id: "state-1" }}, {{ id: "state-2" }}] }};
+        let ovizActiveStateId = null;
+        let ovizStateTransition = null;
+        let ovizStateControllerReady = true;
+        let ovizPresentationStateNavigationQueue = Promise.resolve({{ idle: true }});
+        let ovizPresentationStateNavigationGeneration = 0;
+        let ovizPresentationStateNavigationPending = 0;
+        const root = {{ dataset: {{}} }};
+        const visited = [];
+        function ovizGoToState(target) {{
+          if (target === "original") ovizActiveStateId = null;
+          else ovizActiveStateId = ovizStatesProject.items[Number(target) - 1].id;
+          visited.push(target);
+          return Promise.resolve(target);
+        }}
+        {cycle_source}
+        (async () => {{
+          await ovizStatesPresentationNext();
+          await ovizStatesPresentationNext();
+          await ovizStatesPresentationNext();
+          await ovizStatesPresentationPrevious();
+          await ovizStatesPresentationPrevious();
+          await ovizStatesPresentationPrevious();
+          process.stdout.write(JSON.stringify(visited));
+        }})().catch((error) => {{ throw error; }});
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+
+        self.assertEqual(json.loads(result.stdout), [1, 2, 1, 2, 1, 2])
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_state_only_presentation_navigation_waits_for_ready_and_serializes_rapid_taps(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        cycle_source = (
+            "function ovizSyncPresentationStateNavigationDiagnostics()"
+            + html.split("function ovizSyncPresentationStateNavigationDiagnostics()", 1)[1].split(
+                "function ovizAssertEditable", 1
+            )[0]
+        )
+        script = f"""
+        let ovizStatesProject = {{ items: [
+          {{ id: "state-1" }}, {{ id: "state-2" }}, {{ id: "state-3" }}
+        ] }};
+        let ovizActiveStateId = null;
+        let ovizStateTransition = null;
+        let ovizStateControllerReady = false;
+        let ovizPresentationStateNavigationQueue = Promise.resolve({{ idle: true }});
+        let ovizPresentationStateNavigationGeneration = 0;
+        let ovizPresentationStateNavigationPending = 0;
+        const root = new EventTarget();
+        root.dataset = {{}};
+        const window = {{
+          setTimeout: globalThis.setTimeout,
+          clearTimeout: globalThis.clearTimeout,
+        }};
+        const visited = [];
+        let inFlight = 0;
+        let maxInFlight = 0;
+        function ovizGoToState(target) {{
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          visited.push(target);
+          const promise = new Promise((resolve) => globalThis.setTimeout(() => {{
+            ovizActiveStateId = ovizStatesProject.items[Number(target) - 1].id;
+            ovizStateTransition = null;
+            inFlight -= 1;
+            resolve(target);
+          }}, 5));
+          ovizStateTransition = {{ targetIndex: Number(target) - 1, promise }};
+          return promise;
+        }}
+        {cycle_source}
+        (async () => {{
+          const first = ovizStatesPresentationNext();
+          const second = ovizStatesPresentationNext();
+          const third = ovizStatesPresentationNext();
+          globalThis.setTimeout(() => {{
+            ovizStateControllerReady = true;
+            root.dispatchEvent(new Event("states-ready"));
+          }}, 5);
+          await Promise.all([first, second, third]);
+          process.stdout.write(JSON.stringify({{
+            visited,
+            maxInFlight,
+            active: ovizActiveStateId,
+            pending: ovizPresentationStateNavigationPending,
+          }}));
+        }})().catch((error) => {{ throw error; }});
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertEqual(payload["visited"], [1, 2, 3])
+        self.assertEqual(payload["maxInFlight"], 1)
+        self.assertEqual(payload["active"], "state-3")
+        self.assertEqual(payload["pending"], 0)
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
     def test_exact_state_restore_preserves_captured_legend_panel_geometry(self):
         html = ThreeJSFigure({
             "width": 640,
@@ -555,6 +684,56 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             exact_apply,
         )
         self.assertIn("ovizRenderedSceneFidelityDifferences", finish_body)
+
+    def test_exact_state_completion_defers_saved_motion_until_after_fidelity(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        apply_body = html.split(
+            "function ovizApplyStateImmediately(snapshot, options = {})", 1
+        )[1].split("function ovizPointFrom", 1)[0]
+        finish_body = html.split(
+            "async function ovizFinishStateTransition(transition)", 1
+        )[1].split("function ovizFailStateTransition", 1)[0]
+
+        self.assertLess(
+            apply_body.index("setCameraAutoOrbitEnabled(false);"),
+            apply_body.index("applyViewerStateSyncInternal(hydrated, options);"),
+        )
+        self.assertIn("options.deferMotionActivation === true", apply_body)
+        self.assertEqual(finish_body.count("deferMotionActivation: true"), 2)
+        self.assertLess(
+            finish_body.index("ovizStateTransition = null;"),
+            finish_body.index("syncCameraAutoOrbitMode();"),
+        )
+        self.assertLess(
+            finish_body.index("State fidelity check failed"),
+            finish_body.index("syncCameraAutoOrbitMode();"),
+        )
+
+    def test_exact_camera_restore_drains_orbit_damping_before_saved_pose(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        helper = html.split(
+            "function ovizApplyCapturedCameraState(snapshot)", 1
+        )[1].split("function ovizStateFidelityDifferences", 1)[0]
+
+        drain_index = helper.index("controls.enableDamping = false;")
+        update_index = helper.index("controls.update();", drain_index)
+        restore_index = helper.index("camera.position.set", update_index)
+        matrix_index = helper.index("camera.updateMatrixWorld(true);", restore_index)
+
+        self.assertLess(drain_index, update_index)
+        self.assertLess(update_index, restore_index)
+        self.assertLess(restore_index, matrix_index)
+        self.assertNotIn("controls.update();", helper[matrix_index:])
 
     def test_final_retained_target_is_painted_before_exact_restoration(self):
         html = ThreeJSFigure({

@@ -20,6 +20,23 @@ THREEJS_VIEWER_RUNTIME_JS = """
         return clampRange(value, MIN_MANUAL_LABEL_SIZE, MAX_MANUAL_LABEL_SIZE);
       }
 
+      function sanitizeManualLabelColor(value, fallback = DEFAULT_MANUAL_LABEL_COLOR) {
+        const text = String(value || "").trim().toLowerCase();
+        if (/^#[0-9a-f]{6}$/.test(text)) {
+          return text;
+        }
+        const shortMatch = text.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/);
+        if (shortMatch) {
+          return `#${shortMatch[1]}${shortMatch[1]}${shortMatch[2]}${shortMatch[2]}${shortMatch[3]}${shortMatch[3]}`;
+        }
+        const safeFallback = String(fallback || DEFAULT_MANUAL_LABEL_COLOR).trim().toLowerCase();
+        return /^#[0-9a-f]{6}$/.test(safeFallback) ? safeFallback : DEFAULT_MANUAL_LABEL_COLOR;
+      }
+
+      function manualLabelDefaultColor() {
+        return sanitizeManualLabelColor(theme && theme.axis_color, DEFAULT_MANUAL_LABEL_COLOR);
+      }
+
       function sanitizeManualLabelText(value) {
         return String(value ?? "")
           .replace(/\s+/g, " ")
@@ -62,6 +79,8 @@ THREEJS_VIEWER_RUNTIME_JS = """
           y: Number.isFinite(Number(rawLabel.y)) ? Number(rawLabel.y) : 0.0,
           z: Number.isFinite(Number(rawLabel.z)) ? Number(rawLabel.z) : 0.0,
           size: clampManualLabelSize(rawLabel.size ?? DEFAULT_MANUAL_LABEL_SIZE),
+          color: sanitizeManualLabelColor(rawLabel.color, manualLabelDefaultColor()),
+          visible: rawLabel.visible !== false,
         };
       }
 
@@ -88,10 +107,12 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (selectedLabel) {
           manualLabelDraftText = String(selectedLabel.text || "");
           manualLabelDraftSize = clampManualLabelSize(selectedLabel.size);
+          manualLabelDraftColor = sanitizeManualLabelColor(selectedLabel.color, manualLabelDefaultColor());
           return;
         }
         manualLabelDraftText = "";
         manualLabelDraftSize = DEFAULT_MANUAL_LABEL_SIZE;
+        manualLabelDraftColor = manualLabelDefaultColor();
       }
 
       function loadManualLabels(labelState, preferredId = "") {
@@ -117,12 +138,60 @@ THREEJS_VIEWER_RUNTIME_JS = """
         return clampManualLabelSize(manualLabelDraftSize);
       }
 
+      function formatManualLabelSize(value) {
+        const numeric = clampManualLabelSize(value);
+        return numeric < 10.0
+          ? numeric.toFixed(1).replace(/\.0$/, "")
+          : String(Math.round(numeric));
+      }
+
+      function formatManualLabelCoordinate(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return "";
+        return numeric.toFixed(3).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+      }
+
+      function setManualLabelPlacementArmed(enabled) {
+        manualLabelPlacementArmed = Boolean(enabled) && !minimalModeEnabled && !mobileModeEnabled;
+        if (manualLabelPlaceButtonEl) {
+          manualLabelPlaceButtonEl.dataset.active = manualLabelPlacementArmed ? "true" : "false";
+          manualLabelPlaceButtonEl.setAttribute("aria-pressed", manualLabelPlacementArmed ? "true" : "false");
+          manualLabelPlaceButtonEl.textContent = manualLabelPlacementArmed ? "Click scene…" : "Place in scene";
+        }
+        if (canvas) {
+          canvas.style.cursor = manualLabelPlacementArmed ? "crosshair" : "";
+        }
+        if (root && root.dataset) {
+          root.dataset.manualLabelPlacement = manualLabelPlacementArmed ? "armed" : "idle";
+        }
+      }
+
+      function updateManualLabelInstrumentation(selectedLabel = activeManualLabel()) {
+        if (!root || !root.dataset) {
+          return;
+        }
+        root.dataset.manualLabelCount = String(manualLabels.length);
+        root.dataset.activeManualLabelId = selectedLabel ? String(selectedLabel.id || "") : "";
+        root.dataset.activeManualLabelStyle = selectedLabel
+          ? JSON.stringify({
+            text: selectedLabel.text,
+            size: selectedLabel.size,
+            color: selectedLabel.color,
+            visible: selectedLabel.visible !== false,
+            x: selectedLabel.x,
+            y: selectedLabel.y,
+            z: selectedLabel.z,
+          })
+          : "";
+      }
+
       function renderManualLabelControls() {
         if (!manualLabelSelectEl || !manualLabelTextEl || !manualLabelSizeEl) {
           return;
         }
         ensureActiveManualLabel();
         const selectedLabel = activeManualLabel();
+        updateManualLabelInstrumentation(selectedLabel);
 
         manualLabelSelectEl.innerHTML = "";
         const placeholder = document.createElement("option");
@@ -132,30 +201,56 @@ THREEJS_VIEWER_RUNTIME_JS = """
         manualLabels.forEach((label, index) => {
           const option = document.createElement("option");
           option.value = String(label.id || "");
-          option.textContent = `${index + 1}. ${String(label.text || manualLabelFallbackText(index + 1))}`;
+          const hiddenSuffix = label.visible === false ? " (hidden)" : "";
+          option.textContent = `${index + 1}. ${String(label.text || manualLabelFallbackText(index + 1))}${hiddenSuffix}`;
           manualLabelSelectEl.appendChild(option);
         });
         manualLabelSelectEl.disabled = manualLabels.length === 0;
         manualLabelSelectEl.value = selectedLabel ? String(selectedLabel.id || "") : "";
         manualLabelTextEl.value = String(manualLabelDraftText || "");
-        manualLabelSizeEl.value = String(Math.round(currentManualLabelDraftSize()));
+        manualLabelSizeEl.value = String(currentManualLabelDraftSize());
+        if (manualLabelSizeReadoutEl) {
+          manualLabelSizeReadoutEl.textContent = `${formatManualLabelSize(currentManualLabelDraftSize())} px`;
+        }
+        if (manualLabelColorEl) {
+          manualLabelColorEl.value = sanitizeManualLabelColor(manualLabelDraftColor, manualLabelDefaultColor());
+        }
         if (manualLabelApplyButtonEl) {
           manualLabelApplyButtonEl.disabled = !selectedLabel;
         }
         if (manualLabelDeleteButtonEl) {
           manualLabelDeleteButtonEl.disabled = !selectedLabel;
         }
+        if (manualLabelVisibilityButtonEl) {
+          const selectedVisible = Boolean(selectedLabel && selectedLabel.visible !== false);
+          manualLabelVisibilityButtonEl.disabled = !selectedLabel;
+          manualLabelVisibilityButtonEl.textContent = selectedVisible ? "Hide text" : "Show text";
+          manualLabelVisibilityButtonEl.setAttribute("aria-pressed", selectedVisible ? "true" : "false");
+          manualLabelVisibilityButtonEl.title = selectedVisible
+            ? "Hide this text from the scene"
+            : "Show this text in the scene";
+        }
+        if (manualLabelMoveButtonEl) {
+          manualLabelMoveButtonEl.disabled = !selectedLabel;
+        }
+        [manualLabelXEl, manualLabelYEl, manualLabelZEl].forEach((inputEl) => {
+          if (inputEl) inputEl.disabled = !selectedLabel;
+        });
+        if (manualLabelXEl) manualLabelXEl.value = selectedLabel ? formatManualLabelCoordinate(selectedLabel.x) : "";
+        if (manualLabelYEl) manualLabelYEl.value = selectedLabel ? formatManualLabelCoordinate(selectedLabel.y) : "";
+        if (manualLabelZEl) manualLabelZEl.value = selectedLabel ? formatManualLabelCoordinate(selectedLabel.z) : "";
+        setManualLabelPlacementArmed(manualLabelPlacementArmed);
         if (manualLabelReadoutEl) {
           if (selectedLabel) {
-            manualLabelReadoutEl.textContent = `Selected: ${selectedLabel.text} @ (${formatTick(selectedLabel.x)}, ${formatTick(selectedLabel.y)}, ${formatTick(selectedLabel.z)}) pc. Click and drag in the scene to reposition.`;
+            const visibilityText = selectedLabel.visible === false ? "Hidden" : "Visible";
+            manualLabelReadoutEl.textContent = `${visibilityText}: ${selectedLabel.text} @ (${formatTick(selectedLabel.x)}, ${formatTick(selectedLabel.y)}, ${formatTick(selectedLabel.z)}) pc. Click and drag in the scene to reposition.`;
           } else {
             manualLabelReadoutEl.textContent = "Add a label at the current camera target, then drag it in the scene.";
           }
         }
       }
 
-      function addManualLabelFromDraft() {
-        const position = manualLabelScenePositionFromCurrentTarget();
+      function addManualLabelAtScenePosition(position) {
         const nextLabel = {
           id: nextManualLabelId(),
           text: currentManualLabelDraftText(manualLabelFallbackText(manualLabels.length + 1)),
@@ -163,12 +258,19 @@ THREEJS_VIEWER_RUNTIME_JS = """
           y: Number.isFinite(position.y) ? position.y : 0.0,
           z: Number.isFinite(position.z) ? position.z : 0.0,
           size: currentManualLabelDraftSize(),
+          color: sanitizeManualLabelColor(manualLabelDraftColor, manualLabelDefaultColor()),
+          visible: true,
         };
         manualLabels.push(nextLabel);
         activeManualLabelId = nextLabel.id;
         syncManualLabelDraftFromSelection();
         renderManualLabelControls();
         renderFrame(currentFrameIndex);
+        return nextLabel;
+      }
+
+      function addManualLabelFromDraft() {
+        return addManualLabelAtScenePosition(manualLabelScenePositionFromCurrentTarget());
       }
 
       function applyManualLabelDraftToSelection() {
@@ -178,7 +280,31 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         selectedLabel.text = currentManualLabelDraftText(selectedLabel.text || manualLabelFallbackText(1));
         selectedLabel.size = currentManualLabelDraftSize();
+        selectedLabel.color = sanitizeManualLabelColor(manualLabelDraftColor, selectedLabel.color || manualLabelDefaultColor());
         syncManualLabelDraftFromSelection();
+        renderManualLabelControls();
+        renderFrame(currentFrameIndex);
+      }
+
+      function moveActiveManualLabelToCurrentTarget() {
+        const selectedLabel = activeManualLabel();
+        if (!selectedLabel) {
+          return;
+        }
+        const position = manualLabelScenePositionFromCurrentTarget();
+        selectedLabel.x = Number.isFinite(position.x) ? position.x : selectedLabel.x;
+        selectedLabel.y = Number.isFinite(position.y) ? position.y : selectedLabel.y;
+        selectedLabel.z = Number.isFinite(position.z) ? position.z : selectedLabel.z;
+        renderManualLabelControls();
+        renderFrame(currentFrameIndex);
+      }
+
+      function toggleActiveManualLabelVisibility() {
+        const selectedLabel = activeManualLabel();
+        if (!selectedLabel) {
+          return;
+        }
+        selectedLabel.visible = selectedLabel.visible === false;
         renderManualLabelControls();
         renderFrame(currentFrameIndex);
       }
@@ -1821,6 +1947,10 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         if (zenModeEnabled) {
           tooltipEl.style.display = "none";
+          setManualLabelPlacementArmed(false);
+          if (typeof setManualLabelMenuOpen === "function") {
+            setManualLabelMenuOpen(false);
+          }
           const statesShellEl = root.querySelector(".oviz-states-shell");
           if (statesShellEl) {
             statesShellEl.dataset.open = "false";
@@ -1844,7 +1974,17 @@ THREEJS_VIEWER_RUNTIME_JS = """
       }
 
       function setPresentationMode(enabled) {
-        presentationModeEnabled = Boolean(enabled);
+        const nextPresentationMode = Boolean(enabled);
+        const presentationModeChanged = presentationModeEnabled !== nextPresentationMode;
+        presentationModeEnabled = nextPresentationMode;
+        if (
+          presentationModeChanged
+          && typeof ovizResetPresentationStateNavigationQueue === "function"
+        ) {
+          ovizResetPresentationStateNavigationQueue(
+            presentationModeEnabled ? "presentation-start" : "presentation-end"
+          );
+        }
         root.dataset.presentationMode = presentationModeEnabled ? "true" : "false";
         if (presentationModeButtonEl) {
           presentationModeButtonEl.dataset.active = presentationModeEnabled ? "true" : "false";
@@ -1861,6 +2001,10 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
         if (presentationModeEnabled) {
           tooltipEl.style.display = "none";
+          setManualLabelPlacementArmed(false);
+          if (typeof setManualLabelMenuOpen === "function") {
+            setManualLabelMenuOpen(false);
+          }
           const statesShellEl = root.querySelector(".oviz-states-shell");
           if (statesShellEl) {
             statesShellEl.dataset.open = "false";
@@ -1885,6 +2029,11 @@ THREEJS_VIEWER_RUNTIME_JS = """
         root.dispatchEvent(new CustomEvent("presentation-mode-changed", {
           detail: { enabled: presentationModeEnabled },
         }));
+        if (typeof ovizDeckSetPresenting === "function") {
+          Promise.resolve(ovizDeckSetPresenting(presentationModeEnabled)).catch((error) => {
+            console.error("Oviz Reveal presentation failed.", error);
+          });
+        }
       }
 
       function ovizNativeFullscreenElement() {
@@ -2416,15 +2565,42 @@ THREEJS_VIEWER_RUNTIME_JS = """
           && !event.ctrlKey
           && !event.altKey
         );
-        if (keyboardTargetIsEditable(event.target) && !viewerModeShortcutFromButton) {
+        const historyShortcut = (
+          (event.metaKey || event.ctrlKey)
+          && !event.altKey
+          && (lowerKey === "z" || lowerKey === "y")
+        );
+        const deckTextEditing = Boolean(
+          event.target
+          && typeof event.target.closest === "function"
+          && event.target.closest(".oviz-deck-author-content")
+        );
+        const deckHistoryShortcut = Boolean(
+          historyShortcut
+          && !deckTextEditing
+          && root.dataset.deckEditing === "true"
+          && typeof ovizDeckHandleHistoryShortcut === "function"
+        );
+        if (keyboardTargetIsEditable(event.target) && !viewerModeShortcutFromButton && !deckHistoryShortcut) {
           return;
         }
-        if ((event.metaKey || event.ctrlKey) && !event.altKey && lowerKey === "z") {
-          const handled = undoSelectionState();
+        if (historyShortcut) {
+          const wantsRedo = lowerKey === "y" || (lowerKey === "z" && event.shiftKey);
+          const handled = deckHistoryShortcut
+            ? ovizDeckHandleHistoryShortcut(wantsRedo ? "redo" : "undo")
+            : (!wantsRedo && lowerKey === "z" ? undoSelectionState() : false);
           if (handled) {
             clearPressedKeys();
             event.preventDefault();
           }
+          return;
+        }
+        if (
+          root.dataset.deckEditing === "true"
+          && typeof ovizDeckHandleObjectShortcut === "function"
+          && ovizDeckHandleObjectShortcut(event)
+        ) {
+          clearPressedKeys();
           return;
         }
         if (event.metaKey || event.ctrlKey || event.altKey) {
@@ -2474,6 +2650,16 @@ THREEJS_VIEWER_RUNTIME_JS = """
 
         if (key === "Escape") {
           clearPressedKeys();
+          if (manualLabelPlacementArmed) {
+            setManualLabelPlacementArmed(false);
+            event.preventDefault();
+            return;
+          }
+          if (presentationModeEnabled) {
+            setPresentationMode(false);
+            event.preventDefault();
+            return;
+          }
           if (activeLegendEditorKey) {
             closeLegendPopover();
             renderLegend();
@@ -2500,8 +2686,13 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (key === "ArrowLeft") {
           if (presentationModeEnabled) {
             if (!event.repeat) {
-              Promise.resolve(ovizStatesPrevious()).catch((error) => {
-                console.error("Presentation State navigation failed.", error);
+              const navigation = (
+                typeof ovizDeckIsPresenting === "function"
+                && ovizDeckIsPresenting()
+                && typeof ovizDeckPrevious === "function"
+              ) ? ovizDeckPrevious() : ovizStatesPresentationPrevious();
+              Promise.resolve(navigation).catch((error) => {
+                console.error("Presentation navigation failed.", error);
               });
             }
           } else {
@@ -2513,8 +2704,13 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (key === "ArrowRight") {
           if (presentationModeEnabled) {
             if (!event.repeat) {
-              Promise.resolve(ovizStatesNext()).catch((error) => {
-                console.error("Presentation State navigation failed.", error);
+              const navigation = (
+                typeof ovizDeckIsPresenting === "function"
+                && ovizDeckIsPresenting()
+                && typeof ovizDeckNext === "function"
+              ) ? ovizDeckNext() : ovizStatesPresentationNext();
+              Promise.resolve(navigation).catch((error) => {
+                console.error("Presentation navigation failed.", error);
               });
             }
           } else {

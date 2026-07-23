@@ -2679,8 +2679,8 @@ THREEJS_SCENE_RUNTIME_JS = """
           });
         });
         const expectedManualLabelCount = Array.isArray(snapshot.manual_labels)
-          ? snapshot.manual_labels.filter((label) => label && label.text).length
-          : manualLabels.filter((label) => label && label.text).length;
+          ? snapshot.manual_labels.filter((label) => label && label.text && label.visible !== false).length
+          : manualLabels.filter((label) => label && label.text && label.visible !== false).length;
         if (renderedManualLabelCount !== expectedManualLabelCount) {
           differences.push("rendered_manual_labels");
         }
@@ -2923,6 +2923,9 @@ THREEJS_SCENE_RUNTIME_JS = """
         renderDendrogramWidget();
         if (typeof updateSkyPanel === "function") {
           updateSkyPanel();
+        }
+        if (typeof ovizDeckRenderAuthoringSlide === "function") {
+          ovizDeckRenderAuthoringSlide();
         }
       }
 

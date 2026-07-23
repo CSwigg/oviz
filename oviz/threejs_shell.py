@@ -107,8 +107,10 @@ THREEJS_SHELL_HTML = """
           <div>Toggle lasso mode or hide/show the active selection effect.</div>
           <div class="oviz-three-key-help-keys">T</div>
           <div>Hide or show all legend items in the current group.</div>
-          <div class="oviz-three-key-help-keys">Cmd/Ctrl + Z</div>
-          <div>Undo the last selection change.</div>
+          <div class="oviz-three-key-help-keys">Cmd/Ctrl + Z / Shift + Z</div>
+          <div>Undo or redo slide changes while Slides is open; otherwise undo the last selection change.</div>
+          <div class="oviz-three-key-help-keys">Backspace / Delete</div>
+          <div>Delete the selected slide text box when the text caret is not active.</div>
           <div class="oviz-three-key-help-keys">V</div>
           <div>Toggle between 3D View and Sky View.</div>
           <div class="oviz-three-key-help-keys">B</div>
@@ -126,6 +128,11 @@ THREEJS_SHELL_HTML = """
         </div>
       </div>
       <canvas class="oviz-three-canvas" tabindex="0"></canvas>
+      <div class="oviz-deck-authoring-layer" data-visible="false" aria-hidden="true"></div>
+      <aside class="oviz-deck-editor" data-open="false" aria-hidden="true" aria-label="Presentation slide editor"></aside>
+      <div class="reveal oviz-deck-reveal" data-visible="false" aria-hidden="true" aria-label="Oviz Reveal presentation">
+        <div class="slides"></div>
+      </div>
       <div class="oviz-three-startup-status" data-visible="true">Loading Oviz...</div>
       <div class="oviz-three-lasso-overlay" data-active="false">
         <svg preserveAspectRatio="none" aria-hidden="true">
