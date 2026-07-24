@@ -848,11 +848,77 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
       }
 
+      function cancelSkyMemberRevealAnimation() {
+        if (skyMemberRevealAnimationFrame) {
+          window.cancelAnimationFrame(skyMemberRevealAnimationFrame);
+          skyMemberRevealAnimationFrame = 0;
+        }
+      }
+
+      function setSkyMemberRevealProgress(value) {
+        skyMemberRevealProgress = clampRange(Number(value) || 0.0, 0.0, 1.0);
+        skyMemberBatchOpacityEntries.forEach((entry) => {
+          if (!entry || !entry.material) return;
+          entry.material.opacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)
+            * skyMemberRevealProgress;
+        });
+        skyMemberBulkOpacityEntries.forEach((entry) => {
+          if (!entry || !entry.material) return;
+          entry.material.opacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)
+            * (1.0 - skyMemberRevealProgress);
+        });
+        if (root && root.dataset) {
+          root.dataset.skyMemberRevealProgress = String(skyMemberRevealProgress);
+        }
+      }
+
+      function animateSkyMemberReveal(targetProgress, options = {}, onComplete = null) {
+        cancelSkyMemberRevealAnimation();
+        const startProgress = clampRange(Number(skyMemberRevealProgress) || 0.0, 0.0, 1.0);
+        const endProgress = clampRange(Number(targetProgress) || 0.0, 0.0, 1.0);
+        if (Math.abs(endProgress - startProgress) <= 1e-6) {
+          setSkyMemberRevealProgress(endProgress);
+          if (typeof onComplete === "function") onComplete();
+          return;
+        }
+        const durationMs = Math.max(Number(options.durationMs) || 680.0, 1.0);
+        const startMs = (typeof performance !== "undefined" && performance.now)
+          ? performance.now()
+          : Date.now();
+        const step = (timestampMs) => {
+          const now = Number(timestampMs) || (
+            (typeof performance !== "undefined" && performance.now)
+              ? performance.now()
+              : Date.now()
+          );
+          const linear = clampRange((now - startMs) / durationMs, 0.0, 1.0);
+          const eased = linear * linear * (3.0 - 2.0 * linear);
+          setSkyMemberRevealProgress(
+            startProgress + ((endProgress - startProgress) * eased)
+          );
+          if (linear < 1.0) {
+            skyMemberRevealAnimationFrame = window.requestAnimationFrame(step);
+            return;
+          }
+          skyMemberRevealAnimationFrame = 0;
+          setSkyMemberRevealProgress(endProgress);
+          if (typeof onComplete === "function") onComplete();
+        };
+        skyMemberRevealAnimationFrame = window.requestAnimationFrame(step);
+      }
+
+      function animateSkyMemberRevealPromise(targetProgress, options = {}) {
+        return new Promise((resolve) => {
+          animateSkyMemberReveal(targetProgress, options, () => resolve(true));
+        });
+      }
+
       function cancelSkyViewTransitionAnimations(options = {}) {
         skyViewTransitionSerial += 1;
         cancelCameraTransition();
         cancelSkyDomeOpacityAnimation();
         cancelMilkyWayOpacityAnimation();
+        cancelSkyMemberRevealAnimation();
         if (
           options.cancelBackground !== false
           && typeof cancelSkyDomeBackgroundProgrammaticTransition === "function"
@@ -1481,6 +1547,12 @@ THREEJS_VIEWER_RUNTIME_JS = """
           reason: "enter-earth-view",
         });
         setSkyDomeViewOpacityScale(0.0, { force: true });
+        if (!wasEarthView) {
+          // Keep the familiar bulk markers throughout the spatial camera
+          // handoff. Member stars are revealed only after Sky is settled.
+          skyMemberBatchesEnabled = false;
+          setSkyMemberRevealProgress(0.0);
+        }
         if (!wasEarthView && (!options || options.storeReturnState !== false)) {
           earthViewReturnCameraState = captureEarthViewReturnCameraState();
         }
@@ -1570,6 +1642,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
               camera.position.copy(targetPosition);
               camera.up.copy(targetUp);
               camera.fov = targetFov;
+              skyMemberBatchesEnabled = true;
               renderFrame(currentFrameIndex);
               applyGlobalControlState();
               applyCameraViewMode();
@@ -1583,6 +1656,9 @@ THREEJS_VIEWER_RUNTIME_JS = """
                 { force: true }
               );
               animateSkyDomeViewOpacity(1.0, { durationMs: skyFadeDurationMs });
+              animateSkyMemberReveal(1.0, {
+                durationMs: Math.max(Number(options.memberRevealDurationMs) || 680.0, 1.0),
+              });
             },
             {
               lockDirection: preserveDirection,
@@ -1631,7 +1707,8 @@ THREEJS_VIEWER_RUNTIME_JS = """
         exitStartDirection.normalize();
         const skyFadeDurationMs = Math.max(Number(options.opacityDurationMs) || 360.0, 1.0);
         const milkyWayFadeDurationMs = Math.max(Number(options.milkyWayFadeDurationMs) || 240.0, 1.0);
-        animateSkyDomeViewOpacity(0.0, { durationMs: skyFadeDurationMs }, () => {
+        const continueExitAfterMemberFade = () => {
+          animateSkyDomeViewOpacity(0.0, { durationMs: skyFadeDurationMs }, () => {
           if (transitionSerial !== skyViewTransitionSerial) {
             return;
           }
@@ -1650,6 +1727,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
               camera.up.copy(targetUp);
               camera.fov = targetFov;
               earthViewReturnCameraState = null;
+              skyMemberBatchesEnabled = false;
               setSkyDomeViewOpacityScale(0.0, { force: true });
               applyGlobalControlState();
               applyCameraViewMode();
@@ -1671,6 +1749,17 @@ THREEJS_VIEWER_RUNTIME_JS = """
               endDistance: exitTargetDistance,
             }
           );
+          });
+        };
+        // Reverse the entry sequence: members return to their bulk markers
+        // before the Aladin background and spatial camera leave Sky mode.
+        animateSkyMemberReveal(0.0, {
+          durationMs: Math.max(Number(options.memberRevealDurationMs) || 520.0, 1.0),
+        }, () => {
+          if (transitionSerial !== skyViewTransitionSerial) {
+            return;
+          }
+          continueExitAfterMemberFade();
         });
         return true;
       }

@@ -1542,12 +1542,18 @@ THREEJS_SCENE_RUNTIME_JS = """
         if (resetRegistries) {
           hoverTargets.length = 0;
           cameraResponsivePointEntries.length = 0;
+          skyMemberBatchOpacityEntries.length = 0;
+          skyMemberBulkOpacityEntries.length = 0;
           cameraResponsiveImagePlaneEntries.length = 0;
           galacticReferenceOpacityGroups.length = 0;
           selectionSpriteEntriesByKey.clear();
           screenStableTextSprites.length = 0;
           frameLineMaterials.length = 0;
           volumeRuntimeByKey.clear();
+          renderedSkyMemberStarCount = 0;
+          renderedSkyMemberBulkReplacementCount = 0;
+          renderedSkyClusterBulkPointCount = 0;
+          renderedSkyMemberDrawObjectCount = 0;
         }
         if (clearScene) {
           clearGroup(renderRoot);
@@ -1593,6 +1599,19 @@ THREEJS_SCENE_RUNTIME_JS = """
             renderRoot.add(galacticReferenceGroup);
           }
         });
+        if (resetRegistries && root && root.dataset) {
+          root.dataset.skyMemberStarCount = String(renderedSkyMemberStarCount);
+          root.dataset.skyMemberBulkReplacementCount = String(
+            renderedSkyMemberBulkReplacementCount
+          );
+          root.dataset.skyClusterBulkPointCount = String(
+            renderedSkyClusterBulkPointCount
+          );
+          root.dataset.skyMemberDrawObjectCount = String(
+            renderedSkyMemberDrawObjectCount
+          );
+          root.dataset.skyMemberRevealProgress = String(skyMemberRevealProgress);
+        }
 
         const selectionTransition = (
           typeof ovizStateTransition !== "undefined"
@@ -2054,7 +2073,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
         const starsFactor = sizeByStarsFactorForPoint(point, trace, traceState);
         const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05) * birthVisibility;
-        const baseScale = Math.max(
+        const bulkBaseScale = Math.max(
           Math.max(Number(pointState.size) || 0.0, 0.0)
             * sizeScaleFactor
             * starsFactor
@@ -2062,6 +2081,10 @@ THREEJS_SCENE_RUNTIME_JS = """
             * pointScale,
           scaleFloor,
         );
+        const memberSizeRatio = point && point.oviz_sky_member === true
+          ? clampRange(Number(point.oviz_sky_member_size_ratio) || (1.0 / 20.0), 0.001, 1.0)
+          : 1.0;
+        const baseScale = bulkBaseScale * memberSizeRatio;
         return {
           effectiveOpacity,
           baseScale,
@@ -2095,6 +2118,9 @@ THREEJS_SCENE_RUNTIME_JS = """
             0.0,
             1.0,
           );
+          responsivePointScale = baseScale;
+        } else if (metadata.component === "sky_member") {
+          componentOpacity = effectiveOpacity;
           responsivePointScale = baseScale;
         } else {
           componentOpacity *= 1.0 - glowMix;

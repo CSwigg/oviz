@@ -15,6 +15,11 @@ JULY4_CHRONOS_RESULTS_PATH = Path(
     "parsec_allhunt_46w_500b_5000s_dustav_12gyr_linearage_192shards/cluster_results.csv"
 )
 DEFAULT_OUTPUT_HTML = Path(__file__).resolve().with_suffix(".html")
+CLUSTER_MEMBERS_PATH = (
+    Path.home()
+    / "Downloads"
+    / "members-2.csv"
+)
 
 
 def write_zip_copy(html_path: Path, zip_path: Path | None = None) -> Path:
@@ -82,6 +87,8 @@ def main() -> None:
         include_spiral_arms=bool(args.include_spiral_arms),
         jun6_catalog=True,
         include_background_cluster_trace=False,
+        cluster_members_file=CLUSTER_MEMBERS_PATH,
+        show_cluster_members_in_sky=True,
         website_output_html=None,
     )
     print(f"Wrote {output_html}")

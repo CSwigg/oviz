@@ -18,8 +18,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from oviz import Layer, LayerCollection, Scene3D, galactic_lite_profile, website_background_profile  # noqa: E402
 from oviz.threejs_figure import ThreeJSFigure  # noqa: E402
-from oviz.threejs_scene import _compact_threejs_frame_payloads  # noqa: E402
-from oviz.viz import Animate3D, _build_threejs_volume_ar_proxy  # noqa: E402
+from oviz.threejs_scene import (  # noqa: E402
+    _compact_threejs_frame_payloads,
+    _round_scene_floats,
+)
+from oviz.viz import (  # noqa: E402
+    Animate3D,
+    MAX_SELECTED_MEMBER_POINTS,
+    _build_threejs_volume_ar_proxy,
+    _load_threejs_cluster_catalog,
+)
 
 
 class _FakeCluster:
@@ -1346,10 +1354,21 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz.data_collection.cluster.df_int["x_helio"] = [10.0, 10.0]
         viz.data_collection.cluster.df_int["y_helio"] = [-5.0, -5.0]
         viz.data_collection.cluster.df_int["z_helio"] = [2.0, 2.0]
+        viz.data_collection.cluster.df_int["name_all"] = [
+            "member_1,Cluster A",
+            "member_1,Cluster A",
+        ]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             members_file = Path(tmp_dir) / "members.csv"
-            members_file.write_text("name,l,b\nCluster A,120.0,-20.0\nCluster A,120.1,-20.1\n", encoding="utf-8")
+            members_file.write_text(
+                "name,l,b,within_r_t\n"
+                "Cluster A,120.0,-20.0,True\n"
+                "Cluster A,120.1,-20.1,True\n"
+                "Cluster A,121.5,-21.5,False\n"
+                "Unrelated Cluster,80.0,10.0,True\n",
+                encoding="utf-8",
+            )
 
             fig = viz.make_plot(
                 time=np.array([0.0, -1.0]),
@@ -1359,6 +1378,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 sky_radius_deg=1.25,
                 sky_survey="P/DSS2/color",
                 cluster_members_file=str(members_file),
+                show_cluster_members_in_sky=True,
             )
 
         html = fig.to_html()
@@ -1370,9 +1390,28 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertTrue(scene_spec["sky_panel"]["enabled"])
         self.assertAlmostEqual(scene_spec["sky_panel"]["radius_deg"], 1.25)
         self.assertEqual(scene_spec["sky_panel"]["survey"], "P/DSS2/color")
+        self.assertTrue(scene_spec["sky_panel"]["show_cluster_members_in_sky"])
+        self.assertEqual(scene_spec["sky_panel"]["member_point_size_denominator"], 20)
+        self.assertEqual(scene_spec["sky_panel"]["member_min_screen_size_px"], 2.5)
         self.assertIn("Cluster A", scene_spec["sky_panel"]["members_by_cluster"])
-        self.assertEqual(len(scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"]), 2)
+        self.assertEqual(len(scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"]), 3)
+        self.assertNotIn("Unrelated Cluster", scene_spec["sky_panel"]["members_by_cluster"])
+        self.assertAlmostEqual(
+            scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"][0]["l"],
+            120.0,
+        )
+        self.assertAlmostEqual(
+            scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"][0]["b"],
+            -20.0,
+        )
+        self.assertTrue(
+            all(
+                member["is_cluster_member"]
+                for member in scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"]
+            )
+        )
         self.assertEqual(selection["cluster_name"], "member_1")
+        self.assertEqual(selection["name_all"], "member_1,Cluster A")
         self.assertEqual(selection["trace_name"], "Cluster A")
         self.assertTrue(np.isfinite(selection["ra_deg"]))
         self.assertTrue(np.isfinite(selection["dec_deg"]))
@@ -1383,8 +1422,114 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn(".aladin-stack-box", html)
         self.assertIn("View: Mollweide all-sky", html)
         self.assertIn('type: "oviz-sky-hover-cluster"', html)
+        self.assertIn("function skyMemberCatalogForPoint(point, trace)", html)
+        self.assertIn("function addSkyMemberStars(group, catalog, options = {})", html)
+        self.assertIn("function skyMemberScaleForPoint(basePointScale, position)", html)
+        self.assertIn("function normalizeClusterCatalogKey(value)", html)
+        self.assertIn("new THREE.Points(memberGeometry, glowMaterial)", html)
+        self.assertIn("new THREE.Points(memberGeometry, coreMaterial)", html)
+        self.assertIn("root.dataset.skyMemberDrawObjectCount = String(", html)
+        self.assertIn("function animateSkyMemberReveal(targetProgress", html)
+        self.assertIn('starGlowTextureFor("sky_member_halo")', html)
+        self.assertIn('starCoreTextureFor("sky_member_core")', html)
+        self.assertIn("skyMemberBulkOpacityEntries", html)
+        sky_member_runtime = html.split(
+            "function addSkyMemberStars(group, catalog, options = {})", 1
+        )[1].split("function addMarkerTrace(parent, trace)", 1)[0]
+        self.assertNotIn("new THREE.Sprite(", sky_member_runtime)
+        self.assertIn('"sky_member_glow"', html)
+        self.assertIn('"sky_member_core"', html)
+        self.assertIn("root.dataset.skyClusterBulkPointCount = String(", html)
+        self.assertIn('cameraViewMode !== "earth"', html)
+        self.assertIn("oviz_sky_member_size_ratio", html)
+        self.assertIn("1.0 / memberSizeDenominator", html)
         self.assertIn('type: "oviz-parent-hover-cluster"', html)
         self.assertIn('aladin.on("objectHovered"', html)
+
+    def test_cluster_member_catalog_sampling_is_unbiased_by_row_order(self):
+        row_count = MAX_SELECTED_MEMBER_POINTS + 200
+        rows = pd.DataFrame(
+            {
+                "name": ["Cluster A"] * row_count,
+                # Gaia source IDs are deliberately ordered, as they commonly
+                # are in the real member catalog.
+                "source_id": [str(10_000_000 + idx) for idx in range(row_count)],
+                "l": 100.0 + np.arange(row_count, dtype=float) * 0.001,
+                "b": -5.0 + (np.arange(row_count, dtype=float) % 37.0) * 0.002,
+                # This column must not alter which rows are loaded.
+                "within_r_t": (np.arange(row_count) % 2) == 0,
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            members_file = Path(tmp_dir) / "ordered_members.csv"
+            rows.to_csv(members_file, index=False)
+            first = _load_threejs_cluster_catalog(
+                str(members_file),
+                cluster_names=["Cluster A"],
+            )
+            second = _load_threejs_cluster_catalog(
+                str(members_file),
+                cluster_names=["Cluster A"],
+            )
+
+        first_members = first["Cluster A"]
+        second_members = second["Cluster A"]
+        self.assertEqual(len(first_members), MAX_SELECTED_MEMBER_POINTS)
+        self.assertEqual(first_members, second_members)
+        self.assertTrue(any(not row["within_r_t"] for _, row in rows.iterrows()))
+
+        sampled_indices = np.rint(
+            (np.asarray([member["l"] for member in first_members]) - 100.0) / 0.001
+        ).astype(int)
+        linspace_indices = np.linspace(
+            0,
+            row_count - 1,
+            MAX_SELECTED_MEMBER_POINTS,
+            dtype=int,
+        )
+        self.assertFalse(np.array_equal(sampled_indices, linspace_indices))
+        self.assertTrue(np.any((sampled_indices % 2) == 1))
+
+    def test_threejs_renderer_accepts_common_icrs_member_catalog_columns(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            members_file = Path(tmp_dir) / "members_icrs.csv"
+            members_file.write_text(
+                "Name,GaiaDR3,RA_ICRS,DE_ICRS\n"
+                "Cluster A,123456789,120.0,-20.0\n"
+                "Cluster A,987654321,120.1,-20.1\n",
+                encoding="utf-8",
+            )
+            viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                enable_sky_panel=True,
+                cluster_members_file=str(members_file),
+                show_cluster_members_in_sky=True,
+            )
+
+        members = viz.fig_dict["sky_panel"]["members_by_cluster"]["Cluster A"]
+        self.assertEqual(len(members), 2)
+        self.assertEqual(members[0]["source_id"], "123456789")
+        self.assertTrue(members[0]["is_cluster_member"])
+        self.assertTrue(np.isfinite(members[0]["l"]))
+        self.assertTrue(np.isfinite(members[0]["b"]))
+        self.assertAlmostEqual(members[0]["ra"], 120.0)
+        self.assertAlmostEqual(members[0]["dec"], -20.0)
+
+    def test_threejs_renderer_requires_member_catalog_for_sky_replacement(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+
+        with self.assertRaisesRegex(ValueError, "cluster_members_file"):
+            viz.make_plot(
+                time=np.array([0.0, -1.0]),
+                renderer="threejs",
+                show=False,
+                enable_sky_panel=True,
+                show_cluster_members_in_sky=True,
+            )
 
     def test_threejs_renderer_can_enable_local_sky_dome_from_image_path(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
@@ -2586,6 +2731,24 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(point["x"], 1.23)
         self.assertEqual(point["y"], 2.35)
         self.assertEqual(point["z"], 3.46)
+
+    def test_threejs_scene_float_precision_preserves_sky_catalog_coordinates(self):
+        rounded = _round_scene_floats(
+            {
+                "x": 1.23456789,
+                "l": 132.87654321,
+                "b": -1.45678912,
+                "ra": 35.12345678,
+                "dec": 58.87654321,
+            },
+            1,
+        )
+
+        self.assertEqual(rounded["x"], 1.2)
+        self.assertEqual(rounded["l"], 132.876543)
+        self.assertEqual(rounded["b"], -1.456789)
+        self.assertEqual(rounded["ra"], 35.123457)
+        self.assertEqual(rounded["dec"], 58.876543)
 
     def test_threejs_renderer_volume_defaults_to_100_samples(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")

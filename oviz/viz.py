@@ -188,6 +188,7 @@ CUSTOMDATA_IDX_Z0 = 7
 CUSTOMDATA_IDX_CLUSTER_NAME = 8
 CUSTOMDATA_IDX_CLUSTER_COLOR = 9
 CUSTOMDATA_IDX_N_STARS = 10
+CUSTOMDATA_IDX_CLUSTER_ALIASES = 11
 MAX_SELECTED_MEMBER_POINTS = 1200
 DEFAULT_THREEJS_VOLUME_COLORMAPS = (
     'inferno',
@@ -291,6 +292,7 @@ class Animate3D:
         sky_frame='galactic',
         sky_survey='P/DSS2/color',
         cluster_members_file=None,
+        show_cluster_members_in_sky=False,
         volumes=None,
         threejs_initial_state=None,
         preset=None,
@@ -346,6 +348,7 @@ class Animate3D:
         self.sky_frame = str(sky_frame)
         self.sky_survey = str(sky_survey)
         self.cluster_members_file = cluster_members_file
+        self.show_cluster_members_in_sky = bool(show_cluster_members_in_sky)
         self.sky_members_by_cluster = None
         self.volume_configs = _normalize_threejs_volume_configs(volumes)
         profile_initial_state = build_threejs_profile(preset) if preset else {}
@@ -376,7 +379,15 @@ class Animate3D:
                 raise ValueError("sky_frame must be either 'galactic' or 'icrs'.")
             if self.sky_frame != 'galactic':
                 raise ValueError("sky_frame='icrs' is not yet supported; use 'galactic'.")
-            self.sky_members_by_cluster = _load_threejs_cluster_catalog(cluster_members_file)
+            if self.show_cluster_members_in_sky and not cluster_members_file:
+                raise ValueError(
+                    "show_cluster_members_in_sky=True requires a readable "
+                    "cluster_members_file with cluster names and sky coordinates."
+                )
+        elif self.show_cluster_members_in_sky:
+            raise ValueError(
+                "show_cluster_members_in_sky=True requires enable_sky_panel=True."
+            )
 
         # Build the figure layout, optionally overriding for galactic mode.
         layout_dict = copy.deepcopy(self.figure_layout_dict)
@@ -1594,6 +1605,12 @@ class Animate3D:
                 n_star_values = pd.to_numeric(df_t['n_stars'], errors='coerce').to_numpy(dtype=float)
             else:
                 n_star_values = np.full(len(df_t), np.nan, dtype=float)
+            if 'name_all' in df_t.columns:
+                cluster_alias_values = (
+                    df_t['name_all'].fillna('').astype(str).to_numpy(dtype=object)
+                )
+            else:
+                cluster_alias_values = np.repeat('', len(df_t)).astype(object)
 
             trace_meta = {
                 'trace_kind': 'cluster',
@@ -1625,6 +1642,7 @@ class Animate3D:
                         cluster_names,
                         trace_colors,
                         n_star_values,
+                        cluster_alias_values,
                     )),
                     meta=trace_meta,
                     hovertext=hovertext,
@@ -1777,6 +1795,23 @@ class Animate3D:
     def _build_threejs_sky_panel_spec(self, default_catalog=None):
         if not getattr(self, 'enable_sky_panel', False):
             return {'enabled': False}
+        if (
+            getattr(self, 'show_cluster_members_in_sky', False)
+            and self.sky_members_by_cluster is None
+        ):
+            # Full Hunt member catalogs can contain more than a million rows.
+            # Read them lazily and retain only clusters represented by this
+            # figure (including their aliases) before embedding the HTML.
+            requested_cluster_names = set((default_catalog or {}).keys())
+            self.sky_members_by_cluster = _load_threejs_cluster_catalog(
+                self.cluster_members_file,
+                cluster_names=requested_cluster_names,
+            )
+            if not self.sky_members_by_cluster:
+                raise ValueError(
+                    "show_cluster_members_in_sky=True requires a readable "
+                    "cluster_members_file with members matching figure clusters."
+                )
         merged_catalog = _merge_threejs_member_catalogs(default_catalog, self.sky_members_by_cluster)
 
         return {
@@ -1784,6 +1819,14 @@ class Animate3D:
             'radius_deg': float(self.sky_radius_deg),
             'frame': self.sky_frame,
             'survey': self.sky_survey,
+            'show_cluster_members_in_sky': bool(
+                getattr(self, 'show_cluster_members_in_sky', False)
+            ),
+            'member_point_size_denominator': 20,
+            # A 1/20-scale point can project to substantially less than one
+            # physical pixel in an all-sky view. Keep the requested data-space
+            # scale while enforcing a small render-only visibility floor.
+            'member_min_screen_size_px': 2.5,
             'members_by_cluster': merged_catalog,
         }
 
@@ -2949,6 +2992,12 @@ def _selection_from_customdata_row(row):
     n_stars = np.nan
     if len(values) > CUSTOMDATA_IDX_N_STARS:
         n_stars = _coerce_float(values[CUSTOMDATA_IDX_N_STARS], np.nan)
+    cluster_aliases = ''
+    if (
+        len(values) > CUSTOMDATA_IDX_CLUSTER_ALIASES
+        and values[CUSTOMDATA_IDX_CLUSTER_ALIASES] not in (None, '')
+    ):
+        cluster_aliases = str(values[CUSTOMDATA_IDX_CLUSTER_ALIASES])
 
     return {
         'l_deg': float(l_deg),
@@ -2965,6 +3014,7 @@ def _selection_from_customdata_row(row):
         'cluster_name': cluster_name,
         'cluster_color': cluster_color,
         'n_stars': float(n_stars) if np.isfinite(n_stars) else np.nan,
+        'name_all': cluster_aliases,
     }
 
 
@@ -3207,46 +3257,185 @@ def _labels_from_trace(trace_json):
     return labels
 
 
-def _load_threejs_cluster_catalog(cluster_members_file):
+def _normalize_threejs_cluster_catalog_key(value):
+    return ''.join(character for character in str(value or '').strip().lower() if character.isalnum())
+
+
+def _load_threejs_cluster_catalog(cluster_members_file, cluster_names=None):
     if not cluster_members_file:
         return None
 
     try:
-        df = pd.read_csv(cluster_members_file, usecols=['name', 'l', 'b'])
+        header = pd.read_csv(cluster_members_file, nrows=0)
+    except Exception:
+        return None
+
+    columns = list(header.columns)
+    columns_by_lower = {str(column).strip().lower(): column for column in columns}
+
+    def first_column(*candidates):
+        for candidate in candidates:
+            matched = columns_by_lower.get(str(candidate).strip().lower())
+            if matched is not None:
+                return matched
+        return None
+
+    cluster_column = first_column('name', 'cluster_name', 'cluster', 'group_name')
+    l_column = first_column('l', 'l_deg', 'glon', 'galactic_l')
+    b_column = first_column('b', 'b_deg', 'glat', 'galactic_b')
+    ra_column = first_column('ra', 'ra_deg', 'ra_icrs', '_ra_icrs', 'raj2000')
+    dec_column = first_column('dec', 'dec_deg', 'de_icrs', '_de_icrs', 'dej2000')
+    source_id_column = first_column('source_id', 'gaia_source_id', 'gaiadr3', 'id')
+    if cluster_column is None:
+        return None
+    has_galactic = l_column is not None and b_column is not None
+    has_icrs = ra_column is not None and dec_column is not None
+    if not has_galactic and not has_icrs:
+        return None
+
+    usecols = [cluster_column]
+    for column in (
+        l_column,
+        b_column,
+        ra_column,
+        dec_column,
+        source_id_column,
+    ):
+        if column is not None and column not in usecols:
+            usecols.append(column)
+
+    dtype = {cluster_column: str}
+    if source_id_column is not None:
+        dtype[source_id_column] = str
+    requested_keys = {
+        _normalize_threejs_cluster_catalog_key(value)
+        for value in (cluster_names or [])
+        if _normalize_threejs_cluster_catalog_key(value)
+    }
+    try:
+        if requested_keys:
+            matched_chunks = []
+            for chunk in pd.read_csv(
+                cluster_members_file,
+                usecols=usecols,
+                dtype=dtype,
+                chunksize=250_000,
+            ):
+                normalized_names = chunk[cluster_column].map(
+                    _normalize_threejs_cluster_catalog_key
+                )
+                matched = chunk.loc[normalized_names.isin(requested_keys)]
+                if not matched.empty:
+                    matched_chunks.append(matched)
+            if not matched_chunks:
+                return None
+            df = pd.concat(matched_chunks, ignore_index=True)
+        else:
+            df = pd.read_csv(cluster_members_file, usecols=usecols, dtype=dtype)
     except Exception:
         return None
 
     if df.empty:
         return None
 
-    df = df.rename(columns={'name': 'cluster_name', 'l': 'l_deg', 'b': 'b_deg'})
+    rename_columns = {cluster_column: 'cluster_name'}
+    if l_column is not None:
+        rename_columns[l_column] = 'l_deg'
+    if b_column is not None:
+        rename_columns[b_column] = 'b_deg'
+    if ra_column is not None:
+        rename_columns[ra_column] = 'ra_deg'
+    if dec_column is not None:
+        rename_columns[dec_column] = 'dec_deg'
+    if source_id_column is not None:
+        rename_columns[source_id_column] = 'source_id'
+    df = df.rename(columns=rename_columns)
     df['cluster_name'] = df['cluster_name'].astype(str)
-    df['l_deg'] = pd.to_numeric(df['l_deg'], errors='coerce')
-    df['b_deg'] = pd.to_numeric(df['b_deg'], errors='coerce')
-    df = df.loc[df['l_deg'].notnull() & df['b_deg'].notnull()].copy()
+    for coordinate_column in ('l_deg', 'b_deg', 'ra_deg', 'dec_deg'):
+        if coordinate_column in df.columns:
+            df[coordinate_column] = pd.to_numeric(df[coordinate_column], errors='coerce')
+
+    if has_galactic:
+        valid_coordinates = df['l_deg'].notnull() & df['b_deg'].notnull()
+    else:
+        valid_coordinates = df['ra_deg'].notnull() & df['dec_deg'].notnull()
+    df = df.loc[valid_coordinates].copy()
     if df.empty:
         return None
 
     grouped = {}
     for cluster_name, grp in df.groupby('cluster_name', sort=False):
-        l_vals = grp['l_deg'].to_numpy(dtype=np.float64)
-        b_vals = grp['b_deg'].to_numpy(dtype=np.float64)
-        coords = SkyCoord(l=l_vals * u.deg, b=b_vals * u.deg, frame='galactic').icrs
+        if has_galactic:
+            l_vals = grp['l_deg'].to_numpy(dtype=np.float64)
+            b_vals = grp['b_deg'].to_numpy(dtype=np.float64)
+            icrs_coords = SkyCoord(
+                l=l_vals * u.deg,
+                b=b_vals * u.deg,
+                frame='galactic',
+            ).icrs
+            ra_vals = np.asarray(icrs_coords.ra.deg, dtype=np.float64)
+            dec_vals = np.asarray(icrs_coords.dec.deg, dtype=np.float64)
+        else:
+            ra_vals = grp['ra_deg'].to_numpy(dtype=np.float64)
+            dec_vals = grp['dec_deg'].to_numpy(dtype=np.float64)
+            galactic_coords = SkyCoord(
+                ra=ra_vals * u.deg,
+                dec=dec_vals * u.deg,
+                frame='icrs',
+            ).galactic
+            l_vals = np.asarray(galactic_coords.l.deg, dtype=np.float64)
+            b_vals = np.asarray(galactic_coords.b.deg, dtype=np.float64)
+
         idx = np.arange(l_vals.size, dtype=int)
         if idx.size > MAX_SELECTED_MEMBER_POINTS:
-            choose = np.linspace(0, idx.size - 1, int(MAX_SELECTED_MEMBER_POINTS), dtype=int)
-            idx = idx[choose]
+            # Gaia source IDs encode sky position, so catalog rows commonly
+            # arrive in a spatially structured order. Evenly spaced row
+            # sampling therefore imprints artificial stripes or grids on the
+            # rendered sky. Select a stable pseudo-random subset from the
+            # member identity and exact coordinates instead.
+            sample_columns = [
+                column
+                for column in (
+                    'source_id',
+                    'l_deg',
+                    'b_deg',
+                    'ra_deg',
+                    'dec_deg',
+                )
+                if column in grp.columns
+            ]
+            sample_hashes = pd.util.hash_pandas_object(
+                grp[sample_columns],
+                index=False,
+                categorize=True,
+            ).to_numpy(dtype=np.uint64)
+            chosen = np.argpartition(
+                sample_hashes,
+                int(MAX_SELECTED_MEMBER_POINTS) - 1,
+            )[: int(MAX_SELECTED_MEMBER_POINTS)]
+            # Preserve source ordering only after the unbiased subset has been
+            # chosen. This keeps exported payloads deterministic.
+            idx = np.sort(chosen.astype(int))
 
-        grouped[str(cluster_name)] = [
-            {
+        source_ids = (
+            grp['source_id'].fillna('').astype(str).to_numpy()
+            if 'source_id' in grp.columns
+            else None
+        )
+        members = []
+        for i in idx:
+            member = {
                 'l': float(l_vals[i]),
                 'b': float(b_vals[i]),
-                'ra': float(coords.ra.deg[i]),
-                'dec': float(coords.dec.deg[i]),
+                'ra': float(ra_vals[i]),
+                'dec': float(dec_vals[i]),
                 'label': str(cluster_name),
+                'is_cluster_member': True,
             }
-            for i in idx
-        ]
+            if source_ids is not None and source_ids[i]:
+                member['source_id'] = str(source_ids[i])
+            members.append(member)
+        grouped[str(cluster_name).strip()] = members
 
     return grouped or None
 
@@ -3307,6 +3496,12 @@ def _threejs_catalog_from_frame_spec(frame_spec):
             cluster_name = selection.get('cluster_name') if isinstance(selection, dict) else None
             if cluster_name:
                 grouped_points.setdefault(str(cluster_name), []).append(catalog_point)
+            cluster_aliases = selection.get('name_all') if isinstance(selection, dict) else None
+            if cluster_aliases:
+                for alias in str(cluster_aliases).replace(';', ',').replace('|', ',').split(','):
+                    alias = alias.strip()
+                    if alias:
+                        grouped_points.setdefault(alias, []).append(catalog_point)
 
         if trace_name and trace_points:
             catalogs[str(trace_name)] = _limit_catalog_points(trace_points)

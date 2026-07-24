@@ -17,10 +17,28 @@ def _lite_mode_enabled(plot) -> bool:
 
 
 _CONTROL_RANGE_KEYS = {"vmin", "vmax", "cut_min", "cut_max", "opacity_scale"}
+_SKY_COORDINATE_KEYS = {
+    "l",
+    "b",
+    "ra",
+    "dec",
+    "l_deg",
+    "b_deg",
+    "ra_deg",
+    "dec_deg",
+}
 
 
 def _round_scene_floats(value, precision: int, *, field_name: str | None = None):
-    effective_precision = max(precision, 4) if field_name in _CONTROL_RANGE_KEYS else precision
+    if field_name in _SKY_COORDINATE_KEYS:
+        # Compact scientific figures may round ordinary 3D payload values
+        # aggressively, but 0.1-degree rounding visibly snaps dense stellar
+        # catalogs onto a sky grid. Preserve sub-arcsecond catalog positions.
+        effective_precision = max(precision, 6)
+    elif field_name in _CONTROL_RANGE_KEYS:
+        effective_precision = max(precision, 4)
+    else:
+        effective_precision = precision
     if isinstance(value, bool):
         return value
     if isinstance(value, (float, np.floating)):

@@ -14,6 +14,7 @@ def _make_integrated_trace():
             "V": [2.5, 3.5],
             "W": [4.5, 5.5],
             "name": ["young", "old"],
+            "name_all": ["young,Alias_Young", "old,Alias_Old"],
             "age_myr": [5.0, 25.0],
         }
     )
@@ -49,6 +50,13 @@ def _make_integrated_trace():
 
 def test_limit_cluster_age_preserves_integrated_coordinate_structure():
     trace = _make_integrated_trace()
+
+    assert trace.df_int["name_all"].tolist() == [
+        "young,Alias_Young",
+        "young,Alias_Young",
+        "old,Alias_Old",
+        "old,Alias_Old",
+    ]
 
     trace.limit_cluster_age(0.0, 10.0)
 

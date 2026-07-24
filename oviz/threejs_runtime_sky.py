@@ -12,6 +12,13 @@ THREEJS_SKY_RUNTIME_JS = """
           .replace(/[_\s]+/g, " ");
       }
 
+      function normalizeClusterCatalogKey(value) {
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "");
+      }
+
       const GALACTIC_TO_ICRS_MATRIX = [
         -0.0548755604162154, 0.4941094278755837, -0.8676661490190047,
         -0.8734370902348850, -0.4448296299600112, -0.1980763734312015,
@@ -787,7 +794,11 @@ THREEJS_SKY_RUNTIME_JS = """
         const byCluster = skySpec.members_by_cluster || {};
         const traceName = selection && selection.trace_name ? String(selection.trace_name) : "";
         const clusterName = selection && selection.cluster_name ? String(selection.cluster_name) : "";
-        const candidates = [clusterName, traceName]
+        const aliases = selection && selection.name_all ? String(selection.name_all) : "";
+        const candidates = [clusterName, traceName, aliases]
+          .filter(Boolean)
+          .flatMap((name) => String(name).split(/[,;|]/g))
+          .map((name) => String(name).trim())
           .filter(Boolean)
           .flatMap((name) => [name, name.replace(/_/g, " "), name.replace(/\s+/g, "_")]);
 
@@ -797,9 +808,15 @@ THREEJS_SKY_RUNTIME_JS = """
           }
         }
 
-        const normalizedCandidates = new Set(candidates.map((name) => normalizeMemberKey(name)));
+        const normalizedCandidates = new Set(
+          candidates.map((name) => normalizeClusterCatalogKey(name))
+        );
         for (const key of Object.keys(byCluster)) {
-          if (normalizedCandidates.has(normalizeMemberKey(key)) && Array.isArray(byCluster[key]) && byCluster[key].length) {
+          if (
+            normalizedCandidates.has(normalizeClusterCatalogKey(key))
+            && Array.isArray(byCluster[key])
+            && byCluster[key].length
+          ) {
             return { key, points: byCluster[key] };
           }
         }

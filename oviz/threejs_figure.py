@@ -7697,6 +7697,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const pointScale = (pointScaleReferenceSpan / 2600.0) * pointScaleBaseline;
       const hoverTargets = [];
       const cameraResponsivePointEntries = [];
+      const skyMemberBatchOpacityEntries = [];
+      const skyMemberBulkOpacityEntries = [];
       const cameraResponsiveImagePlaneEntries = [];
       const galacticReferenceOpacityGroups = [];
       const selectionSpriteEntriesByKey = new Map();
@@ -7905,8 +7907,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let cameraTransitionAnimationFrame = 0;
       let skyDomeOpacityAnimationFrame = 0;
       let milkyWayOpacityAnimationFrame = 0;
+      let skyMemberRevealAnimationFrame = 0;
       let milkyWayViewOpacityScale = 1.0;
       let skyDomeViewOpacityScale = 0.0;
+      let skyMemberRevealProgress = 0.0;
+      let skyMemberBatchesEnabled = false;
       let skyBackgroundHidden = Boolean(initialState.global_controls && initialState.global_controls.sky_background_hidden);
       let skyViewTransitionSerial = 0;
       let skyViewDragState = null;
@@ -16349,10 +16354,19 @@ __SKY_RUNTIME_JS__
         }
 
         const canvasEl = document.createElement("canvas");
-        canvasEl.width = 1024;
-        canvasEl.height = 1024;
+        const isSkyMemberTexture = cacheKey === "sky_member_halo";
+        canvasEl.width = isSkyMemberTexture ? 256 : 1024;
+        canvasEl.height = isSkyMemberTexture ? 256 : 1024;
 
         writeStarPsfTexture(canvasEl, (radius) => {
+          if (isSkyMemberTexture) {
+            // Keep tiny GPU-batched member stars circular. The much narrower
+            // bulk-marker PSF aliases into cross/grid artifacts at 3–8 px.
+            const compactCore = 0.72 * Math.exp(-0.5 * (radius / 0.075) ** 2.0);
+            const seeingHalo = 0.24 * ((1.0 + (radius / 0.14) ** 2.0) ** -2.4);
+            const aureole = 0.035 * ((1.0 + (radius / 0.32) ** 2.0) ** -3.0);
+            return compactCore + seeingHalo + aureole;
+          }
           const airyCore = 0.82 * Math.exp(-0.5 * (radius / 0.024) ** 2.0);
           const seeingHalo = 0.30 * ((1.0 + (radius / 0.060) ** 2.0) ** -2.25);
           const aureole = 0.050 * ((1.0 + (radius / 0.20) ** 2.0) ** -2.50);
@@ -16394,9 +16408,15 @@ __SKY_RUNTIME_JS__
         }
 
         const canvasEl = document.createElement("canvas");
-        canvasEl.width = 1024;
-        canvasEl.height = 1024;
+        const isSkyMemberTexture = cacheKey === "sky_member_core";
+        canvasEl.width = isSkyMemberTexture ? 256 : 1024;
+        canvasEl.height = isSkyMemberTexture ? 256 : 1024;
         writeStarPsfTexture(canvasEl, (radius) => {
+          if (isSkyMemberTexture) {
+            const saturatedCore = 1.00 * Math.exp(-0.5 * (radius / 0.055) ** 2.0);
+            const seeingDisk = 0.16 * ((1.0 + (radius / 0.12) ** 2.0) ** -2.8);
+            return saturatedCore + seeingDisk;
+          }
           const saturatedCore = 1.00 * Math.exp(-0.5 * (radius / 0.020) ** 2.0);
           const seeingDisk = 0.28 * ((1.0 + (radius / 0.052) ** 2.0) ** -2.65);
           return saturatedCore + seeingDisk;
@@ -16443,6 +16463,43 @@ __SKY_RUNTIME_JS__
         return Math.max(Number(basePointScale) || 0.0, 0.0) * 0.36;
       }
 
+      function worldScaleForScreenPixelsAt(position, pixelHeight) {
+        const pixels = Math.max(Number(pixelHeight) || 0.0, 0.0);
+        const canvasHeight = Math.max(renderer.domElement.clientHeight || root.clientHeight || 0, 1);
+        if (!(pixels > 0.0) || !(position instanceof THREE.Vector3)) {
+          return 0.0;
+        }
+        if (camera.isPerspectiveCamera) {
+          const distance = Math.max(camera.position.distanceTo(position), 1e-6);
+          return (
+            2.0
+            * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5))
+            * distance
+            * (pixels / canvasHeight)
+          );
+        }
+        if (camera.isOrthographicCamera) {
+          return (
+            (camera.top - camera.bottom)
+            / Math.max(camera.zoom, 1e-6)
+            * (pixels / canvasHeight)
+          );
+        }
+        return 0.0;
+      }
+
+      function skyMemberScaleForPoint(basePointScale, position) {
+        const requestedScale = Math.max(Number(basePointScale) || 0.0, 0.0);
+        const minimumPixels = Math.max(
+          Number(skySpec && skySpec.member_min_screen_size_px) || 2.5,
+          0.0,
+        );
+        return Math.max(
+          requestedScale,
+          worldScaleForScreenPixelsAt(position, minimumPixels),
+        );
+      }
+
       function registerCameraResponsivePointSprite(sprite, scaleKind, position, pointScaleValue, selectionKey) {
         const entry = {
           sprite,
@@ -16479,6 +16536,26 @@ __SKY_RUNTIME_JS__
         if (entry.scaleKind === "core") {
           return starCoreScaleForPoint(entry.pointScale, entry.position, globalPointGlowStrength);
         }
+        if (entry.scaleKind === "sky_member_glow") {
+          return glowScaleForPoint(
+            skyMemberScaleForPoint(entry.pointScale, entry.position),
+            entry.position,
+            globalPointGlowStrength,
+          );
+        }
+        if (entry.scaleKind === "sky_member_core") {
+          return starCoreScaleForPoint(
+            skyMemberScaleForPoint(entry.pointScale, entry.position),
+            entry.position,
+            globalPointGlowStrength,
+          );
+        }
+        if (entry.scaleKind === "sky_member_marker") {
+          return nonGlowMarkerScaleForPoint(
+            skyMemberScaleForPoint(entry.pointScale, entry.position),
+            entry.position,
+          );
+        }
         return Math.max(Number(entry.pointScale) || 0.0, 0.0);
       }
 
@@ -16486,10 +16563,10 @@ __SKY_RUNTIME_JS__
         if (!entry || !entry.selectionKey) {
           return 1.0;
         }
-        if (entry.scaleKind === "glow") {
+        if (entry.scaleKind === "glow" || entry.scaleKind === "sky_member_glow") {
           return 1.08;
         }
-        if (entry.scaleKind === "core") {
+        if (entry.scaleKind === "core" || entry.scaleKind === "sky_member_core") {
           return 1.22;
         }
         return 1.45;
@@ -17982,6 +18059,262 @@ __SKY_RUNTIME_JS__
         return material;
       }
 
+      let renderedSkyMemberStarCount = 0;
+      let renderedSkyMemberBulkReplacementCount = 0;
+      let renderedSkyClusterBulkPointCount = 0;
+      let renderedSkyMemberDrawObjectCount = 0;
+
+      function skyMemberCatalogForPoint(point, trace) {
+        if (
+          cameraViewMode !== "earth"
+          || !skySpec
+          || skySpec.show_cluster_members_in_sky !== true
+        ) {
+          return null;
+        }
+        const byCluster = skySpec.members_by_cluster || {};
+        const selection = point && typeof point.selection === "object" ? point.selection : {};
+        const candidates = [
+          selection.cluster_name,
+          selection.name,
+          selection.name_all,
+          trace && trace.name,
+        ]
+          .filter((value) => value !== null && value !== undefined && String(value).trim())
+          .flatMap((value) => String(value).split(/[,;|]/g))
+          .map((value) => String(value).trim())
+          .filter(Boolean)
+          .flatMap((name) => [
+            name,
+            name.replace(/_/g, " "),
+            name.replace(/\s+/g, "_"),
+          ]);
+        const memberPointsForKey = (key) => {
+          const points = Array.isArray(byCluster[key]) ? byCluster[key] : [];
+          const members = points.filter((member) => member && member.is_cluster_member === true);
+          return members.length ? { key, points: members } : null;
+        };
+        for (const candidate of candidates) {
+          const resolved = memberPointsForKey(candidate);
+          if (resolved) {
+            return resolved;
+          }
+        }
+        const normalizedCandidates = new Set(
+          candidates.map((value) => normalizeClusterCatalogKey(value))
+        );
+        for (const key of Object.keys(byCluster)) {
+          if (!normalizedCandidates.has(normalizeClusterCatalogKey(key))) {
+            continue;
+          }
+          const resolved = memberPointsForKey(key);
+          if (resolved) {
+            return resolved;
+          }
+        }
+        return null;
+      }
+
+      function skyMemberWorldPosition(member, bulkPosition) {
+        const lDeg = Number(member && member.l);
+        const bDeg = Number(member && member.b);
+        const raDeg = Number(member && member.ra);
+        const decDeg = Number(member && member.dec);
+        let direction = null;
+        if (Number.isFinite(lDeg) && Number.isFinite(bDeg)) {
+          direction = volumeSkyCartesianFromGalacticLonLatDeg(lDeg, bDeg);
+        } else if (Number.isFinite(raDeg) && Number.isFinite(decDeg)) {
+          direction = volumeSkyCartesianFromIcrsDeg(raDeg, decDeg);
+        }
+        if (!direction || !direction.lengthSq || direction.lengthSq() <= 1e-12) {
+          return null;
+        }
+        const earthPoint = earthViewPoint();
+        const bulkDistance = Math.max(bulkPosition.distanceTo(earthPoint), 1e-6);
+        return earthPoint.clone().add(direction.normalize().multiplyScalar(bulkDistance));
+      }
+
+      function addSkyMemberStars(group, catalog, options = {}) {
+        if (!catalog || !Array.isArray(catalog.points) || !catalog.points.length) {
+          return false;
+        }
+        const renderedCatalogKeys = options.renderedCatalogKeys;
+        const catalogIdentity = normalizeClusterCatalogKey(catalog.key || "");
+        renderedSkyMemberBulkReplacementCount += 1;
+        if (renderedCatalogKeys instanceof Set && renderedCatalogKeys.has(catalogIdentity)) {
+          return true;
+        }
+
+        const bulkPosition = options.pointPosition;
+        const positionedMembers = catalog.points
+          .map((member, memberIndex) => ({
+            member,
+            memberIndex,
+            position: skyMemberWorldPosition(member, bulkPosition),
+          }))
+          .filter((entry) => entry.position instanceof THREE.Vector3);
+        if (!positionedMembers.length) {
+          renderedSkyMemberBulkReplacementCount -= 1;
+          return false;
+        }
+        if (renderedCatalogKeys instanceof Set) {
+          renderedCatalogKeys.add(catalogIdentity);
+        }
+
+        const memberSizeDenominator = Math.max(
+          Number(skySpec.member_point_size_denominator) || 20.0,
+          1.0,
+        );
+        const sizeRatio = clampRange(
+          1.0 / memberSizeDenominator,
+          0.001,
+          1.0,
+        );
+        const memberBaseScale = Math.max(Number(options.scale) || 0.0, 0.0) * sizeRatio;
+        const pointColor = String(options.pointColor || "#ffffff");
+        const forceResident = options.forceResident === true;
+        const selectionKey = String(options.selectionKey || "");
+        const selection = options.selection || null;
+        const trace = options.trace || {};
+        const parentPoint = options.point || {};
+        const parentStableKey = String(
+          options.stablePointKey
+          || selectionKey
+          || `${String(trace.key || trace.name || "trace")}:${Number(options.pointIndex) || 0}`
+        );
+        // Render the catalog as a few GPU point clouds instead of allocating a
+        // glow and core Sprite for every member. A large Hunt catalog can
+        // otherwise create hundreds of thousands of scene objects while
+        // entering Sky mode.
+        const relativePositions = new Float32Array(positionedMembers.length * 3);
+        positionedMembers.forEach(({ position }, memberIndex) => {
+          const offset = memberIndex * 3;
+          relativePositions[offset] = position.x - bulkPosition.x;
+          relativePositions[offset + 1] = position.y - bulkPosition.y;
+          relativePositions[offset + 2] = position.z - bulkPosition.z;
+        });
+        const memberGeometry = new THREE.BufferGeometry();
+        memberGeometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(relativePositions, 3),
+        );
+        memberGeometry.computeBoundingSphere();
+
+        const memberGroup = new THREE.Group();
+        memberGroup.position.copy(bulkPosition);
+        const visibleBaseScale = skyMemberScaleForPoint(memberBaseScale, bulkPosition);
+        const glowStrength = Math.max(Number(globalPointGlowStrength) || 0.0, 0.0);
+        const effectiveOpacity = clamp01(Number(options.effectiveOpacity) || 0.0);
+
+        if (glowStrength > 0.02 || forceResident) {
+          const glowBaseOpacity = clampRange(
+            effectiveOpacity * (0.34 + 0.18 * glowStrength),
+            0.0,
+            0.78,
+          );
+          const glowMaterial = new THREE.PointsMaterial({
+            map: starGlowTextureFor("sky_member_halo"),
+            color: pointColor,
+            size: glowScaleForPoint(visibleBaseScale, bulkPosition, glowStrength),
+            sizeAttenuation: true,
+            transparent: true,
+            opacity: glowBaseOpacity * skyMemberRevealProgress,
+            depthWrite: false,
+            depthTest: true,
+            alphaTest: 0.0015,
+            blending: THREE.NormalBlending,
+          });
+          glowMaterial.userData = {
+            cached: false,
+            glow: true,
+            ovizSkyMemberBatch: true,
+          };
+          skyMemberBatchOpacityEntries.push({
+            material: glowMaterial,
+            baseOpacity: glowBaseOpacity,
+          });
+          const glowPoints = new THREE.Points(memberGeometry, glowMaterial);
+          glowPoints.renderOrder = -2;
+          memberGroup.add(glowPoints);
+
+          const coreBaseOpacity = clampRange(
+            effectiveOpacity * (0.74 + 0.16 * glowStrength),
+            0.0,
+            1.0,
+          );
+          const coreMaterial = new THREE.PointsMaterial({
+            map: starCoreTextureFor("sky_member_core"),
+            color: "#ffffff",
+            size: starCoreScaleForPoint(visibleBaseScale, bulkPosition, glowStrength),
+            sizeAttenuation: true,
+            transparent: true,
+            opacity: coreBaseOpacity * skyMemberRevealProgress,
+            depthWrite: false,
+            depthTest: true,
+            blending: THREE.AdditiveBlending,
+          });
+          coreMaterial.userData = {
+            cached: false,
+            glow: true,
+            core: true,
+            ovizSkyMemberBatch: true,
+          };
+          skyMemberBatchOpacityEntries.push({
+            material: coreMaterial,
+            baseOpacity: coreBaseOpacity,
+          });
+          memberGroup.add(new THREE.Points(memberGeometry, coreMaterial));
+          renderedSkyMemberDrawObjectCount += 2;
+        }
+
+        if (glowStrength <= 0.02 || forceResident) {
+          const markerMaterial = new THREE.PointsMaterial({
+            map: markerTextureFor("circle"),
+            color: pointColor,
+            size: nonGlowMarkerScaleForPoint(visibleBaseScale, bulkPosition),
+            sizeAttenuation: true,
+            transparent: true,
+            opacity: effectiveOpacity * skyMemberRevealProgress,
+            depthWrite: false,
+            depthTest: true,
+            alphaTest: 0.035,
+            blending: THREE.NormalBlending,
+          });
+          markerMaterial.userData = {
+            cached: false,
+            ovizSkyMemberBatch: true,
+          };
+          skyMemberBatchOpacityEntries.push({
+            material: markerMaterial,
+            baseOpacity: effectiveOpacity,
+          });
+          memberGroup.add(new THREE.Points(memberGeometry, markerMaterial));
+          renderedSkyMemberDrawObjectCount += 1;
+        }
+        group.add(memberGroup);
+
+        // One non-rendering proxy preserves cluster hover, click, lasso, and
+        // tooltip behavior without putting every member into hoverTargets.
+        const hoverProxy = new THREE.Object3D();
+        hoverProxy.position.copy(bulkPosition);
+        hoverProxy.userData = {
+          selection,
+          selectionKey,
+          referenceFrameKey: parentStableKey,
+          tooltipColor: pointColor,
+          isSkyMemberStar: true,
+          isSkyMemberBatch: true,
+          memberCount: positionedMembers.length,
+          hovertext: `${pointHoverText(parentPoint, trace, pointColor)}<br>${positionedMembers.length.toLocaleString()} member stars`,
+          baseScale: visibleBaseScale,
+          pickWorldScale: nonGlowMarkerScaleForPoint(visibleBaseScale, bulkPosition),
+        };
+        group.add(hoverProxy);
+        hoverTargets.push(hoverProxy);
+        renderedSkyMemberStarCount += positionedMembers.length;
+        return true;
+      }
+
       function addMarkerTrace(parent, trace) {
         const options = arguments.length > 2 && arguments[2] ? arguments[2] : {};
         if (!trace.points || !trace.points.length) {
@@ -17996,6 +18329,7 @@ __SKY_RUNTIME_JS__
         const traceVisibilityMultiplier = traceVisibilityOpacityMultiplier(trace);
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
         const stableKeyCounts = new Map();
+        const renderedSkyMemberCatalogKeys = new Set();
         trace.points.forEach((point, pointIndex) => {
           if (!clusterFilterPassesPoint(point) && !forceResident) {
             return;
@@ -18064,12 +18398,48 @@ __SKY_RUNTIME_JS__
             pointIndex,
             component,
           });
+          const skyMemberCatalog = skyMemberCatalogForPoint(point, trace);
+          if (skyMemberCatalog && skyMemberBatchesEnabled) {
+            addSkyMemberStars(group, skyMemberCatalog, {
+              trace,
+              point,
+              pointIndex,
+              pointPosition,
+              pointColor,
+              effectiveOpacity,
+              scale,
+              selection,
+              selectionKey,
+              stablePointKey,
+              forceResident,
+              renderedCatalogKeys: renderedSkyMemberCatalogKeys,
+            });
+          }
+          // Linked bulk markers stay resident in Sky mode and crossfade into
+          // their GPU-batched member stars after the camera handoff.
+          if (
+            cameraViewMode === "earth"
+            && point
+            && point.selection
+            && String(point.selection.cluster_name || "").trim()
+          ) {
+            renderedSkyClusterBulkPointCount += 1;
+          }
           if (glowStrength > 0.02 || forceResident) {
             const glowOpacity = clampRange(effectiveOpacity * (0.34 + 0.18 * glowStrength), 0.0, 0.78);
             const glowBaseMaterial = starGlowMaterialFor(pointColor, glowOpacity);
-            const glowSprite = new THREE.Sprite(
-              forceResident ? ovizRetainedSpriteMaterial(glowBaseMaterial) : glowBaseMaterial
-            );
+            const glowSpriteMaterial = (forceResident || skyMemberCatalog)
+              ? ovizRetainedSpriteMaterial(glowBaseMaterial)
+              : glowBaseMaterial;
+            if (skyMemberCatalog) {
+              skyMemberBulkOpacityEntries.push({
+                material: glowSpriteMaterial,
+                baseOpacity: Number(glowBaseMaterial.opacity) || 0.0,
+              });
+              glowSpriteMaterial.opacity = (Number(glowBaseMaterial.opacity) || 0.0)
+                * (1.0 - skyMemberRevealProgress);
+            }
+            const glowSprite = new THREE.Sprite(glowSpriteMaterial);
             const glowScale = glowScaleForPoint(
               scale,
               pointPosition,
@@ -18090,9 +18460,18 @@ __SKY_RUNTIME_JS__
 
             const coreOpacity = clampRange(effectiveOpacity * (1.00 + 0.24 * glowStrength), 0.0, 1.0);
             const coreBaseMaterial = starCoreMaterialFor("#ffffff", coreOpacity);
-            const coreSprite = new THREE.Sprite(
-              forceResident ? ovizRetainedSpriteMaterial(coreBaseMaterial) : coreBaseMaterial
-            );
+            const coreSpriteMaterial = (forceResident || skyMemberCatalog)
+              ? ovizRetainedSpriteMaterial(coreBaseMaterial)
+              : coreBaseMaterial;
+            if (skyMemberCatalog) {
+              skyMemberBulkOpacityEntries.push({
+                material: coreSpriteMaterial,
+                baseOpacity: Number(coreBaseMaterial.opacity) || 0.0,
+              });
+              coreSpriteMaterial.opacity = (Number(coreBaseMaterial.opacity) || 0.0)
+                * (1.0 - skyMemberRevealProgress);
+            }
+            const coreSprite = new THREE.Sprite(coreSpriteMaterial);
             const coreScale = starCoreScaleForPoint(
               scale,
               pointPosition,
@@ -18121,9 +18500,18 @@ __SKY_RUNTIME_JS__
               pointColor,
               effectiveOpacity,
             );
-            const sprite = new THREE.Sprite(
-              forceResident ? ovizRetainedSpriteMaterial(markerBaseMaterial) : markerBaseMaterial
-            );
+            const markerSpriteMaterial = (forceResident || skyMemberCatalog)
+              ? ovizRetainedSpriteMaterial(markerBaseMaterial)
+              : markerBaseMaterial;
+            if (skyMemberCatalog) {
+              skyMemberBulkOpacityEntries.push({
+                material: markerSpriteMaterial,
+                baseOpacity: Number(markerBaseMaterial.opacity) || 0.0,
+              });
+              markerSpriteMaterial.opacity = (Number(markerBaseMaterial.opacity) || 0.0)
+                * (1.0 - skyMemberRevealProgress);
+            }
+            const sprite = new THREE.Sprite(markerSpriteMaterial);
             const markerScale = nonGlowMarkerScaleForPoint(scale, pointPosition);
             sprite.position.copy(pointPosition);
             sprite.scale.set(markerScale, markerScale, 1.0);
@@ -20696,6 +21084,8 @@ __STATE_RUNTIME_JS__
       renderLegend();
       updateSelectionUI();
       updatePlaybackButtons();
+      skyMemberBatchesEnabled = cameraViewMode === "earth";
+      setSkyMemberRevealProgress(cameraViewMode === "earth" ? 1.0 : 0.0);
       renderFrame(currentFrameIndex);
       resize();
       setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);

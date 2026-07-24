@@ -1374,9 +1374,37 @@ def patch_script_source(
     include_spiral_arms: bool = False,
     jun6_catalog: bool = False,
     include_background_cluster_trace: bool = True,
+    cluster_members_file: Path | None = None,
+    show_cluster_members_in_sky: bool = False,
 ) -> str:
     source = source.replace("/Users/cam", str(HOME_DIR))
     source = source.replace("/Users/cam/Desktop", str(DESKTOP_ROOT))
+
+    if show_cluster_members_in_sky:
+        if cluster_members_file is None:
+            raise ValueError(
+                "show_cluster_members_in_sky=True requires cluster_members_file."
+            )
+        cluster_members_file = Path(cluster_members_file).expanduser().resolve()
+        if not cluster_members_file.exists():
+            raise FileNotFoundError(
+                f"Missing cluster member catalog: {cluster_members_file}"
+            )
+        if "show_cluster_members_in_sky=" not in source:
+            source, injected_sky_members = re.subn(
+                r"(?m)^(\s*enable_sky_panel\s*=\s*True,\s*)$",
+                (
+                    r"\1\n"
+                    f"    cluster_members_file={str(cluster_members_file)!r},\n"
+                    "    show_cluster_members_in_sky=True,"
+                ),
+                source,
+                count=1,
+            )
+            if injected_sky_members != 1:
+                raise RuntimeError(
+                    "Could not enable cluster-member rendering in the main figure."
+                )
 
     if jun6_catalog:
         jun6_catalog_block = build_jun6_catalog_source_block()
@@ -1882,6 +1910,8 @@ def run_main_figure(
     include_spiral_arms: bool = False,
     jun6_catalog: bool = False,
     include_background_cluster_trace: bool = True,
+    cluster_members_file: Path | None = None,
+    show_cluster_members_in_sky: bool = False,
     website_output_html: Path | None = WEBSITE_OUTPUT_HTML,
 ) -> Path:
     output_html.parent.mkdir(parents=True, exist_ok=True)
@@ -1910,6 +1940,8 @@ def run_main_figure(
         include_spiral_arms=include_spiral_arms,
         jun6_catalog=jun6_catalog,
         include_background_cluster_trace=include_background_cluster_trace,
+        cluster_members_file=cluster_members_file,
+        show_cluster_members_in_sky=show_cluster_members_in_sky,
     )
 
     run_script_source(patched_source)

@@ -105,10 +105,16 @@ fig = viz.make_plot(
     sky_frame="galactic",
     sky_survey="P/DSS2/color",
     cluster_members_file="/absolute/path/to/members.csv",  # optional
+    show_cluster_members_in_sky=True,
 )
 ```
 
 Sky behavior:
+- when `show_cluster_members_in_sky=True`, matched cluster members replace the
+  bulk cluster marker in Sky view and inherit the parent trace color/visibility
+- member stars use `1/20` of the parent cluster point size; a small 2.5 px
+  render-only floor keeps them visible in wide Sky views, while the normal
+  bulk marker remains unchanged in 3D
 - click a cluster member in 3D at `t = 0` to set the footprint and sky target
 - cone footprint is shown only at `t = 0`
 - sky layers, Aladin backgrounds, and spectrum aperture controls are built into the viewer
@@ -116,9 +122,10 @@ Sky behavior:
 ## Optional Member File Format
 
 If `cluster_members_file` is passed, it should be a CSV with:
-- `name` (cluster label)
-- `l` (galactic longitude, deg)
-- `b` (galactic latitude, deg)
+- a cluster label column: `name`, `cluster_name`, `cluster`, or `group_name`
+- either Galactic coordinates (`l`/`b`) or ICRS coordinates
+  (`ra`/`dec`, including common `RA_ICRS`/`DE_ICRS` aliases)
+- optionally, `source_id`, `gaia_source_id`, or `GaiaDR3`
 
 When a cluster is selected, only that cluster's member stars are rendered in Aladin.
 

@@ -230,6 +230,8 @@ class Trace:
 
         df_int['age_myr'] = np.repeat(self.df['age_myr'].values, len(time))
         df_int['name'] = np.repeat(self.df['name'].values, len(time))
+        if 'name_all' in self.df.columns:
+            df_int['name_all'] = np.repeat(self.df['name_all'].values, len(time))
         df_int['time'] = np.tile(time, len(self.df))
 
         df_int.reset_index(drop=True, inplace=True)

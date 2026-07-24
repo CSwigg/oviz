@@ -110,10 +110,34 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
 
     sky_panel = scene_spec["sky_panel"]
     assert sky_panel["enabled"] is True
+    assert sky_panel["show_cluster_members_in_sky"] is True
+    assert sky_panel["member_point_size_denominator"] == 20
+    assert sky_panel["member_min_screen_size_px"] == 2.5
     assert len(sky_panel.get("members_by_cluster", {})) > 1000
+    explicit_members = [
+        member
+        for members in sky_panel["members_by_cluster"].values()
+        for member in members
+        if member.get("is_cluster_member") is True
+    ]
+    assert len(explicit_members) >= 2500
     assert scene_spec["sky_dome"]["enabled"] is True
     assert scene_spec["sky_dome"]["source"] == "aladin"
     assert scene_spec["sky_dome"]["background_mode"] == "live_aladin"
+    assert "function addSkyMemberStars(group, catalog, options = {})" in html
+    assert "function skyMemberScaleForPoint(basePointScale, position)" in html
+    assert "function normalizeClusterCatalogKey(value)" in html
+    assert "new THREE.Points(memberGeometry, glowMaterial)" in html
+    assert "new THREE.Points(memberGeometry, coreMaterial)" in html
+    assert "root.dataset.skyMemberDrawObjectCount = String(" in html
+    assert "function animateSkyMemberReveal(targetProgress" in html
+    assert 'starGlowTextureFor("sky_member_halo")' in html
+    assert 'starCoreTextureFor("sky_member_core")' in html
+    assert "skyMemberBulkOpacityEntries" in html
+    assert '"sky_member_glow"' in html
+    assert '"sky_member_core"' in html
+    assert 'root.dataset.skyClusterBulkPointCount = String(' in html
+    assert 'root.dataset.skyMemberStarCount = String(renderedSkyMemberStarCount)' in html
 
     for widget_key in ("age_kde", "cluster_filter", "dendrogram"):
         assert scene_spec[widget_key]["enabled"] is False

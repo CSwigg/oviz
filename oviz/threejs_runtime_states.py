@@ -1352,6 +1352,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
         if (cameraViewMode !== "earth") {
           earthViewReturnCameraState = captureEarthViewReturnCameraState();
         }
+        if (typeof setSkyMemberRevealProgress === "function") {
+          setSkyMemberRevealProgress(0.0);
+        }
+        skyMemberBatchesEnabled = false;
         const earthPoint = earthViewPoint();
         const targetPoint = earthViewTargetPoint();
         earthViewFocusDistance = targetPoint
@@ -2153,6 +2157,21 @@ THREEJS_STATE_RUNTIME_JS = r"""
           updateTimelineMotionOpacity();
           setMilkyWayModelOpacityScale(transition.toViewMode === "earth" ? 0.0 : 1.0);
           setSkyDomeViewOpacityScale(transition.toViewMode === "earth" ? 1.0 : 0.0, { force: false });
+          if (
+            transition.viewTransitionKind === "enter-earth"
+            && typeof animateSkyMemberRevealPromise === "function"
+          ) {
+            skyMemberBatchesEnabled = true;
+            renderFrame(currentFrameIndex);
+            transition.sceneRenderCount += 1;
+            await animateSkyMemberRevealPromise(1.0, { durationMs: 680.0 });
+            if (transition !== ovizStateTransition) {
+              return;
+            }
+          } else if (typeof setSkyMemberRevealProgress === "function") {
+            skyMemberBatchesEnabled = transition.toViewMode === "earth";
+            setSkyMemberRevealProgress(transition.toViewMode === "earth" ? 1.0 : 0.0);
+          }
           if (transition !== ovizStateTransition) {
             return;
           }

@@ -7,8 +7,8 @@ from oviz.threejs_figure import ThreeJSFigure
 
 KNOWN_GOOD_STARTUP_HASHES = {
     "apply_initial": "d1e2211940073214e2409142a115f5522865530b04518097c695e7a1df7f8532",
-    "marker": "e1ff90b3eb153b326af817e0eeb4eed8d79ca3cc5a3fa051fd16534bd7e890ff",
-    "frame_scene": "11d826e0224e45691ccd6ee340ff4624e4d1b592a30279b28ff8402b1f0701d7",
+    "marker": "4bb381625d33342192a8cff72525c52ee7efcb2df6b46ee7d00900a98aa32d24",
+    "frame_scene": "965ea4cd4f6bbbfb34e63268ce398171a6d3e8739dc9d5d612b156cc78d1ee3f",
     "render_frame": "3a6d2a6f01c07569d990dd7283f9e8fdf749de9c912acb35e4ae89c49860125a",
 }
 

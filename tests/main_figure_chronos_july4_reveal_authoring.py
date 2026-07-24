@@ -185,7 +185,8 @@ def add_reveal_preload(html: str) -> str:
     <link data-oviz-deck-reveal="true" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@{REVEAL_VERSION}/dist/reveal.css" />
     <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/reveal.js@{REVEAL_VERSION}/dist/reveal.js" />
 """
-    return html.replace("  </head>", preload + "  </head>", 1)
+    closing_head = "  </head>" if "  </head>" in html else "</head>"
+    return html.replace(closing_head, preload + closing_head, 1)
 
 
 def build_authoring_figure(source_html: Path, output_html: Path) -> Path:
