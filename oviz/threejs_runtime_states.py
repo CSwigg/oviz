@@ -917,6 +917,53 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return { changed, phases, effectiveDurationMs, requestedDurationMs };
       }
 
+      function ovizStatePhasePlanAfterViewButtonHandoff(phasePlan) {
+        const original = phasePlan || {
+          changed: { camera: false, appearance: false, time: false },
+          phases: [],
+          effectiveDurationMs: 0.0,
+          requestedDurationMs: 0.0,
+        };
+        const remaining = (Array.isArray(original.phases) ? original.phases : [])
+          .map((phase) => {
+            const domains = (Array.isArray(phase.domains) ? phase.domains : [])
+              .filter((domain) => domain !== "camera");
+            return Object.assign({}, phase, { domains });
+          })
+          .filter((phase) => phase.domains.length > 0);
+        if (!remaining.length) {
+          return {
+            changed: Object.assign({}, original.changed, { camera: false }),
+            phases: [{ name: "settle", domains: [], startMs: 0.0, endMs: 0.0 }],
+            effectiveDurationMs: 0.0,
+            requestedDurationMs: original.requestedDurationMs,
+          };
+        }
+        let cursorMs = 0.0;
+        const phases = remaining.map((phase, index) => {
+          const originalDuration = Math.max(
+            Number(phase.endMs) - Number(phase.startMs),
+            800.0,
+          );
+          const next = Object.assign({}, phase, {
+            name: phase.domains.join("+"),
+            startMs: cursorMs,
+            endMs: cursorMs + originalDuration,
+          });
+          cursorMs = next.endMs;
+          if (index === remaining.length - 1) {
+            next.endMs = cursorMs;
+          }
+          return next;
+        });
+        return {
+          changed: Object.assign({}, original.changed, { camera: false }),
+          phases,
+          effectiveDurationMs: cursorMs,
+          requestedDurationMs: original.requestedDurationMs,
+        };
+      }
+
       function ovizRenderStateTimelineFrameLikeSlider(transition, frameValue) {
         const clampedValue = clampFrameValue(frameValue);
         const stableFrameIndex = clampFrameIndex(clampedValue);
@@ -1475,13 +1522,20 @@ THREEJS_STATE_RUNTIME_JS = r"""
               )
           );
         const nativeViewTransition = viewTransitionKind !== "generic";
+        const usesViewButtonHandoff = (
+          viewTransitionKind === "enter-earth"
+          || viewTransitionKind === "exit-earth"
+        );
         if (viewTransitionKind === "enter-earth" || viewTransitionKind === "exit-earth") {
           transitionSpec.duration_ms = Math.max(
             transitionSpec.duration_ms,
             toViewMode === "earth" ? 1320 : 1180
           );
         }
-        const phasePlan = ovizBuildTransitionPhases(from, destination, transitionSpec);
+        let phasePlan = ovizBuildTransitionPhases(from, destination, transitionSpec);
+        if (usesViewButtonHandoff) {
+          phasePlan = ovizStatePhasePlanAfterViewButtonHandoff(phasePlan);
+        }
         if (options.preserveActionRun !== true) {
           ovizCancelActionWithoutSnap("state-navigation");
         }
@@ -1536,12 +1590,16 @@ THREEJS_STATE_RUNTIME_JS = r"""
           visualChanges: ovizTransitionVisualSignature(from) !== ovizTransitionVisualSignature(destination),
           nativeViewTransition,
           viewTransitionKind,
+          usesViewButtonHandoff,
+          viewButtonHandoffPending: usesViewButtonHandoff,
+          viewButtonHandoffComplete: !usesViewButtonHandoff,
           transitionId,
           earthCameraTrack: viewTransitionKind === "earth-to-earth"
             ? ovizCreateEarthCameraTrack(destination)
             : null,
           nativeCameraTrack: (
-            viewTransitionKind === "enter-earth" || viewTransitionKind === "exit-earth"
+            !usesViewButtonHandoff
+            && (viewTransitionKind === "enter-earth" || viewTransitionKind === "exit-earth")
           ) ? ovizCreateNativeViewCameraTrack(destination) : null,
           skyBackgroundPromise: null,
           skyLayerPromise: Promise.resolve({ unchanged: true }),
@@ -1557,7 +1615,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           lassoLoadPromise: null,
           targetRuntimeLassoMask: null,
           selectionTransition: null,
-          currentPhase: phasePlan.phases[0].name,
+          currentPhase: usesViewButtonHandoff ? "view-handoff" : phasePlan.phases[0].name,
           currentAppearanceProgress: 0.0,
           lastAppliedAppearanceProgress: null,
           lastRenderedTimeProgress: 0.0,
@@ -1582,12 +1640,14 @@ THREEJS_STATE_RUNTIME_JS = r"""
           root.dataset.stateTransitionKind = viewTransitionKind;
           root.dataset.stateTransitionProgress = "0";
           root.dataset.stateTransitionId = transitionId;
-          root.dataset.stateTransitionPhase = phasePlan.phases[0].name;
+          root.dataset.stateTransitionPhase = usesViewButtonHandoff
+            ? "view-handoff"
+            : phasePlan.phases[0].name;
           root.dataset.stateTransitionPhaseProgress = "0";
           root.dataset.stateTransitionEffectiveDurationMs = String(phasePlan.effectiveDurationMs);
         }
         ovizWriteTransitionDiagnostics(ovizStateTransition, {
-          phase: phasePlan.phases[0].name,
+          phase: usesViewButtonHandoff ? "view-handoff" : phasePlan.phases[0].name,
           phaseProgress: 0.0,
           effectiveDurationMs: phasePlan.effectiveDurationMs,
           topologyPrepareCount: 0,
@@ -1640,29 +1700,68 @@ THREEJS_STATE_RUNTIME_JS = r"""
         }
         if (nativeViewTransition) {
           const destinationCameraState = ovizStateDestinationCameraState(destination);
-          if (viewTransitionKind === "enter-earth") {
-            setMilkyWayModelOpacityScale(1.0);
-            setSkyDomeViewOpacityScale(0.0, { force: false });
-          } else if (viewTransitionKind === "exit-earth") {
-            setMilkyWayModelOpacityScale(0.0);
-            setSkyDomeViewOpacityScale(1.0, { force: false });
-          }
-          if (toViewMode === "earth") {
-            if (viewTransitionKind === "enter-earth") {
+          if (usesViewButtonHandoff) {
+            const transition = ovizStateTransition;
+            const completeViewButtonHandoff = () => {
+              if (transition !== ovizStateTransition) {
+                return;
+              }
+              const synchronizedStart = performance.now();
+              transition.viewButtonHandoffPending = false;
+              transition.viewButtonHandoffComplete = true;
+              transition.startedAt = synchronizedStart;
+              transition.startedAtEpochMs = ovizTransitionEpochMs(synchronizedStart);
+              transition.lastAnimationAt = synchronizedStart;
+              const destinationViewOffset = destinationCameraState.viewOffset || { x: 0.0, y: 0.0 };
+              ovizApplyInterpolatedViewOffset(
+                destinationViewOffset,
+                destinationViewOffset,
+                1.0,
+              );
+              if (root && root.dataset) {
+                root.dataset.stateTransitionPhase = transition.phasePlan.phases[0].name;
+                root.dataset.stateTransitionPhaseProgress = "0";
+                root.dataset.stateTransitionViewHandoff = "complete";
+              }
+              if (typeof ovizInvalidateRender === "function") {
+                ovizInvalidateRender();
+              }
+            };
+            if (toViewMode === "earth") {
+              skyMemberDisplayMode = normalizeSkyMemberDisplayMode(
+                (destination.global_controls || {}).sky_member_display_mode
+              );
+              syncSkyMemberDisplayToggleUi();
               resetToSunReferenceFrameForSkyView();
-              ovizStateTransition.nativeCameraTrack = ovizCreateNativeViewCameraTrack(destination);
-              ovizPrepareEarthViewModeForStateTransition();
+              ovizPrepareDestinationSkyPresentation(destination, {
+                postLayersToAladin: false,
+                prepareOnly: true,
+              });
+              transition.sourceSkyLayers = sourceSkyLayers;
+              transition.skyBackgroundPromise = null;
+              enterEarthViewFromCurrentCamera({
+                preserveScaleBar: false,
+                preserveDirection: true,
+                preserveFov: false,
+                destinationCameraState,
+                onComplete: completeViewButtonHandoff,
+              });
+            } else {
+              exitEarthViewToCameraState({
+                destinationCameraState,
+                onComplete: completeViewButtonHandoff,
+              });
             }
+            if (root && root.dataset) {
+              root.dataset.stateTransitionPhase = "view-handoff";
+              root.dataset.stateTransitionPhaseProgress = "0";
+              root.dataset.stateTransitionViewHandoff = viewTransitionKind;
+            }
+          } else if (toViewMode === "earth") {
             ovizPrepareDestinationSkyPresentation(destination, {
               postLayersToAladin: false,
               prepareOnly: true,
             });
-            if (viewTransitionKind === "enter-earth") {
-              const synchronizedStart = performance.now();
-              ovizStateTransition.startedAt = synchronizedStart;
-              ovizStateTransition.startedAtEpochMs = ovizTransitionEpochMs(synchronizedStart);
-              ovizStateTransition.lastAnimationAt = synchronizedStart;
-            }
             // The rendered Three.js camera is the only spatial source of truth.
             // updateSkyDomeBackgroundFrame() forwards that exact pose to Aladin
             // every frame, matching the smooth View-button path and preventing
@@ -1683,7 +1782,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           name: target.name,
           durationMs: transitionSpec.duration_ms,
           effectiveDurationMs: phasePlan.effectiveDurationMs,
-          phase: phasePlan.phases[0].name,
+          phase: usesViewButtonHandoff ? "view-handoff" : phasePlan.phases[0].name,
           easing: transitionSpec.easing,
         });
         return promise;
@@ -1708,6 +1807,21 @@ THREEJS_STATE_RUNTIME_JS = r"""
             setter(ovizLerp(a, b, progress));
           }
         });
+        const fromViewMode = String(fromGlobal.camera_view_mode || "free");
+        const toViewMode = String(toGlobal.camera_view_mode || "free");
+        if (
+          cameraViewMode === "earth"
+          && fromViewMode === "earth"
+          && toViewMode === "earth"
+          && typeof setSkyMemberRevealProgress === "function"
+        ) {
+          skyMemberBatchesEnabled = true;
+          setSkyMemberRevealProgress(ovizLerp(
+            skyMemberDisplayTargetProgress(fromGlobal.sky_member_display_mode),
+            skyMemberDisplayTargetProgress(toGlobal.sky_member_display_mode),
+            progress,
+          ));
+        }
       }
 
       function ovizInterpolateColor(fromColor, toColor, progress) {
@@ -1793,6 +1907,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
         if (transition.finishing) {
           return true;
         }
+        if (transition.viewButtonHandoffPending) {
+          // The ordinary View-button transition owns the camera, star/bulk
+          // crossfade, Milky Way, and Aladin fades. Do not run the State
+          // renderer in parallel; that duplicate writer caused the lower FPS
+          // and made State mode changes differ from a manual View click.
+          if (root && root.dataset) {
+            root.dataset.stateTransitionPhase = "view-handoff";
+            root.dataset.stateTransitionViewHandoff = transition.viewTransitionKind;
+          }
+          transition.skippedSceneUpdateCount += 1;
+          return true;
+        }
         try {
           const frameGapMs = Math.max(0, now - transition.lastAnimationAt);
           transition.lastAnimationAt = now;
@@ -1841,8 +1967,11 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (transition.viewTransitionKind === "earth-to-earth") {
             ovizApplyEarthCameraTrack(transition.earthCameraTrack, cameraProgress);
           } else if (
-            transition.viewTransitionKind === "enter-earth"
-            || transition.viewTransitionKind === "exit-earth"
+            !transition.usesViewButtonHandoff
+            && (
+              transition.viewTransitionKind === "enter-earth"
+              || transition.viewTransitionKind === "exit-earth"
+            )
           ) {
             ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, modeCameraProgress);
           } else if (!transition.nativeViewTransition) {
@@ -1948,7 +2077,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
             }
             transition.lastAppliedAppearanceProgress = appearanceProgress;
           }
-          if (transition.viewTransitionKind === "enter-earth") {
+          if (
+            transition.viewTransitionKind === "enter-earth"
+            && !transition.usesViewButtonHandoff
+          ) {
             const milkyWayFade = 1.0 - ovizEasing(
               transition.transitionSpec.easing,
               clampRange(cameraRaw / 0.20, 0, 1)
@@ -1959,7 +2091,22 @@ THREEJS_STATE_RUNTIME_JS = r"""
             );
             setMilkyWayModelOpacityScale(milkyWayFade);
             setSkyDomeViewOpacityScale(skyFade, { force: false });
-          } else if (transition.viewTransitionKind === "exit-earth") {
+          } else if (
+            transition.viewTransitionKind === "exit-earth"
+            && !transition.usesViewButtonHandoff
+          ) {
+            // Match the normal View-button handoff: use the camera phase's
+            // stationary opening interval to crossfade member stars back to
+            // their bulk cluster markers. The camera does not begin moving
+            // until modeCameraRaw advances beyond this same 20% boundary.
+            const memberFade = 1.0 - ovizEasing(
+              transition.transitionSpec.easing,
+              clampRange(cameraRaw / 0.20, 0, 1)
+            );
+            setSkyMemberRevealProgress(memberFade);
+            if (memberFade <= 1e-6) {
+              skyMemberBatchesEnabled = false;
+            }
             const skyFade = 1.0 - ovizEasing(
               transition.transitionSpec.easing,
               clampRange(cameraRaw / 0.20, 0, 1)
@@ -2159,6 +2306,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           setSkyDomeViewOpacityScale(transition.toViewMode === "earth" ? 1.0 : 0.0, { force: false });
           if (
             transition.viewTransitionKind === "enter-earth"
+            && !transition.usesViewButtonHandoff
             && typeof animateSkyMemberRevealPromise === "function"
           ) {
             skyMemberBatchesEnabled = true;
@@ -2169,8 +2317,19 @@ THREEJS_STATE_RUNTIME_JS = r"""
               return;
             }
           } else if (typeof setSkyMemberRevealProgress === "function") {
-            skyMemberBatchesEnabled = transition.toViewMode === "earth";
-            setSkyMemberRevealProgress(transition.toViewMode === "earth" ? 1.0 : 0.0);
+            skyMemberBatchesEnabled = Boolean(
+              transition.toViewMode === "earth"
+              && skyMemberDisplayTargetProgress(
+                (transition.targetSnapshot.global_controls || {}).sky_member_display_mode
+              ) > 0.5
+            );
+            setSkyMemberRevealProgress(
+              transition.toViewMode === "earth"
+                ? skyMemberDisplayTargetProgress(
+                  (transition.targetSnapshot.global_controls || {}).sky_member_display_mode
+                )
+                : 0.0
+            );
           }
           if (transition !== ovizStateTransition) {
             return;

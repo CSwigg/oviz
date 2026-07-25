@@ -403,6 +403,10 @@ THREEJS_WIDGET_CONTENT_RUNTIME_JS = """
         return series;
       }
 
+      let ovizAgeKdeStaticCanvas = null;
+      let ovizAgeKdeStaticSignature = "";
+      let ovizAgeKdeMarkerSignature = "";
+
       function renderAgeKdeWidget() {
         if (!ageKdeSpec.enabled || !ageKdeCanvasEl || widgetModeForKey("age_kde") === "hidden") {
           return;
@@ -412,19 +416,37 @@ THREEJS_WIDGET_CONTENT_RUNTIME_JS = """
         const cssWidth = Math.max(1, Math.round(rect.width));
         const cssHeight = Math.max(1, Math.round(rect.height));
         const dpr = Math.max(window.devicePixelRatio || 1, 1);
+        const staticSignature = JSON.stringify({
+          cssWidth,
+          cssHeight,
+          dpr,
+          currentGroup,
+          legendState,
+          traceStyleStateByKey,
+          clusterFilterRangeStateByKey,
+          selectedClusterKeys: Array.from(selectedClusterKeys).sort(),
+          sceneBackground: theme.scene_bgcolor || theme.paper_bgcolor || "#000000",
+          axisColor: ageKdeSpec.axis_color || theme.axis_color || "#808080",
+          xRange: ageKdeSpec.x_range,
+          yRange: ageKdeSpec.y_range,
+        });
+        const markerTime = frameTimeForValue(displayedFrameValue);
+        const markerSignature = `${staticSignature}|${Number(markerTime) || 0.0}`;
+        if (
+          staticSignature === ovizAgeKdeStaticSignature
+          && markerSignature === ovizAgeKdeMarkerSignature
+        ) {
+          return;
+        }
         if (ageKdeCanvasEl.width !== Math.round(cssWidth * dpr) || ageKdeCanvasEl.height !== Math.round(cssHeight * dpr)) {
           ageKdeCanvasEl.width = Math.round(cssWidth * dpr);
           ageKdeCanvasEl.height = Math.round(cssHeight * dpr);
         }
 
-        const ctx = ageKdeCanvasEl.getContext("2d");
-        if (!ctx) {
+        const visibleCtx = ageKdeCanvasEl.getContext("2d");
+        if (!visibleCtx) {
           return;
         }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, cssWidth, cssHeight);
-        ctx.fillStyle = theme.scene_bgcolor || theme.paper_bgcolor || "#000000";
-        ctx.fillRect(0, 0, cssWidth, cssHeight);
 
         const margin = { left: 44, right: 16, top: 18, bottom: 28 };
         const plotWidth = Math.max(40, cssWidth - margin.left - margin.right);
@@ -433,121 +455,138 @@ THREEJS_WIDGET_CONTENT_RUNTIME_JS = """
         const xMin = Number(xRange[0]);
         const xMax = Number(xRange[1]);
         const axisColor = String(ageKdeSpec.axis_color || theme.axis_color || "#808080");
-        const filteredSeries = filteredAgeKdeSeries();
-        const ageFilterParameter = ageKdeFilterParameterSpec();
-        const ageRangeState = ageFilterParameter ? clampClusterFilterRangeForParameter(ageFilterParameter) : null;
-        const ageAxisRangeState = ageFilterParameter ? ageKdeAxisFilterRange() : null;
-        const ageEntries = ageKdeBaseEntries();
-        const yMax = Math.max(
-          ...filteredSeries.map((series) => Math.max(...series.y, 0.0)),
-          Number((Array.isArray(ageKdeSpec.y_range) ? ageKdeSpec.y_range[1] : 1.0)) || 1.0,
-          1e-6,
-        );
 
         function xToPx(value) {
           const denom = Math.max(xMax - xMin, 1e-6);
           return margin.left + ((Number(value) - xMin) / denom) * plotWidth;
         }
 
-        function yToPx(value) {
-          return margin.top + plotHeight - (Math.max(Number(value), 0.0) / yMax) * plotHeight;
-        }
-
-        ctx.strokeStyle = axisColor;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(margin.left, margin.top);
-        ctx.lineTo(margin.left, margin.top + plotHeight);
-        ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
-        ctx.stroke();
-
-        ctx.fillStyle = axisColor;
-        ctx.font = "11px Helvetica, Arial, sans-serif";
-        ctx.textBaseline = "middle";
-        ctx.textAlign = "right";
-        [0.0, 0.5, 1.0].forEach((frac) => {
-          const yValue = frac * yMax;
-          const yPx = yToPx(yValue);
-          ctx.globalAlpha = 0.16;
-          ctx.beginPath();
-          ctx.moveTo(margin.left, yPx);
-          ctx.lineTo(margin.left + plotWidth, yPx);
-          ctx.stroke();
-          ctx.globalAlpha = 1.0;
-          ctx.fillText(formatCompactNumber(yValue), margin.left - 8, yPx);
-        });
-
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        [xMin, 0.5 * (xMin + xMax), xMax].forEach((xValue) => {
-          const xPx = xToPx(xValue);
-          ctx.fillText(formatCompactNumber(xValue), xPx, margin.top + plotHeight + 8);
-        });
-
-        const visibleTraceNames = [];
-        filteredSeries.forEach((traceSpec) => {
-          const lineColor = traceSpec.color || axisColor;
-          const lineOpacity = clamp01(traceSpec.opacity);
-          const xValues = Array.isArray(traceSpec.x) ? traceSpec.x : [];
-          const yValues = Array.isArray(traceSpec.y) ? traceSpec.y : [];
-          if (xValues.length < 2 || yValues.length !== xValues.length) {
+        if (staticSignature !== ovizAgeKdeStaticSignature || !ovizAgeKdeStaticCanvas) {
+          if (!ovizAgeKdeStaticCanvas) {
+            ovizAgeKdeStaticCanvas = document.createElement("canvas");
+          }
+          ovizAgeKdeStaticCanvas.width = Math.round(cssWidth * dpr);
+          ovizAgeKdeStaticCanvas.height = Math.round(cssHeight * dpr);
+          const ctx = ovizAgeKdeStaticCanvas.getContext("2d");
+          if (!ctx) {
             return;
           }
-          visibleTraceNames.push(String(traceSpec.traceName || traceSpec.traceKey || "trace"));
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, cssWidth, cssHeight);
+          ctx.fillStyle = theme.scene_bgcolor || theme.paper_bgcolor || "#000000";
+          ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-          ctx.beginPath();
-          ctx.moveTo(xToPx(xValues[0]), margin.top + plotHeight);
-          for (let i = 0; i < xValues.length; i += 1) {
-            ctx.lineTo(xToPx(xValues[i]), yToPx(yValues[i]));
+          const filteredSeries = filteredAgeKdeSeries();
+          const ageFilterParameter = ageKdeFilterParameterSpec();
+          const ageRangeState = ageFilterParameter ? clampClusterFilterRangeForParameter(ageFilterParameter) : null;
+          const ageAxisRangeState = ageFilterParameter ? ageKdeAxisFilterRange() : null;
+          const yMax = Math.max(
+            ...filteredSeries.map((series) => Math.max(...series.y, 0.0)),
+            Number((Array.isArray(ageKdeSpec.y_range) ? ageKdeSpec.y_range[1] : 1.0)) || 1.0,
+            1e-6,
+          );
+
+          function yToPx(value) {
+            return margin.top + plotHeight - (Math.max(Number(value), 0.0) / yMax) * plotHeight;
           }
-          ctx.lineTo(xToPx(xValues[xValues.length - 1]), margin.top + plotHeight);
-          ctx.closePath();
-          ctx.fillStyle = cssColorWithAlpha(lineColor, Math.min(0.28, 0.14 + 0.18 * lineOpacity), axisColor);
-          ctx.fill();
 
+          ctx.strokeStyle = axisColor;
+          ctx.lineWidth = 1.5;
           ctx.beginPath();
-          for (let i = 0; i < xValues.length; i += 1) {
-            const xPx = xToPx(xValues[i]);
-            const yPx = yToPx(yValues[i]);
-            if (i === 0) {
-              ctx.moveTo(xPx, yPx);
-            } else {
-              ctx.lineTo(xPx, yPx);
+          ctx.moveTo(margin.left, margin.top);
+          ctx.lineTo(margin.left, margin.top + plotHeight);
+          ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
+          ctx.stroke();
+
+          ctx.fillStyle = axisColor;
+          ctx.font = "11px Helvetica, Arial, sans-serif";
+          ctx.textBaseline = "middle";
+          ctx.textAlign = "right";
+          [0.0, 0.5, 1.0].forEach((frac) => {
+            const yValue = frac * yMax;
+            const yPx = yToPx(yValue);
+            ctx.globalAlpha = 0.16;
+            ctx.beginPath();
+            ctx.moveTo(margin.left, yPx);
+            ctx.lineTo(margin.left + plotWidth, yPx);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+            ctx.fillText(formatCompactNumber(yValue), margin.left - 8, yPx);
+          });
+
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          [xMin, 0.5 * (xMin + xMax), xMax].forEach((xValue) => {
+            const xPx = xToPx(xValue);
+            ctx.fillText(formatCompactNumber(xValue), xPx, margin.top + plotHeight + 8);
+          });
+
+          filteredSeries.forEach((traceSpec) => {
+            const lineColor = traceSpec.color || axisColor;
+            const lineOpacity = clamp01(traceSpec.opacity);
+            const xValues = Array.isArray(traceSpec.x) ? traceSpec.x : [];
+            const yValues = Array.isArray(traceSpec.y) ? traceSpec.y : [];
+            if (xValues.length < 2 || yValues.length !== xValues.length) {
+              return;
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(xToPx(xValues[0]), margin.top + plotHeight);
+            for (let i = 0; i < xValues.length; i += 1) {
+              ctx.lineTo(xToPx(xValues[i]), yToPx(yValues[i]));
+            }
+            ctx.lineTo(xToPx(xValues[xValues.length - 1]), margin.top + plotHeight);
+            ctx.closePath();
+            ctx.fillStyle = cssColorWithAlpha(lineColor, Math.min(0.28, 0.14 + 0.18 * lineOpacity), axisColor);
+            ctx.fill();
+
+            ctx.beginPath();
+            for (let i = 0; i < xValues.length; i += 1) {
+              const xPx = xToPx(xValues[i]);
+              const yPx = yToPx(yValues[i]);
+              if (i === 0) {
+                ctx.moveTo(xPx, yPx);
+              } else {
+                ctx.lineTo(xPx, yPx);
+              }
+            }
+            ctx.strokeStyle = cssColorWithAlpha(lineColor, lineOpacity, axisColor);
+            ctx.lineWidth = 2.0;
+            ctx.stroke();
+          });
+
+          if (ageFilterParameter && ageRangeState && ageAxisRangeState) {
+            if (ageKdeFilterRangeMinEl) {
+              ageKdeFilterRangeMinEl.value = String(ageKdeAxisValueToSlider(ageAxisRangeState.min));
+            }
+            if (ageKdeFilterRangeMaxEl) {
+              ageKdeFilterRangeMaxEl.value = String(ageKdeAxisValueToSlider(ageAxisRangeState.max));
+            }
+            if (ageKdeFilterRangeReadoutMinEl) {
+              ageKdeFilterRangeReadoutMinEl.textContent = formatAgeKdeAxisValue(ageAxisRangeState.min);
+            }
+            if (ageKdeFilterRangeReadoutMaxEl) {
+              ageKdeFilterRangeReadoutMaxEl.textContent = formatAgeKdeAxisValue(ageAxisRangeState.max);
             }
           }
-          ctx.strokeStyle = cssColorWithAlpha(lineColor, lineOpacity, axisColor);
-          ctx.lineWidth = 2.0;
-          ctx.stroke();
-        });
-
-        const frame = currentFrame();
-        const timeValue = frame ? Number(frame.time) : 0.0;
-        const markerX = xToPx(Math.min(Math.max(timeValue, xMin), xMax));
-        ctx.save();
-        ctx.setLineDash([6, 6]);
-        ctx.strokeStyle = axisColor;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(markerX, margin.top);
-        ctx.lineTo(markerX, margin.top + plotHeight);
-        ctx.stroke();
-        ctx.restore();
-
-        if (ageFilterParameter && ageRangeState && ageAxisRangeState) {
-          if (ageKdeFilterRangeMinEl) {
-            ageKdeFilterRangeMinEl.value = String(ageKdeAxisValueToSlider(ageAxisRangeState.min));
-          }
-          if (ageKdeFilterRangeMaxEl) {
-            ageKdeFilterRangeMaxEl.value = String(ageKdeAxisValueToSlider(ageAxisRangeState.max));
-          }
-          if (ageKdeFilterRangeReadoutMinEl) {
-            ageKdeFilterRangeReadoutMinEl.textContent = formatAgeKdeAxisValue(ageAxisRangeState.min);
-          }
-          if (ageKdeFilterRangeReadoutMaxEl) {
-            ageKdeFilterRangeReadoutMaxEl.textContent = formatAgeKdeAxisValue(ageAxisRangeState.max);
-          }
+          ovizAgeKdeStaticSignature = staticSignature;
         }
 
+        visibleCtx.setTransform(1, 0, 0, 1, 0, 0);
+        visibleCtx.clearRect(0, 0, ageKdeCanvasEl.width, ageKdeCanvasEl.height);
+        visibleCtx.drawImage(ovizAgeKdeStaticCanvas, 0, 0);
+        visibleCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const markerX = xToPx(Math.min(Math.max(markerTime, xMin), xMax));
+        visibleCtx.save();
+        visibleCtx.setLineDash([6, 6]);
+        visibleCtx.strokeStyle = axisColor;
+        visibleCtx.lineWidth = 1.5;
+        visibleCtx.beginPath();
+        visibleCtx.moveTo(markerX, margin.top);
+        visibleCtx.lineTo(markerX, margin.top + plotHeight);
+        visibleCtx.stroke();
+        visibleCtx.restore();
+        ovizAgeKdeMarkerSignature = markerSignature;
       }
 
       function renderBoxMetricsWidget() {

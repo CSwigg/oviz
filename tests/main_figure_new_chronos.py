@@ -1380,6 +1380,20 @@ def patch_script_source(
     source = source.replace("/Users/cam", str(HOME_DIR))
     source = source.replace("/Users/cam/Desktop", str(DESKTOP_ROOT))
 
+    source, enabled_galactic_guides = re.subn(
+        r"(?m)^(\s*show_galactic_guides\s*=\s*)False(\s*,?\s*)$",
+        r"\1True\2",
+        source,
+        count=1,
+    )
+    if enabled_galactic_guides != 1 and not re.search(
+        r"(?m)^\s*show_galactic_guides\s*=\s*True\s*,?\s*$",
+        source,
+    ):
+        raise RuntimeError(
+            "Could not enable the Galactic coordinate grid in the main figure."
+        )
+
     if show_cluster_members_in_sky:
         if cluster_members_file is None:
             raise ValueError(

@@ -722,37 +722,39 @@ THREEJS_SCENE_RUNTIME_JS = """
             if (scaled_px > 0.0) {
               scaled_px = applyStretch(min(scaled_px, 0.999));
               pxColor = texture(colormap, vec2(scaled_px, 0.5));
-              vec3 worldPos = inverse_rotate_vertex_position(
-                (textcoord - vec3(0.5)) * scale.xyz + translation.xyz,
-                translation.xyz,
-                rotation
-              );
-              bool insideSelection = sampleInsideSelectionPolygon(worldPos);
-              float selectionWeight = insideSelection ? 1.0 : selectionDimOutside;
-              if (selectionTransitionActive) {
-                bool insideSourceSecondarySelection = sampleInsideSourceSecondarySelectionPolygon(worldPos);
-                bool insideSourceTertiarySelection = sampleInsideSourceTertiarySelectionPolygon(worldPos);
-                bool insideSourceQuaternarySelection = sampleInsideSourceQuaternarySelectionPolygon(worldPos);
-                bool insideTargetSelection = sampleInsideTargetSelectionPolygon(worldPos);
-                float sourceSelectionWeight = mix(
-                  insideSelection ? 1.0 : 0.0,
-                  insideSourceSecondarySelection ? 1.0 : 0.0,
-                  clamp(selectionSourceBlend, 0.0, 1.0)
+              float selectionWeight = 1.0;
+              // The common no-lasso path avoids coordinate transforms and up
+              // to five mask texture reads for every non-empty ray sample.
+              // The selected path below is unchanged and produces the exact
+              // same result whenever a volume mask is active.
+              if (useSelectionPolygon || selectionTransitionActive) {
+                vec3 worldPos = inverse_rotate_vertex_position(
+                  (textcoord - vec3(0.5)) * scale.xyz + translation.xyz,
+                  translation.xyz,
+                  rotation
                 );
-                sourceSelectionWeight = dot(
-                  selectionSourceWeights,
-                  vec4(
-                    insideSelection ? 1.0 : 0.0,
-                    insideSourceSecondarySelection ? 1.0 : 0.0,
-                    insideSourceTertiarySelection ? 1.0 : 0.0,
-                    insideSourceQuaternarySelection ? 1.0 : 0.0
-                  )
-                );
-                selectionWeight = mix(
-                  sourceSelectionWeight,
-                  insideTargetSelection ? 1.0 : 0.0,
-                  clamp(selectionTransitionProgress, 0.0, 1.0)
-                );
+                bool insideSelection = sampleInsideSelectionPolygon(worldPos);
+                selectionWeight = insideSelection ? 1.0 : selectionDimOutside;
+                if (selectionTransitionActive) {
+                  bool insideSourceSecondarySelection = sampleInsideSourceSecondarySelectionPolygon(worldPos);
+                  bool insideSourceTertiarySelection = sampleInsideSourceTertiarySelectionPolygon(worldPos);
+                  bool insideSourceQuaternarySelection = sampleInsideSourceQuaternarySelectionPolygon(worldPos);
+                  bool insideTargetSelection = sampleInsideTargetSelectionPolygon(worldPos);
+                  float sourceSelectionWeight = dot(
+                    selectionSourceWeights,
+                    vec4(
+                      insideSelection ? 1.0 : 0.0,
+                      insideSourceSecondarySelection ? 1.0 : 0.0,
+                      insideSourceTertiarySelection ? 1.0 : 0.0,
+                      insideSourceQuaternarySelection ? 1.0 : 0.0
+                    )
+                  );
+                  selectionWeight = mix(
+                    sourceSelectionWeight,
+                    insideTargetSelection ? 1.0 : 0.0,
+                    clamp(selectionTransitionProgress, 0.0, 1.0)
+                  );
+                }
               }
               if (selectionWeight <= 0.001) {
                 continue;
@@ -1528,6 +1530,9 @@ THREEJS_SCENE_RUNTIME_JS = """
         if (!frame) {
           return;
         }
+        if (typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
+        }
         if (!preserveCamera && zoomAnchorTracksFrame !== false) {
           currentZoomAnchorPoint = trackedZoomAnchorPointForFrame(frame);
         }
@@ -1542,10 +1547,16 @@ THREEJS_SCENE_RUNTIME_JS = """
         if (resetRegistries) {
           hoverTargets.length = 0;
           cameraResponsivePointEntries.length = 0;
+          ovizBatchedPointMaterials.length = 0;
+          ovizBatchedLogicalPointCount = 0;
+          ovizBatchedPointComponentCount = 0;
+          ovizBatchedDrawObjectCount = 0;
+          ovizRetainedPointComponentCount = 0;
           skyMemberBatchOpacityEntries.length = 0;
           skyMemberBulkOpacityEntries.length = 0;
           cameraResponsiveImagePlaneEntries.length = 0;
           galacticReferenceOpacityGroups.length = 0;
+          milkyWayModelGroups.length = 0;
           selectionSpriteEntriesByKey.clear();
           screenStableTextSprites.length = 0;
           frameLineMaterials.length = 0;
@@ -1586,6 +1597,12 @@ THREEJS_SCENE_RUNTIME_JS = """
             addTextTrace(traceParent, trace, { forceResident });
           }
           if (galacticReferenceGroup) {
+            galacticReferenceGroup.userData.ovizGalacticPresentDayReference = (
+              isGalacticPresentDayReferenceTrace(trace)
+            );
+            galacticReferenceGroup.userData.ovizGalacticReferenceTraceName = String(
+              trace.name || ""
+            );
             galacticReferenceGroup.traverse((object) => {
               const material = object && object.material;
               if (!material) return;
@@ -1657,6 +1674,12 @@ THREEJS_SCENE_RUNTIME_JS = """
 
         if (includeOverlays) {
           addManualLabels(renderRoot);
+        }
+        if (root && root.dataset) {
+          root.dataset.ovizBatchedLogicalPointCount = String(ovizBatchedLogicalPointCount);
+          root.dataset.ovizBatchedPointComponentCount = String(ovizBatchedPointComponentCount);
+          root.dataset.ovizBatchedDrawObjectCount = String(ovizBatchedDrawObjectCount);
+          root.dataset.ovizRetainedPointComponentCount = String(ovizRetainedPointComponentCount);
         }
         updateTimelineMotionOpacity();
 
@@ -1761,6 +1784,7 @@ THREEJS_SCENE_RUNTIME_JS = """
         ovizPruneRetainedArray(cameraResponsivePointEntries, (entry) => entry && entry.sprite, rootGroup);
         ovizPruneRetainedArray(cameraResponsiveImagePlaneEntries, (entry) => entry && entry.mesh, rootGroup);
         ovizPruneRetainedArray(galacticReferenceOpacityGroups, (entry) => entry, rootGroup);
+        ovizPruneRetainedArray(milkyWayModelGroups, (entry) => entry, rootGroup);
         ovizPruneRetainedArray(screenStableTextSprites, (entry) => entry, rootGroup);
         let lineWriteIndex = 0;
         frameLineMaterials.forEach((material) => {
@@ -1987,6 +2011,212 @@ THREEJS_SCENE_RUNTIME_JS = """
           }
         });
         return pairs;
+      }
+
+      function ovizPairRetainedGalacticCircleLines(fromEndpoint, toEndpoint) {
+        const targetByTraceKey = new Map();
+        toEndpoint.nonPointEntries.forEach((entry) => {
+          const trace = entry && entry.trace;
+          if (
+            !trace
+            || !isGalacticCircleTrace(trace)
+            || !entry.object
+            || entry.object.userData.ovizRetainedKind !== "segments"
+          ) {
+            return;
+          }
+          targetByTraceKey.set(String(trace.key || ""), entry);
+        });
+        const pairs = [];
+        fromEndpoint.nonPointEntries.forEach((fromEntry) => {
+          const fromTrace = fromEntry && fromEntry.trace;
+          if (
+            !fromTrace
+            || !isGalacticCircleTrace(fromTrace)
+            || !fromEntry.object
+            || fromEntry.object.userData.ovizRetainedKind !== "segments"
+          ) {
+            return;
+          }
+          const toEntry = targetByTraceKey.get(String(fromTrace.key || ""));
+          const fromSegments = Array.isArray(fromTrace.segments)
+            ? fromTrace.segments
+            : [];
+          const toSegments = Array.isArray(toEntry && toEntry.trace && toEntry.trace.segments)
+            ? toEntry.trace.segments
+            : [];
+          const positionAttribute = (
+            fromEntry.object.geometry
+            && fromEntry.object.geometry.attributes
+            && fromEntry.object.geometry.attributes.instanceStart
+          );
+          const interleavedBuffer = positionAttribute && positionAttribute.data;
+          if (
+            !toEntry
+            || !fromSegments.length
+            || fromSegments.length !== toSegments.length
+            || !interleavedBuffer
+            || !interleavedBuffer.array
+            || interleavedBuffer.array.length !== fromSegments.length * 6
+          ) {
+            return;
+          }
+          fromEntry.object.frustumCulled = false;
+          toEntry.object.frustumCulled = false;
+          pairs.push({
+            from: fromEntry,
+            to: toEntry,
+            fromSegments,
+            toSegments,
+            positionBuffer: interleavedBuffer,
+          });
+        });
+        return pairs;
+      }
+
+      function ovizApplyRetainedGalacticCircleLinePair(pair, alpha) {
+        if (!pair || !pair.from || !pair.to || !pair.positionBuffer) {
+          return;
+        }
+        const progress = clamp01(alpha);
+        const positions = pair.positionBuffer.array;
+        pair.fromSegments.forEach((fromSegment, segmentIndex) => {
+          const toSegment = pair.toSegments[segmentIndex];
+          const offset = segmentIndex * 6;
+          for (let coordinateIndex = 0; coordinateIndex < 6; coordinateIndex += 1) {
+            positions[offset + coordinateIndex] = interpolateNumber(
+              fromSegment[coordinateIndex],
+              toSegment[coordinateIndex],
+              progress,
+              fromSegment[coordinateIndex],
+            );
+          }
+        });
+        pair.positionBuffer.needsUpdate = true;
+        pair.from.object.visible = true;
+        pair.to.object.visible = false;
+        if (pair.from.object.parent) {
+          pair.from.object.parent.visible = true;
+        }
+        if (pair.to.object.parent) {
+          pair.to.object.parent.visible = false;
+        }
+        const trace = progress < 0.5 ? pair.from.trace : pair.to.trace;
+        const traceState = traceStyleStateForKey(trace.key);
+        const baseOpacity = (
+          traceState
+            ? clamp01(traceState.opacity)
+            : clamp01(trace.opacity ?? trace.default_opacity ?? 1.0)
+        )
+          * (traceVisible(trace) ? traceVisibilityOpacityMultiplier(trace) : 0.0)
+          * clamp01(Number(trace.oviz_presence_opacity ?? 1.0))
+          * (galacticReferenceMotionVisible() ? 1.0 : 0.0);
+        const color = (traceState && traceState.color)
+          || trace.default_color
+          || trace.color
+          || ((trace.line || {}).color)
+          || "#ffffff";
+        pair.from.materials.forEach((material) => {
+          if (!material) return;
+          if (material.color && typeof material.color.set === "function") {
+            material.color.set(color);
+          }
+          material.transparent = true;
+          material.opacity = baseOpacity;
+          material.userData.ovizTimelineBaseOpacity = baseOpacity;
+          material.userData.ovizRetainedEndpointOpacityScale = 1.0;
+        });
+        pair.to.materials.forEach((material) => {
+          if (material) material.opacity = 0.0;
+        });
+      }
+
+      function ovizPairRetainedGalacticLabels(fromEndpoint, toEndpoint) {
+        const targetByTraceKey = new Map();
+        toEndpoint.nonPointEntries.forEach((entry) => {
+          const metadata = entry && entry.labelMetadata;
+          const trace = metadata && metadata.trace;
+          if (!trace || !isGalacticReferenceTrace(trace) || !entry.object) {
+            return;
+          }
+          targetByTraceKey.set(String(trace.key || trace.name || ""), entry);
+        });
+        const pairs = [];
+        fromEndpoint.nonPointEntries.forEach((fromEntry) => {
+          const metadata = fromEntry && fromEntry.labelMetadata;
+          const fromTrace = metadata && metadata.trace;
+          if (!fromTrace || !isGalacticReferenceTrace(fromTrace) || !fromEntry.object) {
+            return;
+          }
+          const toEntry = targetByTraceKey.get(
+            String(fromTrace.key || fromTrace.name || "")
+          );
+          const fromLabel = metadata.label;
+          const toLabel = toEntry && toEntry.labelMetadata && toEntry.labelMetadata.label;
+          if (
+            !toEntry
+            || !fromLabel
+            || !toLabel
+            || String(fromLabel.text || "") !== String(toLabel.text || "")
+          ) {
+            return;
+          }
+          pairs.push({
+            from: fromEntry,
+            to: toEntry,
+            fromLabel,
+            toLabel,
+          });
+        });
+        return pairs;
+      }
+
+      function ovizApplyRetainedGalacticLabelPair(pair, alpha) {
+        if (!pair || !pair.from || !pair.to) return;
+        const progress = clamp01(alpha);
+        const fromObject = pair.from.object;
+        const toObject = pair.to.object;
+        fromObject.position.set(
+          interpolateNumber(pair.fromLabel.x, pair.toLabel.x, progress, pair.fromLabel.x),
+          interpolateNumber(pair.fromLabel.y, pair.toLabel.y, progress, pair.fromLabel.y),
+          interpolateNumber(pair.fromLabel.z, pair.toLabel.z, progress, pair.fromLabel.z),
+        );
+        fromObject.visible = true;
+        toObject.visible = false;
+        if (fromObject.parent) fromObject.parent.visible = true;
+        if (toObject.parent) toObject.parent.visible = false;
+        const trace = progress < 0.5
+          ? pair.from.labelMetadata.trace
+          : pair.to.labelMetadata.trace;
+        const label = progress < 0.5 ? pair.fromLabel : pair.toLabel;
+        const traceState = traceStyleStateForKey(trace.key);
+        const timeScale = isGalacticPresentDayReferenceTrace(trace)
+          ? galacticPresentDayGridOpacity()
+          : 1.0;
+        const baseOpacity = (
+          traceState ? clamp01(traceState.opacity) : 1.0
+        )
+          * (traceVisible(trace) ? traceVisibilityOpacityMultiplier(trace) : 0.0)
+          * clamp01(Number(trace.oviz_presence_opacity ?? 1.0))
+          * clamp01(Number(label.oviz_presence_opacity ?? 1.0))
+          * (galacticReferenceMotionVisible() ? 1.0 : 0.0)
+          * timeScale;
+        const color = (traceState && traceState.color)
+          || label.color
+          || theme.axis_color;
+        pair.from.materials.forEach((material) => {
+          if (!material) return;
+          if (material.color && typeof material.color.set === "function") {
+            material.color.set(color);
+          }
+          material.transparent = true;
+          material.opacity = baseOpacity;
+          material.userData.ovizTimelineBaseOpacity = baseOpacity;
+          material.userData.ovizRetainedEndpointOpacityScale = 1.0;
+        });
+        pair.to.materials.forEach((material) => {
+          if (material) material.opacity = 0.0;
+        });
       }
 
       function ovizRetainedCloneLivePoint(pair, alpha, displayedTimeMyr) {
@@ -2220,6 +2450,15 @@ THREEJS_SCENE_RUNTIME_JS = """
                 * clamp01(Number(label.oviz_presence_opacity ?? 1.0));
               const color = (traceState && traceState.color) || label.color || theme.axis_color;
               if (material.color && typeof material.color.set === "function") material.color.set(color);
+            }
+            if (
+              material.userData
+              && Number.isFinite(Number(material.userData.ovizTimelineBaseOpacity))
+            ) {
+              // Galactic reference traces exist in both retained timeline
+              // endpoints. Preserve the endpoint crossfade when the shared
+              // timeline-opacity refresh runs later in the same frame.
+              material.userData.ovizRetainedEndpointOpacityScale = endpointWeight;
             }
             material.transparent = true;
             material.opacity = clamp01(baseOpacity) * endpointWeight;
@@ -2503,6 +2742,14 @@ THREEJS_SCENE_RUNTIME_JS = """
           fromEndpoint,
           toEndpoint,
           pointPairs: ovizPairRetainedPoints(fromEndpoint, toEndpoint),
+          galacticCircleLinePairs: ovizPairRetainedGalacticCircleLines(
+            fromEndpoint,
+            toEndpoint,
+          ),
+          galacticLabelPairs: ovizPairRetainedGalacticLabels(
+            fromEndpoint,
+            toEndpoint,
+          ),
           overlayRoot,
           overlayLineMaterials: [],
           selectionOverlay: null,
@@ -2642,6 +2889,31 @@ THREEJS_SCENE_RUNTIME_JS = """
         let renderedManualLabelCount = 0;
         plotGroup.traverse((object) => {
           if (!object || !object.material || object.visible === false) return;
+          const pointBatch = object.userData && object.userData.ovizPointBatch;
+          if (pointBatch && Array.isArray(pointBatch.proxies)) {
+            const opacityArray = pointBatch.opacityAttribute
+              && pointBatch.opacityAttribute.array;
+            pointBatch.proxies.forEach((proxy, batchIndex) => {
+              const metadata = proxy
+                && proxy.userData
+                && proxy.userData.ovizRetainedPoint;
+              const traceKey = String(metadata && metadata.traceKey || "");
+              if (!traceKey) return;
+              const opacity = opacityArray
+                ? Number(opacityArray[batchIndex]) || 0.0
+                : 0.0;
+              actualOpacityByTrace.set(
+                traceKey,
+                Math.max(Number(actualOpacityByTrace.get(traceKey)) || 0.0, opacity),
+              );
+              const pointKey = `${traceKey}:${Number(metadata.pointIndex) || 0}`;
+              actualOpacityByPoint.set(
+                pointKey,
+                Math.max(Number(actualOpacityByPoint.get(pointKey)) || 0.0, opacity),
+              );
+            });
+            return;
+          }
           const pointMetadata = object.userData && object.userData.ovizRetainedPoint;
           const traceMetadata = object.userData && object.userData.ovizRetainedTrace;
           const labelMetadata = object.userData && object.userData.ovizRetainedLabel;
@@ -2768,6 +3040,12 @@ THREEJS_SCENE_RUNTIME_JS = """
         // reapply the endpoint weight after they have updated their base state.
         ovizApplyRetainedEndpointWeight(runtime.fromEndpoint, fromWeight, displayedTimeMyr);
         ovizApplyRetainedEndpointWeight(runtime.toEndpoint, toWeight, displayedTimeMyr);
+        runtime.galacticCircleLinePairs.forEach((pair) => {
+          ovizApplyRetainedGalacticCircleLinePair(pair, alpha);
+        });
+        runtime.galacticLabelPairs.forEach((pair) => {
+          ovizApplyRetainedGalacticLabelPair(pair, alpha);
+        });
         runtime.livePointByIdentity.clear();
         runtime.commonVisualByEndpointIdentity.clear();
         runtime.pointPairs.forEach((pair) => {
@@ -2836,6 +3114,8 @@ THREEJS_SCENE_RUNTIME_JS = """
             endpointReuses: ovizRetainedEndpointReuseSerial,
             reusedEndpoint: runtime.reusedEndpoint,
             pointEvaluations: runtime.pointEvaluationCount,
+            galacticCircleLinePairs: runtime.galacticCircleLinePairs.length,
+            galacticLabelPairs: runtime.galacticLabelPairs.length,
           });
           root.dataset.retainedSceneDebug = JSON.stringify(ovizRetainedDebugSnapshot(runtime));
         }
@@ -2847,7 +3127,25 @@ THREEJS_SCENE_RUNTIME_JS = """
         currentFrameIndex = clampFrameIndex(displayedFrameValue);
         const displayedTimeMyr = frameTimeForValue(displayedFrameValue);
         updateTimelineUi(displayedFrameValue, displayedTimeMyr);
-        const retainedOwner = ovizRetainedTransitionOwner(options);
+        if (
+          typeof ovizUpdateSkyMemberTimelineFastPath === "function"
+          && ovizUpdateSkyMemberTimelineFastPath(
+            displayedFrameValue,
+            displayedTimeMyr,
+            options,
+          )
+        ) {
+          return;
+        }
+        const requestedRetainedOwner = ovizRetainedTransitionOwner(options);
+        // Sky member catalogs carry individual proper motions. Rebuild the
+        // compact GPU batches from the fractional timeline state so stars move
+        // continuously on the sky instead of crossfading between two static
+        // retained endpoints.
+        const retainedOwner = (
+          cameraViewMode === "earth"
+          && skyMemberBatchesEnabled
+        ) ? "" : requestedRetainedOwner;
         if (retainedOwner) {
           ovizUpdateRetainedTransitionScene(retainedOwner, displayedFrameValue, displayedTimeMyr);
           return;
@@ -2914,10 +3212,72 @@ THREEJS_SCENE_RUNTIME_JS = """
         root.dataset.topbarDensity = density;
       }
 
+      function ovizRectsApproach(leftRect, rightRect, gap = 0.0) {
+        if (!leftRect || !rightRect) {
+          return false;
+        }
+        const spacing = Math.max(Number(gap) || 0.0, 0.0);
+        return !(
+          leftRect.right + spacing <= rightRect.left
+          || rightRect.right + spacing <= leftRect.left
+          || leftRect.bottom + spacing <= rightRect.top
+          || rightRect.bottom + spacing <= leftRect.top
+        );
+      }
+
+      function updateBottomControlLayout() {
+        if (!bottomSwitchesEl || bottomSwitchesEl.offsetParent === null) {
+          return;
+        }
+        bottomSwitchesEl.style.bottom = "";
+        bottomSwitchesEl.dataset.layout = "inline";
+        const timelineVisible = Boolean(
+          footerEl
+          && footerEl.offsetParent !== null
+          && timelineEnabled
+        );
+        const timelineRect = timelineVisible
+          ? footerEl.getBoundingClientRect()
+          : null;
+        const inlineRect = bottomSwitchesEl.getBoundingClientRect();
+        const rootWidth = Math.max(Number(root.clientWidth) || 0.0, 1.0);
+        const rootHeight = Math.max(Number(root.clientHeight) || 0.0, 1.0);
+        const aspect = rootWidth / rootHeight;
+        const timelineCollision = timelineRect
+          ? ovizRectsApproach(inlineRect, timelineRect, 12.0)
+          : false;
+        const compactAspect = aspect < 1.18 && rootWidth < 1180.0;
+        const stack = Boolean(timelineCollision || compactAspect);
+        bottomSwitchesEl.dataset.layout = stack ? "stacked" : "inline";
+        let finalCollision = timelineCollision;
+        if (stack && timelineRect) {
+          let stackedRect = bottomSwitchesEl.getBoundingClientRect();
+          finalCollision = ovizRectsApproach(stackedRect, timelineRect, 12.0);
+          if (finalCollision) {
+            const rootRect = root.getBoundingClientRect();
+            const timelineClearance = Math.max(
+              68.0,
+              rootRect.bottom - timelineRect.top + 12.0,
+            );
+            bottomSwitchesEl.style.bottom = `${timelineClearance}px`;
+            stackedRect = bottomSwitchesEl.getBoundingClientRect();
+            finalCollision = ovizRectsApproach(stackedRect, timelineRect, 12.0);
+          }
+        }
+        if (root && root.dataset) {
+          root.dataset.bottomControlsLayout = stack ? "stacked" : "inline";
+          root.dataset.bottomControlsTimelineClear = finalCollision ? "false" : "true";
+        }
+      }
+
       function resize() {
+        if (typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
+        }
         const width = root.clientWidth;
         const height = root.clientHeight;
         updateTopbarDensity();
+        updateBottomControlLayout();
         renderer.setSize(width, height, false);
         camera.aspect = width / Math.max(height, 1);
         if (typeof applyActionCameraViewOffset === "function") {
@@ -2933,6 +3293,14 @@ THREEJS_SCENE_RUNTIME_JS = """
         ) ? ovizRetainedTransitionScene.overlayLineMaterials : [];
         [...axisLineMaterials, ...frameLineMaterials, ...retainedOverlayLineMaterials].forEach((material) => {
           material.resolution.set(width, height);
+        });
+        ovizBatchedPointMaterials.forEach((material) => {
+          const viewportUniform = material
+            && material.uniforms
+            && material.uniforms.ovizViewportHeight;
+          if (viewportUniform) {
+            viewportUniform.value = Math.max(canvas.height || 1, 1);
+          }
         });
         if (legendPanelEl) {
           applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());

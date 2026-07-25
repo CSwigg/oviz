@@ -218,6 +218,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("Math.round(xValue)", point_hover_body)
         pointer_move_body = html.split("function onPointerMove(event) {", 1)[1].split("function onPointerLeave()", 1)[0]
         self.assertNotIn("tooltipEl.innerHTML = hitObject.userData.hovertext;", pointer_move_body)
+
         self.assertNotIn('tooltipEl.style.display = "block";', pointer_move_body)
         self.assertTrue(fig.scene_spec["initial_state"]["lasso_volume_selection_enabled"])
         self.assertTrue(fig.scene_spec["initial_state"]["lasso_selection_filter_enabled"])
@@ -390,9 +391,18 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("keyboardLegendVisibilitySnapshotByGroup.set(snapshotKey, visibleSnapshot)", html)
         self.assertIn("visibleSnapshot[itemKey] === true", html)
         self.assertIn('if (lowerKey === "t") {', html)
-        self.assertIn(">View: 3D<", html)
+        self.assertIn('data-mode="3d" data-selected="true">3D</span>', html)
+        self.assertIn('data-mode="sky" data-selected="false">Sky</span>', html)
         self.assertIn("Current view: 3D. Click or press V to enter Sky view.", html)
         self.assertIn("oviz-three-earth-view-toggle", html)
+        self.assertIn("oviz-three-view-segmented", html)
+        self.assertNotIn('oviz-three-earth-view-toggle" type="button" role="switch"', html)
+        self.assertIn('data-layout="inline"', html)
+        self.assertIn('.oviz-three-bottom-switches[data-layout="stacked"]', html)
+        self.assertIn("function updateBottomControlLayout()", html)
+        self.assertIn("ovizRectsApproach(inlineRect, timelineRect, 12.0)", html)
+        self.assertIn('bottomSwitchesEl.dataset.layout = stack ? "stacked" : "inline";', html)
+        self.assertIn('root.dataset.bottomControlsTimelineClear = finalCollision ? "false" : "true";', html)
         self.assertIn("right: calc(env(safe-area-inset-right, 0px) + 72px);", html)
         self.assertIn("right: calc(env(safe-area-inset-right, 0px) + 66px);", html)
         self.assertIn("Reset camera", html)
@@ -432,6 +442,111 @@ class ThreeJSRendererTests(unittest.TestCase):
             html_text = out_file.read_text()
             self.assertIn("oviz-three-legend-panel", html_text)
             self.assertNotIn("Three.js modules are loaded from a CDN", html_text)
+
+    def test_regular_3d_points_use_gpu_batches_without_changing_retained_or_sky_paths(self):
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+            }
+        ).to_html(compress_scene_spec=False)
+        batched_body = html.split("function addBatchedMarkerTrace(parent, trace)", 1)[1].split(
+            "function addMarkerTrace(parent, trace)", 1
+        )[0]
+        overflow_body = html.split("function ovizEnsureBatchedOverflowSprite(entry)", 1)[1].split(
+            "function cameraResponsivePointBaseScale(entry)", 1
+        )[0]
+        marker_prefix = html.split("function addMarkerTrace(parent, trace)", 1)[1].split(
+            "const group = new THREE.Group();", 1
+        )[0]
+
+        self.assertIn("new THREE.Points(geometry, material)", html)
+        self.assertIn("ovizEnsureBatchedOverflowSprite", html)
+        self.assertIn("ovizMaximumRasterizedPointSize", html)
+        self.assertIn("projectedSize > overflowThreshold", html)
+        self.assertIn("new THREE.Sprite(material)", overflow_body)
+        self.assertIn("sprite.visible = false", overflow_body)
+        self.assertIn('geometry.setAttribute("ovizOpacity"', html)
+        self.assertIn('geometry.setAttribute("ovizPointSize"', html)
+        self.assertIn("renderer.domElement.height", html)
+        self.assertIn('if (!forceResident && cameraViewMode !== "earth")', marker_prefix)
+        self.assertIn("ovizPointBatchProxyForHit", html)
+        self.assertIn("ovizForEachHoverProxy", html)
+        self.assertIn("ovizBatchedLogicalPointCount", html)
+        self.assertIn("ovizRetainedPointComponentCount", html)
+
+    def test_idle_rendering_and_ancillary_widgets_are_dirty_driven(self):
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+            }
+        ).to_html(compress_scene_spec=False)
+        animate_body = html.split("function animate(timestamp)", 1)[1].split(
+            "applyInitialStateSync();", 1
+        )[0]
+        age_kde_body = html.split("function renderAgeKdeWidget()", 1)[1].split(
+            "function renderBoxMetricsWidget()", 1
+        )[0]
+
+        self.assertIn("const shouldRender = Boolean(", animate_body)
+        self.assertNotIn('|| cameraViewMode === "earth"', animate_body)
+        self.assertIn("skyDomeTimelineOpacityAnimationFrame", html)
+        self.assertIn("ovizSkippedFrameCount += 1", animate_body)
+        self.assertLess(
+            animate_body.index("if (!shouldRender)"),
+            animate_body.index("renderer.render(scene, camera)"),
+        )
+        self.assertIn("root.addEventListener(eventName, ovizInvalidateRender", html)
+        self.assertIn("ovizLastTimelineSliderValue", html)
+        self.assertIn("ovizLastTimeSliderTickIndex", html)
+        self.assertIn("ovizLastScaleBarLabel", html)
+        self.assertIn("ovizSkyCameraUiDirty", animate_body)
+        self.assertIn("renderSceneControls();", animate_body)
+        self.assertIn("ovizAgeKdeStaticCanvas", age_kde_body)
+        self.assertIn("visibleCtx.drawImage(ovizAgeKdeStaticCanvas", age_kde_body)
+        self.assertIn("frameTimeForValue(displayedFrameValue)", age_kde_body)
+        self.assertEqual(age_kde_body.count("filteredAgeKdeSeries()"), 1)
+
+    def test_sky_members_batch_across_parent_clusters_and_volume_skips_inactive_masks(self):
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+            }
+        ).to_html(compress_scene_spec=False)
+        finalize_body = html.split(
+            "function ovizFinalizeSkyMemberTraceBatches(group)", 1
+        )[1].split("function addSkyMemberStars(", 1)[0]
+        member_body = html.split(
+            "function addSkyMemberStars(group, catalog, options = {})", 1
+        )[1].split("function ovizCreateBatchedPointMaterial(", 1)[0]
+        volume_shader = html.split("const VOLUME_FRAGMENT_SHADER = `", 1)[1].split(
+            "`;", 1
+        )[0]
+
+        self.assertIn("builder.components.forEach", finalize_body)
+        self.assertIn("const pointCount = records.reduce", finalize_body)
+        self.assertIn("new THREE.Points(geometry, material)", finalize_body)
+        self.assertIn("renderedSkyMemberDrawObjectCount += 1", finalize_body)
+        self.assertIn("batchOpacityAttribute", finalize_body)
+        self.assertIn("batchBulkDeltaAttribute", finalize_body)
+        self.assertNotIn("new THREE.Points(memberGeometry", member_body)
+        self.assertEqual(member_body.count("ovizQueueSkyMemberTraceBatchComponent("), 3)
+        self.assertIn(
+            "if (useSelectionPolygon || selectionTransitionActive)",
+            volume_shader,
+        )
+        self.assertLess(
+            volume_shader.index("if (useSelectionPolygon || selectionTransitionActive)"),
+            volume_shader.index("vec3 worldPos = inverse_rotate_vertex_position("),
+        )
 
     def test_threejs_trace_colormap_exports_age_controls(self):
         collection = _FakeCollection(show_tracks=False)
@@ -1223,7 +1338,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("ovizTimeOpacityScale", html)
         self.assertIn("baseOpacity * timeScale * scale", html)
 
-    def test_threejs_galactic_circles_include_gc_marker_and_drop_radius_labels(self):
+    def test_threejs_galactic_coordinates_are_labelled_and_time_independent(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
         fig = viz.make_plot(
             time=np.array([1.0, 0.0, -1.0]),
@@ -1231,6 +1346,7 @@ class ThreeJSRendererTests(unittest.TestCase):
             show=False,
             galactic_mode=True,
             show_gc_line=True,
+            show_galactic_guides=True,
         )
 
         zero_frame = next(frame for frame in viz.fig_dict["frames"] if frame["time"] == 0.0)
@@ -1253,39 +1369,166 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("R = 8.12 kpc", trace_names)
         self.assertIn("R = 12 kpc", trace_names)
         self.assertIn("GC", trace_names)
-        self.assertNotIn("GC Ring", trace_names)
-        self.assertIn("G.C.", label_texts)
+        self.assertIn("GC Ring", trace_names)
+        self.assertIn("GALACTIC CENTER", label_texts)
         self.assertTrue(gc_labels)
         self.assertGreater(float(gc_labels[0].get("z", 0.0)), 0.0)
-        self.assertNotIn("R = 4 kpc", label_texts)
-        self.assertNotIn("R = 8.12 kpc", label_texts)
-        self.assertNotIn("R = 12 kpc", label_texts)
-        expected_reference_names = {"GC", "R = 4 kpc", "R = 8.12 kpc", "R = 12 kpc"}
-        self.assertTrue(expected_reference_names.issubset({
-            trace.get("name") for trace in positive_frame["traces"]
-        }))
-        self.assertTrue(expected_reference_names.issubset({
-            trace.get("name") for trace in negative_frame["traces"]
-        }))
+        self.assertEqual(float(gc_labels[0].get("screen_px", 0.0)), 18.0)
+        self.assertEqual(
+            next(
+                trace["line"]["color"]
+                for trace in zero_frame["traces"]
+                if trace.get("name") == "R = 8.12 kpc"
+            ),
+            "#94a3b8",
+        )
+        quadrant_lines = next(
+            trace
+            for trace in zero_frame["traces"]
+            if trace.get("name") == "Galactic Quadrants"
+        )
+        for circle_name in ("GC Ring", "R = 4 kpc", "R = 8.12 kpc", "R = 12 kpc"):
+            circle = next(
+                trace
+                for trace in zero_frame["traces"]
+                if trace.get("name") == circle_name
+            )
+            self.assertEqual(circle["line"]["color"], quadrant_lines["line"]["color"])
+            self.assertEqual(circle["line"]["width"], quadrant_lines["line"]["width"])
+            self.assertEqual(circle["line"]["dash"], quadrant_lines["line"]["dash"])
+            self.assertEqual(circle["opacity"], quadrant_lines["opacity"])
+        self.assertIn("R = 4 kpc", label_texts)
+        self.assertIn("R = 8.12 kpc", label_texts)
+        self.assertIn("R = 12 kpc", label_texts)
+        self.assertTrue({"ℓ = 0°", "ℓ = 90°", "ℓ = 180°", "ℓ = 270°"}.issubset(label_texts))
+        longitude_labels = next(
+            trace
+            for trace in zero_frame["traces"]
+            if trace.get("name") == "Galactic l Labels"
+        )["labels"]
+        self.assertTrue(all(float(label["screen_px"]) == 28.0 for label in longitude_labels))
+        radius_labels = [
+            label
+            for trace in zero_frame["traces"]
+            if trace.get("name") in {
+                "R = 4 kpc Label",
+                "R = 8.12 kpc Label",
+                "R = 12 kpc Label",
+            }
+            for label in trace.get("labels", [])
+        ]
+        self.assertEqual(len(radius_labels), 3)
+        self.assertTrue(all(float(label["screen_px"]) == 28.0 for label in radius_labels))
+        gc_x = float(gc_labels[0]["x"])
+        gc_y = float(gc_labels[0]["y"])
+        expected_radius_pc = {
+            "R = 4 kpc": 4000.0,
+            "R = 8.12 kpc": 8122.0,
+            "R = 12 kpc": 12000.0,
+        }
+        for trace in zero_frame["traces"]:
+            if trace.get("name") not in {
+                "R = 4 kpc Label",
+                "R = 8.12 kpc Label",
+                "R = 12 kpc Label",
+            }:
+                continue
+            label = trace["labels"][0]
+            radius_name = trace["name"].removesuffix(" Label")
+            self.assertAlmostEqual(float(label["x"]), gc_x)
+            self.assertAlmostEqual(
+                float(label["y"]),
+                gc_y + expected_radius_pc[radius_name],
+            )
+        expected_reference_names = {
+            "GC",
+            "GC Ring",
+            "R = 4 kpc",
+            "R = 4 kpc Label",
+            "R = 8.12 kpc",
+            "R = 8.12 kpc Label",
+            "R = 12 kpc",
+            "R = 12 kpc Label",
+            "Galactic Quadrants",
+            "Galactic l Labels",
+        }
+        removed_reference_names = {
+            "Galactic Longitude Grid",
+            "Galactic l Ticks",
+            "Galactic Quadrant Labels",
+            "Galactic Z Axis",
+            "Galactic b Labels",
+        }
+        for frame in (positive_frame, zero_frame, negative_frame):
+            frame_traces = {
+                trace.get("name"): trace
+                for trace in frame["traces"]
+            }
+            self.assertTrue(expected_reference_names.issubset(frame_traces))
+            self.assertTrue(removed_reference_names.isdisjoint(frame_traces))
+            self.assertTrue(frame_traces["Galactic Quadrants"]["segments"])
+            self.assertTrue(frame_traces["Galactic l Labels"]["labels"])
+            ring_points = np.array([
+                segment[:3]
+                for segment in frame_traces["R = 8.12 kpc"]["segments"]
+            ], dtype=float)
+            plane_matrix = np.column_stack((
+                ring_points[:, 0],
+                ring_points[:, 1],
+                np.ones(len(ring_points)),
+            ))
+            plane_a, plane_b, plane_c = np.linalg.lstsq(
+                plane_matrix,
+                ring_points[:, 2],
+                rcond=None,
+            )[0]
+            for segment in frame_traces["Galactic Quadrants"]["segments"]:
+                for offset in (0, 3):
+                    x_value, y_value, z_value = segment[offset:offset + 3]
+                    expected_z = (
+                        plane_a * float(x_value)
+                        + plane_b * float(y_value)
+                        + plane_c
+                    )
+                    self.assertAlmostEqual(float(z_value), expected_z, places=5)
         html = fig.to_html()
         self.assertIn("function galacticReferenceMotionVisible()", html)
         self.assertIn("function galacticReferenceTimeOpacity()", html)
-        self.assertIn("return Math.abs(timeMyr) <= 1e-9 ? 0.0 : 1.0", html)
-        self.assertIn("return Math.abs(timeMyr) <= 1e-9 ? 1.0 : 0.0", html)
-        self.assertNotIn("Math.abs(timeMyr) / 5.0", html)
         motion_visibility_body = html.split(
             "function galacticReferenceMotionVisible()", 1
         )[1].split("function galacticReferenceTimeOpacity()", 1)[0]
+        time_opacity_body = html.split(
+            "function galacticReferenceTimeOpacity()", 1
+        )[1].split("function galacticPresentDayGridOpacity()", 1)[0]
+        grid_opacity_body = html.split(
+            "function galacticPresentDayGridOpacity()", 1
+        )[1].split("function milkyWayTimelineOpacity()", 1)[0]
         self.assertIn("galacticReferenceVisible", motion_visibility_body)
         self.assertIn('cameraViewMode !== "earth"', motion_visibility_body)
+        self.assertNotIn("frameTimeForValue", motion_visibility_body)
+        self.assertIn("return galacticPresentDayGridOpacity();", time_opacity_body)
+        self.assertIn("Math.abs(timeMyr)", grid_opacity_body)
+        self.assertIn(
+            "1.0 - smoothstep01(clampRange(Math.abs(timeMyr), 0.0, 1.0))",
+            grid_opacity_body,
+        )
         self.assertNotIn("timelineScrubMotionActive", motion_visibility_body)
         self.assertNotIn("playbackDirection", motion_visibility_body)
         self.assertNotIn("timeActionTrack", motion_visibility_body)
         self.assertNotIn("ovizStateTimelineMotionActive", motion_visibility_body)
-        self.assertIn(
-            "galacticReferenceMotionVisible() ? galacticReferenceTimeOpacity() : 0.0",
-            html,
-        )
+        self.assertIn("ovizGalacticPresentDayReference", html)
+        self.assertIn("presentDayOnly ? presentDayScale : 1.0", html)
+        self.assertIn("root.dataset.galacticQuadrantOpacity", html)
+        self.assertIn("function ovizPairRetainedGalacticCircleLines(", html)
+        self.assertIn("function ovizApplyRetainedGalacticCircleLinePair(", html)
+        self.assertIn("positionBuffer.needsUpdate = true", html)
+        self.assertIn("runtime.galacticCircleLinePairs.forEach", html)
+        self.assertIn("function ovizPairRetainedGalacticLabels(", html)
+        self.assertIn("function ovizApplyRetainedGalacticLabelPair(", html)
+        self.assertIn("runtime.galacticLabelPairs.forEach", html)
+        self.assertIn("oviz-three-galactic-coordinate-toggle", html)
+        self.assertIn('role="switch"', html)
+        self.assertIn("function setGalacticReferenceVisible(visible, options = {})", html)
         self.assertIn("setTimelineScrubMotionActive(true, { settleDelayMs: 240.0 })", html)
 
     def test_threejs_text_trace_can_be_a_single_legend_item(self):
@@ -1362,11 +1605,11 @@ class ThreeJSRendererTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             members_file = Path(tmp_dir) / "members.csv"
             members_file.write_text(
-                "name,l,b,within_r_t\n"
-                "Cluster A,120.0,-20.0,True\n"
-                "Cluster A,120.1,-20.1,True\n"
-                "Cluster A,121.5,-21.5,False\n"
-                "Unrelated Cluster,80.0,10.0,True\n",
+                "name,l,b,within_r_t,pmra,pmdec,parallax,r_med_geo\n"
+                "Cluster A,120.0,-20.0,True,1.5,-2.5,2.0,500.0\n"
+                "Cluster A,120.1,-20.1,True,1.7,-2.7,1.9,520.0\n"
+                "Cluster A,121.5,-21.5,False,1.9,-2.9,1.8,540.0\n"
+                "Unrelated Cluster,80.0,10.0,True,2.1,-3.1,2.2,460.0\n",
                 encoding="utf-8",
             )
 
@@ -1391,8 +1634,12 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertAlmostEqual(scene_spec["sky_panel"]["radius_deg"], 1.25)
         self.assertEqual(scene_spec["sky_panel"]["survey"], "P/DSS2/color")
         self.assertTrue(scene_spec["sky_panel"]["show_cluster_members_in_sky"])
-        self.assertEqual(scene_spec["sky_panel"]["member_point_size_denominator"], 20)
-        self.assertEqual(scene_spec["sky_panel"]["member_min_screen_size_px"], 2.5)
+        self.assertEqual(scene_spec["sky_panel"]["member_point_size_denominator"], 30)
+        self.assertEqual(scene_spec["sky_panel"]["member_min_screen_size_px"], 0.0)
+        self.assertEqual(
+            scene_spec["sky_panel"]["member_distance_policy"],
+            "stellar_parallax_preferred",
+        )
         self.assertIn("Cluster A", scene_spec["sky_panel"]["members_by_cluster"])
         self.assertEqual(len(scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"]), 3)
         self.assertNotIn("Unrelated Cluster", scene_spec["sky_panel"]["members_by_cluster"])
@@ -1403,6 +1650,26 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertAlmostEqual(
             scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"][0]["b"],
             -20.0,
+        )
+        self.assertAlmostEqual(
+            scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"][0]["pmra_masyr"],
+            1.5,
+        )
+        self.assertAlmostEqual(
+            scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"][0]["pmdec_masyr"],
+            -2.5,
+        )
+        self.assertAlmostEqual(
+            scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"][0]["distance_pc"],
+            500.0,
+        )
+        self.assertAlmostEqual(
+            scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"][1]["distance_pc"],
+            round(1000.0 / 1.9, 3),
+        )
+        self.assertAlmostEqual(
+            scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"][2]["distance_pc"],
+            round(1000.0 / 1.8, 3),
         )
         self.assertTrue(
             all(
@@ -1423,13 +1690,80 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("View: Mollweide all-sky", html)
         self.assertIn('type: "oviz-sky-hover-cluster"', html)
         self.assertIn("function skyMemberCatalogForPoint(point, trace)", html)
+        self.assertIn("motionKeyForPoint(point),", html)
         self.assertIn("function addSkyMemberStars(group, catalog, options = {})", html)
         self.assertIn("function skyMemberScaleForPoint(basePointScale, position)", html)
+        self.assertIn("if (!(minimumPixels > 0.0))", html)
+        self.assertIn("return requestedScale;", html)
+        self.assertIn("function ovizEnsureSkyMemberOverflowSprites(entry)", html)
+        self.assertIn("function ovizCreateSkyMemberPointMaterial(texture, options = {})", html)
+        self.assertIn("projectionMatrix[1][1]", html)
+        self.assertIn("ovizFovAwarePointSize: true", html)
+        self.assertIn("function ovizSetSkyMemberBatchMaterialOpacity(entry, opacity)", html)
+        self.assertIn("function skyMemberBulkRadialVelocitiesKmS()", html)
+        self.assertIn("function skyMemberPropagatedIcrs(", html)
+        self.assertIn("4.74047 * pmraMasYr", html)
+        self.assertIn(
+            "const distancePc = Number.isFinite(parallaxMas) && parallaxMas > 0.0",
+            html,
+        )
+        self.assertIn("function ovizUpdateSkyMemberTimelineFastPath(", html)
+        self.assertIn("function ovizUpdateSkyMemberBatchParentVisual(", html)
+        self.assertIn("parentVisualByKey", html)
+        self.assertIn("ovizRetainedCommonPointVisual(", html)
+        self.assertIn("memberSizeRatio: sizeRatio", html)
+        self.assertIn('componentKind: "glow"', html)
+        self.assertIn('componentKind: "core"', html)
+        self.assertIn('componentKind: "marker"', html)
+        self.assertIn(
+            "effectiveOpacity * (0.34 + 0.18 * glowStrength)",
+            html,
+        )
+        self.assertIn(
+            "effectiveOpacity * (0.74 + 0.16 * glowStrength)",
+            html,
+        )
+        self.assertIn("attribute vec3 ovizVelocityPcMyr;", html)
+        self.assertIn("uniform float ovizTimeDeltaMyr;", html)
+        self.assertIn("uniform vec3 ovizBulkDelta;", html)
+        self.assertIn("function ovizSetSkyMemberBatchTime(", html)
+        self.assertIn("function volumeSkyCartesianFromIcrsVector(", html)
+        self.assertIn("root.dataset.skyMemberTimelineFastPathCount", html)
+        self.assertIn("root.dataset.skyMemberReferenceFrameAnchored", html)
+        self.assertIn("referenceFrameRotation.setFromUnitVectors(", html)
+        self.assertIn("entry.velocityPcMyr.sub(meanMemberVelocityPcMyr);", html)
+        self.assertEqual(html.count("ovizSetSkyMemberBatchCollapse("), 1)
+        self.assertIn("function skyVolumeVisibleForDisplayedTime()", html)
+        self.assertIn("root.dataset.skyVolumeTimeVisible", html)
+        self.assertIn("ovizCollapseProgress", html)
+        self.assertIn("function ovizSetSkyMemberBatchCollapse(entry, collapseProgress)", html)
+        self.assertIn("renderDisplayedFrameForViewHandoff();", html)
+        self.assertIn('cameraViewMode === "earth"', html)
+        self.assertIn("&& skyMemberBatchesEnabled", html)
+        self.assertIn("animateSkyDomeTimelineOpacity(milkyWayTimelineOpacity());", html)
+        self.assertIn("skyDomeTimelineOpacityScale", html)
+        self.assertIn("updateSkyMemberBatchOverflowSprites();", html)
         self.assertIn("function normalizeClusterCatalogKey(value)", html)
-        self.assertIn("new THREE.Points(memberGeometry, glowMaterial)", html)
-        self.assertIn("new THREE.Points(memberGeometry, coreMaterial)", html)
+        self.assertIn("function ovizCreateSkyMemberTraceBatchMaterial(", html)
+        self.assertIn("function ovizFinalizeSkyMemberTraceBatches(group)", html)
+        self.assertIn('geometry.setAttribute("ovizBulkDelta"', html)
+        self.assertIn('geometry.setAttribute("ovizCollapseTarget"', html)
+        self.assertIn("points.frustumCulled = false", html)
         self.assertIn("root.dataset.skyMemberDrawObjectCount = String(", html)
         self.assertIn("function animateSkyMemberReveal(targetProgress", html)
+        self.assertIn("oviz-three-sky-member-toggle", html)
+        self.assertIn('data-sky-member-mode="clusters"', html)
+        self.assertIn('data-sky-member-mode="stars"', html)
+        self.assertIn("function normalizeSkyMemberDisplayMode(value)", html)
+        self.assertIn("function skyMemberDisplayTargetProgress(", html)
+        self.assertIn("function syncSkyMemberDisplayToggleUi()", html)
+        self.assertIn("function setSkyMemberDisplayMode(mode, options = {})", html)
+        self.assertIn(
+            "animateSkyMemberReveal(skyMemberDisplayTargetProgress()",
+            html,
+        )
+        self.assertIn("sky_member_display_mode: skyMemberDisplayMode", html)
+        self.assertIn("animateSkyMemberReveal(0.0", html)
         self.assertIn('starGlowTextureFor("sky_member_halo")', html)
         self.assertIn('starCoreTextureFor("sky_member_core")', html)
         self.assertIn("skyMemberBulkOpacityEntries", html)
@@ -1437,6 +1771,9 @@ class ThreeJSRendererTests(unittest.TestCase):
             "function addSkyMemberStars(group, catalog, options = {})", 1
         )[1].split("function addMarkerTrace(parent, trace)", 1)[0]
         self.assertNotIn("new THREE.Sprite(", sky_member_runtime)
+        self.assertNotIn("new THREE.PointsMaterial(", sky_member_runtime)
+        self.assertIn("ovizQueueSkyMemberTraceBatchComponent(", sky_member_runtime)
+        self.assertIn("ovizFinalizeSkyMemberTraceBatches(group);", html)
         self.assertIn('"sky_member_glow"', html)
         self.assertIn('"sky_member_core"', html)
         self.assertIn("root.dataset.skyClusterBulkPointCount = String(", html)

@@ -1,6 +1,7 @@
 import base64
 import gzip
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -108,12 +109,77 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert len(first_frame_traces["Clusters (< 60 Myr)"]["points"]) >= 600
     assert len(first_frame_traces["Clusters (< 15 Myr)"]["points"]) >= 400
 
+    galactic_coordinate_names = {
+        "GC",
+        "GC Ring",
+        "R = 4 kpc",
+        "R = 4 kpc Label",
+        "R = 8.12 kpc",
+        "R = 8.12 kpc Label",
+        "R = 12 kpc",
+        "R = 12 kpc Label",
+        "Galactic Quadrants",
+        "Galactic l Labels",
+    }
+    removed_galactic_coordinate_names = {
+        "Galactic Longitude Grid",
+        "Galactic l Ticks",
+        "Galactic Quadrant Labels",
+        "Galactic Z Axis",
+        "Galactic b Labels",
+    }
+    for frame in scene_spec["frames"]:
+        frame_names = [trace.get("name") for trace in frame["traces"]]
+        assert all(frame_names.count(name) == 1 for name in galactic_coordinate_names)
+        assert removed_galactic_coordinate_names.isdisjoint(frame_names)
+        trace_by_name = {
+            trace["name"]: trace
+            for trace in frame["traces"]
+            if trace.get("name") in galactic_coordinate_names
+        }
+        assert trace_by_name["Galactic Quadrants"]["segments"]
+        assert trace_by_name["Galactic l Labels"]["labels"]
+        assert all(
+            float(label["screen_px"]) == 28.0
+            for label in trace_by_name["Galactic l Labels"]["labels"]
+        )
+        assert all(
+            float(label["screen_px"]) == 28.0
+            for label_name in (
+                "R = 4 kpc Label",
+                "R = 8.12 kpc Label",
+                "R = 12 kpc Label",
+            )
+            for label in trace_by_name[label_name]["labels"]
+        )
+
     sky_panel = scene_spec["sky_panel"]
     assert sky_panel["enabled"] is True
     assert sky_panel["show_cluster_members_in_sky"] is True
-    assert sky_panel["member_point_size_denominator"] == 20
-    assert sky_panel["member_min_screen_size_px"] == 2.5
+    assert sky_panel["member_point_size_denominator"] == 30
+    assert sky_panel["member_min_screen_size_px"] == 0.0
+    assert sky_panel["member_distance_policy"] == "stellar_parallax_preferred"
     assert len(sky_panel.get("members_by_cluster", {})) > 1000
+    normalize_catalog_key = lambda value: "".join(
+        character.lower()
+        for character in str(value)
+        if character.isalnum()
+    )
+    normalized_member_catalog_keys = {
+        normalize_catalog_key(key)
+        for key in sky_panel["members_by_cluster"]
+    }
+    past_motion_keys = {
+        point["motion"]["key"]
+        for trace in scene_spec["frames"][0]["traces"]
+        for point in trace.get("points", [])
+        if point.get("motion", {}).get("key")
+    }
+    assert len(past_motion_keys) > 1000
+    assert all(
+        normalize_catalog_key(key) in normalized_member_catalog_keys
+        for key in past_motion_keys
+    )
     explicit_members = [
         member
         for members in sky_panel["members_by_cluster"].values()
@@ -121,16 +187,84 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
         if member.get("is_cluster_member") is True
     ]
     assert len(explicit_members) >= 2500
+    assert sum("pmra_masyr" in member for member in explicit_members) >= 2500
+    assert sum("pmdec_masyr" in member for member in explicit_members) >= 2500
+    assert sum("distance_pc" in member for member in explicit_members) >= 2500
+    projected_reference_errors_deg = []
+    for trace in scene_spec["frames"][-1]["traces"]:
+        for point in trace.get("points", []):
+            selection = point.get("selection", {})
+            x = float(point.get("x", 0.0))
+            y = float(point.get("y", 0.0))
+            z = float(point.get("z", 0.0))
+            distance = math.sqrt((x * x) + (y * y) + (z * z))
+            if (
+                distance <= 1.0
+                or selection.get("l_deg") is None
+                or selection.get("b_deg") is None
+            ):
+                continue
+            projected_l = math.degrees(math.atan2(y, x)) % 360.0
+            projected_b = math.degrees(math.asin(z / distance))
+            longitude_error = abs(
+                ((projected_l - float(selection["l_deg"]) + 180.0) % 360.0)
+                - 180.0
+            )
+            latitude_error = abs(projected_b - float(selection["b_deg"]))
+            projected_reference_errors_deg.append(
+                math.hypot(longitude_error, latitude_error)
+            )
+    assert len(projected_reference_errors_deg) > 1000
+    projected_reference_errors_deg.sort()
+    assert projected_reference_errors_deg[
+        int(0.99 * (len(projected_reference_errors_deg) - 1))
+    ] < 0.05
     assert scene_spec["sky_dome"]["enabled"] is True
     assert scene_spec["sky_dome"]["source"] == "aladin"
     assert scene_spec["sky_dome"]["background_mode"] == "live_aladin"
     assert "function addSkyMemberStars(group, catalog, options = {})" in html
+    assert "motionKeyForPoint(point)," in html
     assert "function skyMemberScaleForPoint(basePointScale, position)" in html
     assert "function normalizeClusterCatalogKey(value)" in html
-    assert "new THREE.Points(memberGeometry, glowMaterial)" in html
-    assert "new THREE.Points(memberGeometry, coreMaterial)" in html
+    assert "function ovizCreateSkyMemberTraceBatchMaterial(" in html
+    assert "function ovizFinalizeSkyMemberTraceBatches(group)" in html
+    assert 'geometry.setAttribute("ovizBulkDelta"' in html
+    assert 'geometry.setAttribute("ovizCollapseTarget"' in html
+    assert "points.frustumCulled = false" in html
     assert "root.dataset.skyMemberDrawObjectCount = String(" in html
     assert "function animateSkyMemberReveal(targetProgress" in html
+    assert "animateSkyMemberReveal(1.0" in html
+    assert "animateSkyMemberReveal(0.0" in html
+    assert "root.dataset.skyMemberStarsVisibleIn3d" in html
+    assert "setSkyMemberRevealProgress(memberFade);" in html
+    assert "usesViewButtonHandoff" in html
+    assert "enterEarthViewFromCurrentCamera({" in html
+    assert "exitEarthViewToCameraState({" in html
+    assert "function ovizStatePhasePlanAfterViewButtonHandoff(" in html
+    assert 'if (transition.viewButtonHandoffPending)' in html
+    assert "function skyMemberPropagatedIcrs(" in html
+    assert "function skyMemberBulkRadialVelocitiesKmS()" in html
+    assert "function ovizUpdateSkyMemberTimelineFastPath(" in html
+    assert "function ovizUpdateSkyMemberBatchParentVisual(" in html
+    assert "parentVisualByKey" in html
+    assert "memberSizeRatio: sizeRatio" in html
+    assert 'componentKind: "glow"' in html
+    assert 'componentKind: "core"' in html
+    assert 'componentKind: "marker"' in html
+    assert "attribute vec3 ovizVelocityPcMyr;" in html
+    assert "uniform float ovizTimeDeltaMyr;" in html
+    assert "uniform vec3 ovizBulkDelta;" in html
+    assert "function volumeSkyCartesianFromIcrsVector(" in html
+    assert "root.dataset.skyMemberTimelineFastPathCount" in html
+    assert "root.dataset.skyMemberReferenceFrameAnchored" in html
+    assert "referenceFrameRotation.setFromUnitVectors(" in html
+    assert "entry.velocityPcMyr.sub(meanMemberVelocityPcMyr);" in html
+    assert html.count("ovizSetSkyMemberBatchCollapse(") == 1
+    assert "function skyVolumeVisibleForDisplayedTime()" in html
+    assert "root.dataset.skyVolumeTimeVisible" in html
+    assert "animateSkyDomeTimelineOpacity(milkyWayTimelineOpacity());" in html
+    assert "ovizCollapseProgress" in html
+    assert "renderDisplayedFrameForViewHandoff();" in html
     assert 'starGlowTextureFor("sky_member_halo")' in html
     assert 'starCoreTextureFor("sky_member_core")' in html
     assert "skyMemberBulkOpacityEntries" in html
@@ -138,6 +272,22 @@ def test_main_figure_chronos_july4_artifact_is_mobile_safe():
     assert '"sky_member_core"' in html
     assert 'root.dataset.skyClusterBulkPointCount = String(' in html
     assert 'root.dataset.skyMemberStarCount = String(renderedSkyMemberStarCount)' in html
+    assert "oviz-three-bottom-switches" in html
+    assert "oviz-three-view-segmented" in html
+    assert "function updateBottomControlLayout()" in html
+    assert '.oviz-three-bottom-switches[data-layout="stacked"]' in html
+    assert "oviz-three-galactic-coordinate-toggle" in html
+    assert 'data-mode="3d" data-selected="true">3D</span>' in html
+    assert 'data-mode="sky" data-selected="false">Sky</span>' in html
+    assert "function setGalacticReferenceVisible(visible, options = {})" in html
+    assert "function galacticPresentDayGridOpacity()" in html
+    assert "presentDayOnly ? presentDayScale : 1.0" in html
+    assert "root.dataset.galacticQuadrantOpacity" in html
+    assert "function ovizPairRetainedGalacticCircleLines(" in html
+    assert "function ovizApplyRetainedGalacticCircleLinePair(" in html
+    assert "positionBuffer.needsUpdate = true" in html
+    assert "function ovizPairRetainedGalacticLabels(" in html
+    assert "function ovizApplyRetainedGalacticLabelPair(" in html
 
     for widget_key in ("age_kde", "cluster_filter", "dendrogram"):
         assert scene_spec[widget_key]["enabled"] is False

@@ -194,9 +194,15 @@ THREEJS_SKY_RUNTIME_JS = """
         return galacticLonLatDegFromCartesian(transformed.x, transformed.y, transformed.z);
       }
 
-      function volumeSkyCartesianFromGalacticLonLatDeg(lDeg, bDeg) {
-        const transformed = galacticDirectionVectorFromLonLatDeg(lDeg, bDeg);
-        if (!transformed) {
+      function volumeSkyCartesianFromGalacticVector(xGal, yGal, zGal) {
+        const transformedX = Number(xGal);
+        const transformedY = Number(yGal);
+        const transformedZ = Number(zGal);
+        if (
+          !Number.isFinite(transformedX)
+          || !Number.isFinite(transformedY)
+          || !Number.isFinite(transformedZ)
+        ) {
           return null;
         }
         const transform = volumeSkyAxisTransform || {};
@@ -210,13 +216,28 @@ THREEJS_SKY_RUNTIME_JS = """
         const coords = [0.0, 0.0, 0.0];
         const xIndex = Number(xyPermutation[0]) || 0;
         const yIndex = Number(xyPermutation[1]) || 1;
-        coords[xIndex] = transformed.x / ((Number(xySigns[0]) || 1));
-        coords[yIndex] = transformed.y / ((Number(xySigns[1]) || 1));
-        coords[2] = transformed.z / (Number.isFinite(zSign) && Math.abs(zSign) > 0.5 ? zSign : 1);
+        coords[xIndex] = transformedX / ((Number(xySigns[0]) || 1));
+        coords[yIndex] = transformedY / ((Number(xySigns[1]) || 1));
+        coords[2] = transformedZ / (Number.isFinite(zSign) && Math.abs(zSign) > 0.5 ? zSign : 1);
         if (!coords.every(Number.isFinite)) {
           return null;
         }
-        return new THREE.Vector3(coords[0], coords[1], coords[2]).normalize();
+        return new THREE.Vector3(coords[0], coords[1], coords[2]);
+      }
+
+      function volumeSkyCartesianFromGalacticLonLatDeg(lDeg, bDeg) {
+        const transformed = galacticDirectionVectorFromLonLatDeg(lDeg, bDeg);
+        if (!transformed) {
+          return null;
+        }
+        const cartesian = volumeSkyCartesianFromGalacticVector(
+          transformed.x,
+          transformed.y,
+          transformed.z,
+        );
+        return cartesian && cartesian.lengthSq() > 1e-12
+          ? cartesian.normalize()
+          : null;
       }
 
       function volumeSkyCartesianFromIcrsDeg(raDeg, decDeg) {
@@ -225,6 +246,31 @@ THREEJS_SKY_RUNTIME_JS = """
           return null;
         }
         return volumeSkyCartesianFromGalacticLonLatDeg(galactic.l, galactic.b);
+      }
+
+      function volumeSkyCartesianFromIcrsVector(xEq, yEq, zEq) {
+        const x = Number(xEq);
+        const y = Number(yEq);
+        const z = Number(zEq);
+        if (![x, y, z].every(Number.isFinite)) {
+          return null;
+        }
+        const xGal = (
+          GALACTIC_TO_ICRS_MATRIX[0] * x
+          + GALACTIC_TO_ICRS_MATRIX[3] * y
+          + GALACTIC_TO_ICRS_MATRIX[6] * z
+        );
+        const yGal = (
+          GALACTIC_TO_ICRS_MATRIX[1] * x
+          + GALACTIC_TO_ICRS_MATRIX[4] * y
+          + GALACTIC_TO_ICRS_MATRIX[7] * z
+        );
+        const zGal = (
+          GALACTIC_TO_ICRS_MATRIX[2] * x
+          + GALACTIC_TO_ICRS_MATRIX[5] * y
+          + GALACTIC_TO_ICRS_MATRIX[8] * z
+        );
+        return volumeSkyCartesianFromGalacticVector(xGal, yGal, zGal);
       }
 
       function icrsDegFromGalacticDeg(lDeg, bDeg) {
@@ -462,6 +508,13 @@ THREEJS_SKY_RUNTIME_JS = """
 
       function buildVolumeSkyImageOverlaySpec(mode = "overview") {
         if (mode === "click") {
+          return null;
+        }
+        if (
+          cameraViewMode === "earth"
+          && typeof skyVolumeVisibleForDisplayedTime === "function"
+          && !skyVolumeVisibleForDisplayedTime()
+        ) {
           return null;
         }
         const activeMask = activeVolumeLassoSelectionMask();
@@ -1166,7 +1219,11 @@ THREEJS_SKY_RUNTIME_JS = """
           return 0.0;
         }
         const maxOpacity = Math.min(Math.max(Number(skyDomeSpec.opacity ?? 0.55), 0.0), 1.0);
-        return maxOpacity * Math.min(Math.max(Number(skyDomeViewOpacityScale) || 0.0, 0.0), 1.0);
+        return (
+          maxOpacity
+          * Math.min(Math.max(Number(skyDomeViewOpacityScale) || 0.0, 0.0), 1.0)
+          * Math.min(Math.max(Number(skyDomeTimelineOpacityScale) || 0.0, 0.0), 1.0)
+        );
       }
 
       function skyDomeBackgroundViewForDirection(directionValue, cameraFovValue) {
@@ -1554,7 +1611,9 @@ THREEJS_SKY_RUNTIME_JS = """
         }
         applySkyDomeFrameVisualSettings();
         if (baseOpacity <= 0.002 || !skyDomeBackgroundFrameReady || !skyDomeFrameEl.contentWindow) {
-          skyDomeFrameEl.style.opacity = "0";
+          if (skyDomeFrameEl.style.opacity !== "0") {
+            skyDomeFrameEl.style.opacity = "0";
+          }
           setSkyDomeBackgroundDebugState(
             baseOpacity <= 0.002
               ? "transparent"
@@ -1564,7 +1623,9 @@ THREEJS_SKY_RUNTIME_JS = """
         }
         const view = skyDomeBackgroundViewForCamera();
         if (!view) {
-          skyDomeFrameEl.style.opacity = "0";
+          if (skyDomeFrameEl.style.opacity !== "0") {
+            skyDomeFrameEl.style.opacity = "0";
+          }
           setSkyDomeBackgroundDebugState("missing-camera-view");
           return;
         }
@@ -1577,7 +1638,10 @@ THREEJS_SKY_RUNTIME_JS = """
         if (signature !== skyDomeBackgroundLatestViewSignature) {
           skyDomeBackgroundLatestViewSignature = signature;
         }
-        skyDomeFrameEl.style.opacity = String(baseOpacity);
+        const opacityCss = String(baseOpacity);
+        if (skyDomeFrameEl.style.opacity !== opacityCss) {
+          skyDomeFrameEl.style.opacity = opacityCss;
+        }
         setSkyDomeBackgroundDebugState("visible");
         if (
           typeof ovizDebugUpdateSky === "function"
@@ -3680,6 +3744,15 @@ THREEJS_SKY_RUNTIME_JS = """
       }
 
       function updateSkyApertureUi(timestampMs = 0.0) {
+        if (
+          !skyApertureInstances.length
+          && !(
+            Array.isArray(skyAperturePendingRestoreStates)
+            && skyAperturePendingRestoreStates.length
+          )
+        ) {
+          return;
+        }
         syncSkyApertureToggle();
         applyPendingSkyApertureRestore();
         if (!skyApertureInstances.length) {
@@ -4493,11 +4566,18 @@ THREEJS_SKY_RUNTIME_JS = """
         return `brightness(${(brightness * gammaTone).toFixed(3)}) contrast(${contrast.toFixed(3)})`;
       }
 
+      let skyDomeFrameLastVisualFilterCss = "";
+
       function applySkyDomeFrameVisualSettings() {
         if (!skyDomeFrameEl) {
           return;
         }
-        skyDomeFrameEl.style.filter = skyDomeFrameVisualFilterCss();
+        const filterCss = skyDomeFrameVisualFilterCss();
+        if (filterCss === skyDomeFrameLastVisualFilterCss) {
+          return;
+        }
+        skyDomeFrameEl.style.filter = filterCss;
+        skyDomeFrameLastVisualFilterCss = filterCss;
       }
 
       function skyDomeHipsUpdateIntervalMs() {

@@ -463,12 +463,16 @@ THREEJS_VIEWER_RUNTIME_JS = """
           syncOvizSearchMode();
         }
         if (earthViewToggleButtonEl) {
-          earthViewToggleButtonEl.textContent = buttonText;
           earthViewToggleButtonEl.dataset.active = isEarthView ? "true" : "false";
           earthViewToggleButtonEl.dataset.viewMode = isEarthView ? "sky" : "3d";
           earthViewToggleButtonEl.setAttribute("aria-pressed", isEarthView ? "true" : "false");
           earthViewToggleButtonEl.setAttribute("aria-label", buttonAriaLabel);
           earthViewToggleButtonEl.title = buttonTitle;
+          earthViewToggleButtonEl.querySelectorAll(".oviz-three-display-switch-choice").forEach((choiceEl) => {
+            choiceEl.dataset.selected = choiceEl.dataset.mode === (isEarthView ? "sky" : "3d")
+              ? "true"
+              : "false";
+          });
         }
         if (viewFromEarthButtonEl) {
           viewFromEarthButtonEl.textContent = buttonText;
@@ -485,6 +489,33 @@ THREEJS_VIEWER_RUNTIME_JS = """
           mobileSkyViewButtonEl.setAttribute("aria-pressed", isEarthView ? "true" : "false");
           mobileSkyViewButtonEl.setAttribute("aria-label", buttonAriaLabel);
           mobileSkyViewButtonEl.title = buttonTitle;
+        }
+        syncSkyMemberDisplayToggleUi();
+      }
+
+      function syncGalacticReferenceToggleUi() {
+        const active = Boolean(galacticReferenceVisible);
+        if (galacticReferenceToggleEl) {
+          galacticReferenceToggleEl.checked = active;
+        }
+        if (galacticCoordinateToggleEl) {
+          galacticCoordinateToggleEl.dataset.active = active ? "true" : "false";
+          galacticCoordinateToggleEl.setAttribute("aria-checked", active ? "true" : "false");
+          galacticCoordinateToggleEl.setAttribute("aria-pressed", active ? "true" : "false");
+          galacticCoordinateToggleEl.title = active
+            ? "Hide Galactic coordinates"
+            : "Show Galactic coordinates";
+        }
+        if (root && root.dataset) {
+          root.dataset.galacticCoordinatesVisible = active ? "true" : "false";
+        }
+      }
+
+      function setGalacticReferenceVisible(visible, options = {}) {
+        galacticReferenceVisible = Boolean(visible);
+        syncGalacticReferenceToggleUi();
+        if (options.render !== false) {
+          renderFrame(currentFrameIndex);
         }
       }
 
@@ -855,12 +886,91 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
       }
 
+      function normalizeSkyMemberDisplayMode(value) {
+        return String(value || "").toLowerCase() === "clusters"
+          ? "clusters"
+          : "stars";
+      }
+
+      function skyMemberDisplayTargetProgress(mode = skyMemberDisplayMode) {
+        return normalizeSkyMemberDisplayMode(mode) === "stars" ? 1.0 : 0.0;
+      }
+
+      function syncSkyMemberDisplayToggleUi() {
+        const mode = normalizeSkyMemberDisplayMode(skyMemberDisplayMode);
+        const visible = Boolean(
+          skyMemberToggleButtonEl
+          && skyMemberDisplayAvailable
+          && cameraViewMode === "earth"
+        );
+        if (skyMemberToggleButtonEl) {
+          const wasHidden = Boolean(skyMemberToggleButtonEl.hidden);
+          skyMemberToggleButtonEl.hidden = !visible;
+          skyMemberToggleButtonEl.dataset.active = mode === "stars" ? "true" : "false";
+          skyMemberToggleButtonEl.setAttribute(
+            "aria-pressed",
+            mode === "stars" ? "true" : "false",
+          );
+          skyMemberToggleButtonEl.setAttribute(
+            "aria-label",
+            mode === "stars"
+              ? "Current Sky markers: Stars. Switch to Clusters."
+              : "Current Sky markers: Clusters. Switch to Stars.",
+          );
+          skyMemberToggleButtonEl.title = mode === "stars"
+            ? "Current Sky markers: Stars. Click to show cluster markers."
+            : "Current Sky markers: Clusters. Click to show member stars.";
+          skyMemberToggleButtonEl
+            .querySelectorAll(".oviz-three-display-switch-choice")
+            .forEach((choiceEl) => {
+              choiceEl.dataset.selected = (
+                choiceEl.dataset.skyMemberMode === mode
+              ) ? "true" : "false";
+            });
+          if (
+            wasHidden !== skyMemberToggleButtonEl.hidden
+            && typeof updateBottomControlLayout === "function"
+          ) {
+            window.requestAnimationFrame(() => updateBottomControlLayout());
+          }
+        }
+        if (root && root.dataset) {
+          root.dataset.skyMemberDisplayAvailable = skyMemberDisplayAvailable ? "true" : "false";
+          root.dataset.skyMemberDisplayMode = mode;
+        }
+      }
+
       function setSkyMemberRevealProgress(value) {
-        skyMemberRevealProgress = clampRange(Number(value) || 0.0, 0.0, 1.0);
+        const requestedProgress = clampRange(Number(value) || 0.0, 0.0, 1.0);
+        // Individual member stars are a Sky-only representation. Keep this
+        // invariant here at the material writer so State restoration,
+        // transition retargets, and future callers cannot expose them in 3D.
+        skyMemberRevealProgress = cameraViewMode === "earth"
+          ? requestedProgress
+          : 0.0;
+        if (cameraViewMode !== "earth") {
+          skyMemberBatchesEnabled = false;
+        }
         skyMemberBatchOpacityEntries.forEach((entry) => {
           if (!entry || !entry.material) return;
-          entry.material.opacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)
+          const effectiveOpacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)
             * skyMemberRevealProgress;
+          if (typeof ovizSetSkyMemberBatchMaterialOpacity === "function") {
+            ovizSetSkyMemberBatchMaterialOpacity(
+              entry,
+              entry.overflowActive ? 0.0 : effectiveOpacity,
+            );
+          } else {
+            entry.material.opacity = entry.overflowActive ? 0.0 : effectiveOpacity;
+          }
+          if (entry.overflowMaterial) {
+            entry.overflowMaterial.opacity = effectiveOpacity;
+          }
+          if (entry.overflowGroup) {
+            entry.overflowGroup.visible = Boolean(
+              entry.overflowActive && effectiveOpacity > 0.0
+            );
+          }
         });
         skyMemberBulkOpacityEntries.forEach((entry) => {
           if (!entry || !entry.material) return;
@@ -869,7 +979,53 @@ THREEJS_VIEWER_RUNTIME_JS = """
         });
         if (root && root.dataset) {
           root.dataset.skyMemberRevealProgress = String(skyMemberRevealProgress);
+          root.dataset.skyMemberStarsVisibleIn3d = (
+            cameraViewMode !== "earth" && skyMemberRevealProgress > 1e-6
+          ) ? "true" : "false";
         }
+      }
+
+      function setSkyMemberDisplayMode(mode, options = {}) {
+        skyMemberDisplayMode = normalizeSkyMemberDisplayMode(mode);
+        syncSkyMemberDisplayToggleUi();
+        if (cameraViewMode !== "earth") {
+          setSkyMemberRevealProgress(0.0);
+          return skyMemberDisplayMode;
+        }
+        const targetProgress = skyMemberDisplayTargetProgress();
+        if (targetProgress > 0.5) {
+          skyMemberBatchesEnabled = true;
+        }
+        if (
+          targetProgress > 0.5
+          && skyMemberDisplayAvailable
+          && !skyMemberBatchOpacityEntries.length
+          && typeof renderDisplayedFrameForViewHandoff === "function"
+        ) {
+          renderDisplayedFrameForViewHandoff();
+        }
+        if (options.animate === true) {
+          animateSkyMemberReveal(targetProgress, {
+            durationMs: Math.max(Number(options.durationMs) || 360.0, 1.0),
+          }, () => {
+            if (
+              targetProgress <= 0.5
+              && cameraViewMode === "earth"
+              && normalizeSkyMemberDisplayMode(skyMemberDisplayMode) === "clusters"
+            ) {
+              skyMemberBatchesEnabled = false;
+              renderDisplayedFrameForViewHandoff();
+            }
+          });
+        } else {
+          cancelSkyMemberRevealAnimation();
+          setSkyMemberRevealProgress(targetProgress);
+          skyMemberBatchesEnabled = targetProgress > 0.5;
+          if (typeof ovizInvalidateRender === "function") {
+            ovizInvalidateRender();
+          }
+        }
+        return skyMemberDisplayMode;
       }
 
       function animateSkyMemberReveal(targetProgress, options = {}, onComplete = null) {
@@ -1104,12 +1260,15 @@ THREEJS_VIEWER_RUNTIME_JS = """
           camera.up.normalize();
           camera.fov = interpolateCameraFovTangent(startFov, endFov, eased);
           camera.updateProjectionMatrix();
-          updateControlSensitivityForView();
-          controls.update();
-          renderSceneControls();
-          updateScaleBar();
-          updateCameraResponsiveImagePlanes();
-          updateSkyDomeBackgroundFrame(now, { force: true });
+          camera.lookAt(controls.target);
+          camera.updateMatrixWorld(true);
+          // The main renderer already refreshes the scale bar, responsive
+          // image planes, controls-dependent sprites, and registered Aladin
+          // pose once per animation frame. Repeating all of that here made
+          // View and State mode transitions do the same expensive work twice.
+          if (typeof ovizInvalidateRender === "function") {
+            ovizInvalidateRender();
+          }
           if (linear < 1.0) {
             cameraTransitionAnimationFrame = window.requestAnimationFrame(step);
             return;
@@ -1147,13 +1306,10 @@ THREEJS_VIEWER_RUNTIME_JS = """
         } else {
           controls.update();
         }
-        renderSceneControls();
-        updateScaleBar();
-        updateCameraResponsiveImagePlanes();
-        updateSkyDomeBackgroundFrame(
-          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
-          { force: true }
-        );
+        ovizSkyCameraUiDirty = true;
+        if (typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
+        }
         return true;
       }
 
@@ -1343,12 +1499,10 @@ THREEJS_VIEWER_RUNTIME_JS = """
         camera.up.copy(skyViewUpVectorForDirection(nextDirection));
         camera.lookAt(earthPoint);
         camera.updateMatrixWorld(true);
-        updateScaleBar();
-        updateCameraResponsiveImagePlanes();
-        updateSkyDomeBackgroundFrame(
-          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
-          { force: true }
-        );
+        ovizSkyCameraUiDirty = true;
+        if (typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
+        }
         return true;
       }
 
@@ -1540,6 +1694,19 @@ THREEJS_VIEWER_RUNTIME_JS = """
         };
       }
 
+      function renderDisplayedFrameForViewHandoff() {
+        const frameValue = clampFrameValue(displayedFrameValue);
+        const frameIndex = clampFrameIndex(frameValue);
+        if (Math.abs(frameValue - frameIndex) <= 1e-6) {
+          renderFrame(frameIndex);
+          return;
+        }
+        renderInterpolatedFrameValue(frameValue, {
+          preserveCamera: true,
+          updateWidgets: true,
+        });
+      }
+
       function enterEarthViewFromCurrentCamera(options = {}) {
         const wasEarthView = cameraViewMode === "earth";
         const transitionSerial = cancelSkyViewTransitionAnimations({
@@ -1621,7 +1788,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         applyGlobalControlState();
         applyCameraViewMode();
         buildAxes();
-        renderFrame(currentFrameIndex);
+        renderDisplayedFrameForViewHandoff();
         const transitionDurationMs = Math.max(Number(options.durationMs) || 820.0, 1.0);
         const milkyWayFadeDurationMs = Math.max(Number(options.milkyWayFadeDurationMs) || 240.0, 1.0);
         const skyFadeDurationMs = Math.max(Number(options.opacityDurationMs) || 360.0, 1.0);
@@ -1642,8 +1809,8 @@ THREEJS_VIEWER_RUNTIME_JS = """
               camera.position.copy(targetPosition);
               camera.up.copy(targetUp);
               camera.fov = targetFov;
-              skyMemberBatchesEnabled = true;
-              renderFrame(currentFrameIndex);
+              skyMemberBatchesEnabled = skyMemberDisplayTargetProgress() > 0.5;
+              renderDisplayedFrameForViewHandoff();
               applyGlobalControlState();
               applyCameraViewMode();
               buildAxes();
@@ -1655,10 +1822,25 @@ THREEJS_VIEWER_RUNTIME_JS = """
                 (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(),
                 { force: true }
               );
-              animateSkyDomeViewOpacity(1.0, { durationMs: skyFadeDurationMs });
-              animateSkyMemberReveal(1.0, {
+              let pendingSettles = 2;
+              const finishEnterTransition = () => {
+                pendingSettles -= 1;
+                if (
+                  pendingSettles <= 0
+                  && transitionSerial === skyViewTransitionSerial
+                  && typeof options.onComplete === "function"
+                ) {
+                  options.onComplete({ mode: "earth", transitionSerial });
+                }
+              };
+              animateSkyDomeViewOpacity(
+                1.0,
+                { durationMs: skyFadeDurationMs },
+                finishEnterTransition,
+              );
+              animateSkyMemberReveal(skyMemberDisplayTargetProgress(), {
                 durationMs: Math.max(Number(options.memberRevealDurationMs) || 680.0, 1.0),
-              });
+              }, finishEnterTransition);
             },
             {
               lockDirection: preserveDirection,
@@ -1670,6 +1852,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
             }
           );
         });
+        return true;
       }
 
       function exitEarthViewToCameraState(options = {}) {
@@ -1732,13 +1915,24 @@ THREEJS_VIEWER_RUNTIME_JS = """
               applyGlobalControlState();
               applyCameraViewMode();
               buildAxes();
-              renderFrame(currentFrameIndex);
+              renderDisplayedFrameForViewHandoff();
               controls.update();
               renderSceneControls();
               updateScaleBar();
               updateCameraResponsiveImagePlanes();
               setMilkyWayModelOpacityScale(0.0);
-              animateMilkyWayModelOpacity(1.0, { durationMs: milkyWayFadeDurationMs });
+              animateMilkyWayModelOpacity(
+                1.0,
+                { durationMs: milkyWayFadeDurationMs },
+                () => {
+                  if (
+                    transitionSerial === skyViewTransitionSerial
+                    && typeof options.onComplete === "function"
+                  ) {
+                    options.onComplete({ mode: "free", transitionSerial });
+                  }
+                },
+              );
             },
             {
               durationMs: transitionDurationMs,
@@ -2013,9 +2207,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (axesVisibleToggleEl) {
           axesVisibleToggleEl.checked = axesVisible;
         }
-        if (galacticReferenceToggleEl) {
-          galacticReferenceToggleEl.checked = galacticReferenceVisible;
-        }
+        syncGalacticReferenceToggleUi();
         nearbyRegionLabelsToggleEls.forEach((toggleEl) => {
           toggleEl.checked = nearbyRegionLabelsVisible;
         });
@@ -2950,6 +3142,9 @@ THREEJS_VIEWER_RUNTIME_JS = """
         return `${formatCompactNumber(value)}°`;
       }
 
+      let ovizLastScaleBarLabel = null;
+      let ovizLastScaleBarDisplay = null;
+
       function updateScaleBar() {
         if (!scaleBarEl || !scaleLabelEl) {
           return;
@@ -2959,11 +3154,23 @@ THREEJS_VIEWER_RUNTIME_JS = """
         const displayedLength = cameraViewMode === "earth"
           ? scaleBarAngularLengthDegForCurrentView()
           : barLengthPc;
-        scaleLabelEl.textContent = cameraViewMode === "earth"
+        const nextLabel = cameraViewMode === "earth"
           ? formatAngularLabelDeg(displayedLength)
           : formatDistanceLabelPc(displayedLength);
-        scaleBarEl.style.display = Number.isFinite(displayedLength) ? "flex" : "none";
-        if (Number.isFinite(displayedLength)) {
+        const nextDisplay = Number.isFinite(displayedLength) ? "flex" : "none";
+        const scaleBarVisualChanged = (
+          ovizLastScaleBarLabel !== nextLabel
+          || ovizLastScaleBarDisplay !== nextDisplay
+        );
+        if (ovizLastScaleBarLabel !== nextLabel) {
+          scaleLabelEl.textContent = nextLabel;
+          ovizLastScaleBarLabel = nextLabel;
+        }
+        if (ovizLastScaleBarDisplay !== nextDisplay) {
+          scaleBarEl.style.display = nextDisplay;
+          ovizLastScaleBarDisplay = nextDisplay;
+        }
+        if (Number.isFinite(displayedLength) && scaleBarVisualChanged) {
           applyScaleBarPosition();
         }
       }

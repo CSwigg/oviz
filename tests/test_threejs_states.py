@@ -18,6 +18,40 @@ from oviz.threejs_scene import _round_scene_floats
 
 
 class ThreeJSStatesSchemaTests(unittest.TestCase):
+    def test_sky_member_display_mode_round_trips_through_states(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {
+                "global_controls": {
+                    "camera_view_mode": "earth",
+                    "sky_member_display_mode": "clusters",
+                },
+            },
+        }).to_html(compress_scene_spec=False)
+
+        self.assertIn(
+            "sky_member_display_mode: skyMemberDisplayMode",
+            html,
+        )
+        self.assertIn(
+            "savedGlobalControls.sky_member_display_mode",
+            html,
+        )
+        self.assertIn(
+            "skyMemberDisplayTargetProgress(fromGlobal.sky_member_display_mode)",
+            html,
+        )
+        self.assertIn(
+            "skyMemberDisplayTargetProgress(toGlobal.sky_member_display_mode)",
+            html,
+        )
+        self.assertIn(
+            "(destination.global_controls || {}).sky_member_display_mode",
+            html,
+        )
+
     @unittest.skipIf(shutil.which("node") is None, "node is not available")
     def test_state_only_presentation_navigation_cycles_authored_states(self):
         html = ThreeJSFigure({
@@ -605,6 +639,51 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             phase_builder.index('["camera", "time", "appearance"]'),
             phase_builder.index('name: "camera+time"'),
         )
+        self.assertIn("function ovizStatePhasePlanAfterViewButtonHandoff", phase_builder)
+        self.assertIn('.filter((domain) => domain !== "camera")', phase_builder)
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_view_button_handoff_removes_duplicate_state_camera_phase(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        helper_source = (
+            "function ovizStatePhasePlanAfterViewButtonHandoff("
+            + html.split(
+                "function ovizStatePhasePlanAfterViewButtonHandoff(", 1
+            )[1].split("function ovizRenderStateTimelineFrameLikeSlider", 1)[0]
+        )
+        script = f"""
+        {helper_source}
+        const result = ovizStatePhasePlanAfterViewButtonHandoff({{
+          changed: {{ camera: true, time: true, appearance: true }},
+          requestedDurationMs: 2400,
+          effectiveDurationMs: 2400,
+          phases: [
+            {{ name: "camera", domains: ["camera"], startMs: 0, endMs: 800 }},
+            {{ name: "time", domains: ["time"], startMs: 800, endMs: 1600 }},
+            {{ name: "appearance", domains: ["appearance"], startMs: 1600, endMs: 2400 }},
+          ],
+        }});
+        process.stdout.write(JSON.stringify(result));
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["changed"]["camera"])
+        self.assertEqual(
+            [(phase["name"], phase["startMs"], phase["endMs"]) for phase in payload["phases"]],
+            [("time", 0, 800), ("appearance", 800, 1600)],
+        )
+        self.assertEqual(payload["effectiveDurationMs"], 1600)
 
     def test_legacy_time_actions_advance_fractional_frames_each_animation_frame(self):
         html = ThreeJSFigure({
@@ -637,7 +716,11 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn("applyLassoSelectionTransitionUniforms", html)
         self.assertIn("selectionTransitionProgress", html)
         self.assertIn("selectionSourceSecondaryMaskTexture", html)
-        self.assertIn("float sourceSelectionWeight = mix(", html)
+        self.assertIn(
+            "if (useSelectionPolygon || selectionTransitionActive)",
+            html,
+        )
+        self.assertIn("float sourceSelectionWeight = dot(", html)
         self.assertIn("selectionWeight = mix(", html)
         self.assertIn("ovizHeldSelectionTransition", html)
         self.assertIn("preserveRenderedSelection: true", html)

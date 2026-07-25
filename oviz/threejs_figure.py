@@ -185,7 +185,7 @@ _THREEJS_TOPBAR_HTML = """
                 </label>
                 <label class="oviz-three-controls-toggle-row">
                   <input class="oviz-three-galactic-reference-toggle" type="checkbox" checked />
-                  <span>Show GC/radius overlays</span>
+                  <span>Show Galactic coordinates</span>
                 </label>
                 <label class="oviz-three-controls-toggle-row">
                   <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
@@ -3117,36 +3117,123 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-color: rgba(255, 255, 255, 0.14);
         background: rgba(255, 255, 255, 0.08);
       }
-      #__ROOT_ID__ .oviz-three-earth-view-toggle {
+      #__ROOT_ID__ .oviz-three-bottom-switches {
         position: absolute;
         right: calc(env(safe-area-inset-right, 0px) + 72px);
         bottom: 18px;
         z-index: 7;
-        min-width: 104px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #__ROOT_ID__ .oviz-three-bottom-switches[data-layout="stacked"] {
+        right: calc(env(safe-area-inset-right, 0px) + 14px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+      }
+      #__ROOT_ID__ .oviz-three-display-switch {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
         height: 34px;
-        padding: 0 14px;
+        padding: 0 10px;
         border-radius: 6px;
         border: 1px solid rgba(255, 255, 255, 0.10);
         background: rgba(18, 20, 24, 0.92);
         color: rgba(255, 255, 255, 0.88);
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
         cursor: pointer;
-        font: 650 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        font: 600 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
         letter-spacing: 0;
         backdrop-filter: blur(4px) saturate(103%);
         -webkit-backdrop-filter: blur(4px) saturate(103%);
         transition: transform 160ms ease, color 160ms ease, background 180ms ease, border-color 180ms ease;
       }
-      #__ROOT_ID__ .oviz-three-earth-view-toggle:hover {
+      #__ROOT_ID__ .oviz-three-display-switch:hover {
         transform: translateY(-1px);
         color: rgba(255, 255, 255, 0.98);
         border-color: rgba(255, 255, 255, 0.18);
         background: rgba(28, 31, 36, 0.96);
       }
-      #__ROOT_ID__ .oviz-three-earth-view-toggle[data-active="true"] {
-        color: rgba(255, 255, 255, 0.98);
-        border-color: rgba(246, 200, 95, 0.34);
-        background: rgba(246, 200, 95, 0.12);
+      #__ROOT_ID__ .oviz-three-galactic-coordinate-toggle {
+        min-width: 116px;
+      }
+      #__ROOT_ID__ .oviz-three-earth-view-toggle {
+        min-width: 108px;
+      }
+      #__ROOT_ID__ .oviz-three-sky-member-toggle {
+        min-width: 128px;
+      }
+      #__ROOT_ID__ .oviz-three-sky-member-toggle[hidden] {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-view-segmented {
+        gap: 2px;
+        height: 34px;
+        padding: 3px;
+        border-radius: 7px;
+      }
+      #__ROOT_ID__ .oviz-three-view-segmented .oviz-three-display-switch-choice {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 48px;
+        height: 26px;
+        padding: 0 9px;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        box-sizing: border-box;
+        color: rgba(255, 255, 255, 0.58);
+        transition: color 160ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-view-segmented .oviz-three-display-switch-choice[data-selected="true"] {
+        border-color: rgba(246, 200, 95, 0.30);
+        background: rgba(246, 200, 95, 0.16);
+        color: rgba(255, 244, 217, 0.98);
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.20);
+      }
+      #__ROOT_ID__ .oviz-three-display-switch-track {
+        position: relative;
+        flex: 0 0 auto;
+        width: 29px;
+        height: 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        box-sizing: border-box;
+        transition: background 180ms ease, border-color 180ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-display-switch-thumb {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: rgba(224, 231, 239, 0.82);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+        transition: transform 190ms cubic-bezier(0.2, 0.8, 0.2, 1), background 180ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-display-switch[data-active="true"] .oviz-three-display-switch-track {
+        border-color: rgba(246, 200, 95, 0.52);
+        background: rgba(246, 200, 95, 0.25);
+      }
+      #__ROOT_ID__ .oviz-three-display-switch[data-active="true"] .oviz-three-display-switch-thumb {
+        transform: translateX(13px);
+        background: rgba(255, 224, 149, 0.98);
+      }
+      #__ROOT_ID__ .oviz-three-display-switch-label,
+      #__ROOT_ID__ .oviz-three-display-switch-choice {
+        white-space: nowrap;
+        color: rgba(255, 255, 255, 0.68);
+        transition: color 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-display-switch[data-active="true"] .oviz-three-display-switch-label,
+      #__ROOT_ID__ .oviz-three-display-switch-choice[data-selected="true"] {
+        color: rgba(255, 255, 255, 0.96);
       }
       #__ROOT_ID__ .oviz-three-time-label {
         min-width: 124px;
@@ -4694,12 +4781,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           bottom: 12px;
           width: min(calc(100vw - 20px), 620px);
         }
-        #__ROOT_ID__ .oviz-three-earth-view-toggle {
+        #__ROOT_ID__ .oviz-three-bottom-switches {
           right: calc(env(safe-area-inset-right, 0px) + 66px);
           bottom: 68px;
-          min-width: 96px;
+          gap: 6px;
+        }
+        #__ROOT_ID__ .oviz-three-display-switch {
           height: 32px;
-          padding: 0 12px;
+          padding: 0 9px;
           font-size: 11px;
         }
         #__ROOT_ID__ .oviz-three-scale-bar {
@@ -4810,7 +4899,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-mobile="true"] .oviz-three-save-state,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-select,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-key-help,
-      #__ROOT_ID__[data-mobile="true"] .oviz-three-earth-view-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-bottom-switches,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-action-bar,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-note,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-scale-bar,
@@ -6519,7 +6608,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: none !important;
       }
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-topbar,
-      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-earth-view-toggle,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-bottom-switches,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-fullscreen,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-fullscreen-notice,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-action-bar,
@@ -6554,7 +6643,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
   <body>
     <div id="__ROOT_ID__" tabindex="0" data-zen="false" data-presentation-mode="false" __ROOT_MINIMAL_ATTR__ __ROOT_MOBILE_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__ __ROOT_AR_ATTR__>
       __TOPBAR_HTML__
-      <button class="oviz-three-earth-view-toggle" type="button" title="Current view: 3D. Click or press V to enter Sky view." aria-pressed="false" aria-label="Current view: 3D. Switch to Sky View.">View: 3D</button>
+      <div class="oviz-three-bottom-switches" aria-label="View and overlay controls" data-layout="inline">
+        <button class="oviz-three-display-switch oviz-three-galactic-coordinate-toggle" type="button" role="switch" title="Hide Galactic coordinates" aria-checked="true" aria-label="Galactic coordinates" data-active="true">
+          <span class="oviz-three-display-switch-label">Galactic grid</span>
+          <span class="oviz-three-display-switch-track" aria-hidden="true">
+            <span class="oviz-three-display-switch-thumb"></span>
+          </span>
+        </button>
+        <button class="oviz-three-display-switch oviz-three-sky-member-toggle oviz-three-view-segmented" type="button" title="Current Sky markers: Stars. Click to show cluster markers." aria-pressed="true" aria-label="Current Sky markers: Stars. Switch to Clusters." data-active="true" hidden>
+          <span class="oviz-three-display-switch-choice" data-sky-member-mode="clusters" data-selected="false">Clusters</span>
+          <span class="oviz-three-display-switch-choice" data-sky-member-mode="stars" data-selected="true">Stars</span>
+        </button>
+        <button class="oviz-three-display-switch oviz-three-earth-view-toggle oviz-three-view-segmented" type="button" title="Current view: 3D. Click or press V to enter Sky view." aria-pressed="false" aria-label="Current view: 3D. Switch to Sky View." data-active="false">
+          <span class="oviz-three-display-switch-choice" data-mode="3d" data-selected="true">3D</span>
+          <span class="oviz-three-display-switch-choice" data-mode="sky" data-selected="false">Sky</span>
+        </button>
+      </div>
       <button class="oviz-three-fullscreen" type="button" title="Enter fullscreen" aria-label="Enter fullscreen">
         <svg class="oviz-three-fullscreen-expand" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 9V4h5"></path>
@@ -7281,6 +7385,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const presentationModeButtonEl = root.querySelector(".oviz-three-presentation-mode");
       const fullscreenButtonEl = root.querySelector(".oviz-three-fullscreen");
       const fullscreenNoticeEl = root.querySelector(".oviz-three-fullscreen-notice");
+      const bottomSwitchesEl = root.querySelector(".oviz-three-bottom-switches");
       const mobileSkyViewButtonEl = root.querySelector(".oviz-three-mobile-sky-view");
       const mobileLassoButtonEl = root.querySelector(".oviz-three-mobile-lasso");
       const mobileArButtonEl = root.querySelector(".oviz-three-mobile-ar");
@@ -7330,6 +7435,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const playForwardButtonEl = root.querySelector(".oviz-three-play-forward");
       const footerEl = root.querySelector(".oviz-three-footer");
       const earthViewToggleButtonEl = root.querySelector(".oviz-three-earth-view-toggle");
+      const skyMemberToggleButtonEl = root.querySelector(".oviz-three-sky-member-toggle");
       const tooltipEl = root.querySelector(".oviz-three-tooltip");
       const scaleBarEl = root.querySelector(".oviz-three-scale-bar");
       const scaleLabelEl = root.querySelector(".oviz-three-scale-label");
@@ -7375,6 +7481,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const fadeOpacityByBirthToggleEl = root.querySelector(".oviz-three-fade-opacity-by-birth-toggle");
       const axesVisibleToggleEl = root.querySelector(".oviz-three-axes-visible-toggle");
       const galacticReferenceToggleEl = root.querySelector(".oviz-three-galactic-reference-toggle");
+      const galacticCoordinateToggleEl = root.querySelector(".oviz-three-galactic-coordinate-toggle");
       const nearbyRegionLabelsToggleEls = Array.from(root.querySelectorAll(".oviz-three-region-labels-toggle"));
       const manualLabelSelectEl = root.querySelector(".oviz-three-manual-label-select");
       const manualLabelTextEl = root.querySelector(".oviz-three-manual-label-text");
@@ -7609,6 +7716,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const groupVisibility = sceneSpec.group_visibility || {};
       const defaultGroup = sceneSpec.default_group || "All";
       const skySpec = sceneSpec.sky_panel || { enabled: false };
+      const skyMemberDisplayAvailable = Boolean(
+        skySpec
+        && skySpec.show_cluster_members_in_sky === true
+        && skySpec.members_by_cluster
+        && typeof skySpec.members_by_cluster === "object"
+        && Object.values(skySpec.members_by_cluster).some(
+          (members) => Array.isArray(members)
+            && members.some((member) => member && member.is_cluster_member === true)
+        )
+      );
       const skyDomeSpec = sceneSpec.sky_dome || { enabled: false };
       const selectionBoxSpec = sceneSpec.selection_box || { enabled: false };
       const ageKdeSpec = sceneSpec.age_kde || { enabled: false };
@@ -7671,6 +7788,22 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       })();
       const galacticReferenceTraceNames = new Set([
         "GC",
+        "GC Ring",
+        "R = 4 kpc",
+        "R = 4 kpc Label",
+        "R = 8.12 kpc",
+        "R = 8.12 kpc Label",
+        "R = 12 kpc",
+        "R = 12 kpc Label",
+        "Galactic Quadrants",
+        "Galactic l Labels",
+      ]);
+      const galacticPresentDayReferenceTraceNames = new Set([
+        "Galactic Quadrants",
+        "Galactic l Labels",
+      ]);
+      const galacticCircleTraceNames = new Set([
+        "GC Ring",
         "R = 4 kpc",
         "R = 8.12 kpc",
         "R = 12 kpc",
@@ -7697,10 +7830,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const pointScale = (pointScaleReferenceSpan / 2600.0) * pointScaleBaseline;
       const hoverTargets = [];
       const cameraResponsivePointEntries = [];
+      const ovizBatchedPointMaterials = [];
+      let ovizBatchedLogicalPointCount = 0;
+      let ovizBatchedPointComponentCount = 0;
+      let ovizBatchedDrawObjectCount = 0;
+      let ovizBatchedRasterPointSizeMax = null;
+      let ovizRetainedPointComponentCount = 0;
       const skyMemberBatchOpacityEntries = [];
       const skyMemberBulkOpacityEntries = [];
+      const skyMemberBulkFramePositionCache = new Map();
+      let skyMemberTimelineFastPathCount = 0;
       const cameraResponsiveImagePlaneEntries = [];
       const galacticReferenceOpacityGroups = [];
+      const milkyWayModelGroups = [];
       const selectionSpriteEntriesByKey = new Map();
       const axisLineMaterials = [];
       const frameLineMaterials = [];
@@ -7906,12 +8048,19 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let earthViewReturnCameraState = null;
       let cameraTransitionAnimationFrame = 0;
       let skyDomeOpacityAnimationFrame = 0;
+      let skyDomeTimelineOpacityAnimationFrame = 0;
+      let skyDomeTimelineOpacityTarget = 1.0;
       let milkyWayOpacityAnimationFrame = 0;
       let skyMemberRevealAnimationFrame = 0;
       let milkyWayViewOpacityScale = 1.0;
       let skyDomeViewOpacityScale = 0.0;
+      let skyDomeTimelineOpacityScale = 1.0;
       let skyMemberRevealProgress = 0.0;
       let skyMemberBatchesEnabled = false;
+      let skyMemberDisplayMode = (
+        initialState.global_controls
+        && String(initialState.global_controls.sky_member_display_mode || "").toLowerCase() === "clusters"
+      ) ? "clusters" : "stars";
       let skyBackgroundHidden = Boolean(initialState.global_controls && initialState.global_controls.sky_background_hidden);
       let skyViewTransitionSerial = 0;
       let skyViewDragState = null;
@@ -8128,12 +8277,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       });
       controls.addEventListener("change", () => {
         updateZoomAnchorFromControlsPan();
-        if (!skyDomeUsesAladinBackground()) {
-          return;
+        if (typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
         }
-        updateSkyDomeBackgroundFrame(
-          (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()
-        );
       });
 
       const eye = (layoutScene.camera || {}).eye || { x: 0.0, y: -0.8, z: 1.5 };
@@ -10103,6 +10249,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           if (typeof savedGlobalControls.size_points_by_stars_enabled === "boolean") {
             sizePointsByStarsEnabled = savedGlobalControls.size_points_by_stars_enabled;
           }
+          if (typeof savedGlobalControls.sky_member_display_mode === "string") {
+            skyMemberDisplayMode = normalizeSkyMemberDisplayMode(
+              savedGlobalControls.sky_member_display_mode
+            );
+          }
           if (Number.isFinite(Number(savedGlobalControls.fade_in_time_myr))) {
             fadeInTimeMyr = Number(savedGlobalControls.fade_in_time_myr);
           }
@@ -10187,6 +10338,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           restoreSkyApertureState(initialState.sky_apertures || initialState.sky_aperture);
         }
         skyDomeViewOpacityScale = cameraViewMode === "earth" ? 1.0 : 0.0;
+        skyMemberBatchesEnabled = (
+          cameraViewMode === "earth"
+          && skyMemberDisplayTargetProgress() > 0.5
+        );
+        setSkyMemberRevealProgress(
+          cameraViewMode === "earth" ? skyMemberDisplayTargetProgress() : 0.0
+        );
+        syncSkyMemberDisplayToggleUi();
 
         const savedScaleBarState = initialState.scale_bar_state;
         if (
@@ -10602,6 +10761,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             point_opacity_scale: globalPointOpacityScale,
             point_glow_strength: globalPointGlowStrength,
             size_points_by_stars_enabled: sizePointsByStarsEnabled,
+            sky_member_display_mode: skyMemberDisplayMode,
             fade_in_time_myr: fadeInTimeMyr,
             fade_in_and_out_enabled: fadeInAndOutEnabled,
             fade_opacity_by_birth_time_enabled: fadeOpacityByBirthTimeEnabled,
@@ -16009,7 +16169,14 @@ __SKY_RUNTIME_JS__
         const state = volumeStateByKey[volumeStateKeyForLayer(layer)] || {};
         const option = volumeColormapOptionFor(layer, state.colormap);
         const windowState = normalizedVolumeWindowFor(layer, state);
-        runtime.mesh.visible = volumeVisibleForFrame(layer, state, frame);
+        runtime.mesh.visible = Boolean(
+          volumeVisibleForFrame(layer, state, frame)
+          && (
+            cameraViewMode !== "earth"
+            || typeof skyVolumeVisibleForDisplayedTime !== "function"
+            || skyVolumeVisibleForDisplayedTime()
+          )
+        );
         runtime.material.uniforms.low.value = Number(windowState.low);
         runtime.material.uniforms.high.value = Number(windowState.high);
         runtime.material.uniforms.opacity.value = Number(state.opacity);
@@ -16490,10 +16657,15 @@ __SKY_RUNTIME_JS__
 
       function skyMemberScaleForPoint(basePointScale, position) {
         const requestedScale = Math.max(Number(basePointScale) || 0.0, 0.0);
-        const minimumPixels = Math.max(
-          Number(skySpec && skySpec.member_min_screen_size_px) || 2.5,
-          0.0,
+        const configuredMinimumPixels = Number(
+          skySpec && skySpec.member_min_screen_size_px
         );
+        const minimumPixels = Number.isFinite(configuredMinimumPixels)
+          ? Math.max(configuredMinimumPixels, 0.0)
+          : 0.0;
+        if (!(minimumPixels > 0.0)) {
+          return requestedScale;
+        }
         return Math.max(
           requestedScale,
           worldScaleForScreenPixelsAt(position, minimumPixels),
@@ -16524,6 +16696,538 @@ __SKY_RUNTIME_JS__
           selectionSpriteEntriesByKey.get(entry.selectionKey).push(entry);
         }
         return entry;
+      }
+
+      function registerCameraResponsiveBatchedPoint(
+        proxy,
+        scaleKind,
+        position,
+        pointScaleValue,
+        selectionKey,
+        sizeAttribute,
+        pointIndex,
+        batchOptions = {},
+      ) {
+        const entry = registerCameraResponsivePointSprite(
+          proxy,
+          scaleKind,
+          position,
+          pointScaleValue,
+          selectionKey,
+        );
+        entry.batchSizeAttribute = sizeAttribute;
+        entry.batchPointIndex = Number(pointIndex) || 0;
+        entry.batchOpacityAttribute = batchOptions.opacityAttribute || null;
+        entry.batchBaseOpacity = clamp01(Number(batchOptions.opacity) || 0.0);
+        entry.batchOverflow = {
+          parent: batchOptions.parent || null,
+          texture: batchOptions.texture || null,
+          color: String(batchOptions.color || "#ffffff"),
+          alphaTest: Math.max(Number(batchOptions.alphaTest) || 0.0, 0.0),
+          blending: batchOptions.blending ?? THREE.NormalBlending,
+          renderOrder: Number(batchOptions.renderOrder) || 0,
+          sprite: null,
+        };
+        return entry;
+      }
+
+      function ovizMaximumRasterizedPointSize() {
+        if (Number.isFinite(ovizBatchedRasterPointSizeMax)) {
+          return ovizBatchedRasterPointSizeMax;
+        }
+        let maximum = 64.0;
+        try {
+          const gl = renderer.getContext();
+          const range = gl && gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
+          const reportedMaximum = Number(range && range[1]);
+          if (Number.isFinite(reportedMaximum) && reportedMaximum > 0.0) {
+            maximum = reportedMaximum;
+          }
+        } catch (_err) {
+          // A conservative fallback keeps the uncapped sprite path available.
+        }
+        ovizBatchedRasterPointSizeMax = maximum;
+        return maximum;
+      }
+
+      function ovizProjectedBatchedPointSize(entry, worldScale) {
+        if (!entry || !entry.sprite || !(worldScale > 0.0)) {
+          return 0.0;
+        }
+        const worldPosition = entry.batchProjectionWorldPosition || new THREE.Vector3();
+        const viewPosition = entry.batchProjectionViewPosition || new THREE.Vector3();
+        entry.batchProjectionWorldPosition = worldPosition;
+        entry.batchProjectionViewPosition = viewPosition;
+        entry.sprite.getWorldPosition(worldPosition);
+        viewPosition.copy(worldPosition).applyMatrix4(camera.matrixWorldInverse);
+        const viewportHeight = Math.max(renderer.domElement.height || 1, 1);
+        if (camera.isPerspectiveCamera) {
+          const depth = Math.max(-viewPosition.z, 1e-6);
+          const projectionScale = 0.5 * viewportHeight * camera.projectionMatrix.elements[5];
+          return worldScale * projectionScale / depth;
+        }
+        if (camera.isOrthographicCamera) {
+          const worldHeight = Math.max(
+            (camera.top - camera.bottom) / Math.max(camera.zoom, 1e-6),
+            1e-6,
+          );
+          return worldScale * viewportHeight / worldHeight;
+        }
+        return 0.0;
+      }
+
+      function ovizEnsureBatchedOverflowSprite(entry) {
+        const overflow = entry && entry.batchOverflow;
+        if (!overflow || !overflow.parent || !overflow.texture) {
+          return null;
+        }
+        if (overflow.sprite) {
+          return overflow.sprite;
+        }
+        const material = new THREE.SpriteMaterial({
+          map: overflow.texture,
+          color: overflow.color,
+          transparent: true,
+          opacity: entry.batchBaseOpacity,
+          depthWrite: false,
+          depthTest: true,
+          alphaTest: overflow.alphaTest,
+          sizeAttenuation: true,
+          blending: overflow.blending,
+        });
+        material.userData = {
+          cached: false,
+          ovizSharedTexture: true,
+          ovizBatchOverflow: true,
+        };
+        const sprite = new THREE.Sprite(material);
+        sprite.position.copy(entry.position);
+        sprite.renderOrder = overflow.renderOrder;
+        sprite.visible = false;
+        overflow.parent.add(sprite);
+        overflow.sprite = sprite;
+        return sprite;
+      }
+
+      function ovizEnsureSkyMemberOverflowSprites(entry) {
+        if (!entry || !entry.parent || !entry.texture || !entry.relativePositions) {
+          return null;
+        }
+        if (entry.overflowGroup) {
+          return entry.overflowGroup;
+        }
+        const material = new THREE.SpriteMaterial({
+          map: entry.texture,
+          color: entry.color || "#ffffff",
+          transparent: true,
+          opacity: 0.0,
+          depthWrite: false,
+          depthTest: true,
+          alphaTest: Math.max(Number(entry.alphaTest) || 0.0, 0.0),
+          sizeAttenuation: true,
+          blending: entry.blending ?? THREE.NormalBlending,
+        });
+        material.userData = {
+          cached: false,
+          ovizSharedTexture: true,
+          ovizSkyMemberOverflow: true,
+        };
+        const overflowGroup = new THREE.Group();
+        const positions = entry.relativePositions;
+        const velocities = entry.relativeVelocities;
+        const pointCount = Math.floor(positions.length / 3);
+        for (let pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
+          const offset = pointIndex * 3;
+          const sprite = new THREE.Sprite(material);
+          const originalOffset = new THREE.Vector3(
+            positions[offset],
+            positions[offset + 1],
+            positions[offset + 2],
+          );
+          sprite.position.copy(originalOffset);
+          sprite.userData.ovizSkyMemberOffset = originalOffset;
+          sprite.userData.ovizSkyMemberVelocity = (
+            velocities && velocities.length >= offset + 3
+          ) ? new THREE.Vector3(
+            velocities[offset],
+            velocities[offset + 1],
+            velocities[offset + 2],
+          ) : new THREE.Vector3();
+          sprite.scale.set(entry.pointSize, entry.pointSize, 1.0);
+          sprite.renderOrder = entry.renderOrder;
+          overflowGroup.add(sprite);
+        }
+        overflowGroup.visible = false;
+        entry.parent.add(overflowGroup);
+        entry.overflowGroup = overflowGroup;
+        entry.overflowMaterial = material;
+        ovizUpdateSkyMemberOverflowPositions(entry);
+        return overflowGroup;
+      }
+
+      function ovizSetSkyMemberBatchMaterialOpacity(entry, opacity) {
+        if (!entry || !entry.material) {
+          return;
+        }
+        const value = Math.max(Number(opacity) || 0.0, 0.0);
+        if (
+          entry.batchOpacityAttribute
+          && entry.batchOpacityAttribute.array
+          && Number.isInteger(entry.batchStart)
+          && Number.isInteger(entry.batchCount)
+        ) {
+          if (
+            Number.isFinite(Number(entry.batchAppliedOpacity))
+            && Math.abs(Number(entry.batchAppliedOpacity) - value) <= 1e-9
+          ) {
+            return;
+          }
+          const start = Math.max(entry.batchStart, 0);
+          const end = Math.min(
+            start + Math.max(entry.batchCount, 0),
+            entry.batchOpacityAttribute.array.length,
+          );
+          entry.batchOpacityAttribute.array.fill(value, start, end);
+          entry.batchOpacityAttribute.needsUpdate = true;
+          entry.batchAppliedOpacity = value;
+          return;
+        }
+        entry.material.opacity = value;
+        const opacityUniform = entry.material.uniforms
+          && entry.material.uniforms.ovizOpacity;
+        if (opacityUniform) {
+          opacityUniform.value = value;
+        }
+      }
+
+      function ovizUpdateSkyMemberBatchParentVisual(
+        entry,
+        displayedTimeMyr,
+        bulkTarget,
+        parentVisualByKey = null
+      ) {
+        if (
+          !entry
+          || !entry.material
+          || !entry.parentPoint
+          || !entry.parentTrace
+          || typeof ovizRetainedCommonPointVisual !== "function"
+        ) {
+          return;
+        }
+        const visualKey = String(
+          entry.parentVisualKey
+          || `${String(entry.parentTrace.key || entry.parentTrace.name || "trace")}\u0000${entry.parentMotionKey || ""}`
+        );
+        let visual = parentVisualByKey instanceof Map
+          ? parentVisualByKey.get(visualKey)
+          : null;
+        if (!visual) {
+          visual = ovizRetainedCommonPointVisual(
+            {
+              object: entry.parent,
+              metadata: {
+                trace: entry.parentTrace,
+                point: entry.parentPoint,
+              },
+            },
+            entry.parentPoint,
+            displayedTimeMyr,
+          );
+          if (parentVisualByKey instanceof Map) {
+            parentVisualByKey.set(visualKey, visual);
+          }
+        }
+        const position = bulkTarget instanceof THREE.Vector3
+          ? bulkTarget
+          : (
+            entry.parent && entry.parent.position instanceof THREE.Vector3
+              ? entry.parent.position
+              : new THREE.Vector3()
+          );
+        const memberBaseScale = Math.max(Number(visual.baseScale) || 0.0, 0.0)
+          * clampRange(Number(entry.memberSizeRatio) || (1.0 / 30.0), 0.001, 1.0);
+        const visibleBaseScale = skyMemberScaleForPoint(memberBaseScale, position);
+        const glowStrength = Math.max(Number(visual.glowStrength) || 0.0, 0.0);
+        const effectiveOpacity = clamp01(Number(visual.effectiveOpacity) || 0.0);
+        let pointSize = nonGlowMarkerScaleForPoint(visibleBaseScale, position);
+        let baseOpacity = effectiveOpacity;
+        let color = String(visual.color || "#ffffff");
+        if (entry.componentKind === "glow") {
+          pointSize = glowScaleForPoint(visibleBaseScale, position, glowStrength);
+          baseOpacity = clampRange(
+            effectiveOpacity * (0.34 + 0.18 * glowStrength),
+            0.0,
+            0.78,
+          );
+        } else if (entry.componentKind === "core") {
+          pointSize = starCoreScaleForPoint(visibleBaseScale, position, glowStrength);
+          baseOpacity = clampRange(
+            effectiveOpacity * (0.74 + 0.16 * glowStrength),
+            0.0,
+            1.0,
+          );
+          color = "#ffffff";
+        }
+        entry.baseOpacity = baseOpacity;
+        entry.pointSize = pointSize;
+        if (
+          entry.batchSizeAttribute
+          && entry.batchSizeAttribute.array
+          && Number.isInteger(entry.batchStart)
+          && Number.isInteger(entry.batchCount)
+        ) {
+          const start = Math.max(entry.batchStart, 0);
+          const end = Math.min(
+            start + Math.max(entry.batchCount, 0),
+            entry.batchSizeAttribute.array.length,
+          );
+          entry.batchSizeAttribute.array.fill(pointSize, start, end);
+          entry.batchSizeAttribute.needsUpdate = true;
+        } else {
+          entry.material.size = pointSize;
+          if (
+            entry.material.uniforms
+            && entry.material.uniforms.ovizPointSize
+          ) {
+            entry.material.uniforms.ovizPointSize.value = pointSize;
+          }
+        }
+        if (
+          entry.batchColorAttribute
+          && entry.batchColorAttribute.array
+          && Number.isInteger(entry.batchStart)
+          && Number.isInteger(entry.batchCount)
+        ) {
+          const parsedColor = new THREE.Color(color);
+          const start = Math.max(entry.batchStart, 0);
+          const end = Math.min(
+            start + Math.max(entry.batchCount, 0),
+            Math.floor(entry.batchColorAttribute.array.length / 3),
+          );
+          for (let index = start; index < end; index += 1) {
+            const offset = index * 3;
+            entry.batchColorAttribute.array[offset] = parsedColor.r;
+            entry.batchColorAttribute.array[offset + 1] = parsedColor.g;
+            entry.batchColorAttribute.array[offset + 2] = parsedColor.b;
+          }
+          entry.batchColorAttribute.needsUpdate = true;
+        } else if (
+          entry.material.uniforms
+          && entry.material.uniforms.ovizPointColor
+          && entry.material.uniforms.ovizPointColor.value
+        ) {
+          entry.material.uniforms.ovizPointColor.value.set(color);
+        }
+        entry.color = color;
+        const revealedOpacity = baseOpacity * skyMemberRevealProgress;
+        if (entry.overflowActive && entry.overflowMaterial) {
+          entry.overflowMaterial.opacity = revealedOpacity;
+          if (entry.overflowMaterial.color) {
+            entry.overflowMaterial.color.set(color);
+          }
+          ovizSetSkyMemberBatchMaterialOpacity(entry, 0.0);
+        } else {
+          ovizSetSkyMemberBatchMaterialOpacity(entry, revealedOpacity);
+        }
+        if (entry.overflowGroup) {
+          entry.overflowGroup.children.forEach((sprite) => {
+            if (sprite && sprite.scale) {
+              sprite.scale.set(pointSize, pointSize, 1.0);
+            }
+          });
+        }
+      }
+
+      function ovizUpdateSkyMemberOverflowPositions(entry) {
+        if (!entry || !entry.overflowGroup) {
+          return;
+        }
+        const uniforms = entry.material && entry.material.uniforms;
+        const timeDeltaMyr = Number.isFinite(Number(entry.currentTimeDeltaMyr))
+          ? Number(entry.currentTimeDeltaMyr)
+          : (
+            Number(
+              uniforms && uniforms.ovizTimeDeltaMyr && uniforms.ovizTimeDeltaMyr.value
+            ) || 0.0
+          );
+        const collapseProgress = clampRange(
+          Number.isFinite(Number(entry.currentCollapseProgress))
+            ? Number(entry.currentCollapseProgress)
+            : (
+              Number(
+                uniforms
+                && uniforms.ovizCollapseProgress
+                && uniforms.ovizCollapseProgress.value
+              ) || 0.0
+            ),
+          0.0,
+          1.0,
+        );
+        const collapseTarget = entry.currentCollapseTarget instanceof THREE.Vector3
+          ? entry.currentCollapseTarget
+          : (
+            uniforms
+            && uniforms.ovizCollapseTarget
+            && uniforms.ovizCollapseTarget.value instanceof THREE.Vector3
+              ? uniforms.ovizCollapseTarget.value
+              : null
+          );
+        const bulkDelta = entry.currentBulkDelta instanceof THREE.Vector3
+          ? entry.currentBulkDelta
+          : (
+            uniforms
+            && uniforms.ovizBulkDelta
+            && uniforms.ovizBulkDelta.value instanceof THREE.Vector3
+              ? uniforms.ovizBulkDelta.value
+              : null
+          );
+        entry.overflowGroup.children.forEach((sprite) => {
+          const originalOffset = sprite
+            && sprite.userData
+            && sprite.userData.ovizSkyMemberOffset;
+          const velocity = sprite
+            && sprite.userData
+            && sprite.userData.ovizSkyMemberVelocity;
+          if (!(sprite && originalOffset instanceof THREE.Vector3)) {
+            return;
+          }
+          sprite.position.copy(originalOffset);
+          if (bulkDelta) {
+            sprite.position.add(bulkDelta);
+          }
+          if (velocity instanceof THREE.Vector3 && Math.abs(timeDeltaMyr) > 1e-12) {
+            sprite.position.addScaledVector(velocity, timeDeltaMyr);
+          }
+          if (collapseTarget && collapseProgress > 1e-12) {
+            sprite.position.lerp(collapseTarget, collapseProgress);
+          }
+        });
+      }
+
+      function ovizSetSkyMemberBatchTime(entry, displayedTimeMyr, bulkTarget) {
+        if (!entry || !entry.material || !entry.material.uniforms) {
+          return;
+        }
+        const uniforms = entry.material.uniforms;
+        const timeDeltaMyr = (
+          (Number(displayedTimeMyr) || 0.0)
+          - (Number(entry.baseTimeMyr) || 0.0)
+        );
+        entry.currentTimeDeltaMyr = timeDeltaMyr;
+        const bulkDelta = (
+          bulkTarget instanceof THREE.Vector3
+          && entry.parent
+          && entry.parent.position
+        ) ? bulkTarget.clone().sub(entry.parent.position) : new THREE.Vector3();
+        entry.currentBulkDelta = bulkDelta;
+        entry.currentCollapseTarget = bulkDelta.clone();
+        if (
+          entry.batchTimeAttribute
+          && entry.batchBulkDeltaAttribute
+          && entry.batchCollapseTargetAttribute
+          && Number.isInteger(entry.batchStart)
+          && Number.isInteger(entry.batchCount)
+        ) {
+          const start = Math.max(entry.batchStart, 0);
+          const end = Math.min(
+            start + Math.max(entry.batchCount, 0),
+            entry.batchTimeAttribute.array.length,
+          );
+          entry.batchTimeAttribute.array.fill(timeDeltaMyr, start, end);
+          const absoluteCollapseTarget = bulkTarget instanceof THREE.Vector3
+            ? bulkTarget
+            : (
+              entry.parent && entry.parent.position instanceof THREE.Vector3
+                ? entry.parent.position
+                : new THREE.Vector3()
+            );
+          for (let index = start; index < end; index += 1) {
+            const offset = index * 3;
+            entry.batchBulkDeltaAttribute.array[offset] = bulkDelta.x;
+            entry.batchBulkDeltaAttribute.array[offset + 1] = bulkDelta.y;
+            entry.batchBulkDeltaAttribute.array[offset + 2] = bulkDelta.z;
+            entry.batchCollapseTargetAttribute.array[offset] = absoluteCollapseTarget.x;
+            entry.batchCollapseTargetAttribute.array[offset + 1] = absoluteCollapseTarget.y;
+            entry.batchCollapseTargetAttribute.array[offset + 2] = absoluteCollapseTarget.z;
+          }
+          entry.batchTimeAttribute.needsUpdate = true;
+          entry.batchBulkDeltaAttribute.needsUpdate = true;
+          entry.batchCollapseTargetAttribute.needsUpdate = true;
+          ovizUpdateSkyMemberOverflowPositions(entry);
+          return;
+        }
+        if (uniforms.ovizTimeDeltaMyr) {
+          uniforms.ovizTimeDeltaMyr.value = timeDeltaMyr;
+        }
+        if (
+          uniforms.ovizBulkDelta
+          && uniforms.ovizBulkDelta.value instanceof THREE.Vector3
+          && bulkTarget instanceof THREE.Vector3
+          && entry.parent
+          && entry.parent.position
+        ) {
+          uniforms.ovizBulkDelta.value.copy(bulkTarget).sub(entry.parent.position);
+        }
+        if (
+          uniforms.ovizCollapseTarget
+          && uniforms.ovizCollapseTarget.value instanceof THREE.Vector3
+          && bulkTarget instanceof THREE.Vector3
+          && entry.parent
+          && entry.parent.position
+        ) {
+          uniforms.ovizCollapseTarget.value.copy(bulkTarget).sub(entry.parent.position);
+        }
+        ovizUpdateSkyMemberOverflowPositions(entry);
+      }
+
+      function ovizSetSkyMemberBatchCollapse(entry, collapseProgress) {
+        if (!entry || !entry.material) {
+          return;
+        }
+        const progress = clampRange(Number(collapseProgress) || 0.0, 0.0, 1.0);
+        entry.currentCollapseProgress = progress;
+        const collapseUniform = entry.material.uniforms
+          && entry.material.uniforms.ovizCollapseProgress;
+        if (collapseUniform) {
+          collapseUniform.value = progress;
+        }
+        ovizUpdateSkyMemberOverflowPositions(entry);
+      }
+
+      function updateSkyMemberBatchOverflowSprites() {
+        if (!skyMemberBatchOpacityEntries.length) {
+          return;
+        }
+        const pointSizeLimit = ovizMaximumRasterizedPointSize();
+        skyMemberBatchOpacityEntries.forEach((entry) => {
+          if (!entry || !entry.material || !entry.projectionEntry) {
+            return;
+          }
+          const projectedSize = ovizProjectedBatchedPointSize(
+            entry.projectionEntry,
+            entry.pointSize,
+          );
+          const overflowThreshold = pointSizeLimit * (entry.overflowActive ? 0.82 : 0.90);
+          const useOverflowSprites = projectedSize > overflowThreshold;
+          const effectiveOpacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)
+            * skyMemberRevealProgress;
+          if (useOverflowSprites) {
+            const overflowGroup = ovizEnsureSkyMemberOverflowSprites(entry);
+            if (overflowGroup && entry.overflowMaterial) {
+              entry.overflowMaterial.opacity = effectiveOpacity;
+              overflowGroup.visible = effectiveOpacity > 0.0;
+              ovizSetSkyMemberBatchMaterialOpacity(entry, 0.0);
+              entry.overflowActive = true;
+            }
+          } else {
+            ovizSetSkyMemberBatchMaterialOpacity(entry, effectiveOpacity);
+            if (entry.overflowGroup) {
+              entry.overflowGroup.visible = false;
+            }
+            entry.overflowActive = false;
+          }
+        });
       }
 
       function cameraResponsivePointBaseScale(entry) {
@@ -16574,6 +17278,7 @@ __SKY_RUNTIME_JS__
 
       function updateCameraResponsivePointSprites() {
         if (!cameraResponsivePointEntries.length) {
+          updateSkyMemberBatchOverflowSprites();
           return;
         }
         const activeKeys = activeHoveredClusterKeys();
@@ -16588,8 +17293,44 @@ __SKY_RUNTIME_JS__
           }
           const isActive = entry.selectionKey && activeKeys.has(entry.selectionKey);
           const scale = baseScale * (isActive ? cameraResponsivePointHoverMultiplier(entry) : 1.0);
-          entry.sprite.scale.set(scale, scale, 1.0);
+          if (entry.batchSizeAttribute && entry.batchSizeAttribute.array) {
+            const pointIndex = Number(entry.batchPointIndex) || 0;
+            if (entry.batchSizeAttribute.array[pointIndex] !== scale) {
+              entry.batchSizeAttribute.array[pointIndex] = scale;
+              entry.batchSizeAttribute.needsUpdate = true;
+            }
+            const overflow = entry.batchOverflow;
+            const existingOverflowSprite = overflow && overflow.sprite;
+            const projectedSize = ovizProjectedBatchedPointSize(entry, scale);
+            const pointSizeLimit = ovizMaximumRasterizedPointSize();
+            const overflowThreshold = pointSizeLimit * (existingOverflowSprite && existingOverflowSprite.visible ? 0.82 : 0.90);
+            const useOverflowSprite = (
+              entry.batchBaseOpacity > 0.0
+              && projectedSize > overflowThreshold
+            );
+            const opacityArray = entry.batchOpacityAttribute && entry.batchOpacityAttribute.array;
+            if (opacityArray) {
+              const targetOpacity = useOverflowSprite ? 0.0 : entry.batchBaseOpacity;
+              if (opacityArray[pointIndex] !== targetOpacity) {
+                opacityArray[pointIndex] = targetOpacity;
+                entry.batchOpacityAttribute.needsUpdate = true;
+              }
+            }
+            if (useOverflowSprite) {
+              const sprite = ovizEnsureBatchedOverflowSprite(entry);
+              if (sprite) {
+                sprite.material.opacity = entry.batchBaseOpacity;
+                sprite.scale.set(scale, scale, 1.0);
+                sprite.visible = true;
+              }
+            } else if (existingOverflowSprite) {
+              existingOverflowSprite.visible = false;
+            }
+          } else {
+            entry.sprite.scale.set(scale, scale, 1.0);
+          }
         });
+        updateSkyMemberBatchOverflowSprites();
       }
 
       function registerCameraResponsiveImagePlane(mesh, options = {}) {
@@ -17421,7 +18162,7 @@ __SKY_RUNTIME_JS__
       function setMilkyWayModelOpacityScale(value) {
         const scale = clampRange(Number(value) || 0.0, 0.0, 1.0);
         milkyWayViewOpacityScale = scale;
-        plotGroup.traverse((object) => {
+        milkyWayModelGroups.forEach((object) => {
           if (!object || !object.userData || object.userData.ovizDecorationKind !== "milky_way_model") {
             return;
           }
@@ -17466,7 +18207,11 @@ __SKY_RUNTIME_JS__
         if (imagePlaneTextureCache.has(dataUrl)) {
           return imagePlaneTextureCache.get(dataUrl);
         }
-        const texture = new THREE.TextureLoader().load(dataUrl);
+        const texture = new THREE.TextureLoader().load(dataUrl, () => {
+          if (typeof ovizInvalidateRender === "function") {
+            ovizInvalidateRender();
+          }
+        });
         persistentImagePlaneTextures.add(texture);
         texture.minFilter = THREE.LinearFilter;
         texture.magFilter = THREE.LinearFilter;
@@ -17547,7 +18292,7 @@ __SKY_RUNTIME_JS__
         geometry.setPositions(positions);
         const material = new LineMaterial({
           color: lineColor,
-          linewidth: Math.max((trace.line || {}).width ?? 1.0, 1.0),
+          linewidth: Math.max((trace.line || {}).width ?? 1.0, 0.35),
           dashed: ((trace.line || {}).dash || "solid") !== "solid",
           dashSize: 8.0,
           gapSize: 5.0,
@@ -18063,6 +18808,7 @@ __SKY_RUNTIME_JS__
       let renderedSkyMemberBulkReplacementCount = 0;
       let renderedSkyClusterBulkPointCount = 0;
       let renderedSkyMemberDrawObjectCount = 0;
+      let skyMemberBulkRadialVelocityCache = null;
 
       function skyMemberCatalogForPoint(point, trace) {
         if (
@@ -18074,13 +18820,23 @@ __SKY_RUNTIME_JS__
         }
         const byCluster = skySpec.members_by_cluster || {};
         const selection = point && typeof point.selection === "object" ? point.selection : {};
-        const candidates = [
+        const pointIdentityCandidates = [
+          motionKeyForPoint(point),
           selection.cluster_name,
           selection.name,
           selection.name_all,
-          trace && trace.name,
         ]
-          .filter((value) => value !== null && value !== undefined && String(value).trim())
+          .filter((value) => value !== null && value !== undefined && String(value).trim());
+        // Timeline frames before t=0 intentionally omit the heavier selection
+        // records, but retain motion.key. Resolve that stable cluster identity
+        // before considering the trace-level compatibility fallback; otherwise
+        // every point in a past frame can incorrectly reuse one aggregate
+        // trace catalog instead of its own member stars.
+        const candidates = (
+          pointIdentityCandidates.length
+            ? pointIdentityCandidates
+            : [trace && trace.name]
+        )
           .flatMap((value) => String(value).split(/[,;|]/g))
           .map((value) => String(value).trim())
           .filter(Boolean)
@@ -18115,23 +18871,710 @@ __SKY_RUNTIME_JS__
         return null;
       }
 
-      function skyMemberWorldPosition(member, bulkPosition) {
+      function skyMemberBulkRadialVelocitiesKmS() {
+        if (skyMemberBulkRadialVelocityCache) {
+          return skyMemberBulkRadialVelocityCache;
+        }
+        const frames = (Array.isArray(frameSpecs) ? frameSpecs : [])
+          .map((frame) => ({ frame, timeMyr: Number(frame && frame.time) }))
+          .filter((sample) => Number.isFinite(sample.timeMyr));
+        skyMemberBulkRadialVelocityCache = new Map();
+        if (frames.length < 2) {
+          return skyMemberBulkRadialVelocityCache;
+        }
+        const presentFrame = frames.reduce((best, sample) => (
+          !best || Math.abs(sample.timeMyr) < Math.abs(best.timeMyr) ? sample : best
+        ), null);
+        const neighborFrame = frames.reduce((best, sample) => {
+          if (
+            sample === presentFrame
+            || Math.abs(sample.timeMyr - presentFrame.timeMyr) <= 1e-12
+          ) {
+            return best;
+          }
+          return !best
+            || Math.abs(sample.timeMyr - presentFrame.timeMyr)
+              < Math.abs(best.timeMyr - presentFrame.timeMyr)
+            ? sample
+            : best;
+        }, null);
+        if (!presentFrame || !neighborFrame) {
+          return skyMemberBulkRadialVelocityCache;
+        }
+        const positionsForFrame = (frame) => {
+          const positions = new Map();
+          (Array.isArray(frame && frame.traces) ? frame.traces : []).forEach((trace) => {
+            (Array.isArray(trace && trace.points) ? trace.points : []).forEach((point) => {
+              const motionKey = motionKeyForPoint(point);
+              const x = Number(point && point.x);
+              const y = Number(point && point.y);
+              const z = Number(point && point.z);
+              if (
+                !motionKey
+                || positions.has(motionKey)
+                || !Number.isFinite(x)
+                || !Number.isFinite(y)
+                || !Number.isFinite(z)
+              ) {
+                return;
+              }
+              positions.set(motionKey, new THREE.Vector3(x, y, z));
+            });
+          });
+          return positions;
+        };
+        const presentPositions = positionsForFrame(presentFrame.frame);
+        const neighborPositions = positionsForFrame(neighborFrame.frame);
+        const kmSPerPcMyr = 1.0 / 1.0227121650537077;
+        const deltaTimeMyr = presentFrame.timeMyr - neighborFrame.timeMyr;
+        if (Math.abs(deltaTimeMyr) <= 1e-12) {
+          return skyMemberBulkRadialVelocityCache;
+        }
+        presentPositions.forEach((presentPosition, motionKey) => {
+          const neighborPosition = neighborPositions.get(motionKey);
+          if (!neighborPosition || presentPosition.lengthSq() <= 1e-12) {
+            return;
+          }
+          const velocityPcMyr = presentPosition.clone()
+            .sub(neighborPosition)
+            .multiplyScalar(1.0 / deltaTimeMyr);
+          const radialDirection = presentPosition.clone().normalize();
+          const radialVelocityKmS = velocityPcMyr.dot(radialDirection) * kmSPerPcMyr;
+          if (Number.isFinite(radialVelocityKmS)) {
+            skyMemberBulkRadialVelocityCache.set(motionKey, radialVelocityKmS);
+          }
+        });
+        return skyMemberBulkRadialVelocityCache;
+      }
+
+      function skyMemberBulkRadialVelocityKmS(parentPoint) {
+        const motionKey = motionKeyForPoint(parentPoint);
+        if (!motionKey) {
+          return 0.0;
+        }
+        const velocity = Number(skyMemberBulkRadialVelocitiesKmS().get(motionKey));
+        return Number.isFinite(velocity) ? velocity : 0.0;
+      }
+
+      function skyMemberBulkPositionsForFrameIndex(frameIndex) {
+        const safeIndex = Math.min(
+          Math.max(Math.round(Number(frameIndex) || 0), 0),
+          Math.max(frameSpecs.length - 1, 0),
+        );
+        if (skyMemberBulkFramePositionCache.has(safeIndex)) {
+          const cached = skyMemberBulkFramePositionCache.get(safeIndex);
+          // Refresh insertion order so the cache behaves as a small LRU.
+          skyMemberBulkFramePositionCache.delete(safeIndex);
+          skyMemberBulkFramePositionCache.set(safeIndex, cached);
+          return cached;
+        }
+        const positions = new Map();
+        const frame = frameSpecs[safeIndex] || null;
+        (Array.isArray(frame && frame.traces) ? frame.traces : []).forEach((trace) => {
+          (Array.isArray(trace && trace.points) ? trace.points : []).forEach((point) => {
+            const motionKey = motionKeyForPoint(point);
+            const x = Number(point && point.x);
+            const y = Number(point && point.y);
+            const z = Number(point && point.z);
+            if (
+              !motionKey
+              || positions.has(motionKey)
+              || !Number.isFinite(x)
+              || !Number.isFinite(y)
+              || !Number.isFinite(z)
+            ) {
+              return;
+            }
+            const position = new THREE.Vector3(x, y, z);
+            positions.set(motionKey, position);
+            const normalizedKey = normalizeMemberKey(motionKey);
+            if (normalizedKey && !positions.has(normalizedKey)) {
+              positions.set(normalizedKey, position);
+            }
+          });
+        });
+        skyMemberBulkFramePositionCache.set(safeIndex, positions);
+        while (skyMemberBulkFramePositionCache.size > 4) {
+          const oldestKey = skyMemberBulkFramePositionCache.keys().next().value;
+          skyMemberBulkFramePositionCache.delete(oldestKey);
+        }
+        return positions;
+      }
+
+      function skyMemberBulkPositionForFrameValue(motionKeyValue, frameValue) {
+        const motionKey = String(motionKeyValue || "");
+        if (!motionKey || !frameSpecs.length) {
+          return null;
+        }
+        const clampedValue = clampFrameValue(frameValue);
+        const lowerIndex = Math.floor(clampedValue);
+        const upperIndex = Math.min(lowerIndex + 1, frameSpecs.length - 1);
+        const alpha = clampRange(clampedValue - lowerIndex, 0.0, 1.0);
+        const lower = skyMemberBulkPositionsForFrameIndex(lowerIndex).get(motionKey) || null;
+        const upper = skyMemberBulkPositionsForFrameIndex(upperIndex).get(motionKey) || null;
+        if (lower && upper) {
+          return lower.clone().lerp(upper, alpha);
+        }
+        return lower ? lower.clone() : (upper ? upper.clone() : null);
+      }
+
+      function ovizUpdateSkyMemberTimelineFastPath(frameValue, displayedTimeMyr, options = {}) {
+        const owner = String(options.transitionOwnerToken || "");
+        if (
+          cameraViewMode !== "earth"
+          || !skyMemberBatchesEnabled
+          || skyMemberRevealProgress < 1.0 - 1e-6
+          || !skyMemberBatchOpacityEntries.length
+          || (owner !== "timeline-scrub" && owner !== "timeline-playback")
+        ) {
+          return false;
+        }
+        const bulkTargetByKey = new Map();
+        const bulkTargetForKey = (motionKey) => {
+          const key = String(motionKey || "");
+          if (!key) {
+            return null;
+          }
+          if (!bulkTargetByKey.has(key)) {
+            bulkTargetByKey.set(
+              key,
+              skyMemberBulkPositionForFrameValue(key, frameValue),
+            );
+          }
+          return bulkTargetByKey.get(key);
+        };
+        const parentVisualByKey = new Map();
+        let updatedBatchCount = 0;
+        skyMemberBatchOpacityEntries.forEach((entry) => {
+          if (!entry || !entry.material) {
+            return;
+          }
+          const bulkTarget = bulkTargetForKey(entry.parentMotionKey);
+          if (typeof ovizUpdateSkyMemberBatchParentVisual === "function") {
+            ovizUpdateSkyMemberBatchParentVisual(
+              entry,
+              displayedTimeMyr,
+              bulkTarget,
+              parentVisualByKey,
+            );
+          }
+          if (typeof ovizSetSkyMemberBatchTime === "function") {
+            ovizSetSkyMemberBatchTime(entry, displayedTimeMyr, bulkTarget);
+            updatedBatchCount += 1;
+          }
+        });
+        if (!updatedBatchCount) {
+          return false;
+        }
+        const unresolvedBulkEntries = skyMemberBulkOpacityEntries.filter(
+          (entry) => entry && !entry.sprite
+        );
+        const responsiveEntryByMaterial = unresolvedBulkEntries.length
+          ? new Map(
+            cameraResponsivePointEntries
+              .filter((entry) => entry && entry.sprite && entry.sprite.material)
+              .map((entry) => [entry.sprite.material, entry])
+          )
+          : null;
+        unresolvedBulkEntries.forEach((entry) => {
+          if (!entry || entry.sprite) {
+            return;
+          }
+          const responsiveEntry = responsiveEntryByMaterial
+            ? responsiveEntryByMaterial.get(entry.material)
+            : null;
+          if (responsiveEntry) {
+            entry.sprite = responsiveEntry.sprite;
+            entry.responsiveEntry = responsiveEntry;
+            entry.parentMotionKey = (
+              responsiveEntry.selectionKey
+              || (
+                responsiveEntry.sprite.userData
+                && responsiveEntry.sprite.userData.referenceFrameKey
+              )
+              || ""
+            );
+          }
+        });
+        skyMemberBulkOpacityEntries.forEach((entry) => {
+          if (!entry || !entry.sprite) {
+            return;
+          }
+          const bulkTarget = bulkTargetForKey(entry.parentMotionKey);
+          if (!(bulkTarget instanceof THREE.Vector3)) {
+            return;
+          }
+          entry.sprite.position.copy(bulkTarget);
+          if (entry.responsiveEntry && entry.responsiveEntry.position) {
+            entry.responsiveEntry.position.copy(bulkTarget);
+          }
+        });
+        skyMemberTimelineFastPathCount += 1;
+        if (root && root.dataset) {
+          root.dataset.skyMemberTimelineFastPathCount = String(
+            skyMemberTimelineFastPathCount
+          );
+          root.dataset.skyMemberTimelineTimeMyr = String(
+            Number(displayedTimeMyr) || 0.0
+          );
+          root.dataset.skyMemberTimelineBatchUpdates = String(updatedBatchCount);
+        }
+        if (typeof updateTimelineMotionOpacity === "function") {
+          updateTimelineMotionOpacity();
+        }
+        if (typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
+        }
+        return true;
+      }
+
+      function skyMemberPropagatedIcrs(member, timeMyr, fallbackDistancePc, radialVelocityKmS) {
+        const raDeg = Number(member && member.ra);
+        const decDeg = Number(member && member.dec);
+        if (!Number.isFinite(raDeg) || !Number.isFinite(decDeg)) {
+          return null;
+        }
+        const distanceCandidate = Number(member && member.distance_pc);
+        const parallaxMas = Number(member && member.parallax_mas);
+        const distancePc = Number.isFinite(parallaxMas) && parallaxMas > 0.0
+          ? 1000.0 / parallaxMas
+          : (
+            Number.isFinite(distanceCandidate) && distanceCandidate > 0.0
+              ? distanceCandidate
+              : Math.max(Number(fallbackDistancePc) || 0.0, 1e-6)
+          );
+        const ra = THREE.MathUtils.degToRad(raDeg);
+        const dec = THREE.MathUtils.degToRad(decDeg);
+        const cosRa = Math.cos(ra);
+        const sinRa = Math.sin(ra);
+        const cosDec = Math.cos(dec);
+        const sinDec = Math.sin(dec);
+        const radialDirection = new THREE.Vector3(
+          cosDec * cosRa,
+          cosDec * sinRa,
+          sinDec,
+        );
+        const raDirection = new THREE.Vector3(-sinRa, cosRa, 0.0);
+        const decDirection = new THREE.Vector3(
+          -sinDec * cosRa,
+          -sinDec * sinRa,
+          cosDec,
+        );
+        const pmraMasYr = Number(member && member.pmra_masyr);
+        const pmdecMasYr = Number(member && member.pmdec_masyr);
+        const tangentialRaKmS = Number.isFinite(pmraMasYr)
+          ? 4.74047 * pmraMasYr * (distancePc / 1000.0)
+          : 0.0;
+        const tangentialDecKmS = Number.isFinite(pmdecMasYr)
+          ? 4.74047 * pmdecMasYr * (distancePc / 1000.0)
+          : 0.0;
+        const bulkRadialKmS = Number.isFinite(Number(radialVelocityKmS))
+          ? Number(radialVelocityKmS)
+          : 0.0;
+        const velocityKmS = radialDirection.clone().multiplyScalar(bulkRadialKmS)
+          .add(raDirection.multiplyScalar(tangentialRaKmS))
+          .add(decDirection.multiplyScalar(tangentialDecKmS));
+        const velocityPcMyr = velocityKmS.clone().multiplyScalar(1.0227121650537077);
+        const propagatedPosition = radialDirection.clone().multiplyScalar(distancePc)
+          .add(
+            velocityPcMyr.clone().multiplyScalar(Number(timeMyr) || 0.0)
+          );
+        if (propagatedPosition.lengthSq() <= 1e-12) {
+          return {
+            ra: raDeg,
+            dec: decDeg,
+            distancePc,
+            positionIcrsPc: radialDirection.clone().multiplyScalar(distancePc),
+            velocityIcrsPcMyr: velocityPcMyr,
+          };
+        }
+        const propagatedDistancePc = propagatedPosition.length();
+        const direction = propagatedPosition.clone().multiplyScalar(1.0 / propagatedDistancePc);
+        return {
+          ra: normalizeSkyLongitude(
+            THREE.MathUtils.radToDeg(Math.atan2(direction.y, direction.x))
+          ),
+          dec: THREE.MathUtils.radToDeg(
+            Math.asin(clampRange(direction.z, -1.0, 1.0))
+          ),
+          distancePc: propagatedDistancePc,
+          hasProperMotion: Number.isFinite(pmraMasYr) || Number.isFinite(pmdecMasYr),
+          positionIcrsPc: propagatedPosition,
+          velocityIcrsPcMyr: velocityPcMyr,
+        };
+      }
+
+      function skyMemberWorldPosition(member, bulkPosition, options = {}) {
         const lDeg = Number(member && member.l);
         const bDeg = Number(member && member.b);
         const raDeg = Number(member && member.ra);
         const decDeg = Number(member && member.dec);
+        const earthPoint = earthViewPoint();
+        const bulkDistance = Math.max(bulkPosition.distanceTo(earthPoint), 1e-6);
+        const propagatedIcrs = skyMemberPropagatedIcrs(
+          member,
+          Number(options.timeMyr) || 0.0,
+          bulkDistance,
+          Number(options.radialVelocityKmS) || 0.0,
+        );
         let direction = null;
-        if (Number.isFinite(lDeg) && Number.isFinite(bDeg)) {
+        let relativePosition = null;
+        let velocityPcMyr = null;
+        if (
+          propagatedIcrs
+          && propagatedIcrs.positionIcrsPc instanceof THREE.Vector3
+          && typeof volumeSkyCartesianFromIcrsVector === "function"
+        ) {
+          relativePosition = volumeSkyCartesianFromIcrsVector(
+            propagatedIcrs.positionIcrsPc.x,
+            propagatedIcrs.positionIcrsPc.y,
+            propagatedIcrs.positionIcrsPc.z,
+          );
+          velocityPcMyr = propagatedIcrs.velocityIcrsPcMyr instanceof THREE.Vector3
+            ? volumeSkyCartesianFromIcrsVector(
+              propagatedIcrs.velocityIcrsPcMyr.x,
+              propagatedIcrs.velocityIcrsPcMyr.y,
+              propagatedIcrs.velocityIcrsPcMyr.z,
+            )
+            : null;
+        } else if (propagatedIcrs) {
+          direction = volumeSkyCartesianFromIcrsDeg(
+            propagatedIcrs.ra,
+            propagatedIcrs.dec,
+          );
+        } else if (Number.isFinite(lDeg) && Number.isFinite(bDeg)) {
           direction = volumeSkyCartesianFromGalacticLonLatDeg(lDeg, bDeg);
         } else if (Number.isFinite(raDeg) && Number.isFinite(decDeg)) {
           direction = volumeSkyCartesianFromIcrsDeg(raDeg, decDeg);
         }
-        if (!direction || !direction.lengthSq || direction.lengthSq() <= 1e-12) {
+        if (
+          (!relativePosition || relativePosition.lengthSq() <= 1e-12)
+          && (!direction || !direction.lengthSq || direction.lengthSq() <= 1e-12)
+        ) {
           return null;
         }
-        const earthPoint = earthViewPoint();
-        const bulkDistance = Math.max(bulkPosition.distanceTo(earthPoint), 1e-6);
-        return earthPoint.clone().add(direction.normalize().multiplyScalar(bulkDistance));
+        const distancePc = propagatedIcrs
+          ? Math.max(Number(propagatedIcrs.distancePc) || bulkDistance, 1e-6)
+          : bulkDistance;
+        return {
+          position: earthPoint.clone().add(
+            relativePosition && relativePosition.lengthSq() > 1e-12
+              ? relativePosition
+              : direction.normalize().multiplyScalar(distancePc)
+          ),
+          velocityPcMyr: velocityPcMyr instanceof THREE.Vector3
+            ? velocityPcMyr
+            : new THREE.Vector3(),
+          hasProperMotion: Boolean(propagatedIcrs && propagatedIcrs.hasProperMotion),
+        };
+      }
+
+      function ovizCreateSkyMemberPointMaterial(texture, options = {}) {
+        const pointSize = Math.max(Number(options.size) || 0.0, 0.0);
+        const opacity = Math.max(Number(options.opacity) || 0.0, 0.0);
+        const alphaTest = Math.max(Number(options.alphaTest) || 0.0, 0.0);
+        const material = new THREE.ShaderMaterial({
+          uniforms: {
+            ovizPointTexture: { value: texture },
+            ovizPointColor: { value: new THREE.Color(options.color || "#ffffff") },
+            ovizPointSize: { value: pointSize },
+            ovizOpacity: { value: opacity },
+            ovizCollapseProgress: {
+              value: 0.0,
+            },
+            ovizTimeDeltaMyr: { value: 0.0 },
+            ovizBulkDelta: { value: new THREE.Vector3() },
+            ovizCollapseTarget: { value: new THREE.Vector3() },
+            ovizViewportHeight: {
+              value: Math.max(renderer.domElement.height || 1, 1),
+            },
+            ovizAlphaTest: { value: alphaTest },
+          },
+          vertexShader: `
+            attribute vec3 ovizVelocityPcMyr;
+            uniform float ovizPointSize;
+            uniform float ovizViewportHeight;
+            uniform float ovizCollapseProgress;
+            uniform float ovizTimeDeltaMyr;
+            uniform vec3 ovizBulkDelta;
+            uniform vec3 ovizCollapseTarget;
+            void main() {
+              vec3 animatedPosition = (
+                position
+                + ovizBulkDelta
+                + (ovizVelocityPcMyr * ovizTimeDeltaMyr)
+              );
+              vec3 collapsedPosition = mix(
+                animatedPosition,
+                ovizCollapseTarget,
+                ovizCollapseProgress
+              );
+              vec4 mvPosition = modelViewMatrix * vec4(collapsedPosition, 1.0);
+              gl_Position = projectionMatrix * mvPosition;
+              float projectionScale = 0.5 * ovizViewportHeight * projectionMatrix[1][1];
+              gl_PointSize = max(
+                0.0,
+                ovizPointSize * projectionScale / max(-mvPosition.z, 1.0e-6)
+              );
+            }
+          `,
+          fragmentShader: `
+            uniform sampler2D ovizPointTexture;
+            uniform vec3 ovizPointColor;
+            uniform float ovizOpacity;
+            uniform float ovizAlphaTest;
+            void main() {
+              vec4 texel = texture2D(ovizPointTexture, gl_PointCoord);
+              vec4 diffuseColor = vec4(ovizPointColor, ovizOpacity) * texel;
+              if (diffuseColor.a < ovizAlphaTest) discard;
+              gl_FragColor = diffuseColor;
+            }
+          `,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+          blending: options.blending ?? THREE.NormalBlending,
+        });
+        material.opacity = opacity;
+        material.alphaTest = alphaTest;
+        material.size = pointSize;
+        material.map = texture;
+        material.userData = {
+          cached: false,
+          ovizSharedTexture: true,
+          ovizSkyMemberBatch: true,
+          ovizFovAwarePointSize: true,
+        };
+        ovizBatchedPointMaterials.push(material);
+        return material;
+      }
+
+      function ovizSkyMemberTraceBatchBuilder(group) {
+        if (!group || !group.userData) {
+          return null;
+        }
+        if (!group.userData.ovizSkyMemberTraceBatchBuilder) {
+          group.userData.ovizSkyMemberTraceBatchBuilder = {
+            components: new Map(),
+          };
+        }
+        return group.userData.ovizSkyMemberTraceBatchBuilder;
+      }
+
+      function ovizQueueSkyMemberTraceBatchComponent(group, component) {
+        const builder = ovizSkyMemberTraceBatchBuilder(group);
+        if (!builder || !component || !component.kind) {
+          return false;
+        }
+        const key = String(component.kind);
+        if (!builder.components.has(key)) {
+          builder.components.set(key, []);
+        }
+        builder.components.get(key).push(component);
+        return true;
+      }
+
+      function ovizCreateSkyMemberTraceBatchMaterial(texture, options = {}) {
+        const alphaTest = Math.max(Number(options.alphaTest) || 0.0, 0.0);
+        const material = new THREE.ShaderMaterial({
+          uniforms: {
+            ovizPointTexture: { value: texture },
+            ovizViewportHeight: {
+              value: Math.max(renderer.domElement.height || 1, 1),
+            },
+            ovizCollapseProgress: { value: 0.0 },
+            ovizAlphaTest: { value: alphaTest },
+          },
+          vertexShader: `
+            attribute vec3 ovizVelocityPcMyr;
+            attribute vec3 ovizBulkDelta;
+            attribute vec3 ovizCollapseTarget;
+            attribute float ovizTimeDeltaMyr;
+            attribute float ovizPointSize;
+            attribute float ovizOpacity;
+            varying vec3 vOvizColor;
+            varying float vOvizOpacity;
+            uniform float ovizViewportHeight;
+            uniform float ovizCollapseProgress;
+            void main() {
+              vec3 animatedPosition = (
+                position
+                + ovizBulkDelta
+                + (ovizVelocityPcMyr * ovizTimeDeltaMyr)
+              );
+              vec3 collapsedPosition = mix(
+                animatedPosition,
+                ovizCollapseTarget,
+                ovizCollapseProgress
+              );
+              vec4 mvPosition = modelViewMatrix * vec4(collapsedPosition, 1.0);
+              gl_Position = projectionMatrix * mvPosition;
+              float projectionScale = 0.5 * ovizViewportHeight * projectionMatrix[1][1];
+              gl_PointSize = max(
+                0.0,
+                ovizPointSize * projectionScale / max(-mvPosition.z, 1.0e-6)
+              );
+              vOvizColor = color;
+              vOvizOpacity = ovizOpacity;
+            }
+          `,
+          fragmentShader: `
+            uniform sampler2D ovizPointTexture;
+            uniform float ovizAlphaTest;
+            varying vec3 vOvizColor;
+            varying float vOvizOpacity;
+            void main() {
+              vec4 texel = texture2D(ovizPointTexture, gl_PointCoord);
+              vec4 diffuseColor = vec4(vOvizColor, vOvizOpacity) * texel;
+              if (diffuseColor.a < ovizAlphaTest) discard;
+              gl_FragColor = diffuseColor;
+            }
+          `,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+          blending: options.blending ?? THREE.NormalBlending,
+          vertexColors: true,
+        });
+        material.opacity = 1.0;
+        material.alphaTest = alphaTest;
+        material.map = texture;
+        material.userData = {
+          cached: false,
+          ovizSharedTexture: true,
+          ovizSkyMemberBatch: true,
+          ovizSkyMemberTraceBatch: true,
+          ovizFovAwarePointSize: true,
+        };
+        ovizBatchedPointMaterials.push(material);
+        return material;
+      }
+
+      function ovizFinalizeSkyMemberTraceBatches(group) {
+        const builder = group
+          && group.userData
+          && group.userData.ovizSkyMemberTraceBatchBuilder;
+        if (!builder || !(builder.components instanceof Map)) {
+          return 0;
+        }
+        let drawObjectCount = 0;
+        builder.components.forEach((components) => {
+          const records = Array.isArray(components) ? components : [];
+          const pointCount = records.reduce(
+            (total, record) => total + Math.floor(
+              Number(record && record.relativePositions && record.relativePositions.length) / 3
+            ),
+            0,
+          );
+          if (!pointCount) {
+            return;
+          }
+          const positions = new Float32Array(pointCount * 3);
+          const velocities = new Float32Array(pointCount * 3);
+          const bulkDeltas = new Float32Array(pointCount * 3);
+          const collapseTargets = new Float32Array(pointCount * 3);
+          const colors = new Float32Array(pointCount * 3);
+          const timeDeltas = new Float32Array(pointCount);
+          const sizes = new Float32Array(pointCount);
+          const opacities = new Float32Array(pointCount);
+          let cursor = 0;
+          records.forEach((record) => {
+            const relative = record.relativePositions;
+            const velocity = record.relativeVelocities;
+            const count = Math.floor(Number(relative && relative.length) / 3);
+            const bulkPosition = record.bulkPosition instanceof THREE.Vector3
+              ? record.bulkPosition
+              : new THREE.Vector3();
+            const parsedColor = new THREE.Color(record.color || "#ffffff");
+            const start = cursor;
+            for (let pointIndex = 0; pointIndex < count; pointIndex += 1) {
+              const sourceOffset = pointIndex * 3;
+              const targetOffset = cursor * 3;
+              positions[targetOffset] = bulkPosition.x + relative[sourceOffset];
+              positions[targetOffset + 1] = bulkPosition.y + relative[sourceOffset + 1];
+              positions[targetOffset + 2] = bulkPosition.z + relative[sourceOffset + 2];
+              velocities[targetOffset] = Number(velocity && velocity[sourceOffset]) || 0.0;
+              velocities[targetOffset + 1] = Number(velocity && velocity[sourceOffset + 1]) || 0.0;
+              velocities[targetOffset + 2] = Number(velocity && velocity[sourceOffset + 2]) || 0.0;
+              collapseTargets[targetOffset] = bulkPosition.x;
+              collapseTargets[targetOffset + 1] = bulkPosition.y;
+              collapseTargets[targetOffset + 2] = bulkPosition.z;
+              colors[targetOffset] = parsedColor.r;
+              colors[targetOffset + 1] = parsedColor.g;
+              colors[targetOffset + 2] = parsedColor.b;
+              sizes[cursor] = Math.max(Number(record.pointSize) || 0.0, 0.0);
+              opacities[cursor] = Math.max(Number(record.baseOpacity) || 0.0, 0.0)
+                * skyMemberRevealProgress;
+              cursor += 1;
+            }
+            record.batchStart = start;
+            record.batchCount = count;
+          });
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+          geometry.setAttribute(
+            "ovizVelocityPcMyr",
+            new THREE.BufferAttribute(velocities, 3),
+          );
+          const bulkDeltaAttribute = new THREE.BufferAttribute(bulkDeltas, 3);
+          const collapseTargetAttribute = new THREE.BufferAttribute(collapseTargets, 3);
+          const colorAttribute = new THREE.BufferAttribute(colors, 3);
+          const timeAttribute = new THREE.BufferAttribute(timeDeltas, 1);
+          const sizeAttribute = new THREE.BufferAttribute(sizes, 1);
+          const opacityAttribute = new THREE.BufferAttribute(opacities, 1);
+          [
+            bulkDeltaAttribute,
+            collapseTargetAttribute,
+            colorAttribute,
+            timeAttribute,
+            sizeAttribute,
+            opacityAttribute,
+          ].forEach((attribute) => attribute.setUsage(THREE.DynamicDrawUsage));
+          geometry.setAttribute("ovizBulkDelta", bulkDeltaAttribute);
+          geometry.setAttribute("ovizCollapseTarget", collapseTargetAttribute);
+          geometry.setAttribute("color", colorAttribute);
+          geometry.setAttribute("ovizTimeDeltaMyr", timeAttribute);
+          geometry.setAttribute("ovizPointSize", sizeAttribute);
+          geometry.setAttribute("ovizOpacity", opacityAttribute);
+          const first = records[0];
+          const material = ovizCreateSkyMemberTraceBatchMaterial(
+            first.texture,
+            {
+              alphaTest: first.alphaTest,
+              blending: first.blending,
+            },
+          );
+          const points = new THREE.Points(geometry, material);
+          points.renderOrder = Number(first.renderOrder) || 0;
+          // Every vertex is still clipped by the camera. Avoiding a single
+          // conservative sphere for a sky-wide catalog preserves all stars as
+          // their parent clusters move between timeline frames.
+          points.frustumCulled = false;
+          group.add(points);
+          records.forEach((record) => {
+            Object.assign(record, {
+              material,
+              points,
+              batchOpacityAttribute: opacityAttribute,
+              batchSizeAttribute: sizeAttribute,
+              batchColorAttribute: colorAttribute,
+              batchTimeAttribute: timeAttribute,
+              batchBulkDeltaAttribute: bulkDeltaAttribute,
+              batchCollapseTargetAttribute: collapseTargetAttribute,
+              currentTimeDeltaMyr: 0.0,
+              currentBulkDelta: new THREE.Vector3(),
+              currentCollapseTarget: new THREE.Vector3(),
+              currentCollapseProgress: 0.0,
+              batchAppliedOpacity: Math.max(Number(record.baseOpacity) || 0.0, 0.0)
+                * skyMemberRevealProgress,
+            });
+            skyMemberBatchOpacityEntries.push(record);
+          });
+          renderedSkyMemberDrawObjectCount += 1;
+          drawObjectCount += 1;
+        });
+        builder.components.clear();
+        return drawObjectCount;
       }
 
       function addSkyMemberStars(group, catalog, options = {}) {
@@ -18146,23 +19589,82 @@ __SKY_RUNTIME_JS__
         }
 
         const bulkPosition = options.pointPosition;
+        const parentPoint = options.point || {};
+        const memberTimeMyr = Number(
+          parentPoint
+          && parentPoint.motion
+          && parentPoint.motion.time_myr
+        ) || 0.0;
+        const bulkRadialVelocityKmS = skyMemberBulkRadialVelocityKmS(parentPoint);
         const positionedMembers = catalog.points
-          .map((member, memberIndex) => ({
-            member,
-            memberIndex,
-            position: skyMemberWorldPosition(member, bulkPosition),
-          }))
+          .map((member, memberIndex) => {
+            const propagated = skyMemberWorldPosition(member, bulkPosition, {
+              timeMyr: memberTimeMyr,
+              radialVelocityKmS: bulkRadialVelocityKmS,
+            });
+            return {
+              member,
+              memberIndex,
+              position: propagated && propagated.position,
+              velocityPcMyr: propagated && propagated.velocityPcMyr,
+              hasProperMotion: Boolean(propagated && propagated.hasProperMotion),
+            };
+          })
           .filter((entry) => entry.position instanceof THREE.Vector3);
         if (!positionedMembers.length) {
           renderedSkyMemberBulkReplacementCount -= 1;
           return false;
         }
+        // Put the member catalog in the exact projected reference frame of its
+        // parent 3D cluster. Absolute catalog coordinates can differ slightly
+        // from the bulk catalog used for the orbit integration; rotating the
+        // member centroid onto the live bulk direction removes that catalog
+        // zero-point offset while preserving every internal angular separation.
+        const earthPoint = earthViewPoint();
+        const catalogDirection = new THREE.Vector3();
+        positionedMembers.forEach((entry) => {
+          const relative = entry.position.clone().sub(earthPoint);
+          if (relative.lengthSq() > 1e-12) {
+            catalogDirection.add(relative.normalize());
+          }
+        });
+        const bulkDirection = bulkPosition.clone().sub(earthPoint);
+        const referenceFrameRotation = new THREE.Quaternion();
+        if (
+          catalogDirection.lengthSq() > 1e-12
+          && bulkDirection.lengthSq() > 1e-12
+        ) {
+          referenceFrameRotation.setFromUnitVectors(
+            catalogDirection.normalize(),
+            bulkDirection.normalize(),
+          );
+        }
+        const meanMemberVelocityPcMyr = new THREE.Vector3();
+        positionedMembers.forEach((entry) => {
+          entry.position.sub(earthPoint)
+            .applyQuaternion(referenceFrameRotation)
+            .add(earthPoint);
+          if (!(entry.velocityPcMyr instanceof THREE.Vector3)) {
+            entry.velocityPcMyr = new THREE.Vector3();
+          }
+          entry.velocityPcMyr.applyQuaternion(referenceFrameRotation);
+          meanMemberVelocityPcMyr.add(entry.velocityPcMyr);
+        });
+        meanMemberVelocityPcMyr.multiplyScalar(1.0 / positionedMembers.length);
+        positionedMembers.forEach((entry) => {
+          // The 3D orbit supplies the cluster's common motion. Retain only each
+          // star's measured motion relative to the catalog mean so the member
+          // pattern evolves without drifting away from its bulk cluster.
+          entry.velocityPcMyr.sub(meanMemberVelocityPcMyr);
+        });
+        if (root && root.dataset) {
+          root.dataset.skyMemberReferenceFrameAnchored = "true";
+        }
         if (renderedCatalogKeys instanceof Set) {
           renderedCatalogKeys.add(catalogIdentity);
         }
-
         const memberSizeDenominator = Math.max(
-          Number(skySpec.member_point_size_denominator) || 20.0,
+          Number(skySpec.member_point_size_denominator) || 30.0,
           1.0,
         );
         const sizeRatio = clampRange(
@@ -18176,7 +19678,6 @@ __SKY_RUNTIME_JS__
         const selectionKey = String(options.selectionKey || "");
         const selection = options.selection || null;
         const trace = options.trace || {};
-        const parentPoint = options.point || {};
         const parentStableKey = String(
           options.stablePointKey
           || selectionKey
@@ -18187,24 +19688,36 @@ __SKY_RUNTIME_JS__
         // otherwise create hundreds of thousands of scene objects while
         // entering Sky mode.
         const relativePositions = new Float32Array(positionedMembers.length * 3);
-        positionedMembers.forEach(({ position }, memberIndex) => {
+        const relativeVelocities = new Float32Array(positionedMembers.length * 3);
+        positionedMembers.forEach(({ position, velocityPcMyr }, memberIndex) => {
           const offset = memberIndex * 3;
           relativePositions[offset] = position.x - bulkPosition.x;
           relativePositions[offset + 1] = position.y - bulkPosition.y;
           relativePositions[offset + 2] = position.z - bulkPosition.z;
+          relativeVelocities[offset] = Number(velocityPcMyr && velocityPcMyr.x) || 0.0;
+          relativeVelocities[offset + 1] = Number(velocityPcMyr && velocityPcMyr.y) || 0.0;
+          relativeVelocities[offset + 2] = Number(velocityPcMyr && velocityPcMyr.z) || 0.0;
         });
-        const memberGeometry = new THREE.BufferGeometry();
-        memberGeometry.setAttribute(
-          "position",
-          new THREE.BufferAttribute(relativePositions, 3),
-        );
-        memberGeometry.computeBoundingSphere();
-
         const memberGroup = new THREE.Group();
         memberGroup.position.copy(bulkPosition);
+        group.add(memberGroup);
         const visibleBaseScale = skyMemberScaleForPoint(memberBaseScale, bulkPosition);
         const glowStrength = Math.max(Number(globalPointGlowStrength) || 0.0, 0.0);
         const effectiveOpacity = clamp01(Number(options.effectiveOpacity) || 0.0);
+        const commonBatchRecord = {
+          memberSizeRatio: sizeRatio,
+          parentPoint,
+          parentTrace: trace,
+          parentVisualKey: `${String(trace.key || trace.name || "trace")}\u0000${motionKeyForPoint(parentPoint)}`,
+          parent: memberGroup,
+          projectionEntry: { sprite: memberGroup },
+          relativePositions,
+          relativeVelocities,
+          bulkPosition: bulkPosition.clone(),
+          baseTimeMyr: memberTimeMyr,
+          parentMotionKey: motionKeyForPoint(parentPoint),
+          overflowActive: false,
+        };
 
         if (glowStrength > 0.02 || forceResident) {
           const glowBaseOpacity = clampRange(
@@ -18212,86 +19725,52 @@ __SKY_RUNTIME_JS__
             0.0,
             0.78,
           );
-          const glowMaterial = new THREE.PointsMaterial({
-            map: starGlowTextureFor("sky_member_halo"),
+          ovizQueueSkyMemberTraceBatchComponent(group, {
+            ...commonBatchRecord,
+            kind: "glow",
+            baseOpacity: glowBaseOpacity,
+            componentKind: "glow",
+            pointSize: glowScaleForPoint(visibleBaseScale, bulkPosition, glowStrength),
+            texture: starGlowTextureFor("sky_member_halo"),
             color: pointColor,
-            size: glowScaleForPoint(visibleBaseScale, bulkPosition, glowStrength),
-            sizeAttenuation: true,
-            transparent: true,
-            opacity: glowBaseOpacity * skyMemberRevealProgress,
-            depthWrite: false,
-            depthTest: true,
             alphaTest: 0.0015,
             blending: THREE.NormalBlending,
+            renderOrder: -2,
           });
-          glowMaterial.userData = {
-            cached: false,
-            glow: true,
-            ovizSkyMemberBatch: true,
-          };
-          skyMemberBatchOpacityEntries.push({
-            material: glowMaterial,
-            baseOpacity: glowBaseOpacity,
-          });
-          const glowPoints = new THREE.Points(memberGeometry, glowMaterial);
-          glowPoints.renderOrder = -2;
-          memberGroup.add(glowPoints);
 
           const coreBaseOpacity = clampRange(
             effectiveOpacity * (0.74 + 0.16 * glowStrength),
             0.0,
             1.0,
           );
-          const coreMaterial = new THREE.PointsMaterial({
-            map: starCoreTextureFor("sky_member_core"),
-            color: "#ffffff",
-            size: starCoreScaleForPoint(visibleBaseScale, bulkPosition, glowStrength),
-            sizeAttenuation: true,
-            transparent: true,
-            opacity: coreBaseOpacity * skyMemberRevealProgress,
-            depthWrite: false,
-            depthTest: true,
-            blending: THREE.AdditiveBlending,
-          });
-          coreMaterial.userData = {
-            cached: false,
-            glow: true,
-            core: true,
-            ovizSkyMemberBatch: true,
-          };
-          skyMemberBatchOpacityEntries.push({
-            material: coreMaterial,
+          ovizQueueSkyMemberTraceBatchComponent(group, {
+            ...commonBatchRecord,
+            kind: "core",
             baseOpacity: coreBaseOpacity,
+            componentKind: "core",
+            pointSize: starCoreScaleForPoint(visibleBaseScale, bulkPosition, glowStrength),
+            texture: starCoreTextureFor("sky_member_core"),
+            color: "#ffffff",
+            alphaTest: 0.0,
+            blending: THREE.AdditiveBlending,
+            renderOrder: 0,
           });
-          memberGroup.add(new THREE.Points(memberGeometry, coreMaterial));
-          renderedSkyMemberDrawObjectCount += 2;
         }
 
         if (glowStrength <= 0.02 || forceResident) {
-          const markerMaterial = new THREE.PointsMaterial({
-            map: markerTextureFor("circle"),
+          ovizQueueSkyMemberTraceBatchComponent(group, {
+            ...commonBatchRecord,
+            kind: "marker",
+            baseOpacity: effectiveOpacity,
+            componentKind: "marker",
+            pointSize: nonGlowMarkerScaleForPoint(visibleBaseScale, bulkPosition),
+            texture: markerTextureFor("circle"),
             color: pointColor,
-            size: nonGlowMarkerScaleForPoint(visibleBaseScale, bulkPosition),
-            sizeAttenuation: true,
-            transparent: true,
-            opacity: effectiveOpacity * skyMemberRevealProgress,
-            depthWrite: false,
-            depthTest: true,
             alphaTest: 0.035,
             blending: THREE.NormalBlending,
+            renderOrder: 0,
           });
-          markerMaterial.userData = {
-            cached: false,
-            ovizSkyMemberBatch: true,
-          };
-          skyMemberBatchOpacityEntries.push({
-            material: markerMaterial,
-            baseOpacity: effectiveOpacity,
-          });
-          memberGroup.add(new THREE.Points(memberGeometry, markerMaterial));
-          renderedSkyMemberDrawObjectCount += 1;
         }
-        group.add(memberGroup);
 
         // One non-rendering proxy preserves cluster hover, click, lasso, and
         // tooltip behavior without putting every member into hoverTargets.
@@ -18315,12 +19794,365 @@ __SKY_RUNTIME_JS__
         return true;
       }
 
+      function ovizCreateBatchedPointMaterial(texture, options = {}) {
+        const material = new THREE.ShaderMaterial({
+          uniforms: {
+            ovizPointTexture: { value: texture },
+            ovizViewportHeight: {
+              value: Math.max(renderer.domElement.height || 1, 1),
+            },
+            ovizAlphaTest: { value: Math.max(Number(options.alphaTest) || 0.0, 0.0) },
+          },
+          vertexShader: `
+            attribute float ovizOpacity;
+            attribute float ovizPointSize;
+            varying vec3 vOvizColor;
+            varying float vOvizOpacity;
+            uniform float ovizViewportHeight;
+            void main() {
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_Position = projectionMatrix * mvPosition;
+              float projectionScale = 0.5 * ovizViewportHeight * projectionMatrix[1][1];
+              gl_PointSize = max(
+                0.0,
+                ovizPointSize * projectionScale / max(-mvPosition.z, 1.0e-6)
+              );
+              vOvizColor = color;
+              vOvizOpacity = ovizOpacity;
+            }
+          `,
+          fragmentShader: `
+            uniform sampler2D ovizPointTexture;
+            uniform float ovizAlphaTest;
+            varying vec3 vOvizColor;
+            varying float vOvizOpacity;
+            void main() {
+              vec4 texel = texture2D(ovizPointTexture, gl_PointCoord);
+              vec4 diffuseColor = vec4(vOvizColor, vOvizOpacity) * texel;
+              if (diffuseColor.a < ovizAlphaTest) discard;
+              gl_FragColor = diffuseColor;
+            }
+          `,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+          blending: options.blending ?? THREE.NormalBlending,
+          vertexColors: true,
+        });
+        material.userData = {
+          cached: false,
+          ovizSharedTexture: true,
+          ovizPointBatchMaterial: true,
+        };
+        ovizBatchedPointMaterials.push(material);
+        return material;
+      }
+
+      function ovizBatchPointProxy(group, pointPosition, userData) {
+        const proxy = new THREE.Object3D();
+        proxy.position.copy(pointPosition);
+        proxy.userData = Object.assign({}, userData || {}, {
+          ovizBatchedPointProxy: true,
+          ovizBatchRoot: group,
+        });
+        proxy.getWorldPosition = function ovizBatchedPointWorldPosition(target) {
+          const result = target instanceof THREE.Vector3 ? target : new THREE.Vector3();
+          result.copy(this.position);
+          const batchRoot = this.userData && this.userData.ovizBatchRoot;
+          if (batchRoot && typeof batchRoot.localToWorld === "function") {
+            batchRoot.updateWorldMatrix(true, false);
+            batchRoot.localToWorld(result);
+          }
+          return result;
+        };
+        return proxy;
+      }
+
+      function ovizAddBatchedPointComponent(
+        group,
+        entries,
+        texture,
+        options = {},
+      ) {
+        if (!Array.isArray(entries) || !entries.length) {
+          return null;
+        }
+        const positions = new Float32Array(entries.length * 3);
+        const colors = new Float32Array(entries.length * 3);
+        const opacities = new Float32Array(entries.length);
+        const sizes = new Float32Array(entries.length);
+        entries.forEach((entry, index) => {
+          const offset = index * 3;
+          positions[offset] = entry.position.x;
+          positions[offset + 1] = entry.position.y;
+          positions[offset + 2] = entry.position.z;
+          const color = new THREE.Color(entry.color || "#ffffff");
+          colors[offset] = color.r;
+          colors[offset + 1] = color.g;
+          colors[offset + 2] = color.b;
+          opacities[index] = clamp01(Number(entry.opacity) || 0.0);
+          sizes[index] = Math.max(Number(entry.size) || 0.0, 0.0);
+        });
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+        const opacityAttribute = new THREE.BufferAttribute(opacities, 1);
+        const sizeAttribute = new THREE.BufferAttribute(sizes, 1);
+        sizeAttribute.setUsage(THREE.DynamicDrawUsage);
+        geometry.setAttribute("ovizOpacity", opacityAttribute);
+        geometry.setAttribute("ovizPointSize", sizeAttribute);
+        geometry.computeBoundingSphere();
+
+        const material = ovizCreateBatchedPointMaterial(texture, options);
+        const points = new THREE.Points(geometry, material);
+        ovizBatchedPointComponentCount += entries.length;
+        ovizBatchedDrawObjectCount += 1;
+        points.renderOrder = Number(options.renderOrder) || 0;
+        points.userData = {
+          ovizPointBatch: {
+            entries,
+            proxies: entries.map((entry) => entry.proxy),
+            opacityAttribute,
+            sizeAttribute,
+            trace: options.trace || null,
+            component: String(options.component || ""),
+          },
+        };
+        group.add(points);
+        entries.forEach((entry, index) => {
+          registerCameraResponsiveBatchedPoint(
+            entry.proxy,
+            String(options.scaleKind || "marker"),
+            entry.position,
+            entry.pointScale,
+            entry.selectionKey,
+            sizeAttribute,
+            index,
+            {
+              opacityAttribute,
+              opacity: entry.opacity,
+              parent: group,
+              texture,
+              color: entry.color,
+              alphaTest: options.alphaTest,
+              blending: options.blending,
+              renderOrder: options.renderOrder,
+            },
+          );
+        });
+        return points;
+      }
+
+      function addBatchedMarkerTrace(parent, trace) {
+        if (!trace || !Array.isArray(trace.points) || !trace.points.length) {
+          return;
+        }
+        const group = new THREE.Group();
+        const traceState = traceStyleStateForKey(trace.key);
+        const traceOpacityMultiplier = traceState
+          ? clamp01(traceState.opacity)
+            / Math.max(clamp01(Number(trace.default_opacity ?? 1.0)), 1e-6)
+          : 1.0;
+        const traceVisibilityMultiplier = traceVisibilityOpacityMultiplier(trace);
+        const sizeScaleFactor = traceState
+          ? Math.max(Number(traceState.sizeScale), 0.05)
+          : 1.0;
+        const glowStrength = Math.max(globalPointGlowStrength, 0.0);
+        const glowEntries = [];
+        const coreEntries = [];
+        const markerEntriesBySymbol = new Map();
+        const stableKeyCounts = new Map();
+
+        trace.points.forEach((point, pointIndex) => {
+          if (!clusterFilterPassesPoint(point)) {
+            return;
+          }
+          const pointState = animatedPointState(point, trace);
+          if (!Number.isFinite(pointState.size) || pointState.size <= 0) {
+            return;
+          }
+          const birthVisibility = typeof ovizPointBirthVisibility === "function"
+            ? ovizPointBirthVisibility(pointState, point, trace)
+            : 1.0;
+          let opacityMultiplier = clusterFilterPassesPoint(point) ? 1.0 : 0.0;
+          const pointKey = clusterFilterSelectionKeyForPoint(point)
+            || normalizedSelectionKeyFor(point.selection);
+          const focusedTraceKey = dendrogramFocusTraceKey();
+          const dendrogramActiveKeys = activeDendrogramSelectionKeys();
+          if (focusedTraceKey) {
+            if (String(trace.key) !== focusedTraceKey) {
+              opacityMultiplier *= 0.14;
+            } else if (dendrogramActiveKeys.size && pointKey) {
+              opacityMultiplier *= dendrogramActiveKeys.has(pointKey) ? 1.0 : 0.24;
+            }
+          }
+          if (typeof ovizSelectionMembershipOpacity === "function") {
+            opacityMultiplier *= ovizSelectionMembershipOpacity(pointKey, point);
+          } else if (lassoSelectionFilterActive() && (!pointKey || !selectedClusterKeys.has(pointKey))) {
+            return;
+          }
+          const baseOpacity = Number(pointState.opacity ?? pointOpacityForTrace(point, trace));
+          const presenceOpacity = clamp01(Number(point.oviz_presence_opacity ?? 1.0))
+            * clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
+          const effectiveOpacity = clamp01(
+            baseOpacity
+            * traceOpacityMultiplier
+            * traceVisibilityMultiplier
+            * opacityMultiplier
+            * globalPointOpacityScale
+            * presenceOpacity
+            * birthVisibility
+          );
+          if (effectiveOpacity <= 0.001) {
+            return;
+          }
+          const scaleFloor = pointScale
+            * 0.5
+            * Math.max(globalPointSizeScale, 0.05)
+            * birthVisibility;
+          const starsFactor = sizeByStarsFactorForPoint(point, trace, traceState);
+          const scale = Math.max(
+            pointState.size
+              * sizeScaleFactor
+              * starsFactor
+              * globalPointSizeScale
+              * pointScale,
+            scaleFloor,
+          );
+          const selectionKey = clusterFilterSelectionKeyForPoint(point)
+            || normalizedSelectionKeyFor(point.selection);
+          const selection = selectionForPoint(point, trace);
+          const position = new THREE.Vector3(point.x, point.y, point.z);
+          const color = pointColorForTrace(point, trace, traceState);
+          const stablePointKey = typeof ovizTransitionStablePointKey === "function"
+            ? ovizTransitionStablePointKey(point, trace)
+            : (motionKeyForPoint(point) || normalizedSelectionKeyFor(point.selection));
+          const stableOccurrence = stablePointKey
+            ? Number(stableKeyCounts.get(stablePointKey) || 0)
+            : 0;
+          if (stablePointKey) {
+            stableKeyCounts.set(stablePointKey, stableOccurrence + 1);
+          }
+          const proxy = ovizBatchPointProxy(group, position, {
+            hovertext: pointHoverText(point, trace, color),
+            selection,
+            selectionKey,
+            referenceFrameKey: motionKeyForPoint(point),
+            tooltipColor: color || "#ffffff",
+            baseScale: nonGlowMarkerScaleForPoint(scale, position),
+            pickWorldScale: nonGlowMarkerScaleForPoint(scale, position),
+            ovizRetainedPoint: {
+              trace,
+              point,
+              traceKey: String(trace.key || ""),
+              stablePointKey,
+              stableOccurrence,
+              pointIndex,
+              component: glowStrength > 0.02 ? "core" : "marker",
+            },
+          });
+          ovizBatchedLogicalPointCount += 1;
+          const commonEntry = {
+            position,
+            proxy,
+            pointScale: scale,
+            selectionKey,
+          };
+          if (glowStrength > 0.02) {
+            glowEntries.push(Object.assign({}, commonEntry, {
+              color,
+              opacity: clampRange(
+                effectiveOpacity * (0.34 + 0.18 * glowStrength),
+                0.0,
+                0.78,
+              ),
+              size: glowScaleForPoint(scale, position, glowStrength),
+            }));
+            coreEntries.push(Object.assign({}, commonEntry, {
+              color: "#ffffff",
+              opacity: clampRange(
+                effectiveOpacity * (1.00 + 0.24 * glowStrength),
+                0.0,
+                1.0,
+              ),
+              size: starCoreScaleForPoint(scale, position, glowStrength),
+            }));
+          } else {
+            const symbol = pointSymbolForTrace(point, trace);
+            if (!markerEntriesBySymbol.has(symbol)) {
+              markerEntriesBySymbol.set(symbol, []);
+            }
+            markerEntriesBySymbol.get(symbol).push(Object.assign({}, commonEntry, {
+              color,
+              opacity: effectiveOpacity,
+              size: nonGlowMarkerScaleForPoint(scale, position),
+            }));
+          }
+        });
+
+        if (glowEntries.length) {
+          ovizAddBatchedPointComponent(
+            group,
+            glowEntries,
+            starGlowTextureFor("halo"),
+            {
+              trace,
+              component: "glow",
+              scaleKind: "glow",
+              alphaTest: 0.0015,
+              blending: THREE.NormalBlending,
+              renderOrder: -2,
+            },
+          );
+        }
+        let pickBatch = null;
+        if (coreEntries.length) {
+          pickBatch = ovizAddBatchedPointComponent(
+            group,
+            coreEntries,
+            starCoreTextureFor("stellar_core"),
+            {
+              trace,
+              component: "core",
+              scaleKind: "core",
+              blending: THREE.AdditiveBlending,
+            },
+          );
+        }
+        markerEntriesBySymbol.forEach((entries, symbol) => {
+          const markerBatch = ovizAddBatchedPointComponent(
+            group,
+            entries,
+            markerTextureFor(symbol),
+            {
+              trace,
+              component: "marker",
+              scaleKind: "marker",
+              alphaTest: 0.035,
+              blending: THREE.NormalBlending,
+            },
+          );
+          if (markerBatch) {
+            hoverTargets.push(markerBatch);
+          }
+        });
+        if (pickBatch) {
+          hoverTargets.push(pickBatch);
+        }
+        parent.add(group);
+      }
+
       function addMarkerTrace(parent, trace) {
         const options = arguments.length > 2 && arguments[2] ? arguments[2] : {};
         if (!trace.points || !trace.points.length) {
           return;
         }
         const forceResident = options.forceResident === true;
+        if (!forceResident && cameraViewMode !== "earth") {
+          addBatchedMarkerTrace(parent, trace);
+          return;
+        }
         const group = new THREE.Group();
         const traceState = traceStyleStateForKey(trace.key);
         const traceOpacityMultiplier = traceState
@@ -18330,12 +20162,40 @@ __SKY_RUNTIME_JS__
         const sizeScaleFactor = traceState ? Math.max(Number(traceState.sizeScale), 0.05) : 1.0;
         const stableKeyCounts = new Map();
         const renderedSkyMemberCatalogKeys = new Set();
+        const transitionFromGlow = Number(
+          typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+          && ovizStateTransition.fromSnapshot
+          && ovizStateTransition.fromSnapshot.global_controls
+          && ovizStateTransition.fromSnapshot.global_controls.point_glow_strength
+        );
+        const transitionToGlow = Number(
+          typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+          && ovizStateTransition.targetSnapshot
+          && ovizStateTransition.targetSnapshot.global_controls
+          && ovizStateTransition.targetSnapshot.global_controls.point_glow_strength
+        );
+        const retainedGlowModeChanges = Boolean(
+          forceResident
+          && Number.isFinite(transitionFromGlow)
+          && Number.isFinite(transitionToGlow)
+          && ((transitionFromGlow > 0.02) !== (transitionToGlow > 0.02))
+        );
         trace.points.forEach((point, pointIndex) => {
-          if (!clusterFilterPassesPoint(point) && !forceResident) {
+          const skyMemberCatalog = skyMemberCatalogForPoint(point, trace);
+          const preserveSkyMemberBatch = Boolean(
+            skyMemberCatalog && skyMemberBatchesEnabled
+          );
+          if (!clusterFilterPassesPoint(point) && !forceResident && !preserveSkyMemberBatch) {
             return;
           }
           const pointState = animatedPointState(point, trace);
-          if ((!Number.isFinite(pointState.size) || pointState.size <= 0) && !forceResident) {
+          if (
+            (!Number.isFinite(pointState.size) || pointState.size <= 0)
+            && !forceResident
+            && !preserveSkyMemberBatch
+          ) {
             return;
           }
           const birthVisibility = typeof ovizPointBirthVisibility === "function"
@@ -18356,7 +20216,7 @@ __SKY_RUNTIME_JS__
             opacityMultiplier *= ovizSelectionMembershipOpacity(pointKey, point);
           } else if (lassoSelectionFilterActive()) {
             if (!pointKey || !selectedClusterKeys.has(pointKey)) {
-              if (!forceResident) {
+              if (!forceResident && !preserveSkyMemberBatch) {
                 return;
               }
               opacityMultiplier = 0.0;
@@ -18366,7 +20226,7 @@ __SKY_RUNTIME_JS__
           const presenceOpacity = clamp01(Number(point.oviz_presence_opacity ?? 1.0))
             * clamp01(Number(trace.oviz_presence_opacity ?? 1.0));
           const effectiveOpacity = Math.min(1.0, Math.max(0.0, baseOpacity * traceOpacityMultiplier * traceVisibilityMultiplier * opacityMultiplier * globalPointOpacityScale * presenceOpacity * birthVisibility));
-          if (effectiveOpacity <= 0.001 && !forceResident) {
+          if (effectiveOpacity <= 0.001 && !forceResident && !preserveSkyMemberBatch) {
             return;
           }
           const scaleFloor = pointScale * 0.5 * Math.max(globalPointSizeScale, 0.05) * birthVisibility;
@@ -18398,7 +20258,6 @@ __SKY_RUNTIME_JS__
             pointIndex,
             component,
           });
-          const skyMemberCatalog = skyMemberCatalogForPoint(point, trace);
           if (skyMemberCatalog && skyMemberBatchesEnabled) {
             addSkyMemberStars(group, skyMemberCatalog, {
               trace,
@@ -18425,7 +20284,7 @@ __SKY_RUNTIME_JS__
           ) {
             renderedSkyClusterBulkPointCount += 1;
           }
-          if (glowStrength > 0.02 || forceResident) {
+          if (glowStrength > 0.02 || retainedGlowModeChanges) {
             const glowOpacity = clampRange(effectiveOpacity * (0.34 + 0.18 * glowStrength), 0.0, 0.78);
             const glowBaseMaterial = starGlowMaterialFor(pointColor, glowOpacity);
             const glowSpriteMaterial = (forceResident || skyMemberCatalog)
@@ -18440,6 +20299,7 @@ __SKY_RUNTIME_JS__
                 * (1.0 - skyMemberRevealProgress);
             }
             const glowSprite = new THREE.Sprite(glowSpriteMaterial);
+            if (forceResident) ovizRetainedPointComponentCount += 1;
             const glowScale = glowScaleForPoint(
               scale,
               pointPosition,
@@ -18472,6 +20332,7 @@ __SKY_RUNTIME_JS__
                 * (1.0 - skyMemberRevealProgress);
             }
             const coreSprite = new THREE.Sprite(coreSpriteMaterial);
+            if (forceResident) ovizRetainedPointComponentCount += 1;
             const coreScale = starCoreScaleForPoint(
               scale,
               pointPosition,
@@ -18494,7 +20355,7 @@ __SKY_RUNTIME_JS__
             hoverTargets.push(coreSprite);
             registerCameraResponsivePointSprite(coreSprite, "core", pointPosition, scale, selectionKey);
           }
-          if (glowStrength <= 0.02 || forceResident) {
+          if (glowStrength <= 0.02 || retainedGlowModeChanges) {
             const markerBaseMaterial = markerMaterialFor(
               pointSymbolForTrace(point, trace),
               pointColor,
@@ -18512,6 +20373,7 @@ __SKY_RUNTIME_JS__
                 * (1.0 - skyMemberRevealProgress);
             }
             const sprite = new THREE.Sprite(markerSpriteMaterial);
+            if (forceResident) ovizRetainedPointComponentCount += 1;
             const markerScale = nonGlowMarkerScaleForPoint(scale, pointPosition);
             sprite.position.copy(pointPosition);
             sprite.scale.set(markerScale, markerScale, 1.0);
@@ -18530,6 +20392,7 @@ __SKY_RUNTIME_JS__
             registerCameraResponsivePointSprite(sprite, "marker", pointPosition, markerScale, selectionKey);
           }
         });
+        ovizFinalizeSkyMemberTraceBatches(group);
         parent.add(group);
       }
 
@@ -18616,6 +20479,13 @@ __SKY_RUNTIME_JS__
           return;
         }
         if (decoration.kind === "volume_layer") {
+          if (
+            cameraViewMode === "earth"
+            && typeof skyVolumeVisibleForDisplayedTime === "function"
+            && !skyVolumeVisibleForDisplayedTime()
+          ) {
+            return;
+          }
           const layer = volumeLayersByKey.get(String(decoration.key));
           if (!layer) {
             return;
@@ -18640,7 +20510,9 @@ __SKY_RUNTIME_JS__
           return;
         }
         if (decoration.kind === "milky_way_model") {
-          parent.add(createMilkyWayModel(decoration));
+          const milkyWayModel = createMilkyWayModel(decoration);
+          milkyWayModelGroups.push(milkyWayModel);
+          parent.add(milkyWayModel);
           return;
         }
         if (decoration.kind === "tapered_polyline") {
@@ -19141,6 +21013,20 @@ __SKY_RUNTIME_JS__
           return true;
         }
         return traceName.startsWith("R = ") && traceName.endsWith("kpc");
+      }
+
+      function isGalacticPresentDayReferenceTrace(trace) {
+        if (!trace || typeof trace !== "object") {
+          return false;
+        }
+        return galacticPresentDayReferenceTraceNames.has(String(trace.name || ""));
+      }
+
+      function isGalacticCircleTrace(trace) {
+        if (!trace || typeof trace !== "object") {
+          return false;
+        }
+        return galacticCircleTraceNames.has(String(trace.name || ""));
       }
 
       function isNearbyRegionLabelTrace(trace) {
@@ -20163,6 +22049,29 @@ __STATE_RUNTIME_JS__
         return true;
       }
 
+      let ovizPointerHoverFrame = 0;
+      let ovizPendingPointerHover = null;
+
+      function runPendingPointerHover() {
+        ovizPointerHoverFrame = 0;
+        const pending = ovizPendingPointerHover;
+        ovizPendingPointerHover = null;
+        if (
+          !pending
+          || skyViewDragState
+          || selectionBoxPointerState
+          || manualLabelPointerState
+          || lassoState
+        ) {
+          return;
+        }
+        const hitObject = pickSprite(pending, { clusterOnly: true });
+        const hoveredSelectionKey = hitObject && hitObject.userData
+          ? normalizeMemberKey(hitObject.userData.selectionKey || normalizedSelectionKeyFor(hitObject.userData.selection))
+          : "";
+        setLocalHoveredClusterKey(hoveredSelectionKey);
+      }
+
       function onPointerMove(event) {
         if (skyViewDragState) {
           hideClusterInfoTooltip();
@@ -20176,14 +22085,21 @@ __STATE_RUNTIME_JS__
           onLassoPointerMove(event);
           return;
         }
-        const hitObject = pickSprite(event, { clusterOnly: true });
-        const hoveredSelectionKey = hitObject && hitObject.userData
-          ? normalizeMemberKey(hitObject.userData.selectionKey || normalizedSelectionKeyFor(hitObject.userData.selection))
-          : "";
-        setLocalHoveredClusterKey(hoveredSelectionKey);
+        ovizPendingPointerHover = {
+          clientX: Number(event.clientX) || 0.0,
+          clientY: Number(event.clientY) || 0.0,
+        };
+        if (!ovizPointerHoverFrame) {
+          ovizPointerHoverFrame = window.requestAnimationFrame(runPendingPointerHover);
+        }
       }
 
       function onPointerLeave() {
+        ovizPendingPointerHover = null;
+        if (ovizPointerHoverFrame) {
+          window.cancelAnimationFrame(ovizPointerHoverFrame);
+          ovizPointerHoverFrame = 0;
+        }
         setLocalHoveredClusterKey("");
       }
 
@@ -20670,9 +22586,15 @@ __STATE_RUNTIME_JS__
         }
         if (galacticReferenceToggleEl) {
           galacticReferenceToggleEl.addEventListener("change", () => {
-            galacticReferenceVisible = Boolean(galacticReferenceToggleEl.checked);
-            renderSceneControls();
-            renderFrame(currentFrameIndex);
+            setGalacticReferenceVisible(
+              Boolean(galacticReferenceToggleEl.checked),
+              { render: true },
+            );
+          });
+        }
+        if (galacticCoordinateToggleEl) {
+          galacticCoordinateToggleEl.addEventListener("click", () => {
+            setGalacticReferenceVisible(!galacticReferenceVisible, { render: true });
           });
         }
         nearbyRegionLabelsToggleEls.forEach((toggleEl) => {
@@ -20823,6 +22745,18 @@ __STATE_RUNTIME_JS__
               interruptActionRun("camera", { disableOrbit: true });
             }
             toggleEarthView();
+            focusViewer();
+          });
+        }
+        if (skyMemberToggleButtonEl) {
+          skyMemberToggleButtonEl.addEventListener("click", () => {
+            if (cameraViewMode !== "earth" || !skyMemberDisplayAvailable) {
+              return;
+            }
+            setSkyMemberDisplayMode(
+              skyMemberDisplayMode === "stars" ? "clusters" : "stars",
+              { animate: true, durationMs: 360.0 },
+            );
             focusViewer();
           });
         }
@@ -21020,8 +22954,82 @@ __STATE_RUNTIME_JS__
           lastPlaybackAdvanceTimestamp += steps * playbackIntervalMs;
           const frameCount = frameSpecs.length;
           const nextIndex = ((currentFrameIndex + (playbackDirection * steps)) % frameCount + frameCount) % frameCount;
-          renderFrame(nextIndex);
+          renderInterpolatedFrameValue(nextIndex, {
+            preserveCamera: true,
+            transitionOwnerToken: "timeline-playback",
+          });
         }
+      }
+
+      let ovizRenderInvalidated = true;
+      let ovizSkyCameraUiDirty = false;
+      let ovizRenderedFrameCount = 0;
+      let ovizSkippedFrameCount = 0;
+      const ovizLastRenderedCameraState = new Float64Array(12);
+      let ovizHasRenderedCameraState = false;
+
+      function ovizInvalidateRender() {
+        ovizRenderInvalidated = true;
+      }
+
+      function ovizCameraStateChangedSinceRender() {
+        const values = [
+          camera.position.x,
+          camera.position.y,
+          camera.position.z,
+          camera.quaternion.x,
+          camera.quaternion.y,
+          camera.quaternion.z,
+          camera.quaternion.w,
+          Number(camera.fov) || 0.0,
+          controls.target.x,
+          controls.target.y,
+          controls.target.z,
+          Number(camera.zoom) || 1.0,
+        ];
+        if (!ovizHasRenderedCameraState) {
+          return true;
+        }
+        for (let index = 0; index < values.length; index += 1) {
+          if (Math.abs(values[index] - ovizLastRenderedCameraState[index]) > 1.0e-10) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function ovizRememberRenderedCameraState() {
+        ovizLastRenderedCameraState.set([
+          camera.position.x,
+          camera.position.y,
+          camera.position.z,
+          camera.quaternion.x,
+          camera.quaternion.y,
+          camera.quaternion.z,
+          camera.quaternion.w,
+          Number(camera.fov) || 0.0,
+          controls.target.x,
+          controls.target.y,
+          controls.target.z,
+          Number(camera.zoom) || 1.0,
+        ]);
+        ovizHasRenderedCameraState = true;
+      }
+
+      function ovizVisualAnimationActive() {
+        return Boolean(
+          cameraTransitionAnimationFrame
+          || skyMemberRevealAnimationFrame
+          || skyDomeOpacityAnimationFrame
+          || skyDomeTimelineOpacityAnimationFrame
+          || milkyWayOpacityAnimationFrame
+          || sliderScrubRenderHandle
+          || playbackDirection !== 0
+          || (typeof ovizStateTransition !== "undefined" && ovizStateTransition)
+          || (typeof activeActionRun !== "undefined" && activeActionRun)
+          || (typeof skyViewDragState !== "undefined" && skyViewDragState)
+          || (typeof skyViewPinchState !== "undefined" && skyViewPinchState)
+        );
       }
 
       function animate(timestamp) {
@@ -21041,8 +23049,9 @@ __STATE_RUNTIME_JS__
           updateKeyboardMotion(deltaSeconds);
           updateGalacticSimpleDefaultOrbit(deltaSeconds);
         }
+        let controlsChanged = false;
         if (controls.enabled && !transitionOwnsCameraAndTime) {
-          controls.update();
+          controlsChanged = Boolean(controls.update());
         } else if (
           cameraViewMode === "earth"
           && !cameraTransitionAnimationFrame
@@ -21055,6 +23064,24 @@ __STATE_RUNTIME_JS__
         ) {
           lockEarthViewCameraToTarget();
         }
+        const shouldRender = Boolean(
+          ovizRenderInvalidated
+          || controlsChanged
+          || transitionOwnsCameraAndTime
+          || ovizVisualAnimationActive()
+          || ovizCameraStateChangedSinceRender()
+        );
+        if (!shouldRender) {
+          ovizSkippedFrameCount += 1;
+          if (root && root.dataset) {
+            root.dataset.ovizSkippedFrameCount = String(ovizSkippedFrameCount);
+          }
+          return;
+        }
+        if (ovizSkyCameraUiDirty) {
+          renderSceneControls();
+          ovizSkyCameraUiDirty = false;
+        }
         updateCameraResponsivePointSprites();
         updateClusterInfoTooltipPosition();
         updateScaleBar();
@@ -21066,6 +23093,13 @@ __STATE_RUNTIME_JS__
         updateScreenStableTextSprites();
         renderAgeKdeWidget();
         renderer.render(scene, camera);
+        ovizRememberRenderedCameraState();
+        ovizRenderInvalidated = false;
+        ovizRenderedFrameCount += 1;
+        if (root && root.dataset) {
+          root.dataset.ovizRenderedFrameCount = String(ovizRenderedFrameCount);
+          root.dataset.ovizSkippedFrameCount = String(ovizSkippedFrameCount);
+        }
       }
 
       applyInitialStateSync();
@@ -21084,8 +23118,13 @@ __STATE_RUNTIME_JS__
       renderLegend();
       updateSelectionUI();
       updatePlaybackButtons();
-      skyMemberBatchesEnabled = cameraViewMode === "earth";
-      setSkyMemberRevealProgress(cameraViewMode === "earth" ? 1.0 : 0.0);
+      skyMemberBatchesEnabled = (
+        cameraViewMode === "earth"
+        && skyMemberDisplayTargetProgress() > 0.5
+      );
+      setSkyMemberRevealProgress(
+        cameraViewMode === "earth" ? skyMemberDisplayTargetProgress() : 0.0
+      );
       renderFrame(currentFrameIndex);
       resize();
       setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);
@@ -21127,6 +23166,23 @@ __STATE_RUNTIME_JS__
       window.addEventListener("pointercancel", onWindowPointerEnd);
       window.addEventListener("resize", resize);
       window.addEventListener("message", onWindowMessage);
+      [
+        "pointerdown",
+        "pointermove",
+        "pointerleave",
+        "pointerup",
+        "wheel",
+        "click",
+        "input",
+        "change",
+      ].forEach((eventName) => {
+        root.addEventListener(eventName, ovizInvalidateRender, {
+          capture: true,
+          passive: true,
+        });
+      });
+      window.addEventListener("keydown", ovizInvalidateRender, { capture: true });
+      window.addEventListener("keyup", ovizInvalidateRender, { capture: true });
       document.addEventListener("fullscreenchange", syncOvizFullscreenButton);
       document.addEventListener("webkitfullscreenchange", syncOvizFullscreenButton);
       if (typeof ResizeObserver !== "undefined") {

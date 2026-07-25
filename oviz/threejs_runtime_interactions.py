@@ -28,11 +28,17 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
       }
 
+      let ovizLastTimeSliderTickIndex = null;
+
       function updateTimeSliderTickState(activeFrameIndex = currentFrameIndex) {
         if (!sliderTrackWrapEl) {
           return;
         }
         const activeIndex = String(clampFrameIndex(activeFrameIndex));
+        if (activeIndex === ovizLastTimeSliderTickIndex) {
+          return;
+        }
+        ovizLastTimeSliderTickIndex = activeIndex;
         sliderTrackWrapEl.querySelectorAll(".oviz-three-slider-tick, .oviz-three-slider-tick-label").forEach((el) => {
           el.dataset.active = el.dataset.frameIndex === activeIndex ? "true" : "false";
         });
@@ -559,13 +565,20 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         return formatTick(timeValue).replace(/^-/, "−");
       }
 
+      let ovizLastTimelineSliderValue = null;
+      let ovizLastTimelineLabel = null;
+
       function updateTimelineUi(frameValue, timeValue = frameTimeForValue(frameValue)) {
         const clampedValue = clampFrameValue(frameValue);
-        if (sliderEl) {
-          sliderEl.value = String(clampedValue);
+        const sliderValue = String(clampedValue);
+        if (sliderEl && sliderValue !== ovizLastTimelineSliderValue) {
+          sliderEl.value = sliderValue;
+          ovizLastTimelineSliderValue = sliderValue;
         }
-        if (timeLabelEl) {
-          timeLabelEl.textContent = `Time (Myr): ${formatDisplayedTimeLabel(timeValue)}`;
+        const timeLabel = `Time (Myr): ${formatDisplayedTimeLabel(timeValue)}`;
+        if (timeLabelEl && timeLabel !== ovizLastTimelineLabel) {
+          timeLabelEl.textContent = timeLabel;
+          ovizLastTimelineLabel = timeLabel;
         }
         updateTimeSliderTickState(clampFrameIndex(clampedValue));
       }
@@ -574,16 +587,21 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         return Boolean(
           galacticReferenceVisible
           && cameraViewMode !== "earth"
-          && galacticReferenceTimeOpacity() > 0.001
         );
       }
 
       function galacticReferenceTimeOpacity() {
+        return galacticPresentDayGridOpacity();
+      }
+
+      function galacticPresentDayGridOpacity() {
         const timeMyr = Number(frameTimeForValue(displayedFrameValue));
         if (!Number.isFinite(timeMyr)) {
-          return 0.0;
+          return 1.0;
         }
-        return Math.abs(timeMyr) <= 1e-9 ? 0.0 : 1.0;
+        // The quadrant grid is a present-day orientation aid. Fade it away
+        // smoothly during the first Myr in either timeline direction.
+        return 1.0 - smoothstep01(clampRange(Math.abs(timeMyr), 0.0, 1.0));
       }
 
       function milkyWayTimelineOpacity() {
@@ -594,10 +612,79 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         return Math.abs(timeMyr) <= 1e-9 ? 1.0 : 0.0;
       }
 
+      function setSkyDomeTimelineOpacityScale(value) {
+        skyDomeTimelineOpacityScale = clampRange(Number(value) || 0.0, 0.0, 1.0);
+        if (root && root.dataset) {
+          root.dataset.skyDomeTimelineOpacityScale = String(
+            skyDomeTimelineOpacityScale
+          );
+        }
+        if (typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
+        }
+      }
+
+      function animateSkyDomeTimelineOpacity(targetOpacity, durationMs = 260.0) {
+        const target = clampRange(Number(targetOpacity) || 0.0, 0.0, 1.0);
+        if (
+          skyDomeTimelineOpacityAnimationFrame
+          && Math.abs(target - skyDomeTimelineOpacityTarget) <= 1e-9
+        ) {
+          return;
+        }
+        if (skyDomeTimelineOpacityAnimationFrame) {
+          window.cancelAnimationFrame(skyDomeTimelineOpacityAnimationFrame);
+          skyDomeTimelineOpacityAnimationFrame = 0;
+        }
+        skyDomeTimelineOpacityTarget = target;
+        const startOpacity = clampRange(
+          Number(skyDomeTimelineOpacityScale) || 0.0,
+          0.0,
+          1.0,
+        );
+        if (Math.abs(target - startOpacity) <= 1e-6) {
+          return;
+        }
+        const startMs = (typeof performance !== "undefined" && performance.now)
+          ? performance.now()
+          : Date.now();
+        const safeDurationMs = Math.max(Number(durationMs) || 260.0, 1.0);
+        const step = (timestampMs) => {
+          const now = Number(timestampMs) || (
+            (typeof performance !== "undefined" && performance.now)
+              ? performance.now()
+              : Date.now()
+          );
+          const linear = clampRange((now - startMs) / safeDurationMs, 0.0, 1.0);
+          const eased = linear * linear * (3.0 - (2.0 * linear));
+          setSkyDomeTimelineOpacityScale(
+            startOpacity + ((target - startOpacity) * eased)
+          );
+          if (linear < 1.0) {
+            skyDomeTimelineOpacityAnimationFrame = window.requestAnimationFrame(step);
+            return;
+          }
+          skyDomeTimelineOpacityAnimationFrame = 0;
+          setSkyDomeTimelineOpacityScale(target);
+        };
+        skyDomeTimelineOpacityAnimationFrame = window.requestAnimationFrame(step);
+      }
+
       function updateGalacticReferenceMotionOpacity() {
-        const scale = galacticReferenceMotionVisible() ? galacticReferenceTimeOpacity() : 0.0;
+        const referenceVisible = galacticReferenceMotionVisible();
+        const presentDayScale = referenceVisible ? galacticPresentDayGridOpacity() : 0.0;
+        if (root && root.dataset) {
+          root.dataset.galacticQuadrantOpacity = String(presentDayScale);
+        }
         galacticReferenceOpacityGroups.forEach((group) => {
           if (!group) return;
+          const presentDayOnly = Boolean(
+            group.userData
+            && group.userData.ovizGalacticPresentDayReference
+          );
+          const scale = referenceVisible
+            ? (presentDayOnly ? presentDayScale : 1.0)
+            : 0.0;
           group.visible = scale > 0.001;
           group.traverse((object) => {
             const material = object && object.material;
@@ -606,8 +693,17 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             materials.forEach((item) => {
               const baseOpacity = Number(item && item.userData && item.userData.ovizTimelineBaseOpacity);
               if (!item || !Number.isFinite(baseOpacity)) return;
+              const retainedEndpointOpacity = Number(
+                item.userData && item.userData.ovizRetainedEndpointOpacityScale
+              );
               item.transparent = true;
-              item.opacity = baseOpacity * scale;
+              item.opacity = baseOpacity
+                * scale
+                * (
+                  Number.isFinite(retainedEndpointOpacity)
+                    ? clamp01(retainedEndpointOpacity)
+                    : 1.0
+                );
             });
           });
         });
@@ -620,7 +716,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
             entry.timeOpacityScale = scale;
           }
         });
-        plotGroup.traverse((object) => {
+        milkyWayModelGroups.forEach((object) => {
           if (object && object.userData && object.userData.ovizDecorationKind === "milky_way_model") {
             object.userData.ovizTimeOpacityScale = scale;
           }
@@ -629,9 +725,47 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         updateCameraResponsiveImagePlanes();
       }
 
+      function skyVolumeVisibleForDisplayedTime() {
+        if (cameraViewMode !== "earth") {
+          return true;
+        }
+        const timeMyr = Number(frameTimeForValue(displayedFrameValue));
+        return Number.isFinite(timeMyr) && Math.abs(timeMyr) <= 1e-9;
+      }
+
+      function updateSkyVolumeTimelineVisibility() {
+        if (cameraViewMode !== "earth") {
+          return;
+        }
+        const displayedTimeMyr = Number(frameTimeForValue(displayedFrameValue));
+        const skyTimeVisible = skyVolumeVisibleForDisplayedTime();
+        volumeRuntimeByKey.forEach((runtime) => {
+          if (!runtime || !runtime.mesh || !runtime.layer) {
+            return;
+          }
+          const state = volumeStateByKey[
+            volumeStateKeyForLayer(runtime.layer)
+          ] || null;
+          runtime.mesh.visible = Boolean(
+            skyTimeVisible
+            && state
+            && volumeVisibleForFrame(
+              runtime.layer,
+              state,
+              { time: displayedTimeMyr },
+            )
+          );
+        });
+        if (root && root.dataset) {
+          root.dataset.skyVolumeTimeVisible = skyTimeVisible ? "true" : "false";
+        }
+      }
+
       function updateTimelineMotionOpacity() {
         updateGalacticReferenceMotionOpacity();
         updateMilkyWayTimelineOpacity();
+        updateSkyVolumeTimelineVisibility();
+        animateSkyDomeTimelineOpacity(milkyWayTimelineOpacity());
       }
 
       function setTimelineScrubMotionActive(active, options = {}) {
@@ -717,7 +851,10 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         lastPlaybackAdvanceTimestamp = now;
         updatePlaybackButtons();
         const nextIndex = (currentFrameIndex + playbackDirection + frameSpecs.length) % frameSpecs.length;
-        renderFrame(nextIndex);
+        renderInterpolatedFrameValue(nextIndex, {
+          preserveCamera: true,
+          transitionOwnerToken: "timeline-playback",
+        });
       }
 
       function scheduleSliderScrubRender(index) {
@@ -734,10 +871,10 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           pendingSliderFrameIndex = null;
           if (targetIndex !== null && targetIndex !== undefined) {
             const stableFrameIndex = clampFrameIndex(targetIndex);
-            if (stableFrameIndex !== currentFrameIndex || !galacticReferenceOpacityGroups.length) {
-              renderFrame(stableFrameIndex);
-            }
-            displayedFrameValue = clampFrameValue(targetIndex);
+            renderInterpolatedFrameValue(targetIndex, {
+              preserveCamera: true,
+              transitionOwnerToken: "timeline-scrub",
+            });
             currentFrameIndex = stableFrameIndex;
             updateTimelineUi(displayedFrameValue, frameTimeForValue(displayedFrameValue));
             updateTimelineMotionOpacity();
@@ -811,6 +948,36 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         };
       }
 
+      function ovizHoverTargetProxies(target) {
+        const batch = target
+          && target.userData
+          && target.userData.ovizPointBatch;
+        return batch && Array.isArray(batch.proxies) ? batch.proxies : [target];
+      }
+
+      function ovizForEachHoverProxy(callback) {
+        if (typeof callback !== "function") {
+          return;
+        }
+        hoverTargets.forEach((target) => {
+          ovizHoverTargetProxies(target).forEach((proxy) => callback(proxy, target));
+        });
+      }
+
+      function ovizPointBatchProxyForHit(hit) {
+        const object = hit && hit.object;
+        const batch = object
+          && object.userData
+          && object.userData.ovizPointBatch;
+        if (!batch || !Array.isArray(batch.proxies)) {
+          return object || null;
+        }
+        const index = Number(hit && hit.index);
+        return Number.isInteger(index) && index >= 0 && index < batch.proxies.length
+          ? batch.proxies[index]
+          : null;
+      }
+
       function startLassoSelection(event) {
         if (!currentFrameAllowsSelection() || widgetPointerState || event.button !== 0) {
           return false;
@@ -880,7 +1047,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
         const nextLassoSelectionMask = captureLassoSelectionMask(polygon);
         const selected = [];
-        hoverTargets.forEach((sprite) => {
+        ovizForEachHoverProxy((sprite) => {
           const selection = selectionForSprite(sprite);
           if (!selection) {
             return;
@@ -939,7 +1106,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       function pickClusterInfoSpriteByScreenDistance(event) {
         const clickPoint = canvasPointFromEvent(event);
         let best = null;
-        hoverTargets.forEach((sprite) => {
+        ovizForEachHoverProxy((sprite) => {
           if (!isClusterInfoSprite(sprite) || sprite.visible === false) {
             return;
           }
@@ -980,7 +1147,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         raycaster.setFromCamera(pointer, camera);
         const hits = raycaster.intersectObjects(hoverTargets, false);
         for (const hit of hits) {
-          const object = hit && hit.object;
+          const object = ovizPointBatchProxyForHit(hit);
           if (!object || isClusterInfoSprite(object)) {
             continue;
           }

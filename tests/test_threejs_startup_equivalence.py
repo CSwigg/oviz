@@ -6,9 +6,9 @@ from oviz.threejs_figure import ThreeJSFigure
 
 
 KNOWN_GOOD_STARTUP_HASHES = {
-    "apply_initial": "d1e2211940073214e2409142a115f5522865530b04518097c695e7a1df7f8532",
-    "marker": "4bb381625d33342192a8cff72525c52ee7efcb2df6b46ee7d00900a98aa32d24",
-    "frame_scene": "965ea4cd4f6bbbfb34e63268ce398171a6d3e8739dc9d5d612b156cc78d1ee3f",
+    "apply_initial": "03882b710aa2be5e479db7da4bfe59b96c134df27af35c903d4377242c996412",
+    "marker": "c28a7d68b5b4dcf53c361811e495a8ee5c55b6b00ea8df922ca8742c6439579c",
+    "frame_scene": "6844dc6f70c05bb8cff935ff33b0d2dedac9775b416d1bc856dd794ee3eae07e",
     "render_frame": "3a6d2a6f01c07569d990dd7283f9e8fdf749de9c912acb35e4ae89c49860125a",
 }
 
@@ -28,7 +28,7 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def test_transition_optimizations_do_not_change_known_good_startup_renderer():
+def test_startup_renderer_matches_visually_reviewed_optimized_runtime():
     html = _runtime_html()
     startup_sections = {
         "apply_initial": html.split(

@@ -108,9 +108,7 @@ def _sample_colorscale(colorscale, positions):
 
 GALACTIC_GUIDE_TRACE_NAMES = {
     'Galactic Quadrants',
-    'Galactic l Ticks',
     'Galactic l Labels',
-    'Galactic Z Axis'
 }
 GALACTIC_RADIUS_CIRCLE_DEFS = (
     (4.0, 'R = 4 kpc'),
@@ -120,6 +118,7 @@ GALACTIC_RADIUS_CIRCLE_DEFS = (
 GALACTIC_RADIUS_TRACE_NAMES = (
     {name for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
     | {f'{name} Label' for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
+    | {'GC Ring'}
 )
 GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES = {
     'Sun',
@@ -597,8 +596,12 @@ class Animate3D:
             y=y_vals,
             z=z_vals,
             mode='lines',
-            line=dict(color=line_color, width=self._reference_line_width(), dash='solid'),
-            opacity=self._reference_opacity(),
+            line=dict(
+                color=line_color,
+                width=self._reference_line_width(radius_kpc),
+                dash='solid',
+            ),
+            opacity=self._reference_opacity(radius_kpc),
             visible=True,
             name=trace_name,
             showlegend=False,
@@ -607,15 +610,20 @@ class Animate3D:
 
     def _reference_line_color(self):
         """Common reference-line color used by GC circle and galactic guides."""
-        return 'gray' if self.figure_theme == 'dark' else 'black'
+        return '#94a3b8' if self.figure_theme == 'dark' else '#475569'
 
-    def _reference_line_width(self):
-        """Common line width for galactic reference overlays."""
-        return 2.0
+    def _reference_label_color(self):
+        """High-contrast companion color for the Galactic Center annotation."""
+        return '#e2e8f0' if self.figure_theme == 'dark' else '#1e293b'
 
-    def _reference_opacity(self):
-        """Common opacity for galactic reference overlays."""
-        return float(getattr(self, 'galactic_reference_opacity', 0.5))
+    def _reference_line_width(self, radius_kpc=None):
+        """One restrained screen-space stroke for every Galactic guide line."""
+        return 1.0
+
+    def _reference_opacity(self, radius_kpc=None):
+        """One restrained opacity for circles and quadrant lines."""
+        base_opacity = float(getattr(self, 'galactic_reference_opacity', 0.5))
+        return min(max(base_opacity * 0.68, 0.0), 1.0)
 
     def _galactic_center_position(self, t, x_rf, y_rf, z_rf, coord_system='centered'):
         """Galactic-center position in the active reference frame at time t."""
@@ -647,19 +655,26 @@ class Animate3D:
             z_rf=z_rf,
             coord_system=coord_system,
         )
-        line_color = self._reference_line_color()
         return _scatter3d(
             x=[x_gc],
             y=[y_gc],
             z=[float(z_gc) + float(z_offset_pc)],
             mode='text',
-            text=['G.C.'],
+            text=['GALACTIC CENTER'],
             textposition='middle center',
-            textfont=dict(color=line_color, size=48, family='helvetica'),
-            opacity=0.9,
+            textfont=dict(
+                color=self._reference_label_color(),
+                size=18,
+                family='Inter, Helvetica Neue, Arial, sans-serif',
+            ),
+            opacity=0.82,
             name='GC',
             showlegend=False,
-            hoverinfo='skip'
+            hoverinfo='skip',
+            meta={
+                'screen_stable_text': True,
+                'screen_px': 18.0,
+            },
         )
 
     def _galactic_center_ring_trace(
@@ -691,7 +706,7 @@ class Animate3D:
             z=z_vals,
             mode='lines',
             line=dict(color=line_color, width=self._reference_line_width(), dash='solid'),
-            opacity=0.9,
+            opacity=self._reference_opacity(),
             visible=True,
             name='GC Ring',
             showlegend=False,
@@ -705,7 +720,7 @@ class Animate3D:
         x_center,
         y_center,
         z_center,
-        angle_deg=315.0
+        angle_deg=0.0
     ):
         """Place a radius label at a defined angle where 0 deg points +y away from GC."""
         angle_rad = np.deg2rad(float(angle_deg))
@@ -721,16 +736,31 @@ class Animate3D:
             mode='text',
             text=[label_text],
             textposition='middle left',
-            textfont=dict(color=self._reference_line_color(), size=12, family='helvetica'),
-            opacity=self._reference_opacity(),
+            textfont=dict(
+                color=self._reference_label_color(),
+                size=28,
+                family='Inter, Helvetica Neue, Arial, sans-serif',
+            ),
+            opacity=max(self._reference_opacity(radius_kpc), 0.5),
             name=f'{label_text} Label',
             showlegend=False,
-            hoverinfo='skip'
+            hoverinfo='skip',
+            meta={
+                'screen_stable_text': True,
+                'screen_px': 28.0,
+            },
         )
 
     def _build_galactic_circles_with_labels(self, t, x_rf, y_rf, z_rf, coord_system='centered'):
-        """Build R=4/8.12/12 kpc circles."""
+        """Build a restrained, labelled set of galactocentric radius circles."""
         traces = []
+        x_gc, y_gc, z_gc = self._galactic_center_position(
+            t=t,
+            x_rf=x_rf,
+            y_rf=y_rf,
+            z_rf=z_rf,
+            coord_system=coord_system,
+        )
         for radius_kpc, label_text in GALACTIC_RADIUS_CIRCLE_DEFS:
             traces.append(
                 self._radius_circle_trace(
@@ -743,7 +773,57 @@ class Animate3D:
                     z_sub=float(z_rf)
                 )
             )
+            traces.append(
+                self._radius_label_trace(
+                    radius_kpc=radius_kpc,
+                    label_text=label_text,
+                    x_center=x_gc,
+                    y_center=y_gc,
+                    z_center=z_gc,
+                )
+            )
         return traces
+
+    def _galactic_plane_z_model(
+        self,
+        t,
+        x_rf,
+        y_rf,
+        z_rf,
+        coord_system='centered',
+    ):
+        """Return z = ax + by + c for the transformed Galactocentric midplane."""
+        x_gc = np.array([0.0, 1000.0, 0.0], dtype=float)
+        y_gc = np.array([0.0, 0.0, 1000.0], dtype=float)
+        z_gc = np.zeros(3, dtype=float)
+        if coord_system == 'rot':
+            x_plane, y_plane, z_plane = self._coordFIX_to_coordROT(
+                x_gc,
+                y_gc,
+                z_gc,
+                float(t),
+            )
+        else:
+            plane_coordinates = SkyCoord(
+                x=x_gc * u.pc,
+                y=y_gc * u.pc,
+                z=z_gc * u.pc,
+                frame='galactocentric',
+                representation_type='cartesian',
+            ).galactic.cartesian
+            x_plane = plane_coordinates.x.to_value(u.pc) - float(x_rf)
+            y_plane = plane_coordinates.y.to_value(u.pc) - float(y_rf)
+            z_plane = plane_coordinates.z.to_value(u.pc) - float(z_rf)
+        matrix = np.column_stack((
+            np.asarray(x_plane, dtype=float),
+            np.asarray(y_plane, dtype=float),
+            np.ones(3, dtype=float),
+        ))
+        try:
+            a, b, c = np.linalg.solve(matrix, np.asarray(z_plane, dtype=float))
+        except np.linalg.LinAlgError:
+            a, b, c = 0.0, 0.0, float(np.nanmedian(z_plane))
+        return float(a), float(b), float(c)
 
     def _log_spiral_radius(self, theta_rad, rref_kpc, theta_ref_rad, psi_rad):
         """Log-spiral radius model: ln(R/Rref) = -(theta - theta_ref) * tan(psi)."""
@@ -1118,12 +1198,27 @@ class Animate3D:
             if showline is not None:
                 axis['showline'] = showline
 
-    def _build_galactic_guide_traces(self, t, sun_x=0.0, sun_y=0.0):
-        """Quadrant guides, l-ticks, and z-axis line shown only at t=0."""
-        show_guides = np.isclose(float(t), 0.0, rtol=0.0, atol=1e-9)
+    def _build_galactic_guide_traces(
+        self,
+        t,
+        sun_x=0.0,
+        sun_y=0.0,
+        plane_z_model=(0.0, 0.0, 0.0),
+    ):
+        """Build four simple present-day Galactic quadrant boundaries."""
         guide_color = self._reference_line_color()
-        guide_width = self._reference_line_width()
-        guide_opacity = self._reference_opacity()
+        label_color = self._reference_label_color()
+        plane_a, plane_b, plane_c = [
+            float(value)
+            for value in plane_z_model
+        ]
+
+        def plane_z(x_value, y_value):
+            return (
+                plane_a * float(x_value)
+                + plane_b * float(y_value)
+                + plane_c
+            )
 
         try:
             x_min, x_max = [float(v) for v in self.figure_layout['scene']['xaxis']['range']]
@@ -1133,119 +1228,86 @@ class Animate3D:
             y_min, y_max = [float(v) for v in self.figure_layout['scene']['yaxis']['range']]
         except Exception:
             y_min, y_max = -10000.0, 10000.0
-        try:
-            z_min, z_max = [float(v) for v in self.figure_layout['scene']['zaxis']['range']]
-        except Exception:
-            z_min, z_max = -300.0, 300.0
+        xy_span = min(x_max - x_min, y_max - y_min)
+        ray_radius = 0.68 * np.hypot(x_max - x_min, y_max - y_min)
+        major_angles = np.deg2rad([0.0, 90.0, 180.0, 270.0])
 
-        if not show_guides:
-            return [
-                _scatter3d(
-                    x=[], y=[], z=[],
-                    mode='lines',
-                    name='Galactic Quadrants',
-                    showlegend=False,
-                    hoverinfo='skip'
-                ),
-                _scatter3d(
-                    x=[], y=[], z=[],
-                    mode='lines',
-                    name='Galactic l Ticks',
-                    showlegend=False,
-                    hoverinfo='skip'
-                ),
-                _scatter3d(
-                    x=[], y=[], z=[],
-                    mode='text',
-                    text=[],
-                    name='Galactic l Labels',
-                    showlegend=False,
-                    hoverinfo='skip'
-                ),
-                _scatter3d(
-                    x=[], y=[], z=[],
-                    mode='lines',
-                    name='Galactic Z Axis',
-                    showlegend=False,
-                    hoverinfo='skip'
-                ),
-            ]
+        major_x, major_y, major_z = [], [], []
+        for angle in major_angles:
+            end_x = float(sun_x) + ray_radius * np.cos(angle)
+            end_y = float(sun_y) + ray_radius * np.sin(angle)
+            major_x.extend([
+                float(sun_x),
+                end_x,
+                None,
+            ])
+            major_y.extend([
+                float(sun_y),
+                end_y,
+                None,
+            ])
+            major_z.extend([
+                plane_z(sun_x, sun_y),
+                plane_z(end_x, end_y),
+                None,
+            ])
 
-        # Cross-hair lines dividing the Galactic plane into quadrants around the Sun.
+        # The four cardinal longitudes form the quadrant boundaries.
         quadrants = _scatter3d(
-            x=[x_min, x_max, None, sun_x, sun_x],
-            y=[sun_y, sun_y, None, y_min, y_max],
-            z=[0.0, 0.0, None, 0.0, 0.0],
+            x=major_x,
+            y=major_y,
+            z=major_z,
             mode='lines',
-            line=dict(color=guide_color, width=guide_width, dash='solid'),
-            opacity=guide_opacity,
+            line=dict(
+                color=guide_color,
+                width=self._reference_line_width(),
+                dash='solid',
+            ),
+            opacity=self._reference_opacity(),
             name='Galactic Quadrants',
             showlegend=False,
             hoverinfo='skip'
         )
 
-        # Tick marks and labels for l = 0, 90, 180, 270 around the Sun.
-        xy_span = min(x_max - x_min, y_max - y_min)
-        tick_radius = 0.055 * xy_span
-        tick_half = 0.007 * xy_span
-        label_gap = 0.010 * xy_span
-        label_z = (0.03 * (z_max - z_min)) + 50.0
-        angles = [0.0, np.pi / 2.0, np.pi, 3.0 * np.pi / 2.0]
-        labels = ['l=0', 'l=90', 'l=180', 'l=270']
-
-        x_ticks, y_ticks, z_ticks = [], [], []
-        x_labels, y_labels, z_labels = [], [], []
-
-        for angle in angles:
-            c = np.cos(angle)
-            s = np.sin(angle)
-            r0 = tick_radius - tick_half
-            r1 = tick_radius + tick_half
-            x_ticks.extend([sun_x + r0 * c, sun_x + r1 * c, None])
-            y_ticks.extend([sun_y + r0 * s, sun_y + r1 * s, None])
-            z_ticks.extend([0.0, 0.0, None])
-            x_labels.append(sun_x + (tick_radius + tick_half + label_gap) * c)
-            y_labels.append(sun_y + (tick_radius + tick_half + label_gap) * s)
-            z_labels.append(label_z)
-
-        l_ticks = _scatter3d(
-            x=x_ticks,
-            y=y_ticks,
-            z=z_ticks,
-            mode='lines',
-            line=dict(color=guide_color, width=guide_width, dash='solid'),
-            opacity=guide_opacity,
-            name='Galactic l Ticks',
-            showlegend=False,
-            hoverinfo='skip'
-        )
+        # Put the four cardinal longitude labels far enough from the Sun to
+        # remain legible over the cluster field. They are intentionally large
+        # and screen-stable.
+        label_radius = 0.30 * xy_span
+        labels = ['ℓ = 0°', 'ℓ = 90°', 'ℓ = 180°', 'ℓ = 270°']
+        x_labels = [
+            float(sun_x) + label_radius * np.cos(angle)
+            for angle in major_angles
+        ]
+        y_labels = [
+            float(sun_y) + label_radius * np.sin(angle)
+            for angle in major_angles
+        ]
 
         l_labels = _scatter3d(
             x=x_labels,
             y=y_labels,
-            z=z_labels,
+            z=[
+                plane_z(x_value, y_value)
+                for x_value, y_value in zip(x_labels, y_labels)
+            ],
             mode='text',
             text=labels,
             textposition='middle center',
-            textfont=dict(color=guide_color, size=12, family='helvetica'),
+            textfont=dict(
+                color=label_color,
+                size=28,
+                family='Inter, Helvetica Neue, Arial, sans-serif',
+            ),
+            opacity=0.92,
             name='Galactic l Labels',
             showlegend=False,
-            hoverinfo='skip'
+            hoverinfo='skip',
+            meta={
+                'screen_stable_text': True,
+                'screen_px': 28.0,
+            },
         )
-
-        z_axis = _scatter3d(
-            x=[sun_x, sun_x],
-            y=[sun_y, sun_y],
-            z=[z_min, z_max],
-            mode='lines',
-            line=dict(color=guide_color, width=guide_width, dash='solid'),
-            opacity=guide_opacity,
-            name='Galactic Z Axis',
-            showlegend=False,
-            hoverinfo='skip'
-        )
-
-        return [quadrants, l_ticks, l_labels, z_axis]
+        return [quadrants, l_labels]
 
     def generate_play_pause(self):
         """
@@ -1657,6 +1719,11 @@ class Animate3D:
         if show_reference_lines:
             if galactic_mode:
                 scatter_list.append(
+                    self._galactic_center_ring_trace(
+                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+                    )
+                )
+                scatter_list.append(
                     self._galactic_center_label_trace(
                         t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
                     )
@@ -1674,7 +1741,20 @@ class Animate3D:
                 scatter_list.append(gc_line_t)
 
         if galactic_mode and show_galactic_guides:
-            scatter_list.extend(self._build_galactic_guide_traces(t, sun_x=sun_x, sun_y=sun_y))
+            scatter_list.extend(
+                self._build_galactic_guide_traces(
+                    t,
+                    sun_x=sun_x,
+                    sun_y=sun_y,
+                    plane_z_model=self._galactic_plane_z_model(
+                        t=t,
+                        x_rf=x_rf,
+                        y_rf=y_rf,
+                        z_rf=z_rf,
+                        coord_system=coord_system,
+                    ),
+                )
+            )
 
         if galactic_mode and include_spiral_arms:
             scatter_list.extend(
@@ -1822,11 +1902,12 @@ class Animate3D:
             'show_cluster_members_in_sky': bool(
                 getattr(self, 'show_cluster_members_in_sky', False)
             ),
-            'member_point_size_denominator': 20,
+            'member_point_size_denominator': 30,
             # A 1/20-scale point can project to substantially less than one
             # physical pixel in an all-sky view. Keep the requested data-space
             # scale while enforcing a small render-only visibility floor.
-            'member_min_screen_size_px': 2.5,
+            'member_min_screen_size_px': 0.0,
+            'member_distance_policy': 'stellar_parallax_preferred',
             'members_by_cluster': merged_catalog,
         }
 
@@ -3219,7 +3300,10 @@ def _labels_from_trace(trace_json):
     )
     screen_px = None
     if is_gc_label:
-        screen_px = 36.0
+        try:
+            screen_px = float(trace_meta.get('screen_px', 18.0))
+        except Exception:
+            screen_px = 18.0
     elif is_galactic_radius_label:
         screen_px = 9.0
     elif trace_meta.get('screen_px') is not None:
@@ -3286,6 +3370,15 @@ def _load_threejs_cluster_catalog(cluster_members_file, cluster_names=None):
     ra_column = first_column('ra', 'ra_deg', 'ra_icrs', '_ra_icrs', 'raj2000')
     dec_column = first_column('dec', 'dec_deg', 'de_icrs', '_de_icrs', 'dej2000')
     source_id_column = first_column('source_id', 'gaia_source_id', 'gaiadr3', 'id')
+    pmra_column = first_column('pmra', 'pm_ra_cosdec', 'pm_ra')
+    pmdec_column = first_column('pmdec', 'pm_dec')
+    parallax_column = first_column('parallax', 'parallax_mas')
+    distance_column = first_column(
+        'r_med_geo',
+        'distance_pc',
+        'dist_pc',
+        'distance',
+    )
     if cluster_column is None:
         return None
     has_galactic = l_column is not None and b_column is not None
@@ -3300,6 +3393,10 @@ def _load_threejs_cluster_catalog(cluster_members_file, cluster_names=None):
         ra_column,
         dec_column,
         source_id_column,
+        pmra_column,
+        pmdec_column,
+        parallax_column,
+        distance_column,
     ):
         if column is not None and column not in usecols:
             usecols.append(column)
@@ -3337,6 +3434,7 @@ def _load_threejs_cluster_catalog(cluster_members_file, cluster_names=None):
 
     if df.empty:
         return None
+    compact_member_payload = len(df) > 100_000
 
     rename_columns = {cluster_column: 'cluster_name'}
     if l_column is not None:
@@ -3349,9 +3447,26 @@ def _load_threejs_cluster_catalog(cluster_members_file, cluster_names=None):
         rename_columns[dec_column] = 'dec_deg'
     if source_id_column is not None:
         rename_columns[source_id_column] = 'source_id'
+    if pmra_column is not None:
+        rename_columns[pmra_column] = 'pmra_masyr'
+    if pmdec_column is not None:
+        rename_columns[pmdec_column] = 'pmdec_masyr'
+    if parallax_column is not None:
+        rename_columns[parallax_column] = 'parallax_mas'
+    if distance_column is not None:
+        rename_columns[distance_column] = 'distance_pc'
     df = df.rename(columns=rename_columns)
     df['cluster_name'] = df['cluster_name'].astype(str)
-    for coordinate_column in ('l_deg', 'b_deg', 'ra_deg', 'dec_deg'):
+    for coordinate_column in (
+        'l_deg',
+        'b_deg',
+        'ra_deg',
+        'dec_deg',
+        'pmra_masyr',
+        'pmdec_masyr',
+        'parallax_mas',
+        'distance_pc',
+    ):
         if coordinate_column in df.columns:
             df[coordinate_column] = pd.to_numeric(df[coordinate_column], errors='coerce')
 
@@ -3422,18 +3537,62 @@ def _load_threejs_cluster_catalog(cluster_members_file, cluster_names=None):
             if 'source_id' in grp.columns
             else None
         )
+        pmra_values = (
+            grp['pmra_masyr'].to_numpy(dtype=np.float64)
+            if 'pmra_masyr' in grp.columns
+            else None
+        )
+        pmdec_values = (
+            grp['pmdec_masyr'].to_numpy(dtype=np.float64)
+            if 'pmdec_masyr' in grp.columns
+            else None
+        )
+        parallax_values = (
+            grp['parallax_mas'].to_numpy(dtype=np.float64)
+            if 'parallax_mas' in grp.columns
+            else None
+        )
+        distance_values = (
+            grp['distance_pc'].to_numpy(dtype=np.float64)
+            if 'distance_pc' in grp.columns
+            else None
+        )
         members = []
         for i in idx:
             member = {
-                'l': float(l_vals[i]),
-                'b': float(b_vals[i]),
-                'ra': float(ra_vals[i]),
-                'dec': float(dec_vals[i]),
+                'ra': float(np.round(ra_vals[i], 6)),
+                'dec': float(np.round(dec_vals[i], 6)),
                 'label': str(cluster_name),
                 'is_cluster_member': True,
             }
+            if not compact_member_payload:
+                member['l'] = float(np.round(l_vals[i], 6))
+                member['b'] = float(np.round(b_vals[i], 6))
             if source_ids is not None and source_ids[i]:
                 member['source_id'] = str(source_ids[i])
+            if pmra_values is not None and np.isfinite(pmra_values[i]):
+                member['pmra_masyr'] = float(np.round(pmra_values[i], 6))
+            if pmdec_values is not None and np.isfinite(pmdec_values[i]):
+                member['pmdec_masyr'] = float(np.round(pmdec_values[i], 6))
+            # Proper motions are angular rates. Prefer the individual star's
+            # parallax distance when converting them to transverse velocities;
+            # catalog distance estimates are retained only as a fallback for a
+            # missing or non-positive parallax.
+            distance_pc = np.nan
+            if parallax_values is not None:
+                parallax_mas = float(parallax_values[i])
+                if np.isfinite(parallax_mas) and parallax_mas > 0.0:
+                    distance_pc = 1000.0 / parallax_mas
+            if not np.isfinite(distance_pc):
+                distance_pc = (
+                    float(distance_values[i])
+                    if distance_values is not None
+                    and np.isfinite(distance_values[i])
+                    and distance_values[i] > 0.0
+                    else np.nan
+                )
+            if np.isfinite(distance_pc) and distance_pc > 0.0:
+                member['distance_pc'] = float(np.round(distance_pc, 3))
             members.append(member)
         grouped[str(cluster_name).strip()] = members
 

@@ -67,8 +67,10 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
             0 <= earth_branch < spherical_apply < native_mode_apply < generic_guard < cartesian_apply,
             "Sky and mode-changing tracks must be mutually exclusive from generic Cartesian interpolation.",
         )
-        self.assertNotIn("enterEarthViewFromCurrentCamera(", begin_transition)
-        self.assertNotIn("exitEarthViewToCameraState(", begin_transition)
+        self.assertIn("enterEarthViewFromCurrentCamera({", begin_transition)
+        self.assertIn("exitEarthViewToCameraState({", begin_transition)
+        self.assertIn("usesViewButtonHandoff", begin_transition)
+        self.assertIn("ovizStatePhasePlanAfterViewButtonHandoff", begin_transition)
         self.assertIn("const synchronizedStart = performance.now();", begin_transition)
 
     def test_states_forward_the_rendered_camera_instead_of_starting_a_second_sky_animation(self):
@@ -158,7 +160,7 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         )
         self.assertLess(
             enter_view.index("animateCameraTransition("),
-            enter_view.index("animateSkyDomeViewOpacity(1.0"),
+            enter_view.index("animateSkyDomeViewOpacity("),
         )
         self.assertLess(
             exit_view.index("animateSkyDomeViewOpacity(0.0"),
@@ -166,11 +168,78 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         )
         self.assertLess(
             exit_view.index("animateCameraTransition("),
-            exit_view.index("animateMilkyWayModelOpacity(1.0"),
+            exit_view.index("animateMilkyWayModelOpacity("),
         )
 
         self.assertHtmlContains('group.userData.ovizDecorationKind = "milky_way_model"')
         self.assertHtmlContains("function setMilkyWayModelOpacityScale(value)")
+
+    def test_sky_to_3d_state_hides_member_stars_before_camera_motion(self):
+        begin_transition = _function_region(
+            self.html,
+            "ovizBeginStateTransition",
+            "ovizApplyTransitionNumericControls",
+        )
+        update_transition = _function_region(
+            self.html,
+            "updateOvizStateTransition",
+            "ovizFinishStateTransition",
+        )
+        exit_view = _function_region(
+            self.html,
+            "exitEarthViewToCameraState",
+            "exitEarthView",
+        )
+        state_exit = begin_transition.index(
+            "exitEarthViewToCameraState({"
+        )
+        state_destination = begin_transition.index(
+            "destinationCameraState,",
+            state_exit,
+        )
+        state_complete = begin_transition.index(
+            "onComplete: completeViewButtonHandoff,",
+            state_destination,
+        )
+        self.assertTrue(
+            state_exit < state_destination < state_complete,
+            "Sky-to-3D States must call the ordinary View-button exit with the saved camera.",
+        )
+        member_fade = exit_view.index("animateSkyMemberReveal(0.0")
+        sky_fade = exit_view.index("animateSkyDomeViewOpacity(0.0")
+        camera_motion = exit_view.index("animateCameraTransition(")
+        continue_after_member = exit_view.index(
+            "continueExitAfterMemberFade();",
+            member_fade,
+        )
+        self.assertTrue(
+            sky_fade < camera_motion < member_fade < continue_after_member,
+            "The member callback must enter the shared Sky-fade then camera-motion sequence.",
+        )
+        self.assertIn(
+            "if (transition.viewButtonHandoffPending)",
+            update_transition,
+        )
+        self.assertIn(
+            'root.dataset.stateTransitionPhase = "view-handoff";',
+            update_transition,
+        )
+        self.assertNotIn("renderInterpolatedFrameValue(", update_transition[
+            update_transition.index("if (transition.viewButtonHandoffPending)"):
+            update_transition.index("try {")
+        ])
+
+    def test_member_star_material_writer_has_a_hard_3d_guard(self):
+        member_reveal = _function_region(
+            self.html,
+            "setSkyMemberRevealProgress",
+            "animateSkyMemberReveal",
+        )
+        self.assertIn('cameraViewMode === "earth"', member_reveal)
+        self.assertIn("skyMemberRevealProgress = cameraViewMode", member_reveal)
+        self.assertIn('if (cameraViewMode !== "earth")', member_reveal)
+        self.assertIn("skyMemberBatchesEnabled = false;", member_reveal)
+        self.assertIn("root.dataset.skyMemberStarsVisibleIn3d", member_reveal)
 
     def test_state_finish_does_not_force_duplicate_aladin_redraw(self):
         finish_transition = _function_region(
@@ -184,6 +253,24 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         )
         self.assertIn("forceSkyBackground: false", finish_transition)
         self.assertIn("postSkyLayersToAladin: false", finish_transition)
+
+    def test_shared_view_camera_animation_defers_duplicate_ui_work_to_main_frame(self):
+        camera_transition = _function_region(
+            self.html,
+            "animateCameraTransition",
+            "setCameraFovFromZoomFactor",
+        )
+        frame_loop = camera_transition.split(
+            "if (linear < 1.0)",
+            1,
+        )[0]
+        self.assertIn("camera.lookAt(controls.target);", frame_loop)
+        self.assertIn("camera.updateMatrixWorld(true);", frame_loop)
+        self.assertIn("ovizInvalidateRender();", frame_loop)
+        self.assertNotIn("renderSceneControls();", frame_loop)
+        self.assertNotIn("updateScaleBar();", frame_loop)
+        self.assertNotIn("updateCameraResponsiveImagePlanes();", frame_loop)
+        self.assertNotIn("updateSkyDomeBackgroundFrame(", frame_loop)
 
     def test_identical_sky_layers_do_not_crossfade_or_reload(self):
         start_layers = _function_region(
