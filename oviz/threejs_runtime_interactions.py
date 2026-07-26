@@ -929,8 +929,10 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         return inside;
       }
 
+      const ovizSpriteScreenScratchVector = new THREE.Vector3();
+
       function spriteScreenPoint(sprite) {
-        const projected = new THREE.Vector3();
+        const projected = ovizSpriteScreenScratchVector;
         sprite.getWorldPosition(projected);
         projected.project(camera);
         if (

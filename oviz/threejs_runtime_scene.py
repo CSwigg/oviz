@@ -266,6 +266,25 @@ THREEJS_SCENE_RUNTIME_JS = """
               image.depth = volumeTexture.nz;
               volumeTexture.texture.image = image;
               volumeTexture.texture.needsUpdate = true;
+              volumeTexture.occupancy = volumeOccupancyFor(
+                values,
+                volumeTexture.nx,
+                volumeTexture.ny,
+                volumeTexture.nz
+              );
+              volumeRuntimeByKey.forEach((runtime) => {
+                if (
+                  runtime
+                  && runtime.layer
+                  && String(runtime.layer.key) === layerKey
+                  && runtime.material
+                ) {
+                  applyVolumeOccupancyUniforms(runtime.material.uniforms, volumeTexture);
+                }
+              });
+              if (typeof ovizInvalidateRender === "function") {
+                ovizInvalidateRender();
+              }
             }
           });
           return placeholder;
@@ -369,8 +388,8 @@ THREEJS_SCENE_RUNTIME_JS = """
         const bytes = base64ToUint8Array(option.lut_b64 || "");
         const width = Math.max(1, Math.floor(bytes.length / 4));
         const texture = new THREE.DataTexture(bytes, width, 1, THREE.RGBAFormat);
-        texture.minFilter = THREE.NearestFilter;
-        texture.magFilter = THREE.NearestFilter;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
         texture.wrapS = THREE.ClampToEdgeWrapping;
         texture.wrapT = THREE.ClampToEdgeWrapping;
         texture.unpackAlignment = 1;
@@ -420,28 +439,104 @@ THREEJS_SCENE_RUNTIME_JS = """
         texture.unpackAlignment = 1;
         texture.generateMipmaps = false;
         texture.needsUpdate = true;
-        const volumeTexture = { texture, nx, ny, nz };
+        const volumeTexture = { texture, nx, ny, nz, occupancy: volumeOccupancyFor(data, nx, ny, nz) };
         volumeTextureCache.set(layerKey, volumeTexture);
         return volumeTexture;
       }
 
-      function volumeJitterTextureFor() {
-        if (volumeJitterTexture) {
-          return volumeJitterTexture;
+      function applyVolumeOccupancyUniforms(uniforms, volumeTexture) {
+        const occupancy = volumeTexture ? volumeTexture.occupancy : null;
+        uniforms.occupancyTexture.value = occupancy
+          ? occupancy.texture
+          : volumeDummyOccupancyTexture();
+        if (occupancy) {
+          uniforms.occupancyDims.value.set(occupancy.gx, occupancy.gy, occupancy.gz);
         }
-        const bytes = new Uint8Array(64 * 64);
-        for (let i = 0; i < bytes.length; i += 1) {
-          bytes[i] = Math.floor(Math.random() * 256.0);
+        uniforms.useOccupancy.value = occupancy ? 1.0 : 0.0;
+      }
+
+      function volumeMake3DTexture(data, nx, ny, nz) {
+        const VolumeTextureCtor = THREE.Data3DTexture || THREE.DataTexture3D;
+        const texture = new VolumeTextureCtor(data, nx, ny, nz);
+        texture.format = THREE.RedFormat;
+        texture.type = THREE.UnsignedByteType;
+        texture.minFilter = THREE.NearestFilter;
+        texture.magFilter = THREE.NearestFilter;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.wrapR = THREE.ClampToEdgeWrapping;
+        texture.unpackAlignment = 1;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
+        return texture;
+      }
+
+      function volumeDummyOccupancyTexture() {
+        if (!volumeDummyOccupancy) {
+          volumeDummyOccupancy = volumeMake3DTexture(new Uint8Array([255]), 1, 1, 1);
         }
-        volumeJitterTexture = new THREE.DataTexture(bytes, 64, 64, THREE.RedFormat, THREE.UnsignedByteType);
-        volumeJitterTexture.minFilter = THREE.LinearFilter;
-        volumeJitterTexture.magFilter = THREE.LinearFilter;
-        volumeJitterTexture.wrapS = THREE.MirroredRepeatWrapping;
-        volumeJitterTexture.wrapT = THREE.MirroredRepeatWrapping;
-        volumeJitterTexture.generateMipmaps = false;
-        volumeJitterTexture.unpackAlignment = 1;
-        volumeJitterTexture.needsUpdate = true;
-        return volumeJitterTexture;
+        return volumeDummyOccupancy;
+      }
+
+      // Conservative empty-space occupancy: block maxima of the raw density
+      // bytes, dilated by one fine voxel so trilinear tails near block borders
+      // are always covered. The raymarcher can then skip whole empty blocks
+      // without changing a single rendered sample.
+      function volumeOccupancyFor(data, nx, ny, nz) {
+        const total = nx * ny * nz;
+        if (!(data instanceof Uint8Array) || data.length < total || total < (1 << 20)) {
+          return null;
+        }
+        const gx = Math.min(64, nx);
+        const gy = Math.min(64, ny);
+        const gz = Math.min(64, nz);
+        const blocks = new Uint8Array(gx * gy * gz);
+        const blockOfX = new Int32Array(nx);
+        const blockOfY = new Int32Array(ny);
+        const blockOfZ = new Int32Array(nz);
+        for (let x = 0; x < nx; x += 1) {
+          blockOfX[x] = Math.min(gx - 1, Math.floor(((x + 0.5) * gx) / nx));
+        }
+        for (let y = 0; y < ny; y += 1) {
+          blockOfY[y] = Math.min(gy - 1, Math.floor(((y + 0.5) * gy) / ny));
+        }
+        for (let z = 0; z < nz; z += 1) {
+          blockOfZ[z] = Math.min(gz - 1, Math.floor(((z + 0.5) * gz) / nz));
+        }
+        let sawDensity = false;
+        let index = 0;
+        for (let z = 0; z < nz; z += 1) {
+          const bz0 = blockOfZ[Math.max(z - 1, 0)];
+          const bz1 = blockOfZ[Math.min(z + 1, nz - 1)];
+          for (let y = 0; y < ny; y += 1) {
+            const by0 = blockOfY[Math.max(y - 1, 0)];
+            const by1 = blockOfY[Math.min(y + 1, ny - 1)];
+            for (let x = 0; x < nx; x += 1) {
+              const value = data[index];
+              index += 1;
+              if (value === 0) {
+                continue;
+              }
+              sawDensity = true;
+              const bx0 = blockOfX[Math.max(x - 1, 0)];
+              const bx1 = blockOfX[Math.min(x + 1, nx - 1)];
+              for (let bz = bz0; bz <= bz1; bz += 1) {
+                for (let by = by0; by <= by1; by += 1) {
+                  const rowBase = (bz * gy + by) * gx;
+                  for (let bx = bx0; bx <= bx1; bx += 1) {
+                    if (blocks[rowBase + bx] < value) {
+                      blocks[rowBase + bx] = value;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (!sawDensity) {
+          return null;
+        }
+        return { texture: volumeMake3DTexture(blocks, gx, gy, gz), gx, gy, gz };
       }
 
       function normalizedVolumeWindowFor(layer, state) {
@@ -554,8 +649,10 @@ THREEJS_SCENE_RUNTIME_JS = """
         precision highp sampler3D;
 
         uniform sampler3D volumeTexture;
+        uniform sampler3D occupancyTexture;
+        uniform vec3 occupancyDims;
+        uniform float useOccupancy;
         uniform sampler2D colormap;
-        uniform sampler2D jitterTexture;
         uniform sampler2D selectionMaskTexture;
         uniform sampler2D selectionSourceSecondaryMaskTexture;
         uniform sampler2D selectionSourceTertiaryMaskTexture;
@@ -600,6 +697,10 @@ THREEJS_SCENE_RUNTIME_JS = """
         varying vec3 transformedWorldPosition;
 
         float inv_range;
+        vec3 galacticCenterTransformed;
+        vec3 galacticCenterTexture;
+        vec3 galacticIncidentColor;
+        float galacticSolarDistance;
 
         struct Ray {
           vec3 origin;
@@ -792,16 +893,8 @@ THREEJS_SCENE_RUNTIME_JS = """
           return clamp((sampleVolume(pos) - low) * inv_range, 0.0, 1.0);
         }
 
-        float galacticSelfShadow(
-          vec3 textcoord,
-          vec3 transformedGalacticCenter,
-          float localDensity
-        ) {
-          vec3 samplePhysical = (textcoord - vec3(0.5)) * scale.xyz + translation.xyz;
-          vec3 centerTexture = (
-            (transformedGalacticCenter - translation.xyz) / max(scale.xyz, vec3(1e-6))
-          ) + vec3(0.5);
-          vec3 centerDelta = centerTexture - textcoord;
+        float galacticSelfShadow(vec3 textcoord, float localDensity) {
+          vec3 centerDelta = galacticCenterTexture - textcoord;
           float centerDistance = length(centerDelta);
           if (centerDistance <= 1e-6 || galactic_extinction <= 1e-6) {
             return 1.0;
@@ -830,38 +923,28 @@ THREEJS_SCENE_RUNTIME_JS = """
         vec3 applyGalacticDustLighting(
           vec3 premultipliedColor,
           float sampleAlpha,
+          float rawDensity,
           float localDensity,
-          vec3 textcoord,
-          vec3 rayDirection
+          vec3 textcoord
         ) {
           vec3 samplePhysical = (textcoord - vec3(0.5)) * scale.xyz + translation.xyz;
-          vec3 transformedGalacticCenter = rotate_vertex_position(
-            galactic_center,
-            translation.xyz,
-            rotation
-          );
-          vec3 toCenter = transformedGalacticCenter - samplePhysical;
+          vec3 toCenter = galacticCenterTransformed - samplePhysical;
           float centerDistance = max(length(toCenter), 1.0);
           vec3 toCenterDirection = toCenter / centerDistance;
           vec3 outgoingToCamera = normalize(transformedCameraPosition - samplePhysical);
           vec3 incidentFromCenter = -toCenterDirection;
 
-          float solarCircleDistance = max(length(galactic_center), 1000.0);
           float softenedDistance = sqrt(
             centerDistance * centerDistance + 1500.0 * 1500.0
           );
           float distanceFalloff = clamp(
-            (solarCircleDistance * solarCircleDistance)
+            (galacticSolarDistance * galacticSolarDistance)
               / (softenedDistance * softenedDistance),
             0.18,
             4.0
           );
-          float transmission = galacticSelfShadow(
-            textcoord,
-            transformedGalacticCenter,
-            localDensity
-          );
-          vec3 normal = galacticPhysicalNormal(sampleVolume(textcoord), textcoord);
+          float transmission = galacticSelfShadow(textcoord, localDensity);
+          vec3 normal = galacticPhysicalNormal(rawDensity, textcoord);
           float densityFacing = 0.30 + 0.70 * abs(dot(normal, toCenterDirection));
           float directField = (
             galactic_light_intensity
@@ -892,9 +975,7 @@ THREEJS_SCENE_RUNTIME_JS = """
 
           vec3 originalColor = premultipliedColor / max(sampleAlpha, 1e-6);
           float baseLuminance = dot(originalColor, vec3(0.2126, 0.7152, 0.0722));
-          vec3 coolDiskLight = vec3(0.72, 0.82, 1.00);
-          vec3 warmBulgeLight = vec3(1.00, 0.63, 0.30);
-          vec3 incidentColor = mix(coolDiskLight, warmBulgeLight, galactic_warmth);
+          vec3 incidentColor = galacticIncidentColor;
           vec3 shadowColor = vec3(0.24, 0.105, 0.045);
           vec3 illuminatedDust = mix(
             shadowColor,
@@ -908,7 +989,10 @@ THREEJS_SCENE_RUNTIME_JS = """
         }
 
         void main() {
-          float jitter = texture2D(jitterTexture, gl_FragCoord.xy / 64.0).r;
+          // Interleaved gradient noise: a well-distributed per-pixel jitter
+          // that suppresses raymarch banding better than tiled white noise
+          // and costs no texture fetch.
+          float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
           float tmin = 0.0;
           float tmax = 0.0;
           float px = 0.0;
@@ -937,6 +1021,15 @@ THREEJS_SCENE_RUNTIME_JS = """
           textcoord_start = textcoord_start - textcoord_delta * (0.01 + 0.98 * jitter);
           vec3 textcoord = textcoord_start - textcoord_delta;
           float step = length(textcoord_delta);
+          float stepTimesAlphaCoef = step * alpha_coef;
+          if (lighting_mode > 0.5) {
+            galacticCenterTransformed = rotate_vertex_position(galactic_center, translation.xyz, rotation);
+            galacticCenterTexture = (
+              (galacticCenterTransformed - translation.xyz) / max(scale.xyz, vec3(1e-6))
+            ) + vec3(0.5);
+            galacticIncidentColor = mix(vec3(0.72, 0.82, 1.00), vec3(1.00, 0.63, 0.30), galactic_warmth);
+            galacticSolarDistance = max(length(galactic_center), 1000.0);
+          }
 
           for (int count = 0; count < 2048; count++) {
             if (count >= sampleCount) {
@@ -944,6 +1037,23 @@ THREEJS_SCENE_RUNTIME_JS = """
             }
 
             textcoord += textcoord_delta;
+            if (useOccupancy > 0.5 && (texture(occupancyTexture, textcoord).x - low) <= 0.0) {
+              // The whole occupancy block around this sample is below the
+              // density window, so every sample inside it contributes nothing.
+              // Jump to the block boundary in one move; the skipped samples
+              // would all have failed the scaled_px > 0.0 test anyway.
+              vec3 blockCell = floor(clamp(textcoord, vec3(0.0), vec3(1.0)) * occupancyDims);
+              vec3 exitPlanes = (blockCell + vec3(greaterThanEqual(textcoord_delta, vec3(0.0)))) / occupancyDims;
+              vec3 stepsToExit = mix(
+                vec3(65536.0),
+                (exitPlanes - textcoord) / textcoord_delta,
+                greaterThan(abs(textcoord_delta), vec3(1e-12))
+              );
+              int skipCount = int(clamp(min(min(stepsToExit.x, stepsToExit.y), stepsToExit.z), 0.0, 4096.0));
+              count += skipCount;
+              textcoord += float(skipCount) * textcoord_delta;
+              continue;
+            }
             px = texture(volumeTexture, textcoord).x;
             float scaled_px = (px - low) * inv_range;
 
@@ -987,18 +1097,21 @@ THREEJS_SCENE_RUNTIME_JS = """
               if (selectionWeight <= 0.001) {
                 continue;
               }
-              pxColor.a = 1.0 - pow(1.0 - clamp(pxColor.a * opacity, 0.0, 0.999), step * alpha_coef);
+              pxColor.a = 1.0 - pow(1.0 - clamp(pxColor.a * opacity, 0.0, 0.999), stepTimesAlphaCoef);
               pxColor.a *= selectionWeight;
               pxColor.a *= (1.0 - value.a);
               pxColor.rgb *= pxColor.a;
+              if (pxColor.a <= 0.0) {
+                continue;
+              }
 
               if (lighting_mode > 0.5) {
                 pxColor.rgb = applyGalacticDustLighting(
                   pxColor.rgb,
                   pxColor.a,
+                  px,
                   clamp(scaled_px, 0.0, 1.0),
-                  textcoord,
-                  direction
+                  textcoord
                 );
               } else {
                 #if NUM_DIR_LIGHTS > 0
@@ -1041,6 +1154,10 @@ THREEJS_SCENE_RUNTIME_JS = """
           if (value.a <= 0.001) {
             discard;
           }
+          // Sub-quantum output dither: breaks up 8-bit banding in smooth,
+          // dim regions. Scaled so the post-blend amplitude stays ~1/2 LSB.
+          value.rgb += vec3((jitter - 0.5) / (255.0 * max(value.a, 0.05)));
+          value.rgb = max(value.rgb, vec3(0.0));
           gl_FragColor = value;
         }
       `;
@@ -1075,7 +1192,9 @@ THREEJS_SCENE_RUNTIME_JS = """
           {
             volumeTexture: { value: volumeTexture.texture },
             colormap: { value: volumeColorTextureFor(option) },
-            jitterTexture: { value: volumeJitterTextureFor() },
+            occupancyTexture: { value: null },
+            occupancyDims: { value: new THREE.Vector3(1.0, 1.0, 1.0) },
+            useOccupancy: { value: 0.0 },
             low: { value: Number(windowState.low) },
             high: { value: Number(windowState.high) },
             opacity: { value: Number(state.opacity) },
@@ -1123,6 +1242,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           },
         ]);
         applyLassoSelectionTransitionUniforms(uniforms);
+        applyVolumeOccupancyUniforms(uniforms, volumeTexture);
 
         const material = new THREE.ShaderMaterial({
           uniforms,
@@ -1177,6 +1297,10 @@ THREEJS_SCENE_RUNTIME_JS = """
         runtime.material.uniforms.rotation.value.copy(
           volumeQuaternionForZRotation(volumeRotationAngleForFrame(layer, state, frame))
         );
+        const cachedVolumeTexture = volumeTextureCache.get(String(layer.key));
+        if (cachedVolumeTexture) {
+          applyVolumeOccupancyUniforms(runtime.material.uniforms, cachedVolumeTexture);
+        }
         applyLassoSelectionTransitionUniforms(runtime.material.uniforms);
         if (option) {
           runtime.material.uniforms.colormap.value = volumeColorTextureFor(option);

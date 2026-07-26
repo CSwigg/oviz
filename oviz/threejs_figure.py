@@ -7872,7 +7872,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const MIN_MANUAL_LABEL_SIZE = 1.0;
       const MAX_MANUAL_LABEL_SIZE = 180.0;
       const MAX_MANUAL_LABEL_TEXT_LENGTH = 80;
-      let volumeJitterTexture = null;
+      let volumeDummyOccupancy = null;
       let legendState = {};
       let currentGroup = defaultGroup;
       let currentFrameIndex = sceneSpec.initial_frame_index || 0;
@@ -8116,7 +8116,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         alpha: true,
         powerPreference: "high-performance",
       });
-      renderer.setPixelRatio(window.devicePixelRatio || 1);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       if ("outputColorSpace" in renderer && THREE.SRGBColorSpace) {
         renderer.outputColorSpace = THREE.SRGBColorSpace;
       } else if ("outputEncoding" in renderer && THREE.sRGBEncoding) {
@@ -11284,15 +11284,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function activeHoveredClusterKeys() {
         const keys = new Set();
-        [localHoveredClusterKey]
-          .map((value) => normalizeMemberKey(value))
-          .filter(Boolean)
-          .forEach((value) => keys.add(value));
+        const localKey = normalizeMemberKey(localHoveredClusterKey);
+        if (localKey) {
+          keys.add(localKey);
+        }
         if (crossHoverEnabled()) {
-          [skyHoveredClusterKey]
-            .map((value) => normalizeMemberKey(value))
-            .filter(Boolean)
-            .forEach((value) => keys.add(value));
+          const skyKey = normalizeMemberKey(skyHoveredClusterKey);
+          if (skyKey) {
+            keys.add(skyKey);
+          }
         }
         if (widgetModeForKey("dendrogram") !== "hidden") {
           activeDendrogramSelectionKeys().forEach((value) => keys.add(normalizeMemberKey(value)));
@@ -15708,679 +15708,6 @@ __SKY_RUNTIME_JS__
         return Number.isFinite(value) ? value : null;
       }
 
-      function selectedVolumeLayer() {
-        if (!activeVolumeKey) {
-          return null;
-        }
-        return frameVolumeLayerForStateKey(activeVolumeKey);
-      }
-
-      function selectedVolumeState() {
-        if (!activeVolumeKey) {
-          return null;
-        }
-        return volumeStateByKey[String(activeVolumeKey)] || null;
-      }
-
-      function clampVolumeStateForLayer(layer, state) {
-        if (!layer || !state) {
-          return;
-        }
-        const dataRange = Array.isArray(layer.data_range) ? layer.data_range : [0.0, 1.0];
-        const dataMin = Number(dataRange[0]);
-        const dataMax = Number(dataRange[1]);
-        if (!Number.isFinite(state.vmin)) {
-          state.vmin = Number((layer.default_controls || {}).vmin);
-        }
-        if (!Number.isFinite(state.vmax)) {
-          state.vmax = Number((layer.default_controls || {}).vmax);
-        }
-        if (Number.isFinite(dataMin) && Number.isFinite(dataMax)) {
-          state.vmin = Math.min(Math.max(state.vmin, dataMin), dataMax);
-          state.vmax = Math.min(Math.max(state.vmax, dataMin), dataMax);
-        }
-        if (!(state.vmax > state.vmin)) {
-          if (Number.isFinite(dataMax) && dataMax > state.vmin) {
-            state.vmax = dataMax;
-          } else {
-            state.vmax = state.vmin + 1e-6;
-          }
-        }
-        state.opacity = Math.min(Math.max(Number(state.opacity), 0.0), 1.0);
-        state.steps = Math.round(Math.min(Math.max(Number(state.steps), 24.0), 768.0));
-        if (!Number.isFinite(state.steps) || state.steps < 24) {
-          state.steps = Number((layer.default_controls || {}).steps || 100);
-        }
-        state.alphaCoef = Math.min(Math.max(Number(state.alphaCoef), 1.0), 200.0);
-        if (!Number.isFinite(state.alphaCoef)) {
-          state.alphaCoef = Number((layer.default_controls || {}).alpha_coef || 50.0);
-        }
-        state.gradientStep = Math.min(Math.max(Number(state.gradientStep), 1e-4), 0.05);
-        if (!Number.isFinite(state.gradientStep)) {
-          state.gradientStep = Number((layer.default_controls || {}).gradient_step || 0.005);
-        }
-        state.stretch = normalizeVolumeStretch(
-          state.stretch !== undefined ? state.stretch : (layer.default_controls || {}).stretch
-        );
-      }
-
-      function volumeColormapOptionFor(layer, colormapName) {
-        const options = (layer && layer.colormap_options) || [];
-        const requested = String(colormapName || "").trim().toLowerCase();
-        for (const option of options) {
-          if (String(option.name || "").trim().toLowerCase() === requested) {
-            return option;
-          }
-        }
-        return options.length ? options[0] : null;
-      }
-
-      function volumeStretchOptions() {
-        return [
-          { value: "linear", label: "Linear" },
-          { value: "log10", label: "log10" },
-          { value: "asinh", label: "asinh" },
-        ];
-      }
-
-      function normalizeVolumeStretch(stretchName) {
-        const requested = String(stretchName || "").trim().toLowerCase();
-        const option = volumeStretchOptions().find((item) => item.value === requested);
-        return option ? option.value : "linear";
-      }
-
-      function volumeStretchModeValue(stretchName) {
-        const stretch = normalizeVolumeStretch(stretchName);
-        if (stretch === "log10") {
-          return 1.0;
-        }
-        if (stretch === "asinh") {
-          return 2.0;
-        }
-        return 0.0;
-      }
-
-      function startPngAtlasVolumeDecode(layer, cacheKey, onDecoded) {
-        if (volumeScalarDataPendingCache.has(cacheKey)) {
-          return;
-        }
-        const shape = layer.shape || {};
-        const nx = Math.max(1, Math.round(Number(shape.x) || 0));
-        const ny = Math.max(1, Math.round(Number(shape.y) || 0));
-        const nz = Math.max(1, Math.round(Number(shape.z) || 0));
-        const tiles = layer.data_atlas_tiles || {};
-        const tileCols = Math.max(1, Math.round(Number(tiles.x) || Math.ceil(Math.sqrt(nz))));
-        const tileRows = Math.max(1, Math.round(Number(tiles.y) || Math.ceil(nz / tileCols)));
-        const pending = new Promise((resolve) => {
-          const image = new Image();
-          image.onload = () => {
-            const atlasWidth = Math.max(1, Number(image.naturalWidth || image.width || 0));
-            const atlasHeight = Math.max(1, Number(image.naturalHeight || image.height || 0));
-            const canvasEl = document.createElement("canvas");
-            canvasEl.width = atlasWidth;
-            canvasEl.height = atlasHeight;
-            const ctx = canvasEl.getContext("2d");
-            if (!ctx) {
-              volumeScalarDataPendingCache.delete(cacheKey);
-              resolve(null);
-              return;
-            }
-            ctx.drawImage(image, 0, 0, atlasWidth, atlasHeight);
-            const imageData = ctx.getImageData(0, 0, atlasWidth, atlasHeight);
-            const rgba = imageData.data || [];
-            const values = new Uint8Array(nx * ny * nz);
-            for (let zIndex = 0; zIndex < nz; zIndex += 1) {
-              const tileRow = Math.floor(zIndex / tileCols);
-              const tileCol = zIndex % tileCols;
-              if (tileRow >= tileRows) {
-                break;
-              }
-              const xOffset = tileCol * nx;
-              const yOffset = tileRow * ny;
-              for (let yIndex = 0; yIndex < ny; yIndex += 1) {
-                for (let xIndex = 0; xIndex < nx; xIndex += 1) {
-                  const atlasIndex = (((yOffset + yIndex) * atlasWidth) + (xOffset + xIndex)) * 4;
-                  const voxelIndex = (zIndex * ny * nx) + (yIndex * nx) + xIndex;
-                  values[voxelIndex] = Number(rgba[atlasIndex] || 0);
-                }
-              }
-            }
-            volumeScalarDataCache.set(cacheKey, values);
-            volumeScalarDataPendingCache.delete(cacheKey);
-            if (typeof onDecoded === "function") {
-              onDecoded(values);
-            }
-            resolve(values);
-          };
-          image.onerror = () => {
-            volumeScalarDataPendingCache.delete(cacheKey);
-            resolve(null);
-          };
-          image.src = `data:image/png;base64,${String(layer.data_b64 || "")}`;
-        });
-        volumeScalarDataPendingCache.set(cacheKey, pending);
-      }
-
-      function volumeScalarArrayFor(layer) {
-        const layerKey = String(layer.key);
-        if (volumeScalarDataCache.has(layerKey)) {
-          return volumeScalarDataCache.get(layerKey);
-        }
-        const encoding = String(layer.data_encoding || "uint16_le");
-        if (encoding === "png_atlas_uint8") {
-          const shape = layer.shape || {};
-          const nx = Math.max(1, Math.round(Number(shape.x) || 0));
-          const ny = Math.max(1, Math.round(Number(shape.y) || 0));
-          const nz = Math.max(1, Math.round(Number(shape.z) || 0));
-          const placeholder = new Uint8Array(nx * ny * nz);
-          volumeScalarDataCache.set(layerKey, placeholder);
-          startPngAtlasVolumeDecode(layer, layerKey, (values) => {
-            const volumeTexture = volumeTextureCache.get(layerKey);
-            if (volumeTexture && volumeTexture.texture && values) {
-              const image = volumeTexture.texture.image || {};
-              image.data = values;
-              image.width = volumeTexture.nx;
-              image.height = volumeTexture.ny;
-              image.depth = volumeTexture.nz;
-              volumeTexture.texture.image = image;
-              volumeTexture.texture.needsUpdate = true;
-            }
-          });
-          return placeholder;
-        }
-        let data = null;
-        if (encoding === "uint16_le") {
-          data = base64ToUint16Array(layer.data_b64 || "");
-        } else {
-          data = base64ToUint8Array(layer.data_b64 || "");
-        }
-        volumeScalarDataCache.set(layerKey, data);
-        return data;
-      }
-
-      function volumeSkyScalarArrayFor(layer) {
-        const layerKey = `${String(layer.key)}::sky-overlay`;
-        if (volumeScalarDataCache.has(layerKey)) {
-          return volumeScalarDataCache.get(layerKey);
-        }
-        if (!layer || !layer.sky_overlay_data_b64) {
-          const fallback = volumeScalarArrayFor(layer);
-          volumeScalarDataCache.set(layerKey, fallback);
-          return fallback;
-        }
-        const encoding = String(layer.sky_overlay_data_encoding || layer.data_encoding || "uint8");
-        if (encoding === "png_atlas_uint8") {
-          if (!volumeScalarDataPendingCache.has(layerKey)) {
-            const shape = layer.sky_overlay_shape || layer.shape || {};
-            const nx = Math.max(1, Math.round(Number(shape.x) || 0));
-            const ny = Math.max(1, Math.round(Number(shape.y) || 0));
-            const nz = Math.max(1, Math.round(Number(shape.z) || 0));
-            const tiles = layer.sky_overlay_atlas_tiles || {};
-            const tileCols = Math.max(1, Math.round(Number(tiles.x) || Math.ceil(Math.sqrt(nz))));
-            const tileRows = Math.max(1, Math.round(Number(tiles.y) || Math.ceil(nz / tileCols)));
-            const pending = new Promise((resolve) => {
-              const image = new Image();
-              image.onload = () => {
-                const atlasWidth = Math.max(1, Number(image.naturalWidth || image.width || 0));
-                const atlasHeight = Math.max(1, Number(image.naturalHeight || image.height || 0));
-                const canvasEl = document.createElement("canvas");
-                canvasEl.width = atlasWidth;
-                canvasEl.height = atlasHeight;
-                const ctx = canvasEl.getContext("2d");
-                if (!ctx) {
-                  volumeScalarDataPendingCache.delete(layerKey);
-                  resolve(null);
-                  return;
-                }
-                ctx.drawImage(image, 0, 0, atlasWidth, atlasHeight);
-                const imageData = ctx.getImageData(0, 0, atlasWidth, atlasHeight);
-                const rgba = imageData.data || [];
-                const values = new Uint8Array(nx * ny * nz);
-                for (let zIndex = 0; zIndex < nz; zIndex += 1) {
-                  const tileRow = Math.floor(zIndex / tileCols);
-                  const tileCol = zIndex % tileCols;
-                  if (tileRow >= tileRows) {
-                    break;
-                  }
-                  const xOffset = tileCol * nx;
-                  const yOffset = tileRow * ny;
-                  for (let yIndex = 0; yIndex < ny; yIndex += 1) {
-                    for (let xIndex = 0; xIndex < nx; xIndex += 1) {
-                      const atlasIndex = (((yOffset + yIndex) * atlasWidth) + (xOffset + xIndex)) * 4;
-                      const voxelIndex = (zIndex * ny * nx) + (yIndex * nx) + xIndex;
-                      values[voxelIndex] = Number(rgba[atlasIndex] || 0);
-                    }
-                  }
-                }
-                volumeScalarDataCache.set(layerKey, values);
-                volumeScalarDataPendingCache.delete(layerKey);
-                if (skySpec.enabled) {
-                  updateSkyPanel();
-                }
-                resolve(values);
-              };
-              image.onerror = () => {
-                volumeScalarDataPendingCache.delete(layerKey);
-                resolve(null);
-              };
-              image.src = `data:image/png;base64,${String(layer.sky_overlay_data_b64 || "")}`;
-            });
-            volumeScalarDataPendingCache.set(layerKey, pending);
-          }
-          return null;
-        }
-        let data = null;
-        if (encoding === "uint16_le") {
-          data = base64ToUint16Array(layer.sky_overlay_data_b64 || "");
-        } else {
-          data = base64ToUint8Array(layer.sky_overlay_data_b64 || "");
-        }
-        volumeScalarDataCache.set(layerKey, data);
-        return data;
-      }
-
-      function volumeColorTextureFor(option) {
-        const optionKey = String(option.name || "volume-colormap");
-        if (volumeColorTextureCache.has(optionKey)) {
-          return volumeColorTextureCache.get(optionKey);
-        }
-        const bytes = base64ToUint8Array(option.lut_b64 || "");
-        const width = Math.max(1, Math.floor(bytes.length / 4));
-        const texture = new THREE.DataTexture(bytes, width, 1, THREE.RGBAFormat);
-        texture.minFilter = THREE.NearestFilter;
-        texture.magFilter = THREE.NearestFilter;
-        texture.wrapS = THREE.ClampToEdgeWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
-        texture.unpackAlignment = 1;
-        texture.generateMipmaps = false;
-        texture.needsUpdate = true;
-        if ("colorSpace" in texture && THREE.SRGBColorSpace) {
-          texture.colorSpace = THREE.SRGBColorSpace;
-        } else if ("encoding" in texture && THREE.sRGBEncoding) {
-          texture.encoding = THREE.sRGBEncoding;
-        }
-        volumeColorTextureCache.set(optionKey, texture);
-        return texture;
-      }
-
-      function volumeColorBytesForOption(option) {
-        const optionKey = String((option && option.name) || "volume-colormap");
-        if (volumeColorBytesCache.has(optionKey)) {
-          return volumeColorBytesCache.get(optionKey);
-        }
-        const bytes = base64ToUint8Array((option && option.lut_b64) || "");
-        volumeColorBytesCache.set(optionKey, bytes);
-        return bytes;
-      }
-
-      function volumeTextureFor(layer) {
-        const layerKey = String(layer.key);
-        if (volumeTextureCache.has(layerKey)) {
-          return volumeTextureCache.get(layerKey);
-        }
-        const data = volumeScalarArrayFor(layer);
-        const shape = layer.shape || {};
-        const nx = Math.max(1, Number(shape.x || 1));
-        const ny = Math.max(1, Number(shape.y || 1));
-        const nz = Math.max(1, Number(shape.z || 1));
-        const VolumeTextureCtor = THREE.Data3DTexture || THREE.DataTexture3D;
-        if (!VolumeTextureCtor) {
-          throw new Error("Three.js volume textures are unavailable in this browser build.");
-        }
-        const texture = new VolumeTextureCtor(data, nx, ny, nz);
-        texture.format = THREE.RedFormat;
-        texture.type = THREE.UnsignedByteType;
-        texture.minFilter = layer.interpolation === false ? THREE.NearestFilter : THREE.LinearFilter;
-        texture.magFilter = layer.interpolation === false ? THREE.NearestFilter : THREE.LinearFilter;
-        texture.wrapS = THREE.ClampToEdgeWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
-        texture.wrapR = THREE.ClampToEdgeWrapping;
-        texture.unpackAlignment = 1;
-        texture.generateMipmaps = false;
-        texture.needsUpdate = true;
-        const volumeTexture = { texture, nx, ny, nz };
-        volumeTextureCache.set(layerKey, volumeTexture);
-        return volumeTexture;
-      }
-
-      function volumeJitterTextureFor() {
-        if (volumeJitterTexture) {
-          return volumeJitterTexture;
-        }
-        const bytes = new Uint8Array(64 * 64);
-        for (let i = 0; i < bytes.length; i += 1) {
-          bytes[i] = Math.floor(Math.random() * 256.0);
-        }
-        volumeJitterTexture = new THREE.DataTexture(bytes, 64, 64, THREE.RedFormat, THREE.UnsignedByteType);
-        volumeJitterTexture.minFilter = THREE.LinearFilter;
-        volumeJitterTexture.magFilter = THREE.LinearFilter;
-        volumeJitterTexture.wrapS = THREE.MirroredRepeatWrapping;
-        volumeJitterTexture.wrapT = THREE.MirroredRepeatWrapping;
-        volumeJitterTexture.generateMipmaps = false;
-        volumeJitterTexture.unpackAlignment = 1;
-        volumeJitterTexture.needsUpdate = true;
-        return volumeJitterTexture;
-      }
-
-      function normalizedVolumeWindowFor(layer, state) {
-        const dataRange = Array.isArray(layer.data_range) ? layer.data_range : [0.0, 1.0];
-        const dataMin = Number(dataRange[0]);
-        const dataMax = Number(dataRange[1]);
-        if (!Number.isFinite(dataMin) || !Number.isFinite(dataMax) || !(dataMax > dataMin)) {
-          return { low: 0.0, high: 1.0 };
-        }
-        const span = dataMax - dataMin;
-        const low = Math.min(Math.max((Number(state.vmin) - dataMin) / span, 0.0), 1.0);
-        let high = Math.min(Math.max((Number(state.vmax) - dataMin) / span, 0.0), 1.0);
-        if (!(high > low)) {
-          high = Math.min(1.0, low + 1e-6);
-        }
-        return { low, high };
-      }
-
-      function volumeLayerTimeMyr(layer) {
-        if (!layer) {
-          return null;
-        }
-        const rawTime = layer.time_myr;
-        if (rawTime === null || rawTime === undefined || rawTime === "" || rawTime === false) {
-          return null;
-        }
-        const timeValue = Number(rawTime);
-        return Number.isFinite(timeValue) ? timeValue : null;
-      }
-
-      function volumeSupportsShowAllTimes(layer) {
-        return Boolean(
-          layer
-          && layer.supports_show_all_times
-          && volumeLayerTimeMyr(layer) === null
-        );
-      }
-
-      function volumeVisibleForFrame(layer, state, frame = currentFrame()) {
-        if (!layer || !state || state.visible === false) {
-          return false;
-        }
-        const frameTime = frame ? Number(frame.time) : 0.0;
-        const layerTime = volumeLayerTimeMyr(layer);
-        if (layerTime !== null) {
-          return approximatelyZero(frameTime - layerTime);
-        }
-        if (state.showAllTimes && volumeSupportsShowAllTimes(layer)) {
-          return true;
-        }
-        if (layer.only_at_t0 === false) {
-          return true;
-        }
-        return approximatelyZero(frameTime);
-      }
-
-      function volumeRotationAngleForFrame(layer, state, frame = currentFrame()) {
-        if (
-          !layer
-          || !state
-          || !state.showAllTimes
-          || !layer.co_rotate_with_frame
-          || !volumeSupportsShowAllTimes(layer)
-          || !Number.isFinite(volumeCoRotationRateRadPerMyr)
-        ) {
-          return 0.0;
-        }
-        const frameTime = frame ? Number(frame.time) : 0.0;
-        if (!Number.isFinite(frameTime)) {
-          return 0.0;
-        }
-        const referenceTime = Number.isFinite(Number(layer.reference_time_myr))
-          ? Number(layer.reference_time_myr)
-          : 0.0;
-        return volumeCoRotationRateRadPerMyr * (frameTime - referenceTime);
-      }
-
-      function volumeQuaternionForZRotation(angleRad) {
-        const halfAngle = 0.5 * (Number.isFinite(angleRad) ? angleRad : 0.0);
-        return new THREE.Vector4(0.0, 0.0, Math.sin(halfAngle), Math.cos(halfAngle));
-      }
-
-      function createVolumeRuntime(layer) {
-        if (!volumeSupported) {
-          return null;
-        }
-        const state = volumeStateByKey[volumeStateKeyForLayer(layer)];
-        if (!state) {
-          return null;
-        }
-        clampVolumeStateForLayer(layer, state);
-        const bounds = layer.bounds || {};
-        const xBounds = Array.isArray(bounds.x) ? bounds.x : [-0.5, 0.5];
-        const yBounds = Array.isArray(bounds.y) ? bounds.y : [-0.5, 0.5];
-        const zBounds = Array.isArray(bounds.z) ? bounds.z : [-0.5, 0.5];
-        const sizeX = Math.max(1e-6, Number(xBounds[1]) - Number(xBounds[0]));
-        const sizeY = Math.max(1e-6, Number(yBounds[1]) - Number(yBounds[0]));
-        const sizeZ = Math.max(1e-6, Number(zBounds[1]) - Number(zBounds[0]));
-        const centerX = 0.5 * (Number(xBounds[0]) + Number(xBounds[1]));
-        const centerY = 0.5 * (Number(yBounds[0]) + Number(yBounds[1]));
-        const centerZ = 0.5 * (Number(zBounds[0]) + Number(zBounds[1]));
-        const option = volumeColormapOptionFor(layer, state.colormap);
-        if (!option) {
-          return null;
-        }
-        const volumeTexture = volumeTextureFor(layer);
-        const windowState = normalizedVolumeWindowFor(layer, state);
-        const uniforms = THREE.UniformsUtils.merge([
-          THREE.UniformsLib.lights,
-          {
-            volumeTexture: { value: volumeTexture.texture },
-            colormap: { value: volumeColorTextureFor(option) },
-            jitterTexture: { value: volumeJitterTextureFor() },
-            low: { value: Number(windowState.low) },
-            high: { value: Number(windowState.high) },
-            opacity: { value: Number(state.opacity) },
-            samples: { value: Number(state.steps) },
-            alpha_coef: { value: Number(state.alphaCoef) },
-            gradient_step: { value: Number(state.gradientStep) },
-            stretch_mode: { value: volumeStretchModeValue(state.stretch) },
-            scale: { value: new THREE.Vector4(sizeX, sizeY, sizeZ, 1.0) },
-            translation: { value: new THREE.Vector4(centerX, centerY, centerZ, 1.0) },
-            rotation: { value: new THREE.Vector4(0.0, 0.0, 0.0, 1.0) },
-            useSelectionPolygon: { value: false },
-            selectionViewProjectionMatrix: { value: new THREE.Matrix4() },
-            selectionMaskTexture: { value: null },
-            selectionDimOutside: { value: 1.0 },
-            useSelectionSourceSecondaryPolygon: { value: false },
-            selectionSourceSecondaryViewProjectionMatrix: { value: new THREE.Matrix4() },
-            selectionSourceSecondaryMaskTexture: { value: null },
-            useSelectionSourceTertiaryPolygon: { value: false },
-            selectionSourceTertiaryViewProjectionMatrix: { value: new THREE.Matrix4() },
-            selectionSourceTertiaryMaskTexture: { value: null },
-            useSelectionSourceQuaternaryPolygon: { value: false },
-            selectionSourceQuaternaryViewProjectionMatrix: { value: new THREE.Matrix4() },
-            selectionSourceQuaternaryMaskTexture: { value: null },
-            selectionSourceBlend: { value: 0.0 },
-            selectionSourceWeights: { value: new THREE.Vector4(1.0, 0.0, 0.0, 0.0) },
-            useSelectionTargetPolygon: { value: false },
-            selectionTargetViewProjectionMatrix: { value: new THREE.Matrix4() },
-            selectionTargetMaskTexture: { value: null },
-            selectionTransitionActive: { value: false },
-            selectionTransitionProgress: { value: 0.0 },
-          },
-        ]);
-        applyLassoSelectionTransitionUniforms(uniforms);
-
-        const material = new THREE.ShaderMaterial({
-          uniforms,
-          vertexShader: VOLUME_VERTEX_SHADER,
-          fragmentShader: VOLUME_FRAGMENT_SHADER,
-          transparent: true,
-          side: THREE.BackSide,
-          depthTest: true,
-          depthWrite: false,
-          lights: true,
-        });
-
-        const geometry = new THREE.BoxBufferGeometry(1, 1, 1);
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(centerX, centerY, centerZ);
-        mesh.scale.set(sizeX, sizeY, sizeZ);
-        mesh.renderOrder = -30;
-        mesh.frustumCulled = false;
-        const runtime = { mesh, material, geometry, layer };
-        applyVolumeStateToRuntime(layer, runtime);
-        return runtime;
-      }
-
-      function applyVolumeStateToRuntime(layer, runtime, frame = currentFrame()) {
-        if (!runtime || !runtime.material || !runtime.mesh) {
-          return;
-        }
-        const state = volumeStateByKey[volumeStateKeyForLayer(layer)] || {};
-        const option = volumeColormapOptionFor(layer, state.colormap);
-        const windowState = normalizedVolumeWindowFor(layer, state);
-        runtime.mesh.visible = Boolean(
-          volumeVisibleForFrame(layer, state, frame)
-          && (
-            cameraViewMode !== "earth"
-            || typeof skyVolumeVisibleForDisplayedTime !== "function"
-            || skyVolumeVisibleForDisplayedTime()
-          )
-        );
-        runtime.material.uniforms.low.value = Number(windowState.low);
-        runtime.material.uniforms.high.value = Number(windowState.high);
-        runtime.material.uniforms.opacity.value = Number(state.opacity);
-        runtime.material.uniforms.samples.value = Number(state.steps);
-        runtime.material.uniforms.alpha_coef.value = Number(state.alphaCoef);
-        runtime.material.uniforms.gradient_step.value = Number(state.gradientStep);
-        runtime.material.uniforms.stretch_mode.value = volumeStretchModeValue(state.stretch);
-        runtime.material.uniforms.rotation.value.copy(
-          volumeQuaternionForZRotation(volumeRotationAngleForFrame(layer, state, frame))
-        );
-        applyLassoSelectionTransitionUniforms(runtime.material.uniforms);
-        if (option) {
-          runtime.material.uniforms.colormap.value = volumeColorTextureFor(option);
-        }
-      }
-
-      function renderVolumeControls() {
-        if (
-          !volumePanelEl
-          || !volumeSelectEl
-          || !volumeVisibleEl
-          || !volumeColormapEl
-          || !volumeStretchEl
-          || !volumeVMinEl
-          || !volumeVMaxEl
-          || !volumeOpacityEl
-          || !volumeAlphaEl
-          || !volumeStepsEl
-          || !volumeOpacityLabelEl
-          || !volumeAlphaLabelEl
-          || !volumeStepsLabelEl
-          || !volumeSummaryEl
-        ) {
-          return;
-        }
-        const enabled = volumeStateKeys.length > 0;
-        volumePanelEl.dataset.enabled = enabled ? "true" : "false";
-        if (!enabled) {
-          return;
-        }
-
-        if (!activeVolumeKey || !Object.prototype.hasOwnProperty.call(volumeStateByKey, String(activeVolumeKey))) {
-          activeVolumeKey = String(volumeStateKeys[0]);
-        }
-
-        const layer = selectedVolumeLayer();
-        const state = selectedVolumeState();
-        if (!state) {
-          return;
-        }
-        if (layer) {
-          clampVolumeStateForLayer(layer, state);
-        }
-
-        volumeSelectEl.innerHTML = "";
-        const controlOptions = volumeControlOptions();
-        const selectedControlKey = activeVolumeControlKey();
-        controlOptions.forEach((option) => {
-          const optionEl = document.createElement("option");
-          optionEl.value = String(option.controlKey);
-          optionEl.textContent = String(option.label);
-          if (String(option.controlKey) === String(selectedControlKey)) {
-            optionEl.selected = true;
-          }
-          volumeSelectEl.appendChild(optionEl);
-        });
-        volumeSelectEl.disabled = !volumeSupported || controlOptions.length <= 1;
-
-        const controlLayer = layer || volumeLayerForKey(activeVolumeKey);
-        if (!controlLayer) {
-          return;
-        }
-        const controlVariantGroup = volumeVariantGroupForLayer(controlLayer);
-        const smoothingLayers = controlVariantGroup
-          ? volumeVariantLayersForGroup(controlVariantGroup)
-          : [];
-        const showSmoothingControl = smoothingLayers.length > 1;
-        if (volumeSmoothingFieldEl) {
-          volumeSmoothingFieldEl.style.display = showSmoothingControl ? "" : "none";
-        }
-        if (volumeSmoothingEl) {
-          volumeSmoothingEl.innerHTML = "";
-          smoothingLayers.forEach((variantLayer) => {
-            const optionEl = document.createElement("option");
-            optionEl.value = volumeStateKeyForLayer(variantLayer);
-            optionEl.textContent = volumeVariantLabelForLayer(variantLayer);
-            if (String(optionEl.value) === String(activeVolumeKey)) {
-              optionEl.selected = true;
-            }
-            volumeSmoothingEl.appendChild(optionEl);
-          });
-          volumeSmoothingEl.disabled = !volumeSupported || !showSmoothingControl;
-        }
-        volumeVisibleEl.checked = state.visible !== false;
-        volumeColormapEl.innerHTML = "";
-        ((controlLayer.colormap_options || [])).forEach((option) => {
-          const optionEl = document.createElement("option");
-          optionEl.value = String(option.name);
-          optionEl.textContent = String(option.label || option.name);
-          if (String(option.name) === String(state.colormap)) {
-            optionEl.selected = true;
-          }
-          volumeColormapEl.appendChild(optionEl);
-        });
-        volumeColormapEl.value = String(state.colormap);
-        volumeStretchEl.innerHTML = "";
-        volumeStretchOptions().forEach((option) => {
-          const optionEl = document.createElement("option");
-          optionEl.value = String(option.value);
-          optionEl.textContent = String(option.label);
-          if (String(option.value) === String(state.stretch)) {
-            optionEl.selected = true;
-          }
-          volumeStretchEl.appendChild(optionEl);
-        });
-        volumeStretchEl.value = String(state.stretch);
-
-        syncVolumeWindowInput(volumeVMinEl, state.vmin, controlLayer);
-        syncVolumeWindowInput(volumeVMaxEl, state.vmax, controlLayer);
-        volumeOpacityEl.value = String(state.opacity);
-        volumeAlphaEl.value = String(state.alphaCoef);
-        volumeStepsEl.value = String(state.steps);
-        volumeOpacityLabelEl.textContent = `Opacity (${Number(state.opacity).toFixed(2)})`;
-        volumeAlphaLabelEl.textContent = `Alpha coef (${Math.round(Number(state.alphaCoef))})`;
-        volumeStepsLabelEl.textContent = `Samples (${Math.round(Number(state.steps))})`;
-        volumeVisibleEl.disabled = !volumeSupported;
-        volumeColormapEl.disabled = !volumeSupported;
-        volumeStretchEl.disabled = !volumeSupported;
-        volumeVMinEl.disabled = !volumeSupported;
-        volumeVMaxEl.disabled = !volumeSupported;
-        volumeOpacityEl.disabled = !volumeSupported;
-        volumeAlphaEl.disabled = !volumeSupported;
-        volumeStepsEl.disabled = !volumeSupported;
-
-        volumeSummaryEl.textContent = volumeSummaryTextFor(controlLayer, state);
-      }
-
       function clearGroup(group) {
         while (group.children.length) {
           const child = group.children[group.children.length - 1];
@@ -17549,6 +16876,8 @@ __SKY_RUNTIME_JS__
         return sprite;
       }
 
+      const ovizScreenStableScratchVector = new THREE.Vector3();
+
       function updateScreenStableTextSprite(sprite) {
         if (!sprite || !sprite.material || !sprite.material.map) {
           return;
@@ -17564,7 +16893,7 @@ __SKY_RUNTIME_JS__
         let worldHeight = 0.0;
 
         if (camera.isPerspectiveCamera) {
-          const worldPosition = new THREE.Vector3();
+          const worldPosition = ovizScreenStableScratchVector;
           sprite.getWorldPosition(worldPosition);
           const distance = Math.max(camera.position.distanceTo(worldPosition), 1e-6);
           const fovRad = THREE.MathUtils.degToRad(camera.fov);
@@ -18280,9 +17609,10 @@ __SKY_RUNTIME_JS__
           }
         });
         persistentImagePlaneTextures.add(texture);
-        texture.minFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
         texture.generateMipmaps = true;
+        texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy() || 1);
         if ("colorSpace" in texture && THREE.SRGBColorSpace) {
           texture.colorSpace = THREE.SRGBColorSpace;
         } else if ("encoding" in texture && THREE.sRGBEncoding) {
@@ -21019,10 +20349,6 @@ __SKY_RUNTIME_JS__
         });
       }
 
-      function updateDynamicAxesForZoom() {
-        return;
-      }
-
       function groupDefaults(groupName) {
         return groupVisibility[groupName] || {};
       }
@@ -22075,10 +21401,13 @@ __STATE_RUNTIME_JS__
           },
         );
         if (root && root.dataset) {
-          const diagnostics = ovizUnifiedTransitionSession.snapshot();
-          root.dataset.transitionOwner = diagnostics.owner;
-          root.dataset.transitionRunId = diagnostics.runId;
-          root.dataset.transitionFrameUpdates = String(diagnostics.updateCount);
+          if (root.dataset.transitionOwner !== owner) {
+            root.dataset.transitionOwner = owner;
+          }
+          if (root.dataset.transitionRunId !== runId) {
+            root.dataset.transitionRunId = runId;
+          }
+          root.dataset.transitionFrameUpdates = String(ovizUnifiedTransitionFrameSerial);
         }
         return updated;
       }
@@ -23221,7 +22550,6 @@ __STATE_RUNTIME_JS__
         updateCameraResponsivePointSprites();
         updateClusterInfoTooltipPosition();
         updateScaleBar();
-        updateDynamicAxesForZoom();
         updateSkyDome(now);
         updateSkyDomeBackgroundFrame(now);
         updateSkyApertureUi(now);
@@ -23300,7 +22628,18 @@ __STATE_RUNTIME_JS__
       window.addEventListener("pointermove", onWindowPointerMove);
       window.addEventListener("pointerup", onWindowPointerEnd);
       window.addEventListener("pointercancel", onWindowPointerEnd);
-      window.addEventListener("resize", resize);
+      let ovizResizeQueued = false;
+      function scheduleOvizResize() {
+        if (ovizResizeQueued) {
+          return;
+        }
+        ovizResizeQueued = true;
+        window.requestAnimationFrame(() => {
+          ovizResizeQueued = false;
+          resize();
+        });
+      }
+      window.addEventListener("resize", scheduleOvizResize);
       window.addEventListener("message", onWindowMessage);
       [
         "pointerdown",
@@ -23322,7 +22661,7 @@ __STATE_RUNTIME_JS__
       document.addEventListener("fullscreenchange", syncOvizFullscreenButton);
       document.addEventListener("webkitfullscreenchange", syncOvizFullscreenButton);
       if (typeof ResizeObserver !== "undefined") {
-        const observer = new ResizeObserver(() => resize());
+        const observer = new ResizeObserver(scheduleOvizResize);
         observer.observe(root);
       }
       })();

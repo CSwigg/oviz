@@ -406,6 +406,9 @@ THREEJS_WIDGET_CONTENT_RUNTIME_JS = """
       let ovizAgeKdeStaticCanvas = null;
       let ovizAgeKdeStaticSignature = "";
       let ovizAgeKdeMarkerSignature = "";
+      let ovizAgeKdeCheapKey = "";
+      let ovizAgeKdeSignatureCheckedAtMs = -1.0e9;
+      let ovizAgeKdeRecheckPending = false;
 
       function renderAgeKdeWidget() {
         if (!ageKdeSpec.enabled || !ageKdeCanvasEl || widgetModeForKey("age_kde") === "hidden") {
@@ -416,20 +419,41 @@ THREEJS_WIDGET_CONTENT_RUNTIME_JS = """
         const cssWidth = Math.max(1, Math.round(rect.width));
         const cssHeight = Math.max(1, Math.round(rect.height));
         const dpr = Math.max(window.devicePixelRatio || 1, 1);
-        const staticSignature = JSON.stringify({
-          cssWidth,
-          cssHeight,
-          dpr,
-          currentGroup,
-          legendState,
-          traceStyleStateByKey,
-          clusterFilterRangeStateByKey,
-          selectedClusterKeys: Array.from(selectedClusterKeys).sort(),
-          sceneBackground: theme.scene_bgcolor || theme.paper_bgcolor || "#000000",
-          axisColor: ageKdeSpec.axis_color || theme.axis_color || "#808080",
-          xRange: ageKdeSpec.x_range,
-          yRange: ageKdeSpec.y_range,
-        });
+        // Serializing the style/filter/selection state is too expensive to do
+        // on every rendered frame, so the full signature refreshes at most
+        // ~7x/s. Cheap inputs still force an immediate refresh, and a pending
+        // recheck keeps frames flowing until the next full refresh lands.
+        const cheapKey = `${cssWidth}x${cssHeight}@${dpr}|${String(currentGroup)}`;
+        const nowMs = performance.now();
+        let staticSignature = ovizAgeKdeStaticSignature;
+        if (
+          !staticSignature
+          || cheapKey !== ovizAgeKdeCheapKey
+          || nowMs - ovizAgeKdeSignatureCheckedAtMs >= 150.0
+        ) {
+          staticSignature = JSON.stringify({
+            cssWidth,
+            cssHeight,
+            dpr,
+            currentGroup,
+            legendState,
+            traceStyleStateByKey,
+            clusterFilterRangeStateByKey,
+            selectedClusterKeys: Array.from(selectedClusterKeys).sort(),
+            sceneBackground: theme.scene_bgcolor || theme.paper_bgcolor || "#000000",
+            axisColor: ageKdeSpec.axis_color || theme.axis_color || "#808080",
+            xRange: ageKdeSpec.x_range,
+            yRange: ageKdeSpec.y_range,
+          });
+          ovizAgeKdeCheapKey = cheapKey;
+          ovizAgeKdeSignatureCheckedAtMs = nowMs;
+          ovizAgeKdeRecheckPending = false;
+        } else if (ovizRenderInvalidated) {
+          ovizAgeKdeRecheckPending = true;
+        }
+        if (ovizAgeKdeRecheckPending) {
+          ovizInvalidateRender();
+        }
         const markerTime = frameTimeForValue(displayedFrameValue);
         const markerSignature = `${staticSignature}|${Number(markerTime) || 0.0}`;
         if (
