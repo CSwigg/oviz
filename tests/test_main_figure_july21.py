@@ -21,7 +21,19 @@ def _load_module():
 
 def test_build_state_only_scene_disables_and_removes_slides():
     module = _load_module()
-    source = {"title": "Source", "deck": {"available": True, "slides": [{"id": "old"}]}}
+    source = {
+        "title": "Source",
+        "deck": {"available": True, "slides": [{"id": "old"}]},
+        "volumes": {
+            "layers": [{
+                "key": "volume-0",
+                "state_key": "volume-0",
+                "name": "Edenhofer+2024 Dust",
+                "default_controls": {},
+            }],
+        },
+        "initial_state": {"volume_state_by_key": {"volume-0": {"visible": True}}},
+    }
 
     scene = module.build_state_only_scene(source)
 
@@ -29,6 +41,12 @@ def test_build_state_only_scene_disables_and_removes_slides():
     assert scene["deck"]["available"] is False
     assert scene["deck"]["enabled"] is False
     assert scene["deck"]["slides"] == []
+    defaults = scene["volumes"]["layers"][0]["default_controls"]
+    volume_state = scene["initial_state"]["volume_state_by_key"]["volume-0"]
+    assert defaults["lighting_mode"] == "standard"
+    assert defaults["galactic_center"] == [8122.0, 0.0, 0.0]
+    assert volume_state["lightingMode"] == "standard"
+    assert volume_state["galacticExtinction"] == 2.4
 
 
 def test_july21_artifact_uses_state_only_presentation(tmp_path):
@@ -41,6 +59,16 @@ def test_july21_artifact_uses_state_only_presentation(tmp_path):
     assert scene["deck"]["enabled"] is False
     assert scene["deck"]["slides"] == []
     assert scene["title"] == ""
+    edenhofer = next(
+        layer
+        for layer in scene["volumes"]["layers"]
+        if "edenhofer" in str(layer.get("name") or "").lower()
+    )
+    edenhofer_state = scene["initial_state"]["volume_state_by_key"][edenhofer["state_key"]]
+    assert edenhofer["default_controls"]["lighting_mode"] == "standard"
+    assert edenhofer_state["lightingMode"] == "standard"
+    assert edenhofer_state["galacticCenter"] == [8122.0, 0.0, 0.0]
+    assert "const experimentalVolumeLightingControlsEnabled = false;" in html
     assert "Young Clusters — July 21" not in html
     assert ">Slides ▸</button>" not in html
     assert 'class="oviz-three-deck-editor' not in html

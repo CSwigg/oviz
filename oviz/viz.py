@@ -3714,6 +3714,27 @@ def _normalize_threejs_volume_stretch(stretch):
     return 'linear'
 
 
+def _normalize_threejs_volume_lighting_mode(mode):
+    value = str(mode or 'standard').strip().lower().replace('-', '_')
+    if value in {'galactic', 'galactic_center', 'galactic_centre'}:
+        return 'galactic'
+    return 'standard'
+
+
+def _coerce_threejs_volume_galactic_center(value):
+    if isinstance(value, dict):
+        source = [value.get('x'), value.get('y'), value.get('z')]
+    elif isinstance(value, (list, tuple, np.ndarray)) and len(value) >= 3:
+        source = value[:3]
+    else:
+        source = [8122.0, 0.0, 0.0]
+    return [
+        float(_coerce_float(source[0], 8122.0)),
+        float(_coerce_float(source[1], 0.0)),
+        float(_coerce_float(source[2], 0.0)),
+    ]
+
+
 def _coerce_threejs_volume_time_myr(value):
     if value in (None, '', False):
         return None
@@ -3957,6 +3978,26 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
     default_alpha_coef = float(np.clip(_coerce_float(volume_cfg.get('alpha_coef'), 50.0), 1.0, 200.0))
     default_gradient_step = float(np.clip(_coerce_float(volume_cfg.get('gradient_step'), 0.005), 1e-4, 0.05))
     default_stretch = _normalize_threejs_volume_stretch(volume_cfg.get('stretch', 'linear'))
+    default_lighting_mode = _normalize_threejs_volume_lighting_mode(volume_cfg.get('lighting_mode'))
+    default_galactic_center = _coerce_threejs_volume_galactic_center(volume_cfg.get('galactic_center'))
+    default_galactic_light_intensity = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_light_intensity'), 1.35), 0.0, 4.0
+    ))
+    default_galactic_ambient = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_ambient'), 0.22), 0.0, 1.0
+    ))
+    default_galactic_extinction = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_extinction'), 2.4), 0.0, 8.0
+    ))
+    default_galactic_scattering = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_scattering'), 0.55), 0.0, 2.0
+    ))
+    default_galactic_anisotropy = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_anisotropy'), 0.45), 0.0, 0.9
+    ))
+    default_galactic_warmth = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_warmth'), 0.72), 0.0, 1.0
+    ))
 
     name = str(volume_cfg.get('name') or f'Volume {index + 1}')
     key = str(volume_cfg.get('key') or f'volume-{index}')
@@ -4043,6 +4084,14 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
             'stretch': str(default_stretch),
             'colormap': colormap_options[0]['name'],
             'show_all_times': bool(volume_cfg.get('show_all_times', False)),
+            'lighting_mode': str(default_lighting_mode),
+            'galactic_center': default_galactic_center,
+            'galactic_light_intensity': default_galactic_light_intensity,
+            'galactic_ambient': default_galactic_ambient,
+            'galactic_extinction': default_galactic_extinction,
+            'galactic_scattering': default_galactic_scattering,
+            'galactic_anisotropy': default_galactic_anisotropy,
+            'galactic_warmth': default_galactic_warmth,
         },
         'colormap_options': colormap_options,
     }
@@ -4067,6 +4116,26 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
     default_alpha_coef = float(np.clip(_coerce_float(volume_cfg.get('alpha_coef'), 50.0), 1.0, 200.0))
     default_gradient_step = float(np.clip(_coerce_float(volume_cfg.get('gradient_step'), 0.005), 1e-4, 0.05))
     default_stretch = _normalize_threejs_volume_stretch(volume_cfg.get('stretch', 'linear'))
+    default_lighting_mode = _normalize_threejs_volume_lighting_mode(volume_cfg.get('lighting_mode'))
+    default_galactic_center = _coerce_threejs_volume_galactic_center(volume_cfg.get('galactic_center'))
+    default_galactic_light_intensity = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_light_intensity'), 1.35), 0.0, 4.0
+    ))
+    default_galactic_ambient = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_ambient'), 0.22), 0.0, 1.0
+    ))
+    default_galactic_extinction = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_extinction'), 2.4), 0.0, 8.0
+    ))
+    default_galactic_scattering = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_scattering'), 0.55), 0.0, 2.0
+    ))
+    default_galactic_anisotropy = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_anisotropy'), 0.45), 0.0, 0.9
+    ))
+    default_galactic_warmth = float(np.clip(
+        _coerce_float(volume_cfg.get('galactic_warmth'), 0.72), 0.0, 1.0
+    ))
 
     with fits.open(path, memmap=True) as hdul:
         hdu_info = _resolve_threejs_volume_hdu(hdul, hdu_selector)
@@ -4352,6 +4421,14 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
             'stretch': str(default_stretch),
             'colormap': colormap_options[0]['name'],
             'show_all_times': bool(volume_cfg.get('show_all_times', False)),
+            'lighting_mode': str(default_lighting_mode),
+            'galactic_center': default_galactic_center,
+            'galactic_light_intensity': default_galactic_light_intensity,
+            'galactic_ambient': default_galactic_ambient,
+            'galactic_extinction': default_galactic_extinction,
+            'galactic_scattering': default_galactic_scattering,
+            'galactic_anisotropy': default_galactic_anisotropy,
+            'galactic_warmth': default_galactic_warmth,
         },
         'colormap_options': colormap_options,
     }

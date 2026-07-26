@@ -56,6 +56,94 @@ THREEJS_SCENE_RUNTIME_JS = """
         state.stretch = normalizeVolumeStretch(
           state.stretch !== undefined ? state.stretch : (layer.default_controls || {}).stretch
         );
+        const defaults = layer.default_controls || {};
+        state.lightingMode = normalizeVolumeLightingMode(
+          state.lightingMode !== undefined ? state.lightingMode : defaults.lighting_mode
+        );
+        const defaultCenter = normalizeVolumeGalacticCenter(defaults.galactic_center);
+        state.galacticCenter = normalizeVolumeGalacticCenter(
+          state.galacticCenter !== undefined ? state.galacticCenter : defaultCenter
+        );
+        state.galacticLightIntensity = clampVolumeLightingNumber(
+          state.galacticLightIntensity,
+          defaults.galactic_light_intensity,
+          0.0,
+          4.0,
+          1.35
+        );
+        state.galacticAmbient = clampVolumeLightingNumber(
+          state.galacticAmbient,
+          defaults.galactic_ambient,
+          0.0,
+          1.0,
+          0.22
+        );
+        state.galacticExtinction = clampVolumeLightingNumber(
+          state.galacticExtinction,
+          defaults.galactic_extinction,
+          0.0,
+          8.0,
+          2.4
+        );
+        state.galacticScattering = clampVolumeLightingNumber(
+          state.galacticScattering,
+          defaults.galactic_scattering,
+          0.0,
+          2.0,
+          0.55
+        );
+        state.galacticAnisotropy = clampVolumeLightingNumber(
+          state.galacticAnisotropy,
+          defaults.galactic_anisotropy,
+          0.0,
+          0.9,
+          0.45
+        );
+        state.galacticWarmth = clampVolumeLightingNumber(
+          state.galacticWarmth,
+          defaults.galactic_warmth,
+          0.0,
+          1.0,
+          0.72
+        );
+      }
+
+      function normalizeVolumeLightingMode(modeName) {
+        const requested = String(modeName || "standard").trim().toLowerCase().replace(/-/g, "_");
+        return ["galactic", "galactic_center", "galactic_centre"].includes(requested)
+          ? "galactic"
+          : "standard";
+      }
+
+      function volumeLightingModeValue(modeName) {
+        return normalizeVolumeLightingMode(modeName) === "galactic" ? 1.0 : 0.0;
+      }
+
+      function clampVolumeLightingNumber(value, fallback, minimum, maximum, defaultValue) {
+        const numeric = value === null || value === "" ? NaN : Number(value);
+        const fallbackNumeric = fallback === null || fallback === "" ? NaN : Number(fallback);
+        const resolved = Number.isFinite(numeric)
+          ? numeric
+          : (Number.isFinite(fallbackNumeric) ? fallbackNumeric : Number(defaultValue));
+        return Math.min(Math.max(resolved, minimum), maximum);
+      }
+
+      function normalizeVolumeGalacticCenter(value) {
+        const source = Array.isArray(value)
+          ? value
+          : (
+            value && typeof value === "object"
+              ? [value.x, value.y, value.z]
+              : [8122.0, 0.0, 0.0]
+          );
+        const x = Number(source[0]);
+        const y = Number(source[1]);
+        const z = Number(source[2]);
+        return [
+          Number.isFinite(x) ? x : 8122.0,
+          Number.isFinite(y) ? y : 0.0,
+          Number.isFinite(z) ? z : 0.0,
+        ];
       }
 
       function volumeColormapOptionFor(layer, colormapName) {
@@ -480,6 +568,14 @@ THREEJS_SCENE_RUNTIME_JS = """
         uniform float alpha_coef;
         uniform float gradient_step;
         uniform float stretch_mode;
+        uniform float lighting_mode;
+        uniform vec3 galactic_center;
+        uniform float galactic_light_intensity;
+        uniform float galactic_ambient;
+        uniform float galactic_extinction;
+        uniform float galactic_scattering;
+        uniform float galactic_anisotropy;
+        uniform float galactic_warmth;
         uniform vec4 scale;
         uniform vec4 translation;
         uniform vec4 rotation;
@@ -679,6 +775,138 @@ THREEJS_SCENE_RUNTIME_JS = """
           ));
         }
 
+        vec3 galacticPhysicalNormal(in float px, in vec3 pos) {
+          vec3 textureGradient = vec3(
+            px - sampleVolume(pos + vec3(gradient_step, 0.0, 0.0)),
+            px - sampleVolume(pos + vec3(0.0, gradient_step, 0.0)),
+            px - sampleVolume(pos + vec3(0.0, 0.0, gradient_step))
+          );
+          return normalize(textureGradient / max(scale.xyz, vec3(1e-6)));
+        }
+
+        float normalizedDustDensity(vec3 pos) {
+          vec3 bounded = clamp(pos, vec3(0.0), vec3(1.0));
+          if (any(notEqual(bounded, pos))) {
+            return 0.0;
+          }
+          return clamp((sampleVolume(pos) - low) * inv_range, 0.0, 1.0);
+        }
+
+        float galacticSelfShadow(
+          vec3 textcoord,
+          vec3 transformedGalacticCenter,
+          float localDensity
+        ) {
+          vec3 samplePhysical = (textcoord - vec3(0.5)) * scale.xyz + translation.xyz;
+          vec3 centerTexture = (
+            (transformedGalacticCenter - translation.xyz) / max(scale.xyz, vec3(1e-6))
+          ) + vec3(0.5);
+          vec3 centerDelta = centerTexture - textcoord;
+          float centerDistance = length(centerDelta);
+          if (centerDistance <= 1e-6 || galactic_extinction <= 1e-6) {
+            return 1.0;
+          }
+          vec3 textureDirection = centerDelta / centerDistance;
+          float nearDensity = normalizedDustDensity(textcoord + textureDirection * 0.055);
+          float farDensity = normalizedDustDensity(textcoord + textureDirection * 0.16);
+          float directionalColumn = (
+            0.50 * localDensity
+            + 0.32 * nearDensity
+            + 0.18 * farDensity
+          );
+          float pathWeight = clamp(centerDistance, 0.20, 1.25);
+          return exp(-galactic_extinction * directionalColumn * pathWeight);
+        }
+
+        float henyeyGreensteinPhase(float cosineAngle, float anisotropy) {
+          float g = clamp(anisotropy, 0.0, 0.9);
+          float g2 = g * g;
+          float denominator = max(1.0 + g2 - 2.0 * g * cosineAngle, 0.04);
+          // This is the usual phase function multiplied by 4*pi, so an
+          // isotropic field has a convenient value of one.
+          return (1.0 - g2) / pow(denominator, 1.5);
+        }
+
+        vec3 applyGalacticDustLighting(
+          vec3 premultipliedColor,
+          float sampleAlpha,
+          float localDensity,
+          vec3 textcoord,
+          vec3 rayDirection
+        ) {
+          vec3 samplePhysical = (textcoord - vec3(0.5)) * scale.xyz + translation.xyz;
+          vec3 transformedGalacticCenter = rotate_vertex_position(
+            galactic_center,
+            translation.xyz,
+            rotation
+          );
+          vec3 toCenter = transformedGalacticCenter - samplePhysical;
+          float centerDistance = max(length(toCenter), 1.0);
+          vec3 toCenterDirection = toCenter / centerDistance;
+          vec3 outgoingToCamera = normalize(transformedCameraPosition - samplePhysical);
+          vec3 incidentFromCenter = -toCenterDirection;
+
+          float solarCircleDistance = max(length(galactic_center), 1000.0);
+          float softenedDistance = sqrt(
+            centerDistance * centerDistance + 1500.0 * 1500.0
+          );
+          float distanceFalloff = clamp(
+            (solarCircleDistance * solarCircleDistance)
+              / (softenedDistance * softenedDistance),
+            0.18,
+            4.0
+          );
+          float transmission = galacticSelfShadow(
+            textcoord,
+            transformedGalacticCenter,
+            localDensity
+          );
+          vec3 normal = galacticPhysicalNormal(sampleVolume(textcoord), textcoord);
+          float densityFacing = 0.30 + 0.70 * abs(dot(normal, toCenterDirection));
+          float directField = (
+            galactic_light_intensity
+            * distanceFalloff
+            * transmission
+            * densityFacing
+          );
+          float scatteringPhase = clamp(
+            henyeyGreensteinPhase(
+              dot(incidentFromCenter, outgoingToCamera),
+              galactic_anisotropy
+            ),
+            0.15,
+            4.5
+          );
+          float scatteredField = (
+            galactic_scattering
+            * distanceFalloff
+            * transmission
+            * scatteringPhase
+            * 0.28
+          );
+          float radiationField = clamp(
+            galactic_ambient + directField + scatteredField,
+            0.025,
+            3.0
+          );
+
+          vec3 originalColor = premultipliedColor / max(sampleAlpha, 1e-6);
+          float baseLuminance = dot(originalColor, vec3(0.2126, 0.7152, 0.0722));
+          vec3 coolDiskLight = vec3(0.72, 0.82, 1.00);
+          vec3 warmBulgeLight = vec3(1.00, 0.63, 0.30);
+          vec3 incidentColor = mix(coolDiskLight, warmBulgeLight, galactic_warmth);
+          vec3 shadowColor = vec3(0.24, 0.105, 0.045);
+          vec3 illuminatedDust = mix(
+            shadowColor,
+            incidentColor,
+            clamp(transmission * (0.35 + 0.65 * radiationField), 0.0, 1.0)
+          );
+          vec3 dustColor = mix(originalColor, illuminatedDust, 0.78);
+          float obscuration = mix(0.42, 1.0, transmission);
+          float shadedLuminance = baseLuminance * radiationField * obscuration;
+          return dustColor * shadedLuminance * sampleAlpha;
+        }
+
         void main() {
           float jitter = texture2D(jitterTexture, gl_FragCoord.xy / 64.0).r;
           float tmin = 0.0;
@@ -764,33 +992,43 @@ THREEJS_SCENE_RUNTIME_JS = """
               pxColor.a *= (1.0 - value.a);
               pxColor.rgb *= pxColor.a;
 
-              #if NUM_DIR_LIGHTS > 0
-              if (pxColor.a > 0.0) {
-                vec4 addedLights = vec4(ambientLightColor / PI, 1.0);
-                vec3 specularColor = vec3(0.0);
-                vec3 normal = worldGetNormal(px, textcoord);
-                vec3 lightDirection;
-                float lightingIntensity;
-                vec3 lightReflect;
-                float specularFactor;
+              if (lighting_mode > 0.5) {
+                pxColor.rgb = applyGalacticDustLighting(
+                  pxColor.rgb,
+                  pxColor.a,
+                  clamp(scaled_px, 0.0, 1.0),
+                  textcoord,
+                  direction
+                );
+              } else {
+                #if NUM_DIR_LIGHTS > 0
+                if (pxColor.a > 0.0) {
+                  vec4 addedLights = vec4(ambientLightColor / PI, 1.0);
+                  vec3 specularColor = vec3(0.0);
+                  vec3 normal = worldGetNormal(px, textcoord);
+                  vec3 lightDirection;
+                  float lightingIntensity;
+                  vec3 lightReflect;
+                  float specularFactor;
 
-                #pragma unroll_loop_start
-                for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
-                  lightDirection = directionalLights[i].direction;
-                  lightingIntensity = clamp(dot(lightDirection, normal), 0.0, 1.0);
-                  addedLights.rgb += directionalLights[i].color / PI * (0.2 + 0.8 * lightingIntensity);
-                  lightReflect = normalize(reflect(lightDirection, normal));
-                  specularFactor = dot(direction, lightReflect);
-                  if (specularFactor > 0.0) {
-                    specularColor += 0.002 * scaled_px * (1.0 / max(step, 1e-6))
-                      * directionalLights[i].color / PI * pow(specularFactor, 250.0) * pxColor.a;
+                  #pragma unroll_loop_start
+                  for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
+                    lightDirection = directionalLights[i].direction;
+                    lightingIntensity = clamp(dot(lightDirection, normal), 0.0, 1.0);
+                    addedLights.rgb += directionalLights[i].color / PI * (0.2 + 0.8 * lightingIntensity);
+                    lightReflect = normalize(reflect(lightDirection, normal));
+                    specularFactor = dot(direction, lightReflect);
+                    if (specularFactor > 0.0) {
+                      specularColor += 0.002 * scaled_px * (1.0 / max(step, 1e-6))
+                        * directionalLights[i].color / PI * pow(specularFactor, 250.0) * pxColor.a;
+                    }
                   }
-                }
-                #pragma unroll_loop_end
+                  #pragma unroll_loop_end
 
-                pxColor.rgb = pxColor.rgb * addedLights.xyz + specularColor;
+                  pxColor.rgb = pxColor.rgb * addedLights.xyz + specularColor;
+                }
+                #endif
               }
-              #endif
 
               value += pxColor;
               if (value.a >= 0.99) {
@@ -845,6 +1083,20 @@ THREEJS_SCENE_RUNTIME_JS = """
             alpha_coef: { value: Number(state.alphaCoef) },
             gradient_step: { value: Number(state.gradientStep) },
             stretch_mode: { value: volumeStretchModeValue(state.stretch) },
+            lighting_mode: { value: volumeLightingModeValue(state.lightingMode) },
+            galactic_center: {
+              value: new THREE.Vector3(
+                Number(state.galacticCenter[0]),
+                Number(state.galacticCenter[1]),
+                Number(state.galacticCenter[2])
+              ),
+            },
+            galactic_light_intensity: { value: Number(state.galacticLightIntensity) },
+            galactic_ambient: { value: Number(state.galacticAmbient) },
+            galactic_extinction: { value: Number(state.galacticExtinction) },
+            galactic_scattering: { value: Number(state.galacticScattering) },
+            galactic_anisotropy: { value: Number(state.galacticAnisotropy) },
+            galactic_warmth: { value: Number(state.galacticWarmth) },
             scale: { value: new THREE.Vector4(sizeX, sizeY, sizeZ, 1.0) },
             translation: { value: new THREE.Vector4(centerX, centerY, centerZ, 1.0) },
             rotation: { value: new THREE.Vector4(0.0, 0.0, 0.0, 1.0) },
@@ -910,6 +1162,18 @@ THREEJS_SCENE_RUNTIME_JS = """
         runtime.material.uniforms.alpha_coef.value = Number(state.alphaCoef);
         runtime.material.uniforms.gradient_step.value = Number(state.gradientStep);
         runtime.material.uniforms.stretch_mode.value = volumeStretchModeValue(state.stretch);
+        runtime.material.uniforms.lighting_mode.value = volumeLightingModeValue(state.lightingMode);
+        runtime.material.uniforms.galactic_center.value.set(
+          Number(state.galacticCenter[0]),
+          Number(state.galacticCenter[1]),
+          Number(state.galacticCenter[2])
+        );
+        runtime.material.uniforms.galactic_light_intensity.value = Number(state.galacticLightIntensity);
+        runtime.material.uniforms.galactic_ambient.value = Number(state.galacticAmbient);
+        runtime.material.uniforms.galactic_extinction.value = Number(state.galacticExtinction);
+        runtime.material.uniforms.galactic_scattering.value = Number(state.galacticScattering);
+        runtime.material.uniforms.galactic_anisotropy.value = Number(state.galacticAnisotropy);
+        runtime.material.uniforms.galactic_warmth.value = Number(state.galacticWarmth);
         runtime.material.uniforms.rotation.value.copy(
           volumeQuaternionForZRotation(volumeRotationAngleForFrame(layer, state, frame))
         );

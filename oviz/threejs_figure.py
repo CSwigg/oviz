@@ -4516,6 +4516,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: rgba(238, 242, 247, 0.50) !important;
         font: 620 10.5px/1.18 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
       }
+      #__ROOT_ID__ .oviz-three-legend-field[hidden] {
+        display: none !important;
+      }
       #__ROOT_ID__ .oviz-three-legend-field input[type="range"] {
         width: 140px !important;
         min-width: 140px !important;
@@ -8277,6 +8280,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       });
       controls.addEventListener("change", () => {
         updateZoomAnchorFromControlsPan();
+        if (skyDomeUsesAladinBackground()) {
+          // Keep Aladin on the same interaction frame as OrbitControls. The
+          // render-invalidation-only path introduced a visible wheel-zoom lag
+          // because wheel gestures finish before the next RAF and then use the
+          // slower settled-camera throttle.
+          updateSkyDomeBackgroundFrame(
+            (typeof performance !== "undefined" && performance.now)
+              ? performance.now()
+              : Date.now()
+          );
+          // A trailing forced update guarantees that a throttled final wheel
+          // event reaches Aladin after the gesture stops.
+          scheduleSkyDomeBackgroundTrailingCameraSync();
+        }
         if (typeof ovizInvalidateRender === "function") {
           ovizInvalidateRender();
         }
@@ -8321,6 +8338,26 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           stretch: normalizeVolumeStretch(defaults.stretch),
           colormap: String(defaults.colormap || (((layer.colormap_options || [])[0] || {}).name || "inferno")),
           showAllTimes: Boolean(defaults.show_all_times),
+          lightingMode: normalizeVolumeLightingMode(defaults.lighting_mode),
+          galacticCenter: normalizeVolumeGalacticCenter(defaults.galactic_center),
+          galacticLightIntensity: clampVolumeLightingNumber(
+            undefined, defaults.galactic_light_intensity, 0.0, 4.0, 1.35
+          ),
+          galacticAmbient: clampVolumeLightingNumber(
+            undefined, defaults.galactic_ambient, 0.0, 1.0, 0.22
+          ),
+          galacticExtinction: clampVolumeLightingNumber(
+            undefined, defaults.galactic_extinction, 0.0, 8.0, 2.4
+          ),
+          galacticScattering: clampVolumeLightingNumber(
+            undefined, defaults.galactic_scattering, 0.0, 2.0, 0.55
+          ),
+          galacticAnisotropy: clampVolumeLightingNumber(
+            undefined, defaults.galactic_anisotropy, 0.0, 0.9, 0.45
+          ),
+          galacticWarmth: clampVolumeLightingNumber(
+            undefined, defaults.galactic_warmth, 0.0, 1.0, 0.72
+          ),
         };
       });
 
@@ -10470,6 +10507,28 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             if (typeof state.colormap === "string" && state.colormap) {
               target.colormap = state.colormap;
             }
+            if (typeof state.lightingMode === "string" && state.lightingMode) {
+              target.lightingMode = normalizeVolumeLightingMode(state.lightingMode);
+            }
+            if (state.galacticCenter !== undefined) {
+              target.galacticCenter = normalizeVolumeGalacticCenter(state.galacticCenter);
+            }
+            [
+              "galacticLightIntensity",
+              "galacticAmbient",
+              "galacticExtinction",
+              "galacticScattering",
+              "galacticAnisotropy",
+              "galacticWarmth",
+            ].forEach((field) => {
+              if (
+                state[field] !== null
+                && state[field] !== ""
+                && Number.isFinite(Number(state[field]))
+              ) {
+                target[field] = Number(state[field]);
+              }
+            });
           });
         }
         const mobileActiveVolumeKey = String(initialState.mobile_active_volume_key || "").trim();
@@ -15515,11 +15574,19 @@ __SKY_RUNTIME_JS__
           )
           : "Volume rendering requires WebGL2 support in the browser.";
         const resampleMethod = String(layer.downsample_method || "resampled");
+        const lightingText = normalizeVolumeLightingMode(state.lightingMode) === "galactic"
+          ? (
+            `Galactic illumination preview: center (${normalizeVolumeGalacticCenter(state.galacticCenter).map((value) => Math.round(value)).join(", ")}) pc`
+            + ` | light ${Number(state.galacticLightIntensity).toFixed(2)}`
+            + ` | extinction ${Number(state.galacticExtinction).toFixed(2)}`
+          )
+          : "Lighting: standard volume shading";
         return [
           `${volumeStateNameForLayer(layer)}`,
           `${Number(layer.shape.x)} x ${Number(layer.shape.y)} x ${Number(layer.shape.z)} voxels`,
           `Source: ${Number(layer.source_shape.x)} x ${Number(layer.source_shape.y)} x ${Number(layer.source_shape.z)} | ${resampleMethod} scale ${formatVolumeNumber(Number(layer.downsample_step.x))} x ${formatVolumeNumber(Number(layer.downsample_step.y))} x ${formatVolumeNumber(Number(layer.downsample_step.z))}`,
           `Samples: ${Math.round(Number(state.steps))} | alpha_coef: ${Math.round(Number(state.alphaCoef))} | stretch: ${normalizeVolumeStretch(state.stretch)}`,
+          lightingText,
           `Data range: ${formatVolumeNumber((layer.data_range || [0])[0])} to ${formatVolumeNumber((layer.data_range || [0, 1])[1])}${unitText}`,
           supportText,
         ].join("\\n");
@@ -21327,6 +21394,53 @@ __SKY_RUNTIME_JS__
         const stretchField = createLegendField("Stretch", stretchSelect);
         controls.appendChild(stretchField.field);
 
+        // The Galactic illumination runtime is intentionally retained as an
+        // internal experiment, but it is not yet exposed as a user-facing
+        // rendering option.
+        const experimentalVolumeLightingControlsEnabled = false;
+        const lightingSelect = document.createElement("select");
+        [
+          { value: "standard", label: "Standard" },
+          { value: "galactic", label: "Galactic illumination (preview)" },
+        ].forEach((option) => {
+          const optionEl = document.createElement("option");
+          optionEl.value = option.value;
+          optionEl.textContent = option.label;
+          lightingSelect.appendChild(optionEl);
+        });
+        const lightingField = createLegendField("Rendering", lightingSelect);
+        if (experimentalVolumeLightingControlsEnabled) {
+          controls.appendChild(lightingField.field);
+        }
+
+        function createVolumeLightingSlider(label, minimum, maximum, step) {
+          const input = document.createElement("input");
+          input.type = "range";
+          input.min = String(minimum);
+          input.max = String(maximum);
+          input.step = String(step);
+          const field = createLegendField(label, input);
+          if (experimentalVolumeLightingControlsEnabled) {
+            controls.appendChild(field.field);
+          }
+          return { input, field, label };
+        }
+
+        const galacticLightControl = createVolumeLightingSlider("Central light", 0, 4, 0.01);
+        const galacticAmbientControl = createVolumeLightingSlider("Ambient field", 0, 1, 0.01);
+        const galacticExtinctionControl = createVolumeLightingSlider("Self-shadowing", 0, 8, 0.05);
+        const galacticScatteringControl = createVolumeLightingSlider("Scattered light", 0, 2, 0.01);
+        const galacticAnisotropyControl = createVolumeLightingSlider("Forward scattering", 0, 0.9, 0.01);
+        const galacticWarmthControl = createVolumeLightingSlider("Bulge warmth", 0, 1, 0.01);
+        const galacticLightingControls = [
+          [galacticLightControl, "galacticLightIntensity"],
+          [galacticAmbientControl, "galacticAmbient"],
+          [galacticExtinctionControl, "galacticExtinction"],
+          [galacticScatteringControl, "galacticScattering"],
+          [galacticAnisotropyControl, "galacticAnisotropy"],
+          [galacticWarmthControl, "galacticWarmth"],
+        ];
+
         const vminInput = document.createElement("input");
         vminInput.type = "number";
         const vminField = createLegendField("vmin", vminInput);
@@ -21378,6 +21492,10 @@ __SKY_RUNTIME_JS__
             }
             colormapSelect.value = String(state.colormap);
             stretchSelect.value = String(state.stretch);
+            lightingSelect.value = normalizeVolumeLightingMode(state.lightingMode);
+            galacticLightingControls.forEach(([control, stateField]) => {
+              control.input.value = String(Number(state[stateField]));
+            });
             syncVolumeWindowInput(vminInput, state.vmin, summaryLayer);
             syncVolumeWindowInput(vmaxInput, state.vmax, summaryLayer);
             opacityInput.value = String(state.opacity);
@@ -21387,6 +21505,12 @@ __SKY_RUNTIME_JS__
           opacityField.label.textContent = `Opacity (${Number(state.opacity).toFixed(2)})`;
           alphaField.label.textContent = `Alpha coef (${Math.round(Number(state.alphaCoef))})`;
           samplesField.label.textContent = `Samples (${Math.round(Number(state.steps))})`;
+          const showGalacticControls = normalizeVolumeLightingMode(state.lightingMode) === "galactic";
+          galacticLightingControls.forEach(([control, stateField]) => {
+            control.field.field.hidden = !showGalacticControls;
+            control.field.field.style.display = showGalacticControls ? "" : "none";
+            control.field.label.textContent = `${control.label} (${Number(state[stateField]).toFixed(2)})`;
+          });
           summary.textContent = volumeSummaryTextFor(summaryLayer, state);
           toggleButton.style.color = volumeLegendColorForLayer(summaryLayer);
         }
@@ -21429,6 +21553,18 @@ __SKY_RUNTIME_JS__
           state.stretch = normalizeVolumeStretch(stretchSelect.value);
           refreshVolumeControls(false);
           updateVolumeFromLegend(false);
+        });
+        lightingSelect.addEventListener("change", () => {
+          state.lightingMode = normalizeVolumeLightingMode(lightingSelect.value);
+          refreshVolumeControls(true);
+          updateVolumeFromLegend(false);
+        });
+        galacticLightingControls.forEach(([control, stateField]) => {
+          control.input.addEventListener("input", () => {
+            state[stateField] = Number(control.input.value);
+            refreshVolumeControls(false);
+            updateVolumeFromLegend(false);
+          });
         });
         function updateVolumeWindowFromLegendInput(inputEl, key, options = {}) {
           const value = finiteNumberInputValue(inputEl);

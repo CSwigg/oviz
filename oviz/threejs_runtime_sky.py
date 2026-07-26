@@ -4,6 +4,7 @@ from __future__ import annotations
 THREEJS_SKY_RUNTIME_JS = """
       let skyDomeBackgroundProgrammaticTransition = null;
       let skyDomeBackgroundProgrammaticTransitionSequence = 0;
+      let skyDomeBackgroundTrailingCameraSyncTimer = null;
 
       function normalizeMemberKey(value) {
         return String(value || "")
@@ -1308,6 +1309,27 @@ THREEJS_SKY_RUNTIME_JS = """
         }
         skyDomeBackgroundUserCameraActive = Boolean(active);
         holdSkyDomeBackgroundForCameraMotion(0.0);
+      }
+
+      function scheduleSkyDomeBackgroundTrailingCameraSync(delayMs = 56.0) {
+        if (!skyDomeUsesAladinBackground()) {
+          return;
+        }
+        if (skyDomeBackgroundTrailingCameraSyncTimer !== null) {
+          window.clearTimeout(skyDomeBackgroundTrailingCameraSyncTimer);
+        }
+        skyDomeBackgroundTrailingCameraSyncTimer = window.setTimeout(() => {
+          skyDomeBackgroundTrailingCameraSyncTimer = null;
+          updateSkyDomeBackgroundFrame(
+            (typeof performance !== "undefined" && performance.now)
+              ? performance.now()
+              : Date.now(),
+            { force: true }
+          );
+          if (typeof ovizInvalidateRender === "function") {
+            ovizInvalidateRender();
+          }
+        }, Math.max(Number(delayMs) || 0.0, 0.0));
       }
 
       function setSkyDomeBackgroundDebugState(reason) {

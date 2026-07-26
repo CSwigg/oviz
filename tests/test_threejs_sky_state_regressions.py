@@ -97,6 +97,36 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         )
         self.assertNotIn("< 500.0", update_background)
 
+    def test_manual_sky_zoom_updates_aladin_on_the_interaction_frame_and_flushes_the_final_pose(self):
+        controls_change = self.html.split(
+            'controls.addEventListener("change", () => {',
+            1,
+        )[1].split("const eye =", 1)[0]
+        fov_zoom = _function_region(
+            self.html,
+            "setCameraFovFromZoomFactor",
+            "zoomEarthViewByWheelDelta",
+        )
+        trailing_sync = _function_region(
+            self.html,
+            "scheduleSkyDomeBackgroundTrailingCameraSync",
+            "setSkyDomeBackgroundDebugState",
+        )
+
+        # Desktop wheel and mobile pinch are intercepted by Oviz and do not
+        # emit an OrbitControls change event.  Their shared FoV writer must
+        # therefore synchronize Aladin directly on every input frame.
+        self.assertIn('if (cameraViewMode === "earth")', fov_zoom)
+        self.assertIn("updateSkyDomeBackgroundFrame(", fov_zoom)
+        self.assertIn("{ force: true }", fov_zoom)
+        self.assertIn("scheduleSkyDomeBackgroundTrailingCameraSync();", fov_zoom)
+        self.assertIn("updateSkyDomeBackgroundFrame(", controls_change)
+        self.assertIn("scheduleSkyDomeBackgroundTrailingCameraSync();", controls_change)
+        self.assertIn("ovizInvalidateRender();", controls_change)
+        self.assertIn("window.clearTimeout(skyDomeBackgroundTrailingCameraSyncTimer)", trailing_sync)
+        self.assertIn("{ force: true }", trailing_sync)
+        self.assertIn("ovizInvalidateRender();", trailing_sync)
+
     def test_live_aladin_background_keeps_the_same_north_up_roll_as_threejs(self):
         self.assertHtmlContains("lockNorthUp: skyDomeBackgroundOnly")
         self.assertHtmlContains("northPoleOrientation: 0")

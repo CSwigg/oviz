@@ -16,6 +16,16 @@ from oviz.threejs_figure import ThreeJSFigure
 
 SOURCE_HTML = Path(__file__).with_name("main_figure_chronos_july4.html")
 DEFAULT_OUTPUT_HTML = Path(__file__).with_suffix(".html")
+EDENHOFER_GALACTIC_LIGHTING = {
+    "lighting_mode": "standard",
+    "galactic_center": [8122.0, 0.0, 0.0],
+    "galactic_light_intensity": 1.35,
+    "galactic_ambient": 0.22,
+    "galactic_extinction": 2.4,
+    "galactic_scattering": 0.55,
+    "galactic_anisotropy": 0.45,
+    "galactic_warmth": 0.72,
+}
 
 
 def read_embedded_scene_spec(path: Path) -> dict:
@@ -63,6 +73,27 @@ def build_state_only_scene(scene_spec: dict) -> dict:
         "guides": {"smart": True, "grid": False, "grid_size": 20},
         "slides": [],
     }
+    initial_volume_state = (
+        scene.setdefault("initial_state", {}).setdefault("volume_state_by_key", {})
+    )
+    for layer in (scene.get("volumes") or {}).get("layers") or []:
+        if "edenhofer" not in str(layer.get("name") or "").lower():
+            continue
+        defaults = layer.setdefault("default_controls", {})
+        defaults.update(EDENHOFER_GALACTIC_LIGHTING)
+        state_key = str(layer.get("state_key") or layer.get("key") or "")
+        if state_key:
+            state = initial_volume_state.setdefault(state_key, {})
+            state.update({
+                "lightingMode": "standard",
+                "galacticCenter": [8122.0, 0.0, 0.0],
+                "galacticLightIntensity": 1.35,
+                "galacticAmbient": 0.22,
+                "galacticExtinction": 2.4,
+                "galacticScattering": 0.55,
+                "galacticAnisotropy": 0.45,
+                "galacticWarmth": 0.72,
+            })
     return scene
 
 

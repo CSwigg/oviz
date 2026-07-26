@@ -1865,7 +1865,19 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const fromVisible = a.visible !== false;
           const toVisible = b.visible !== false;
           live.visible = fromVisible || toVisible;
-          ["vmin", "vmax", "steps", "alphaCoef", "gradientStep"].forEach((field) => {
+          [
+            "vmin",
+            "vmax",
+            "steps",
+            "alphaCoef",
+            "gradientStep",
+            "galacticLightIntensity",
+            "galacticAmbient",
+            "galacticExtinction",
+            "galacticScattering",
+            "galacticAnisotropy",
+            "galacticWarmth",
+          ].forEach((field) => {
             if (Number.isFinite(Number(a[field])) && Number.isFinite(Number(b[field]))) {
               live[field] = ovizLerp(a[field], b[field], progress);
             }
@@ -1879,6 +1891,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (progress >= 0.5) {
             if (b.stretch) live.stretch = b.stretch;
             if (b.colormap) live.colormap = b.colormap;
+            if (b.lightingMode) live.lightingMode = b.lightingMode;
+            if (b.galacticCenter !== undefined) {
+              live.galacticCenter = normalizeVolumeGalacticCenter(b.galacticCenter);
+            }
           }
         });
       }

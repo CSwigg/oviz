@@ -2893,6 +2893,14 @@ class ThreeJSRendererTests(unittest.TestCase):
                     "alpha_coef": 42,
                     "stretch": "log10",
                     "colormap": "gist_heat_r",
+                    "lighting_mode": "galactic",
+                    "galactic_center": {"x": 8122, "y": 3, "z": -4},
+                    "galactic_light_intensity": 1.6,
+                    "galactic_ambient": 0.18,
+                    "galactic_extinction": 3.1,
+                    "galactic_scattering": 0.7,
+                    "galactic_anisotropy": 0.52,
+                    "galactic_warmth": 0.8,
                 }],
             )
 
@@ -2917,6 +2925,14 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(layer["default_controls"]["stretch"], "log10")
         self.assertAlmostEqual(layer["default_controls"]["opacity"], 0.22)
         self.assertEqual(layer["default_controls"]["colormap"], "gist_heat_r")
+        self.assertEqual(layer["default_controls"]["lighting_mode"], "galactic")
+        self.assertEqual(layer["default_controls"]["galactic_center"], [8122.0, 3.0, -4.0])
+        self.assertAlmostEqual(layer["default_controls"]["galactic_light_intensity"], 1.6)
+        self.assertAlmostEqual(layer["default_controls"]["galactic_ambient"], 0.18)
+        self.assertAlmostEqual(layer["default_controls"]["galactic_extinction"], 3.1)
+        self.assertAlmostEqual(layer["default_controls"]["galactic_scattering"], 0.7)
+        self.assertAlmostEqual(layer["default_controls"]["galactic_anisotropy"], 0.52)
+        self.assertAlmostEqual(layer["default_controls"]["galactic_warmth"], 0.8)
         self.assertTrue(layer["legend_color"])
         self.assertTrue(layer["data_b64"])
         self.assertEqual(layer["ar_proxy"]["method"], "block_max")
@@ -2937,6 +2953,12 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("DataTexture3D", html)
         self.assertIn("Alpha coef", html)
         self.assertIn("stretch_mode", html)
+        self.assertIn("const experimentalVolumeLightingControlsEnabled = false;", html)
+        self.assertIn("galactic_center", html)
+        self.assertIn("galacticSelfShadow", html)
+        self.assertIn("henyeyGreensteinPhase", html)
+        self.assertIn("applyGalacticDustLighting", html)
+        self.assertIn(".oviz-three-legend-field[hidden]", html)
         self.assertIn("precision highp sampler3D;", html)
         self.assertIn("useSelectionPolygon", html)
         self.assertIn("selectionMaskTexture", html)
@@ -3113,6 +3135,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         html = fig.to_html()
         self.assertEqual(layer["default_controls"]["steps"], 100)
         self.assertEqual(layer["default_controls"]["samples"], 100)
+        self.assertEqual(layer["default_controls"]["lighting_mode"], "standard")
+        self.assertEqual(layer["default_controls"]["galactic_center"], [8122.0, 0.0, 0.0])
         self.assertIn('samplesInput.step = "1"', html)
 
     def test_threejs_renderer_inline_volume_honors_max_resolution_cap(self):

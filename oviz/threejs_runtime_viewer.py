@@ -1303,6 +1303,18 @@ THREEJS_VIEWER_RUNTIME_JS = """
         updateControlSensitivityForView();
         if (cameraViewMode === "earth") {
           lockEarthViewCameraToTarget();
+          // Sky wheel and pinch zoom are handled by Oviz before OrbitControls
+          // sees the event.  Keep the registered Aladin background on that
+          // same interaction frame instead of waiting for the throttled main
+          // render loop.  This restores the pre-optimization behavior while
+          // leaving the dirty-driven UI/image-plane work coalesced in animate().
+          updateSkyDomeBackgroundFrame(
+            (typeof performance !== "undefined" && performance.now)
+              ? performance.now()
+              : Date.now(),
+            { force: true }
+          );
+          scheduleSkyDomeBackgroundTrailingCameraSync();
         } else {
           controls.update();
         }
