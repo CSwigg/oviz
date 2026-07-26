@@ -2192,7 +2192,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("aladinInstance.stopAnimation()", html)
         self.assertIn("aladinInstance.gotoPosition(lDeg, bDeg)", html)
         self.assertIn("skyDomeBackgroundUserCameraActive || stateCameraTransitionActive", html)
-        self.assertIn(") ? 16.0 : 50.0", html)
+        self.assertIn(") ? 0.0 : 50.0", html)
         self.assertIn("updateSkyDomeBackgroundFrame(\n            (typeof performance", html)
 
     def test_threejs_renderer_searches_point_traces_and_resolves_aladin_targets(self):

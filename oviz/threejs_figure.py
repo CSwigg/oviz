@@ -13671,6 +13671,16 @@ __SKY_RUNTIME_JS__
             aladinInstance.setFoV(clampedFovDeg);
             lastAppliedSkyBackgroundFovDeg = clampedFovDeg;
           }
+          // Ask Aladin to repaint in this same display frame when possible so
+          // the background does not trail the Three.js traces by a frame
+          // while the camera is moving.
+          try {
+            const aladinView = aladinInstance.view;
+            if (aladinView && typeof aladinView.requestRedraw === "function") {
+              aladinView.requestRedraw();
+            }
+          } catch (_redrawErr) {
+          }
           currentSkyBackgroundView = view;
           return view;
         }
@@ -14664,11 +14674,16 @@ __SKY_RUNTIME_JS__
         }
         function scheduleSkyBackgroundView(data) {
           if (activeSkyBackgroundSemanticTransition || pendingSkyBackgroundSemanticCompletion) {
-            if (data && data.cancelSemanticTransition === true) {
-              cancelSkyBackgroundSemanticTransition("ordinary-view", true);
-            } else {
-              return;
-            }
+            // The parent camera pose is authoritative. Dropping it here would
+            // freeze the background out of registration with the Three.js
+            // traces until the next pose arrives, so always supersede the
+            // semantic transition instead.
+            cancelSkyBackgroundSemanticTransition(
+              data && data.cancelSemanticTransition === true
+                ? "ordinary-view"
+                : "superseded-by-camera",
+              true
+            );
           }
           // Keep only the newest parent camera pose until Aladin can paint it.
           // Replaying every queued intermediate pose makes the iframe fall
@@ -14690,11 +14705,12 @@ __SKY_RUNTIME_JS__
         }
         function applySkyBackgroundViewDirect(data) {
           if (activeSkyBackgroundSemanticTransition || pendingSkyBackgroundSemanticCompletion) {
-            if (data && data.cancelSemanticTransition === true) {
-              cancelSkyBackgroundSemanticTransition("ordinary-view", true);
-            } else {
-              return false;
-            }
+            cancelSkyBackgroundSemanticTransition(
+              data && data.cancelSemanticTransition === true
+                ? "ordinary-view"
+                : "superseded-by-camera",
+              true
+            );
           }
           pendingSkyBackgroundView = null;
           if (skyBackgroundViewAnimationFrame) {

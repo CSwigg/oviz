@@ -89,7 +89,7 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         self.assertIn("ovizStateTransition.skyBackgroundPromise = null;", begin_transition)
         self.assertIn("stateCameraTransitionActive", update_background)
         self.assertIn("skyDomeBackgroundUserCameraActive || stateCameraTransitionActive", update_background)
-        self.assertIn(") ? 16.0 : 50.0", update_background)
+        self.assertIn(") ? 0.0 : 50.0", update_background)
         self.assertIn('type: "oviz-sky-background-view"', update_background)
         self.assertIn(
             "signature === skyDomeBackgroundViewSignature",

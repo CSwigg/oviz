@@ -1652,9 +1652,9 @@ THREEJS_SKY_RUNTIME_JS = """
           return;
         }
         const signature = [
-          view.ra.toFixed(3),
-          view.dec.toFixed(3),
-          view.fovDeg.toFixed(2),
+          view.ra.toFixed(5),
+          view.dec.toFixed(5),
+          view.fovDeg.toFixed(3),
         ].join("|");
         const now = Number(timestampMs) || 0.0;
         if (signature !== skyDomeBackgroundLatestViewSignature) {
@@ -1688,11 +1688,14 @@ THREEJS_SKY_RUNTIME_JS = """
           root.dataset.skyDomeMotion = skyDomeBackgroundUserCameraActive ? "camera-moving" : "settled";
         }
         const forceUpdate = Boolean(options && options.force);
-        // A settled Aladin view must stay settled. Re-sending an identical
-        // center/FOV periodically clears its canvas for no visual benefit and
-        // can expose a black repaint frame over otherwise aligned traces.
+        // A settled Aladin view stays settled: the iframe dedupes identical
+        // applications, so re-asserting once a second costs nothing when
+        // aligned but self-heals the background if anything perturbed the
+        // Aladin view behind the parent's back.
         if (!forceUpdate && signature === skyDomeBackgroundViewSignature) {
-          return;
+          if ((now - skyDomeBackgroundLastSentAt) < 1000.0) {
+            return;
+          }
         }
         const stateCameraTransitionActive = Boolean(
           typeof ovizStateTransition !== "undefined"
@@ -1700,11 +1703,13 @@ THREEJS_SKY_RUNTIME_JS = """
           && ovizStateTransition.nativeViewTransition
         );
         // Keep Aladin on the display cadence while either the user or the
-        // States camera is moving. Settled programmatic updates remain
-        // throttled to avoid redundant redraws.
+        // States camera is moving — every rendered frame pushes a pose, so
+        // the background never trails the traces by a throttling gap.
+        // Settled programmatic updates remain throttled to avoid redundant
+        // redraws.
         const minUpdateIntervalMs = (
           skyDomeBackgroundUserCameraActive || stateCameraTransitionActive
-        ) ? 16.0 : 50.0;
+        ) ? 0.0 : 50.0;
         if (!forceUpdate && (now - skyDomeBackgroundLastSentAt) < minUpdateIntervalMs) {
           return;
         }
