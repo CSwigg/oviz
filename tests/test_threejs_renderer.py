@@ -1695,7 +1695,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("function skyMemberScaleForPoint(basePointScale, position)", html)
         self.assertIn("if (!(minimumPixels > 0.0))", html)
         self.assertIn("return requestedScale;", html)
-        self.assertIn("function ovizEnsureSkyMemberOverflowSprites(entry)", html)
+        self.assertNotIn("function ovizEnsureSkyMemberOverflowSprites(entry)", html)
         self.assertIn("function ovizCreateSkyMemberPointMaterial(texture, options = {})", html)
         self.assertIn("projectionMatrix[1][1]", html)
         self.assertIn("ovizFovAwarePointSize: true", html)

@@ -956,26 +956,19 @@ THREEJS_VIEWER_RUNTIME_JS = """
           const effectiveOpacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)
             * skyMemberRevealProgress;
           if (typeof ovizSetSkyMemberBatchMaterialOpacity === "function") {
-            ovizSetSkyMemberBatchMaterialOpacity(
-              entry,
-              entry.overflowActive ? 0.0 : effectiveOpacity,
-            );
+            ovizSetSkyMemberBatchMaterialOpacity(entry, effectiveOpacity);
           } else {
-            entry.material.opacity = entry.overflowActive ? 0.0 : effectiveOpacity;
-          }
-          if (entry.overflowMaterial) {
-            entry.overflowMaterial.opacity = effectiveOpacity;
-          }
-          if (entry.overflowGroup) {
-            entry.overflowGroup.visible = Boolean(
-              entry.overflowActive && effectiveOpacity > 0.0
-            );
+            entry.material.opacity = effectiveOpacity;
           }
         });
         skyMemberBulkOpacityEntries.forEach((entry) => {
           if (!entry || !entry.material) return;
           entry.material.opacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)
             * (1.0 - skyMemberRevealProgress);
+          // A fully replaced bulk marker must not stay in the draw list:
+          // hundreds of zero-opacity sprites otherwise cost a draw call each
+          // on every Sky frame.
+          entry.material.visible = entry.material.opacity > 0.001;
         });
         if (root && root.dataset) {
           root.dataset.skyMemberRevealProgress = String(skyMemberRevealProgress);

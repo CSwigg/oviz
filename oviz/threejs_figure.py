@@ -16219,62 +16219,6 @@ __SKY_RUNTIME_JS__
         return sprite;
       }
 
-      function ovizEnsureSkyMemberOverflowSprites(entry) {
-        if (!entry || !entry.parent || !entry.texture || !entry.relativePositions) {
-          return null;
-        }
-        if (entry.overflowGroup) {
-          return entry.overflowGroup;
-        }
-        const material = new THREE.SpriteMaterial({
-          map: entry.texture,
-          color: entry.color || "#ffffff",
-          transparent: true,
-          opacity: 0.0,
-          depthWrite: false,
-          depthTest: true,
-          alphaTest: Math.max(Number(entry.alphaTest) || 0.0, 0.0),
-          sizeAttenuation: true,
-          blending: entry.blending ?? THREE.NormalBlending,
-        });
-        material.userData = {
-          cached: false,
-          ovizSharedTexture: true,
-          ovizSkyMemberOverflow: true,
-        };
-        const overflowGroup = new THREE.Group();
-        const positions = entry.relativePositions;
-        const velocities = entry.relativeVelocities;
-        const pointCount = Math.floor(positions.length / 3);
-        for (let pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
-          const offset = pointIndex * 3;
-          const sprite = new THREE.Sprite(material);
-          const originalOffset = new THREE.Vector3(
-            positions[offset],
-            positions[offset + 1],
-            positions[offset + 2],
-          );
-          sprite.position.copy(originalOffset);
-          sprite.userData.ovizSkyMemberOffset = originalOffset;
-          sprite.userData.ovizSkyMemberVelocity = (
-            velocities && velocities.length >= offset + 3
-          ) ? new THREE.Vector3(
-            velocities[offset],
-            velocities[offset + 1],
-            velocities[offset + 2],
-          ) : new THREE.Vector3();
-          sprite.scale.set(entry.pointSize, entry.pointSize, 1.0);
-          sprite.renderOrder = entry.renderOrder;
-          overflowGroup.add(sprite);
-        }
-        overflowGroup.visible = false;
-        entry.parent.add(overflowGroup);
-        entry.overflowGroup = overflowGroup;
-        entry.overflowMaterial = material;
-        ovizUpdateSkyMemberOverflowPositions(entry);
-        return overflowGroup;
-      }
-
       function ovizSetSkyMemberBatchMaterialOpacity(entry, opacity) {
         if (!entry || !entry.material) {
           return;
@@ -16431,88 +16375,7 @@ __SKY_RUNTIME_JS__
         }
         entry.color = color;
         const revealedOpacity = baseOpacity * skyMemberRevealProgress;
-        if (entry.overflowActive && entry.overflowMaterial) {
-          entry.overflowMaterial.opacity = revealedOpacity;
-          if (entry.overflowMaterial.color) {
-            entry.overflowMaterial.color.set(color);
-          }
-          ovizSetSkyMemberBatchMaterialOpacity(entry, 0.0);
-        } else {
-          ovizSetSkyMemberBatchMaterialOpacity(entry, revealedOpacity);
-        }
-        if (entry.overflowGroup) {
-          entry.overflowGroup.children.forEach((sprite) => {
-            if (sprite && sprite.scale) {
-              sprite.scale.set(pointSize, pointSize, 1.0);
-            }
-          });
-        }
-      }
-
-      function ovizUpdateSkyMemberOverflowPositions(entry) {
-        if (!entry || !entry.overflowGroup) {
-          return;
-        }
-        const uniforms = entry.material && entry.material.uniforms;
-        const timeDeltaMyr = Number.isFinite(Number(entry.currentTimeDeltaMyr))
-          ? Number(entry.currentTimeDeltaMyr)
-          : (
-            Number(
-              uniforms && uniforms.ovizTimeDeltaMyr && uniforms.ovizTimeDeltaMyr.value
-            ) || 0.0
-          );
-        const collapseProgress = clampRange(
-          Number.isFinite(Number(entry.currentCollapseProgress))
-            ? Number(entry.currentCollapseProgress)
-            : (
-              Number(
-                uniforms
-                && uniforms.ovizCollapseProgress
-                && uniforms.ovizCollapseProgress.value
-              ) || 0.0
-            ),
-          0.0,
-          1.0,
-        );
-        const collapseTarget = entry.currentCollapseTarget instanceof THREE.Vector3
-          ? entry.currentCollapseTarget
-          : (
-            uniforms
-            && uniforms.ovizCollapseTarget
-            && uniforms.ovizCollapseTarget.value instanceof THREE.Vector3
-              ? uniforms.ovizCollapseTarget.value
-              : null
-          );
-        const bulkDelta = entry.currentBulkDelta instanceof THREE.Vector3
-          ? entry.currentBulkDelta
-          : (
-            uniforms
-            && uniforms.ovizBulkDelta
-            && uniforms.ovizBulkDelta.value instanceof THREE.Vector3
-              ? uniforms.ovizBulkDelta.value
-              : null
-          );
-        entry.overflowGroup.children.forEach((sprite) => {
-          const originalOffset = sprite
-            && sprite.userData
-            && sprite.userData.ovizSkyMemberOffset;
-          const velocity = sprite
-            && sprite.userData
-            && sprite.userData.ovizSkyMemberVelocity;
-          if (!(sprite && originalOffset instanceof THREE.Vector3)) {
-            return;
-          }
-          sprite.position.copy(originalOffset);
-          if (bulkDelta) {
-            sprite.position.add(bulkDelta);
-          }
-          if (velocity instanceof THREE.Vector3 && Math.abs(timeDeltaMyr) > 1e-12) {
-            sprite.position.addScaledVector(velocity, timeDeltaMyr);
-          }
-          if (collapseTarget && collapseProgress > 1e-12) {
-            sprite.position.lerp(collapseTarget, collapseProgress);
-          }
-        });
+        ovizSetSkyMemberBatchMaterialOpacity(entry, revealedOpacity);
       }
 
       function ovizSetSkyMemberBatchTime(entry, displayedTimeMyr, bulkTarget) {
@@ -16564,7 +16427,6 @@ __SKY_RUNTIME_JS__
           entry.batchTimeAttribute.needsUpdate = true;
           entry.batchBulkDeltaAttribute.needsUpdate = true;
           entry.batchCollapseTargetAttribute.needsUpdate = true;
-          ovizUpdateSkyMemberOverflowPositions(entry);
           return;
         }
         if (uniforms.ovizTimeDeltaMyr) {
@@ -16588,7 +16450,6 @@ __SKY_RUNTIME_JS__
         ) {
           uniforms.ovizCollapseTarget.value.copy(bulkTarget).sub(entry.parent.position);
         }
-        ovizUpdateSkyMemberOverflowPositions(entry);
       }
 
       function ovizSetSkyMemberBatchCollapse(entry, collapseProgress) {
@@ -16602,41 +16463,26 @@ __SKY_RUNTIME_JS__
         if (collapseUniform) {
           collapseUniform.value = progress;
         }
-        ovizUpdateSkyMemberOverflowPositions(entry);
       }
 
       function updateSkyMemberBatchOverflowSprites() {
         if (!skyMemberBatchOpacityEntries.length) {
           return;
         }
-        const pointSizeLimit = ovizMaximumRasterizedPointSize();
+        // Member stars always draw through the merged Points batches; WebGL
+        // clamps oversized gl_PointSize values to the device raster limit,
+        // which reads the same on screen. The former per-member overflow
+        // sprites put one scene node and one draw call per star (hundreds of
+        // thousands of nodes after a long Sky session) and re-uploaded the
+        // whole batch opacity buffer whenever a cluster crossed the size
+        // threshold, which collapsed Sky-mode frame rates.
         skyMemberBatchOpacityEntries.forEach((entry) => {
-          if (!entry || !entry.material || !entry.projectionEntry) {
+          if (!entry || !entry.material) {
             return;
           }
-          const projectedSize = ovizProjectedBatchedPointSize(
-            entry.projectionEntry,
-            entry.pointSize,
-          );
-          const overflowThreshold = pointSizeLimit * (entry.overflowActive ? 0.82 : 0.90);
-          const useOverflowSprites = projectedSize > overflowThreshold;
           const effectiveOpacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)
             * skyMemberRevealProgress;
-          if (useOverflowSprites) {
-            const overflowGroup = ovizEnsureSkyMemberOverflowSprites(entry);
-            if (overflowGroup && entry.overflowMaterial) {
-              entry.overflowMaterial.opacity = effectiveOpacity;
-              overflowGroup.visible = effectiveOpacity > 0.0;
-              ovizSetSkyMemberBatchMaterialOpacity(entry, 0.0);
-              entry.overflowActive = true;
-            }
-          } else {
-            ovizSetSkyMemberBatchMaterialOpacity(entry, effectiveOpacity);
-            if (entry.overflowGroup) {
-              entry.overflowGroup.visible = false;
-            }
-            entry.overflowActive = false;
-          }
+          ovizSetSkyMemberBatchMaterialOpacity(entry, effectiveOpacity);
         });
       }
 
@@ -19710,6 +19556,7 @@ __SKY_RUNTIME_JS__
               });
               glowSpriteMaterial.opacity = (Number(glowBaseMaterial.opacity) || 0.0)
                 * (1.0 - skyMemberRevealProgress);
+              glowSpriteMaterial.visible = glowSpriteMaterial.opacity > 0.001;
             }
             const glowSprite = new THREE.Sprite(glowSpriteMaterial);
             if (forceResident) ovizRetainedPointComponentCount += 1;
@@ -19743,6 +19590,7 @@ __SKY_RUNTIME_JS__
               });
               coreSpriteMaterial.opacity = (Number(coreBaseMaterial.opacity) || 0.0)
                 * (1.0 - skyMemberRevealProgress);
+              coreSpriteMaterial.visible = coreSpriteMaterial.opacity > 0.001;
             }
             const coreSprite = new THREE.Sprite(coreSpriteMaterial);
             if (forceResident) ovizRetainedPointComponentCount += 1;
@@ -19784,6 +19632,7 @@ __SKY_RUNTIME_JS__
               });
               markerSpriteMaterial.opacity = (Number(markerBaseMaterial.opacity) || 0.0)
                 * (1.0 - skyMemberRevealProgress);
+              markerSpriteMaterial.visible = markerSpriteMaterial.opacity > 0.001;
             }
             const sprite = new THREE.Sprite(markerSpriteMaterial);
             if (forceResident) ovizRetainedPointComponentCount += 1;
