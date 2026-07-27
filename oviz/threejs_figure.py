@@ -27,6 +27,8 @@ from .threejs_runtime_widget_content import THREEJS_WIDGET_CONTENT_RUNTIME_JS
 from .threejs_runtime_widgets import THREEJS_WIDGET_RUNTIME_JS
 from .threejs_states import default_states_project_id, normalize_states_spec
 from .threejs_deck import normalize_deck_spec
+from .threejs_paper import normalize_paper_spec
+from .threejs_runtime_paper import THREEJS_PAPER_RUNTIME_JS
 
 
 _THREEJS_AR_BUTTON_HTML = (
@@ -37,6 +39,11 @@ _THREEJS_AR_BUTTON_HTML = (
 _THREEJS_DECK_BUTTON_HTML = (
     '<button class="oviz-three-deck-editor oviz-three-deck-toggle" type="button" '
     'title="Open slide editor" aria-expanded="false" aria-pressed="false">Slides ▸</button>'
+)
+
+_THREEJS_PAPER_BUTTON_HTML = (
+    '<button class="oviz-three-paper-toggle" type="button" '
+    'title="Open the paper reader" aria-pressed="false">Paper ▸</button>'
 )
 
 _THREEJS_TOPBAR_HTML = """
@@ -89,6 +96,7 @@ _THREEJS_TOPBAR_HTML = """
             </div>
           </div>
           __DECK_BUTTON_HTML__
+          __PAPER_BUTTON_HTML__
           <div class="oviz-three-search-shell" data-open="false" data-results-open="false">
             <button class="oviz-three-search-toggle" type="button" title="Search clusters" aria-label="Search clusters" aria-expanded="false">
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -6191,6 +6199,251 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-deck-author-block:hover .oviz-deck-block-move,
       #__ROOT_ID__ .oviz-deck-author-block[data-selected="true"] .oviz-deck-block-move {
         display: block;
+      }
+      #__ROOT_ID__ .oviz-three-paper-panel {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: var(--oviz-paper-panel-width, 42%);
+        min-width: 320px;
+        max-width: 72vw;
+        display: none;
+        flex-direction: column;
+        z-index: 60;
+        background:
+          linear-gradient(180deg, rgba(10, 12, 16, 0.94), rgba(10, 12, 16, 0.90));
+        border-left: 1px solid var(--oviz-panel-border);
+        box-shadow: -18px 0 42px rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        color: var(--oviz-text);
+      }
+      #__ROOT_ID__ .oviz-three-paper-panel[data-open="true"] {
+        display: flex;
+      }
+      #__ROOT_ID__[data-zen="true"] .oviz-three-paper-panel,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-paper-panel,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-paper-panel,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-paper-toggle,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-paper-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-paper-toggle {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-paper-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px 12px 26px;
+        border-bottom: 1px solid var(--oviz-panel-border);
+        flex: 0 0 auto;
+      }
+      #__ROOT_ID__ .oviz-three-paper-doc-title {
+        font-size: 15px;
+        font-weight: 650;
+        line-height: 1.3;
+        letter-spacing: 0.01em;
+      }
+      #__ROOT_ID__ .oviz-three-paper-doc-title a {
+        color: var(--oviz-text);
+        text-decoration: none;
+        border-bottom: 1px solid rgba(140, 190, 255, 0.55);
+      }
+      #__ROOT_ID__ .oviz-three-paper-doc-authors {
+        margin-top: 4px;
+        font-size: 11.5px;
+        color: var(--oviz-muted-text, #9aa4b2);
+        line-height: 1.35;
+      }
+      #__ROOT_ID__ .oviz-three-paper-doc-venue {
+        margin-top: 2px;
+        font-size: 11px;
+        color: var(--oviz-muted-text, #9aa4b2);
+        font-style: italic;
+      }
+      #__ROOT_ID__ .oviz-three-paper-head-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex: 0 0 auto;
+      }
+      #__ROOT_ID__ .oviz-three-paper-sync,
+      #__ROOT_ID__ .oviz-three-paper-close {
+        appearance: none;
+        border: 1px solid var(--oviz-panel-border);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--oviz-text);
+        border-radius: 999px;
+        font-size: 11px;
+        padding: 4px 10px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__ .oviz-three-paper-sync[data-mode="paused"] {
+        border-color: rgba(255, 196, 100, 0.75);
+        color: #ffd89a;
+      }
+      #__ROOT_ID__ .oviz-three-paper-sync[data-mode="off"] {
+        opacity: 0.62;
+      }
+      #__ROOT_ID__ .oviz-three-paper-close {
+        font-size: 14px;
+        line-height: 1;
+        padding: 4px 9px;
+      }
+      #__ROOT_ID__ .oviz-three-paper-rail {
+        position: absolute;
+        top: 84px;
+        bottom: 14px;
+        left: 8px;
+        width: 10px;
+        z-index: 2;
+      }
+      #__ROOT_ID__ .oviz-three-paper-rail-tick {
+        position: absolute;
+        left: 1px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        border: 1px solid rgba(140, 190, 255, 0.65);
+        background: rgba(20, 26, 34, 0.9);
+        cursor: pointer;
+        padding: 0;
+      }
+      #__ROOT_ID__ .oviz-three-paper-rail-tick[data-active="true"] {
+        background: var(--oviz-accent, #6ec5ff);
+        border-color: var(--oviz-accent, #6ec5ff);
+        box-shadow: 0 0 8px rgba(110, 197, 255, 0.8);
+      }
+      #__ROOT_ID__ .oviz-three-paper-scroll {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scroll-behavior: smooth;
+        padding: 18px 26px 48px 26px;
+        outline: none;
+      }
+      #__ROOT_ID__ .oviz-three-paper-body {
+        font-family: Georgia, "Iowan Old Style", "Source Serif Pro", serif;
+        font-size: 14.5px;
+        line-height: 1.62;
+        color: rgba(235, 238, 243, 0.94);
+        max-width: 62ch;
+        margin: 0 auto;
+      }
+      #__ROOT_ID__ .oviz-three-paper-body h2,
+      #__ROOT_ID__ .oviz-three-paper-body h3,
+      #__ROOT_ID__ .oviz-three-paper-body h4 {
+        font-family: Helvetica, Arial, sans-serif;
+        letter-spacing: 0.01em;
+        margin: 26px 0 10px 0;
+        line-height: 1.3;
+      }
+      #__ROOT_ID__ .oviz-three-paper-body h2 { font-size: 16px; }
+      #__ROOT_ID__ .oviz-three-paper-body h3 { font-size: 14px; }
+      #__ROOT_ID__ .oviz-three-paper-body h4 { font-size: 13px; }
+      #__ROOT_ID__ .oviz-three-paper-body p {
+        margin: 0 0 12px 0;
+      }
+      #__ROOT_ID__ .oviz-three-paper-body a {
+        color: #9ed0ff;
+      }
+      #__ROOT_ID__ .oviz-three-paper-block {
+        position: relative;
+        border-radius: 8px;
+        padding: 2px 10px;
+        margin: 0 -10px;
+        transition: background 220ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-paper-block[data-active="true"] {
+        background: rgba(110, 197, 255, 0.08);
+      }
+      #__ROOT_ID__ .oviz-three-paper-anchored {
+        border-left: 2px solid rgba(110, 197, 255, 0.30);
+        margin-left: -12px;
+        padding-left: 10px;
+      }
+      #__ROOT_ID__ .oviz-three-paper-block[data-active="true"].oviz-three-paper-anchored {
+        border-left-color: var(--oviz-accent, #6ec5ff);
+      }
+      #__ROOT_ID__ .oviz-three-paper-anchor-marker {
+        position: absolute;
+        left: -30px;
+        top: 6px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 1px solid rgba(140, 190, 255, 0.65);
+        background: rgba(20, 26, 34, 0.9) center / 8px no-repeat;
+        cursor: pointer;
+        padding: 0;
+      }
+      #__ROOT_ID__ .oviz-three-paper-anchor-marker::after {
+        content: "";
+        position: absolute;
+        inset: 5px;
+        border-radius: 50%;
+        background: rgba(140, 190, 255, 0.8);
+      }
+      #__ROOT_ID__ .oviz-three-paper-block[data-active="true"] .oviz-three-paper-anchor-marker::after {
+        background: var(--oviz-accent, #6ec5ff);
+        box-shadow: 0 0 8px rgba(110, 197, 255, 0.9);
+      }
+      #__ROOT_ID__ .oviz-three-paper-block figure {
+        margin: 14px 0 18px 0;
+      }
+      #__ROOT_ID__ .oviz-three-paper-block figure img {
+        max-width: 100%;
+        border-radius: 6px;
+        border: 1px solid var(--oviz-panel-border);
+        cursor: zoom-in;
+        display: block;
+      }
+      #__ROOT_ID__ .oviz-three-paper-block figcaption {
+        margin-top: 8px;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--oviz-muted-text, #9aa4b2);
+        font-family: Helvetica, Arial, sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-paper-live-badge {
+        margin-top: 8px;
+        display: inline-block;
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 11px;
+        color: #9ed0ff;
+        border: 1px dashed rgba(140, 190, 255, 0.5);
+        border-radius: 999px;
+        padding: 3px 10px;
+      }
+      #__ROOT_ID__ .oviz-three-paper-lightbox {
+        position: absolute;
+        inset: 0;
+        z-index: 90;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 40px;
+        background: rgba(4, 6, 10, 0.9);
+        cursor: zoom-out;
+      }
+      #__ROOT_ID__ .oviz-three-paper-lightbox[data-open="true"] {
+        display: flex;
+      }
+      #__ROOT_ID__ .oviz-three-paper-lightbox img {
+        max-width: 92%;
+        max-height: 82%;
+        border-radius: 8px;
+      }
+      #__ROOT_ID__ .oviz-three-paper-lightbox-caption {
+        max-width: 900px;
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: var(--oviz-muted-text, #9aa4b2);
+        text-align: center;
       }
       #__ROOT_ID__ .oviz-deck-editor {
         position: absolute;
@@ -22464,6 +22717,12 @@ __STATE_RUNTIME_JS__
           if (root && root.dataset) root.dataset.deckReady = "error";
           console.error("Oviz Deck initialization failed", err);
         });
+        try {
+          initializeOvizPaper();
+        } catch (err) {
+          if (root && root.dataset) root.dataset.paperReady = "error";
+          console.error("Oviz Paper initialization failed", err);
+        }
       }).catch((err) => {
         if (root && root.dataset) {
           root.dataset.statesReady = "error";
@@ -22552,6 +22811,7 @@ class ThreeJSFigure:
             project_id=default_states_project_id(self.scene_spec),
         )
         self.scene_spec["deck"] = normalize_deck_spec(self.scene_spec.get("deck"))
+        self.scene_spec["paper"] = normalize_paper_spec(self.scene_spec.get("paper"))
         self._root_id = f"oviz-three-{uuid.uuid4().hex}"
         self.compress_scene_spec = compress_scene_spec
         self.scene_spec_compression_threshold_bytes = (
@@ -22570,9 +22830,13 @@ class ThreeJSFigure:
         scene_spec_compression_threshold_bytes: int | None = None,
     ) -> str:
         deck_available = bool(self.scene_spec.get("deck", {}).get("available", True))
+        paper_available = bool(self.scene_spec.get("paper", {}).get("available", False))
         topbar_html = _THREEJS_TOPBAR_HTML.replace(
             "          __DECK_BUTTON_HTML__",
             f"          {_THREEJS_DECK_BUTTON_HTML}" if deck_available else "",
+        ).replace(
+            "          __PAPER_BUTTON_HTML__",
+            f"          {_THREEJS_PAPER_BUTTON_HTML}" if paper_available else "",
         )
         return render_threejs_html(
             self.scene_spec,
@@ -22595,7 +22859,7 @@ class ThreeJSFigure:
                 + "\n\n"
                 + THREEJS_ACTION_RUNTIME_JS
             ),
-            state_runtime_js=THREEJS_STATE_RUNTIME_JS + "\n\n" + THREEJS_DECK_RUNTIME_JS,
+            state_runtime_js=THREEJS_STATE_RUNTIME_JS + "\n\n" + THREEJS_DECK_RUNTIME_JS + "\n\n" + THREEJS_PAPER_RUNTIME_JS,
             compress_scene_spec=(
                 self.compress_scene_spec
                 if compress_scene_spec is None

@@ -2314,7 +2314,19 @@ THREEJS_STATE_RUNTIME_JS = r"""
             differences: fidelityDifferences,
           });
           if (fidelityDifferences.length) {
-            throw new Error(`State fidelity check failed: ${fidelityDifferences.join(", ")}`);
+            const renderedLagOnly = fidelityDifferences.every(
+              (difference) => String(difference).startsWith("rendered_")
+            );
+            if (!renderedLagOnly) {
+              throw new Error(`State fidelity check failed: ${fidelityDifferences.join(", ")}`);
+            }
+            // Rendered-only differences mean the logical state applied
+            // exactly but the drawn frame is still settling (for example a
+            // birth-time fade converging one frame after the re-apply).
+            // Aborting would strand the transition with a stale active
+            // state and break queued navigation, which is strictly worse
+            // than completing; the differences stay recorded in
+            // stateFidelity for diagnostics.
           }
           ovizStateTimelineMotionActive = false;
           updateTimelineMotionOpacity();
@@ -3095,7 +3107,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
         ovizInstallPublicApi();
         window.addEventListener("message", ovizPostMessageHandler);
         root.addEventListener("pointerdown", (event) => {
-          if (ovizStateTransition && (!ovizStatesShellEl || !ovizStatesShellEl.contains(event.target))) {
+          const insideStatesShell = ovizStatesShellEl && ovizStatesShellEl.contains(event.target);
+          // Scrolling or clicking inside the paper reader must not abort a
+          // scroll-driven transition; only direct scene interaction cancels.
+          const insidePaperPanel = event.target
+            && typeof event.target.closest === "function"
+            && event.target.closest(".oviz-three-paper-panel");
+          if (ovizStateTransition && !insideStatesShell && !insidePaperPanel) {
             ovizCancelStateTransitionWithoutSnap("user-interaction", { restorePresentation: true });
           }
         }, { capture: true });

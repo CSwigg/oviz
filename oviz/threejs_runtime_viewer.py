@@ -2502,6 +2502,11 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (typeof target.closest === "function" && target.closest(".oviz-three-key-help")) {
           return true;
         }
+        // The paper reader owns keyboard scrolling while the cursor/focus is
+        // inside it; viewer motion keys must not fire underneath the text.
+        if (typeof target.closest === "function" && target.closest(".oviz-three-paper-panel")) {
+          return true;
+        }
         if (target.isContentEditable) {
           return true;
         }
