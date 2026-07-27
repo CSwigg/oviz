@@ -31,8 +31,9 @@ PANEL_WIDTH_FRACTION = 0.42
 VIEW_OFFSET = {"x": 0.21, "y": 0.0}
 
 # Traces from newer chronology work that play no role in arXiv 2406.06510;
-# the paper demo keeps only the Sun, the two age-sliced cluster samples, the
-# three families, the grid helpers, and the Edenhofer dust volume.
+# the paper demo keeps only the Sun, the paper's cluster sample (three
+# families in colour, everything else grey), the grid helpers, and the
+# Edenhofer dust volume.
 PAPER_IRRELEVANT_TRACES = {
     "Full Cluster Catalog",
     "Lacerta Family",
@@ -43,6 +44,10 @@ PAPER_IRRELEVANT_TRACES = {
     "Cepheus Spur Clusters",
     "Vela-Sagittarius Clusters",
 }
+
+FAMILY_TRACE_NAMES = ("Alpha Persei Family", "Cr 135 Family", "M6 Family")
+GREY_SAMPLE_NAME = "Other Clusters"
+GREY_SAMPLE_COLOR = "#8b93a1"
 
 
 def trace_is_paper_irrelevant(name: object) -> bool:
@@ -260,25 +265,19 @@ def build_states(scene: dict) -> dict:
     }
 
 
+# Every figure in the paper is presented live by the Oviz scene itself, so
+# the panel carries no figure images: the figure-referencing paragraphs
+# anchor the corresponding States instead.
 PARAGRAPH_ANCHORS = [
     # (keyword regex over plain text, state name, label)
-    (r"seventy years|past seventy", "Overview today", "Present-day cluster census"),
-    (r"integrate the clusters|Going back 30", "Orbit traceback", "Orbits traced back in time"),
-    (r"HDBSCAN|membership list", "Three families converge", "Families identified at birth"),
-    (r"supernovae|progenitors", "Dust context", "Feedback shaped the local ISM"),
-    (r"Collinder 135|Cr135 family|Cr 135 family", "Collinder 135 family", "The Cr 135 family"),
-    (r"M6 family|Messier 6", "Messier 6 family", "The M 6 family"),
-    (r"Alpha Persei .{0,10}family|𝛼Per family", "Alpha Persei family", "The α Per family"),
-    (r"Local Bubble|GSH ?238", "Dust context", "The Local Bubble and GSH 238"),
+    (r"sample of 2\d\d high-quality|young \(< ?70 Myr\)", "Orbit traceback", "Orbits traced back in time"),
+    (r"Figure 1|as a function of time from 60", "Three families converge", "Figure 1, live: families at birth"),
+    (r"Figure 2|overlaid on a kiloparsec", "Dust context", "Figure 2, live: families in the dust map"),
+    (r"Collinder 135 family", "Collinder 135 family", "The Cr 135 family"),
+    (r"Messier 6 \(M6\) family|M6 family spans", "Messier 6 family", "The M 6 family"),
+    (r"Alpha Persei .{0,12}family|𝛼Per.{0,3}family", "Alpha Persei family", "The α Per family"),
+    (r"origins of many young local star clusters", "All-sky view", "Figure 3, live: the sample on the sky"),
 ]
-
-FIGURE_PLACEMENTS = {
-    # figure label -> (after paragraph matching regex, state name, live)
-    "Figure 1": (r"HDBSCAN|membership list", "Three families converge", True),
-    "Table 1": (r"supernovae|progenitors", None, False),
-    "Figure 2": (r"Local Bubble|GSH ?238", "Dust context", True),
-    "Figure 3": (r"Alpha Persei .{0,10}family|𝛼Per family", "All-sky view", True),
-}
 
 
 def plain_text(html: str) -> str:
@@ -289,7 +288,6 @@ def plain_text(html: str) -> str:
 
 def build_paper(states: dict) -> dict:
     content = json.loads((CONTENT_DIR / "content.json").read_text(encoding="utf-8"))
-    figures_by_label = {fig["label"]: fig for fig in content["figures"]}
 
     paper = Paper(
         content["title"],
@@ -315,9 +313,12 @@ def build_paper(states: dict) -> dict:
 
     paper.add_section("Main", level=1)
     used_anchors: set[str] = set()
-    pending_figures = dict(FIGURE_PLACEMENTS)
     for paragraph in content["main_paragraphs"]:
         text = plain_text(paragraph)
+        if text.lstrip().startswith("References"):
+            # The extraction merged the reference list into the last main
+            # paragraph; the dedicated References section renders it instead.
+            continue
         anchor_state = None
         anchor_label = None
         for pattern, state_name, label in PARAGRAPH_ANCHORS:
@@ -333,20 +334,6 @@ def build_paper(states: dict) -> dict:
             state=anchor_state,
             label=anchor_label,
         )
-        for figure_label, (pattern, figure_state, live) in list(pending_figures.items()):
-            if re.search(pattern, text, re.IGNORECASE):
-                figure = figures_by_label.get(figure_label)
-                if figure and figure.get("file"):
-                    paper.add_figure(
-                        CONTENT_DIR / figure["file"],
-                        caption_html=figure["caption_html"],
-                        max_width_px=1400,
-                        jpeg_quality=82,
-                        live=bool(live),
-                        state=figure_state,
-                        label=f"{figure_label} view" if figure_state else None,
-                    )
-                pending_figures.pop(figure_label)
 
     paper.add_section("Methods", level=1)
     for block in content["methods_blocks"]:
@@ -354,15 +341,6 @@ def build_paper(states: dict) -> dict:
             paper.add_html(f"<h4>{block['heading']}</h4>")
         else:
             paper.add_html(f"<p>{block['paragraph']}</p>")
-    for label in ("Extended Data Figure 1", "Extended Data Figure 2"):
-        figure = figures_by_label.get(label)
-        if figure and figure.get("file"):
-            paper.add_figure(
-                CONTENT_DIR / figure["file"],
-                caption_html=figure["caption_html"],
-                max_width_px=1200,
-                jpeg_quality=82,
-            )
 
     paper.add_section("References", level=1)
     items = "".join(f"<li>{reference}</li>" for reference in content["references"])
@@ -413,9 +391,111 @@ def strip_paper_irrelevant_traces(scene: dict) -> None:
                 members.pop(name, None)
 
 
+def merge_grey_cluster_sample(scene: dict) -> None:
+    """Collapse the age-sliced samples into one grey non-family trace.
+
+    The paper's visual grammar is three coloured families over a grey field of
+    sample clusters that were not assigned to any family; the source figure's
+    blue/red age slices are merged, family members removed, and the remainder
+    recoloured grey.
+    """
+    frames = scene.get("frames") or []
+    if not frames:
+        return
+
+    def motion_key(point: dict) -> str:
+        return str(((point.get("motion") or {}).get("key")) or "")
+
+    family_keys: set[str] = set()
+    grey_key = ""
+    dropped_keys: set[str] = set()
+    for trace in frames[0].get("traces") or []:
+        if trace.get("name") in FAMILY_TRACE_NAMES:
+            family_keys.update(
+                motion_key(point) for point in trace.get("points") or []
+            )
+    family_keys.discard("")
+
+    for frame in frames:
+        traces = frame.get("traces") or []
+        by_name = {str(t.get("name")): t for t in traces}
+        base = by_name.get("Clusters (< 60 Myr)")
+        extra = by_name.get("Clusters (< 15 Myr)")
+        if base is None:
+            continue
+        merged: list[dict] = []
+        seen: set[str] = set()
+        for source in (base, extra):
+            if source is None:
+                continue
+            for point in source.get("points") or []:
+                key = motion_key(point)
+                if key and key in family_keys:
+                    continue
+                if key and key in seen:
+                    continue
+                if key:
+                    seen.add(key)
+                merged.append(point)
+        base["points"] = merged
+        base["name"] = GREY_SAMPLE_NAME
+        base["legend_color"] = GREY_SAMPLE_COLOR
+        base["default_color"] = GREY_SAMPLE_COLOR
+        base["default_opacity"] = 0.55
+        grey_key = str(base.get("key") or grey_key)
+        if extra is not None:
+            if extra.get("key"):
+                dropped_keys.add(str(extra["key"]))
+            frame["traces"] = [t for t in traces if t is not extra]
+
+    family_trace_keys = {
+        str(trace.get("key"))
+        for trace in frames[0].get("traces") or []
+        if trace.get("name") in FAMILY_TRACE_NAMES and trace.get("key")
+    }
+    # Families and the grey sample stay visible in every group the demo
+    # states use; groups now only differ in dust emphasis and decorations.
+    for visibility in (scene.get("group_visibility") or {}).values():
+        if not isinstance(visibility, dict):
+            continue
+        for key in dropped_keys:
+            visibility.pop(key, None)
+        for key in family_trace_keys | ({grey_key} if grey_key else set()):
+            if key in visibility:
+                visibility[key] = True
+
+    legend = scene.get("legend") or {}
+    if isinstance(legend.get("items"), list):
+        kept_items = []
+        for item in legend["items"]:
+            if str(item.get("key")) in dropped_keys:
+                continue
+            if str(item.get("key")) == grey_key:
+                item = dict(item)
+                item["name"] = GREY_SAMPLE_NAME
+                if "color" in item:
+                    item["color"] = GREY_SAMPLE_COLOR
+                item["legend_color"] = GREY_SAMPLE_COLOR
+                item["default_color"] = GREY_SAMPLE_COLOR
+            kept_items.append(item)
+        legend["items"] = kept_items
+    animation = scene.get("animation") or {}
+    if isinstance(animation.get("focus_options"), list):
+        animation["focus_options"] = [
+            (
+                {**option, "name": GREY_SAMPLE_NAME}
+                if str(option.get("key")) == grey_key
+                else option
+            )
+            for option in animation["focus_options"]
+            if str(option.get("key")) not in dropped_keys
+        ]
+
+
 def build_state_only_scene(scene_spec: dict) -> dict:
     scene = deepcopy(scene_spec)
     strip_paper_irrelevant_traces(scene)
+    merge_grey_cluster_sample(scene)
     scene["title"] = ""
     scene["deck"] = {
         "schema_version": 2,
