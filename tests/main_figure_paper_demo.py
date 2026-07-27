@@ -127,8 +127,16 @@ def trace_centroid(frame: dict, trace_name: str) -> tuple[float, float, float] |
     return None
 
 
+def edenhofer_state_key(scene: dict) -> str:
+    for layer in (scene.get("volumes") or {}).get("layers") or []:
+        if "edenhofer" in str(layer.get("name") or "").lower():
+            return str(layer.get("state_key") or layer.get("key") or "")
+    return ""
+
+
 def build_states(scene: dict) -> dict:
     frames = scene["frames"]
+    dust_key = edenhofer_state_key(scene)
 
     def camera(position, target=(0.0, 0.0, 0.0)):
         return {
@@ -138,16 +146,41 @@ def build_states(scene: dict) -> dict:
             "view_offset": dict(VIEW_OFFSET),
         }
 
-    def snapshot(*, time_myr, cam, group="Clusters", globals_extra=None):
+    def dust_volume(**overrides):
+        # Baseline mirrors the Edenhofer defaults (plus the build-time
+        # galactic lighting); the dust-focused state raises density and
+        # lighting so the map itself becomes the subject.
+        entry = {
+            "visible": True,
+            "opacity": 1.0,
+            "alphaCoef": 105.0,
+            "galacticLightIntensity": 1.35,
+            "galacticAmbient": 0.22,
+        }
+        entry.update(overrides)
+        return entry
+
+    def snapshot(
+        *,
+        time_myr,
+        cam,
+        group="Clusters",
+        globals_extra=None,
+        dust=None,
+        point_opacity=1.0,
+    ):
         # Snapshots stay minimal and only carry keys that
         # captureRuntimeState() also emits: the post-transition fidelity
         # check iterates the target's keys, so any build-pipeline flag
         # copied from initial_state would fail it and abort the transition.
         frame_index = frame_index_for_time(frames, time_myr)
-        controls = {"camera_view_mode": "free"}
+        controls = {
+            "camera_view_mode": "free",
+            "point_opacity_scale": float(point_opacity),
+        }
         if globals_extra:
             controls.update(globals_extra)
-        return {
+        state = {
             "current_group": group,
             "current_frame_index": frame_index,
             "current_frame_value": float(frame_index),
@@ -156,6 +189,13 @@ def build_states(scene: dict) -> dict:
             "zen_mode_enabled": False,
             "global_controls": controls,
         }
+        if dust_key:
+            state["volume_state_by_key"] = {dust_key: dust_volume(**(dust or {}))}
+            # Group switches re-apply the group's legend defaults, which keep
+            # the dust volume legend-only; pin it on so the volume renders in
+            # every state (time-gating still hides it away from t = 0).
+            state["legend_state"] = {dust_key: True}
+        return state
 
     def family_camera(frame_time, family_name, back=420.0, lift=230.0):
         frame = frames[frame_index_for_time(frames, frame_time)]
@@ -224,8 +264,20 @@ def build_states(scene: dict) -> dict:
         {
             "id": "paper-dust",
             "name": "Dust context",
-            "transition": {"duration_ms": 2000, "easing": "easeInOutCubic"},
-            "snapshot": snapshot(time_myr=0.0, cam=dust_camera, group="Dust Structures"),
+            "transition": {"duration_ms": 2200, "easing": "easeInOutCubic"},
+            "snapshot": snapshot(
+                time_myr=0.0,
+                cam=dust_camera,
+                group="Dust Structures",
+                # The dust map is the subject here: denser, brighter volume
+                # with the cluster points pulled well back.
+                dust={
+                    "alphaCoef": 160.0,
+                    "galacticLightIntensity": 1.9,
+                    "galacticAmbient": 0.32,
+                },
+                point_opacity=0.4,
+            ),
         },
         {
             "id": "paper-sky",
@@ -263,6 +315,42 @@ def build_states(scene: dict) -> dict:
         "items": items,
         "assets": {},
     }
+
+
+ALL_FAMILIES = "Alpha Persei Family|Cr 135 Family|M6 Family"
+
+# Important phrases become hover cues: underlined in the text, and while the
+# mouse rests on one the scene emphasises its subject (families brighten and
+# the rest dims, or the dust volume flares). (phrase regex, data attrs).
+HOVER_CUES = [
+    (r"155 out of 272 \(57 percent\) high-quality young clusters",
+     {"traces": ALL_FAMILIES}),
+    (r"Taurus and Sco-Cen star-forming complexes",
+     {"traces": "Alpha Persei Family"}),
+    (r"Local Bubble", {"volume": "edenhofer"}),
+    (r"three-dimensional dust maps", {"volume": "edenhofer"}),
+    (r"Cr135, M6, and .Per families", {"traces": ALL_FAMILIES}),
+    (r"kiloparsec-scale 3D dust map", {"volume": "edenhofer"}),
+    (r"Collinder 135, NGC 2547, and IC 2395",
+     {"traces": "Cr 135 Family"}),
+    (r"Messier 6 \(M6 or NGC 6405\), Trumpler 10, IC 2391",
+     {"traces": "M6 Family"}),
+    (r"Alpha Persei \(.Per\) family", {"traces": "Alpha Persei Family"}),
+]
+
+
+def inject_hover_cues(paragraph_html: str) -> str:
+    result = paragraph_html
+    for phrase_pattern, attrs in HOVER_CUES:
+        match = re.search(phrase_pattern, result)
+        if not match:
+            continue
+        attr_html = "".join(
+            f' data-cue-{key}="{value}"' for key, value in attrs.items()
+        )
+        span = f'<span class="oviz-paper-cue"{attr_html}>{match.group(0)}</span>'
+        result = result[: match.start()] + span + result[match.end():]
+    return result
 
 
 # Every figure in the paper is presented live by the Oviz scene itself, so
@@ -305,7 +393,7 @@ def build_paper(states: dict) -> dict:
 
     paper.add_section("Abstract", level=1)
     paper.add_html(
-        f"<p>{content['abstract_html']}</p>",
+        f"<p>{inject_hover_cues(content['abstract_html'])}</p>",
         state="Overview today",
         label="Present-day overview",
         transition_ms=1600,
@@ -330,17 +418,10 @@ def build_paper(states: dict) -> dict:
                 used_anchors.add(state_name)
                 break
         paper.add_html(
-            f"<p>{paragraph}</p>",
+            f"<p>{inject_hover_cues(paragraph)}</p>",
             state=anchor_state,
             label=anchor_label,
         )
-
-    paper.add_section("Methods", level=1)
-    for block in content["methods_blocks"]:
-        if "heading" in block:
-            paper.add_html(f"<h4>{block['heading']}</h4>")
-        else:
-            paper.add_html(f"<p>{block['paragraph']}</p>")
 
     paper.add_section("References", level=1)
     items = "".join(f"<li>{reference}</li>" for reference in content["references"])

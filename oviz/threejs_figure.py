@@ -6392,6 +6392,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-paper-body a {
         color: #9ed0ff;
       }
+      #__ROOT_ID__ .oviz-three-paper-body .oviz-paper-cue {
+        text-decoration-line: underline;
+        text-decoration-style: dotted;
+        text-decoration-color: rgba(158, 208, 255, 0.55);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+        cursor: pointer;
+        transition: color 150ms ease, text-decoration-color 150ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-paper-body .oviz-paper-cue:hover {
+        color: #d7ecff;
+        text-decoration-style: solid;
+        text-decoration-color: var(--oviz-accent, #6ec5ff);
+      }
       #__ROOT_ID__ .oviz-three-paper-block {
         position: relative;
         padding: 2px 0;

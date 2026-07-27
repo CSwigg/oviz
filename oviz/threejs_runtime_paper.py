@@ -72,6 +72,7 @@ THREEJS_PAPER_RUNTIME_JS = """
             ) {
               continue;
             }
+            ovizPaperClearHoverCue();
             try {
               await ovizGoToState(next);
             } catch (_jumpError) {
@@ -82,6 +83,164 @@ THREEJS_PAPER_RUNTIME_JS = """
           ovizPaperSetDataset("paperJumpPending", "false");
         }
         return null;
+      }
+
+      let ovizPaperHoverCueEl = null;
+      let ovizPaperHoverHeldOpacity = null;
+      let ovizPaperHoverTracesActive = false;
+      let ovizPaperHoverVolumeRestore = null;
+
+      function ovizPaperSampleTraces() {
+        const frame = sceneSpec && Array.isArray(sceneSpec.frames) ? sceneSpec.frames[0] : null;
+        return ((frame && frame.traces) || []).filter((trace) => (
+          trace
+          && trace.key
+          && trace.showlegend
+          && Array.isArray(trace.points)
+          && trace.points.length > 1
+        ));
+      }
+
+      function ovizPaperVolumeLayerFor(nameFragment) {
+        const layers = (sceneSpec.volumes && sceneSpec.volumes.layers) || [];
+        const fragment = String(nameFragment || "").toLowerCase();
+        return layers.find((layer) => (
+          layer && String(layer.name || "").toLowerCase().includes(fragment)
+        )) || null;
+      }
+
+      function ovizPaperRefreshVolume(layer) {
+        if (!layer || typeof volumeRuntimeByKey === "undefined") {
+          return;
+        }
+        const runtime = volumeRuntimeByKey.get(String(layer.key));
+        if (runtime && typeof applyVolumeStateToRuntime === "function") {
+          applyVolumeStateToRuntime(layer, runtime);
+        }
+      }
+
+      function ovizPaperApplyHoverCue(cueEl) {
+        if (!cueEl || cueEl === ovizPaperHoverCueEl) {
+          return;
+        }
+        // Never fight an in-flight state transition; the cue re-applies on the
+        // next hover once the scene has settled.
+        if (typeof ovizStateTransition !== "undefined" && ovizStateTransition) {
+          return;
+        }
+        ovizPaperClearHoverCue();
+        ovizPaperHoverCueEl = cueEl;
+        const targetNames = String(cueEl.dataset.cueTraces || "")
+          .split("|").map((name) => name.trim()).filter(Boolean);
+        const dimOpacity = Math.min(
+          Math.max(Number(cueEl.dataset.cueDim ?? 0.12), 0.0), 1.0
+        );
+        if (targetNames.length && typeof actionHeldTraceOpacityByKey !== "undefined") {
+          const wanted = new Set(targetNames);
+          const overrides = {};
+          let matched = false;
+          ovizPaperSampleTraces().forEach((trace) => {
+            const isTarget = wanted.has(String(trace.name));
+            overrides[String(trace.key)] = isTarget ? 1.0 : dimOpacity;
+            matched = matched || isTarget;
+          });
+          if (matched) {
+            ovizPaperHoverHeldOpacity = actionHeldTraceOpacityByKey;
+            actionHeldTraceOpacityByKey = overrides;
+            ovizPaperHoverTracesActive = true;
+          }
+        }
+        const volumeFragment = String(cueEl.dataset.cueVolume || "").trim();
+        if (volumeFragment && typeof volumeStateByKey !== "undefined") {
+          const layer = ovizPaperVolumeLayerFor(volumeFragment);
+          const stateKey = layer ? String(layer.state_key || layer.key || "") : "";
+          const state = stateKey ? volumeStateByKey[stateKey] : null;
+          if (state) {
+            ovizPaperHoverVolumeRestore = {
+              layer,
+              stateKey,
+              alphaCoef: state.alphaCoef,
+              galacticLightIntensity: state.galacticLightIntensity,
+              galacticAmbient: state.galacticAmbient,
+            };
+            state.alphaCoef = Math.min(Number(state.alphaCoef || 105.0) * 1.5, 400.0);
+            state.galacticLightIntensity = Math.min(
+              Number(state.galacticLightIntensity || 1.35) * 1.4, 4.0
+            );
+            state.galacticAmbient = Math.min(
+              Number(state.galacticAmbient || 0.22) + 0.10, 1.0
+            );
+            ovizPaperRefreshVolume(layer);
+          }
+        }
+        if (ovizPaperHoverTracesActive || ovizPaperHoverVolumeRestore) {
+          ovizPaperSetDataset("paperHoverCue", targetNames.join("|") || volumeFragment);
+          if (typeof renderDisplayedFrameForViewHandoff === "function") {
+            renderDisplayedFrameForViewHandoff();
+          }
+          if (typeof ovizInvalidateRender === "function") {
+            ovizInvalidateRender();
+          }
+        } else {
+          ovizPaperHoverCueEl = null;
+        }
+      }
+
+      function ovizPaperClearHoverCue() {
+        if (!ovizPaperHoverCueEl) {
+          return;
+        }
+        ovizPaperHoverCueEl = null;
+        if (ovizPaperHoverTracesActive && typeof actionHeldTraceOpacityByKey !== "undefined") {
+          actionHeldTraceOpacityByKey = ovizPaperHoverHeldOpacity;
+          ovizPaperHoverHeldOpacity = null;
+          ovizPaperHoverTracesActive = false;
+        }
+        if (ovizPaperHoverVolumeRestore && typeof volumeStateByKey !== "undefined") {
+          const restore = ovizPaperHoverVolumeRestore;
+          ovizPaperHoverVolumeRestore = null;
+          const state = volumeStateByKey[restore.stateKey];
+          if (state) {
+            state.alphaCoef = restore.alphaCoef;
+            state.galacticLightIntensity = restore.galacticLightIntensity;
+            state.galacticAmbient = restore.galacticAmbient;
+            ovizPaperRefreshVolume(restore.layer);
+          }
+        }
+        ovizPaperSetDataset("paperHoverCue", "");
+        if (typeof renderDisplayedFrameForViewHandoff === "function") {
+          renderDisplayedFrameForViewHandoff();
+        }
+        if (typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
+        }
+      }
+
+      function ovizPaperWireHoverCues(scrollEl) {
+        scrollEl.addEventListener("mouseover", (event) => {
+          const cue = event.target && event.target.closest
+            ? event.target.closest(".oviz-paper-cue")
+            : null;
+          if (cue && scrollEl.contains(cue)) {
+            ovizPaperApplyHoverCue(cue);
+          }
+        });
+        scrollEl.addEventListener("mouseout", (event) => {
+          if (!ovizPaperHoverCueEl) {
+            return;
+          }
+          const next = event.relatedTarget && event.relatedTarget.closest
+            ? event.relatedTarget.closest(".oviz-paper-cue")
+            : null;
+          if (next !== ovizPaperHoverCueEl) {
+            ovizPaperClearHoverCue();
+          }
+        });
+        scrollEl.addEventListener("scroll", () => {
+          if (ovizPaperHoverCueEl) {
+            ovizPaperClearHoverCue();
+          }
+        }, { passive: true });
       }
 
       function ovizPaperSyncLabel() {
@@ -504,6 +663,7 @@ THREEJS_PAPER_RUNTIME_JS = """
         ovizPaperRenderSyncButton();
 
         ovizPaperScrollEl.addEventListener("scroll", ovizPaperScheduleScrollSync, { passive: true });
+        ovizPaperWireHoverCues(ovizPaperScrollEl);
         ovizPaperPanelEl.addEventListener("pointerdown", (event) => event.stopPropagation());
         const closeButton = ovizPaperPanelEl.querySelector(".oviz-three-paper-close");
         if (closeButton) {
