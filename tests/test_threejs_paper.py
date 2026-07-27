@@ -123,6 +123,10 @@ class PaperRuntimeTests(unittest.TestCase):
         html = self._html(None)
         self.assertNotIn("Paper ▸", html)
         self.assertIn('class="oviz-three-paper-panel"', html)  # markup ships, runtime removes
+        # The collapse/expand edge tab must never flash or linger in figures
+        # without a paper: hidden in markup, removed by the runtime.
+        self.assertIn('class="oviz-three-paper-expand-tab" type="button" hidden', html)
+        self.assertIn('strayExpandTab.remove()', html)
 
 
 class PaperDemoArtifactTests(unittest.TestCase):

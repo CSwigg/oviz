@@ -785,6 +785,10 @@ THREEJS_PAPER_RUNTIME_JS = """
           if (ovizPaperToggleButtonEl) {
             ovizPaperToggleButtonEl.remove();
           }
+          const strayExpandTab = root.querySelector(".oviz-three-paper-expand-tab");
+          if (strayExpandTab) {
+            strayExpandTab.remove();
+          }
           ovizPaperSetDataset("paperReady", "unavailable");
           return;
         }

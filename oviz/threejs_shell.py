@@ -343,7 +343,7 @@ THREEJS_SHELL_HTML = """
           <article class="oviz-three-paper-body"></article>
         </div>
       </aside>
-      <button class="oviz-three-paper-expand-tab" type="button" title="Show the paper" aria-label="Show the paper">⟨ Paper</button>
+      <button class="oviz-three-paper-expand-tab" type="button" hidden title="Show the paper" aria-label="Show the paper">⟨ Paper</button>
       <div class="oviz-three-paper-lightbox" data-open="false" aria-hidden="true">
         <img alt="Paper figure enlarged" />
         <div class="oviz-three-paper-lightbox-caption"></div>
