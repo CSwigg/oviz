@@ -6225,6 +6225,73 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         -webkit-backdrop-filter: blur(26px) saturate(1.5);
         color: var(--oviz-text);
         overflow: hidden;
+        transition: transform 300ms cubic-bezier(0.4, 0.0, 0.2, 1.0);
+      }
+      #__ROOT_ID__[data-paper-resizing="true"] .oviz-three-paper-panel {
+        transition: none;
+      }
+      #__ROOT_ID__[data-paper-resizing="true"],
+      #__ROOT_ID__[data-paper-resizing="true"] .oviz-three-paper-panel {
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #__ROOT_ID__ .oviz-three-paper-panel[data-collapsed="true"] {
+        transform: translateX(calc(100% + 24px));
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-three-paper-resizer {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: -3px;
+        width: 12px;
+        cursor: ew-resize;
+        z-index: 4;
+        touch-action: none;
+      }
+      #__ROOT_ID__ .oviz-three-paper-resizer::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 5px;
+        width: 2px;
+        border-radius: 2px;
+        background: transparent;
+        transition: background 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-paper-resizer:hover::after,
+      #__ROOT_ID__[data-paper-resizing="true"] .oviz-three-paper-resizer::after {
+        background: rgba(110, 197, 255, 0.55);
+      }
+      #__ROOT_ID__ .oviz-three-paper-expand-tab {
+        position: absolute;
+        top: 50%;
+        right: 0;
+        transform: translateY(-50%);
+        z-index: 59;
+        appearance: none;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-right: 0;
+        border-radius: 12px 0 0 12px;
+        background: rgba(14, 18, 24, 0.60);
+        backdrop-filter: blur(18px) saturate(1.4);
+        -webkit-backdrop-filter: blur(18px) saturate(1.4);
+        color: rgba(226, 232, 240, 0.85);
+        font-size: 11.5px;
+        letter-spacing: 0.03em;
+        padding: 12px 10px 12px 12px;
+        cursor: pointer;
+        transition: background 160ms ease, color 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-paper-expand-tab:hover {
+        background: rgba(24, 32, 42, 0.78);
+        color: #ffffff;
+      }
+      #__ROOT_ID__[data-zen="true"] .oviz-three-paper-expand-tab,
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-paper-expand-tab,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-paper-expand-tab {
+        display: none !important;
       }
       #__ROOT_ID__ .oviz-three-paper-panel[data-open="true"] {
         display: flex;
@@ -6286,6 +6353,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         flex: 0 0 auto;
       }
       #__ROOT_ID__ .oviz-three-paper-sync,
+      #__ROOT_ID__ .oviz-three-paper-collapse,
       #__ROOT_ID__ .oviz-three-paper-close {
         appearance: none;
         border: 0;
@@ -6299,9 +6367,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         transition: background 160ms ease, color 160ms ease;
       }
       #__ROOT_ID__ .oviz-three-paper-sync:hover,
+      #__ROOT_ID__ .oviz-three-paper-collapse:hover,
       #__ROOT_ID__ .oviz-three-paper-close:hover {
         background: rgba(255, 255, 255, 0.14);
         color: #ffffff;
+      }
+      #__ROOT_ID__ .oviz-three-paper-collapse {
+        font-size: 13px;
+        line-height: 1;
+        padding: 5px 9px;
       }
       #__ROOT_ID__ .oviz-three-paper-sync[data-mode="paused"] {
         background: rgba(255, 196, 100, 0.16);
@@ -6368,11 +6442,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(210, 224, 240, 0.4);
       }
       #__ROOT_ID__ .oviz-three-paper-body {
-        font-family: Georgia, "Iowan Old Style", "Source Serif Pro", serif;
-        font-size: 14.5px;
-        line-height: 1.66;
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.68;
         color: rgba(238, 241, 246, 0.92);
-        max-width: 60ch;
+        max-width: 62ch;
         margin: 0 auto;
       }
       #__ROOT_ID__ .oviz-three-paper-body h2,

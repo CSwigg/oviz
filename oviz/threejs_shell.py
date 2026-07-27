@@ -324,7 +324,8 @@ THREEJS_SHELL_HTML = """
         <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="sw"></div>
         <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
-      <aside class="oviz-three-paper-panel" data-open="false" aria-hidden="true" inert aria-label="Paper reader">
+      <aside class="oviz-three-paper-panel" data-open="false" data-collapsed="false" aria-hidden="true" inert aria-label="Paper reader">
+        <div class="oviz-three-paper-resizer" title="Drag to resize the paper panel"></div>
         <div class="oviz-three-paper-head">
           <div class="oviz-three-paper-title-wrap">
             <div class="oviz-three-paper-doc-title"></div>
@@ -333,6 +334,7 @@ THREEJS_SHELL_HTML = """
           </div>
           <div class="oviz-three-paper-head-controls">
             <button class="oviz-three-paper-sync" type="button" title="Toggle scroll-driven scene sync">Sync: on</button>
+            <button class="oviz-three-paper-collapse" type="button" title="Hide the paper to the side" aria-label="Hide the paper to the side">⟩</button>
             <button class="oviz-three-paper-close" type="button" title="Close the paper reader" aria-label="Close the paper reader">×</button>
           </div>
         </div>
@@ -341,6 +343,7 @@ THREEJS_SHELL_HTML = """
           <article class="oviz-three-paper-body"></article>
         </div>
       </aside>
+      <button class="oviz-three-paper-expand-tab" type="button" title="Show the paper" aria-label="Show the paper">⟨ Paper</button>
       <div class="oviz-three-paper-lightbox" data-open="false" aria-hidden="true">
         <img alt="Paper figure enlarged" />
         <div class="oviz-three-paper-lightbox-caption"></div>

@@ -10,6 +10,11 @@ THREEJS_PAPER_RUNTIME_JS = """
       let ovizPaperSyncButtonEl = null;
       let ovizPaperToggleButtonEl = null;
       let ovizPaperLightboxEl = null;
+      let ovizPaperResizerEl = null;
+      let ovizPaperCollapseButtonEl = null;
+      let ovizPaperExpandTabEl = null;
+      let ovizPaperWidthFraction = 0.42;
+      let ovizPaperOffsetTweenFrame = 0;
       let ovizPaperAnchorEntries = [];
       let ovizPaperActiveAnchorId = "";
       let ovizPaperSyncMode = "on";
@@ -141,6 +146,15 @@ THREEJS_PAPER_RUNTIME_JS = """
           let matched = false;
           ovizPaperSampleTraces().forEach((trace) => {
             const isTarget = wanted.has(String(trace.name));
+            if (!isTarget) {
+              // Never resurrect group-hidden traces just to dim them; only
+              // targets may be summoned into view by a hover.
+              const visibleNow = typeof traceVisibleForGroupState !== "function"
+                || traceVisibleForGroupState(trace, currentGroup);
+              if (!visibleNow) {
+                return;
+              }
+            }
             overrides[String(trace.key)] = isTarget ? 1.0 : dimOpacity;
             matched = matched || isTarget;
           });
@@ -316,9 +330,157 @@ THREEJS_PAPER_RUNTIME_JS = """
           ovizPaperScheduleScrollSync();
           ovizPaperRequestKatex();
         }
+        ovizPaperSyncExpandTab();
+        ovizPaperTweenViewOffsetToTarget();
         if (typeof ovizInvalidateRender === "function") {
           ovizInvalidateRender();
         }
+      }
+
+      function ovizPaperIsCollapsed() {
+        return Boolean(ovizPaperPanelEl && ovizPaperPanelEl.dataset.collapsed === "true");
+      }
+
+      function ovizPaperSyncExpandTab() {
+        const showTab = Boolean(
+          ovizPaperProject && ovizPaperIsOpen() && ovizPaperIsCollapsed()
+        );
+        ovizPaperSetDataset("paperCollapsed", ovizPaperIsCollapsed() ? "true" : "false");
+        if (ovizPaperExpandTabEl) {
+          ovizPaperExpandTabEl.hidden = !showTab;
+        }
+      }
+
+      function ovizPaperSetCollapsed(collapsed) {
+        if (!ovizPaperPanelEl) {
+          return;
+        }
+        ovizPaperPanelEl.dataset.collapsed = collapsed ? "true" : "false";
+        ovizPaperSyncExpandTab();
+        ovizPaperTweenViewOffsetToTarget();
+        if (!collapsed) {
+          ovizPaperScheduleScrollSync();
+        }
+      }
+
+      function ovizPaperApplyWidthFraction(fraction, options = {}) {
+        const clamped = Math.min(Math.max(Number(fraction) || 0.42, 0.26), 0.62);
+        ovizPaperWidthFraction = clamped;
+        if (ovizPaperPanelEl) {
+          ovizPaperPanelEl.style.width = `${(clamped * 100).toFixed(2)}%`;
+        }
+        if (options.tweenOffset !== false) {
+          ovizPaperTweenViewOffsetToTarget(options.instantOffset === true);
+        }
+      }
+
+      function ovizPaperTargetViewOffset() {
+        // Content recentres into the region left of the panel: the offset is
+        // half the covered fraction, and zero when the panel is out of view.
+        const covering = ovizPaperIsOpen() && !ovizPaperIsCollapsed();
+        return { x: covering ? ovizPaperWidthFraction / 2.0 : 0.0, y: 0.0 };
+      }
+
+      function ovizPaperTweenViewOffsetToTarget(instant = false) {
+        if (typeof applyActionCameraViewOffset !== "function") {
+          return;
+        }
+        // State transitions own the view offset while they run; the paper
+        // re-asserts its panel-derived offset once the scene settles.
+        if (typeof ovizStateTransition !== "undefined" && ovizStateTransition) {
+          return;
+        }
+        if (ovizPaperOffsetTweenFrame) {
+          window.cancelAnimationFrame(ovizPaperOffsetTweenFrame);
+          ovizPaperOffsetTweenFrame = 0;
+        }
+        const target = ovizPaperTargetViewOffset();
+        const current = (
+          typeof currentActionCameraViewOffset !== "undefined"
+          && currentActionCameraViewOffset
+        ) ? currentActionCameraViewOffset : { x: 0.0, y: 0.0 };
+        const start = { x: Number(current.x) || 0.0, y: Number(current.y) || 0.0 };
+        if (
+          instant
+          || (Math.abs(start.x - target.x) <= 1e-4 && Math.abs(start.y - target.y) <= 1e-4)
+        ) {
+          applyActionCameraViewOffset(target);
+          if (typeof ovizInvalidateRender === "function") {
+            ovizInvalidateRender();
+          }
+          return;
+        }
+        const durationMs = 240.0;
+        const startMs = performance.now();
+        const step = (nowMs) => {
+          ovizPaperOffsetTweenFrame = 0;
+          if (typeof ovizStateTransition !== "undefined" && ovizStateTransition) {
+            return;
+          }
+          const linear = Math.min(Math.max((nowMs - startMs) / durationMs, 0.0), 1.0);
+          const eased = linear * linear * (3.0 - (2.0 * linear));
+          applyActionCameraViewOffset({
+            x: start.x + ((target.x - start.x) * eased),
+            y: start.y + ((target.y - start.y) * eased),
+          });
+          if (typeof ovizInvalidateRender === "function") {
+            ovizInvalidateRender();
+          }
+          if (linear < 1.0) {
+            ovizPaperOffsetTweenFrame = window.requestAnimationFrame(step);
+          }
+        };
+        ovizPaperOffsetTweenFrame = window.requestAnimationFrame(step);
+      }
+
+      function ovizPaperWireResizer() {
+        if (!ovizPaperResizerEl || !ovizPaperPanelEl) {
+          return;
+        }
+        let dragPointerId = null;
+        const onMove = (event) => {
+          if (dragPointerId === null || event.pointerId !== dragPointerId) {
+            return;
+          }
+          const rootRect = root.getBoundingClientRect();
+          const panelRect = ovizPaperPanelEl.getBoundingClientRect();
+          const fraction = (panelRect.right - event.clientX) / Math.max(rootRect.width, 1.0);
+          ovizPaperApplyWidthFraction(fraction, { instantOffset: true });
+        };
+        const endDrag = (event) => {
+          if (dragPointerId === null || (event && event.pointerId !== dragPointerId)) {
+            return;
+          }
+          dragPointerId = null;
+          root.dataset.paperResizing = "false";
+          ovizPaperRenderRail();
+          ovizPaperScheduleScrollSync();
+        };
+        ovizPaperResizerEl.addEventListener("pointerdown", (event) => {
+          dragPointerId = event.pointerId;
+          root.dataset.paperResizing = "true";
+          ovizPaperResizerEl.setPointerCapture(event.pointerId);
+          event.preventDefault();
+          event.stopPropagation();
+        });
+        ovizPaperResizerEl.addEventListener("pointermove", onMove);
+        ovizPaperResizerEl.addEventListener("pointerup", endDrag);
+        ovizPaperResizerEl.addEventListener("pointercancel", endDrag);
+      }
+
+      function ovizPaperWatchTransitionsForOffset() {
+        if (!root || typeof MutationObserver !== "function") {
+          return;
+        }
+        const observer = new MutationObserver(() => {
+          if (root.dataset.stateTransitionPhase === "complete") {
+            ovizPaperTweenViewOffsetToTarget();
+          }
+        });
+        observer.observe(root, {
+          attributes: true,
+          attributeFilter: ["data-state-transition-phase"],
+        });
       }
 
       function ovizPaperActivateAnchor(entry, options = {}) {
@@ -632,10 +794,14 @@ THREEJS_PAPER_RUNTIME_JS = """
         ovizPaperRailEl = ovizPaperPanelEl.querySelector(".oviz-three-paper-rail");
         ovizPaperSyncButtonEl = ovizPaperPanelEl.querySelector(".oviz-three-paper-sync");
         ovizPaperLightboxEl = root.querySelector(".oviz-three-paper-lightbox");
+        ovizPaperResizerEl = ovizPaperPanelEl.querySelector(".oviz-three-paper-resizer");
+        ovizPaperCollapseButtonEl = ovizPaperPanelEl.querySelector(".oviz-three-paper-collapse");
+        ovizPaperExpandTabEl = root.querySelector(".oviz-three-paper-expand-tab");
         ovizPaperPanelEl.style.setProperty(
           "--oviz-paper-panel-width",
           `${(100.0 * Number(spec.panel.width_fraction)).toFixed(2)}%`
         );
+        ovizPaperApplyWidthFraction(Number(spec.panel.width_fraction), { tweenOffset: false });
 
         const titleEl = ovizPaperPanelEl.querySelector(".oviz-three-paper-doc-title");
         if (titleEl) {
@@ -676,9 +842,22 @@ THREEJS_PAPER_RUNTIME_JS = """
         }
         if (ovizPaperToggleButtonEl) {
           ovizPaperToggleButtonEl.addEventListener("click", () => {
+            if (ovizPaperIsOpen() && ovizPaperIsCollapsed()) {
+              ovizPaperSetCollapsed(false);
+              return;
+            }
             ovizPaperSetOpen(!ovizPaperIsOpen());
           });
         }
+        if (ovizPaperCollapseButtonEl) {
+          ovizPaperCollapseButtonEl.addEventListener("click", () => ovizPaperSetCollapsed(true));
+        }
+        if (ovizPaperExpandTabEl) {
+          ovizPaperExpandTabEl.addEventListener("click", () => ovizPaperSetCollapsed(false));
+        }
+        ovizPaperWireResizer();
+        ovizPaperWatchTransitionsForOffset();
+        ovizPaperSyncExpandTab();
         if (ovizPaperLightboxEl) {
           ovizPaperLightboxEl.addEventListener("click", () => ovizPaperCloseLightbox());
         }

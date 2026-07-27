@@ -49,6 +49,11 @@ FAMILY_TRACE_NAMES = ("Alpha Persei Family", "Cr 135 Family", "M6 Family")
 GREY_SAMPLE_NAME = "Other Clusters"
 GREY_SAMPLE_COLOR = "#8b93a1"
 
+LOCAL_BUBBLE_NAME = "Local Bubble (Pelgrims+ 2020)"
+LOCAL_BUBBLE_KEY = "trace-local-bubble"
+LOCAL_BUBBLE_COLOR = "#1E90FF"  # dodger blue
+LOCAL_BUBBLE_CSV = CONTENT_DIR / "local_bubble_pelgrims.csv"
+
 
 def trace_is_paper_irrelevant(name: object) -> bool:
     base = str(name or "")
@@ -327,7 +332,11 @@ HOVER_CUES = [
      {"traces": ALL_FAMILIES}),
     (r"Taurus and Sco-Cen star-forming complexes",
      {"traces": "Alpha Persei Family"}),
-    (r"Local Bubble", {"volume": "edenhofer"}),
+    (r"Local Bubble", {
+        "volume": "edenhofer",
+        "traces": LOCAL_BUBBLE_NAME,
+        "dim": "0.3",
+    }),
     (r"three-dimensional dust maps", {"volume": "edenhofer"}),
     (r"Cr135, M6, and .Per families", {"traces": ALL_FAMILIES}),
     (r"kiloparsec-scale 3D dust map", {"volume": "edenhofer"}),
@@ -573,10 +582,77 @@ def merge_grey_cluster_sample(scene: dict) -> None:
         ]
 
 
+def add_local_bubble_trace(scene: dict) -> None:
+    """Add the Pelgrims et al. (2020) Local Bubble inner-shell surface.
+
+    The shell is a static present-day structure rendered as a fine dodger
+    blue point veil; it is on by default in the dust-focused group and
+    hover-revealable elsewhere.
+    """
+    rows = LOCAL_BUBBLE_CSV.read_text(encoding="utf-8").strip().splitlines()[1:]
+    points = []
+    for index, row in enumerate(rows):
+        x, y, z = (float(value) for value in row.split(","))
+        points.append({
+            "x": x,
+            "y": y,
+            "z": z,
+            "motion": {"key": f"lb-{index}"},
+        })
+    trace = {
+        "key": LOCAL_BUBBLE_KEY,
+        "name": LOCAL_BUBBLE_NAME,
+        "showlegend": True,
+        "has_n_stars": False,
+        "size_by_n_stars_default": False,
+        "default_opacity": 0.34,
+        "default_color": LOCAL_BUBBLE_COLOR,
+        "legend_color": LOCAL_BUBBLE_COLOR,
+        "default_symbol": "circle",
+        "default_point_size": 1.5,
+        "points": points,
+    }
+    for frame in scene.get("frames") or []:
+        frame.setdefault("traces", []).append(deepcopy(trace))
+    for group, visibility in (scene.get("group_visibility") or {}).items():
+        if isinstance(visibility, dict):
+            visibility[LOCAL_BUBBLE_KEY] = group in (
+                "All", "Dust Structures", "Dust Structures and Families"
+            )
+    legend = scene.get("legend") or {}
+    items = legend.get("items")
+    if isinstance(items, list):
+        template = next(
+            (item for item in items if item.get("has_points")), None
+        )
+        item = deepcopy(template) if template else {}
+        item.update({
+            "key": LOCAL_BUBBLE_KEY,
+            "name": LOCAL_BUBBLE_NAME,
+            "color": LOCAL_BUBBLE_COLOR,
+            "default_color": LOCAL_BUBBLE_COLOR,
+            "default_opacity": 0.34,
+            "default_point_size": 1.5,
+            "has_points": True,
+            "has_segments": False,
+            "has_labels": False,
+            "has_n_stars": False,
+            "size_by_n_stars_default": False,
+            "color_by": None,
+        })
+        insert_at = next(
+            (i for i, existing in enumerate(items)
+             if str(existing.get("key", "")).startswith("volume-")),
+            len(items),
+        )
+        items.insert(insert_at, item)
+
+
 def build_state_only_scene(scene_spec: dict) -> dict:
     scene = deepcopy(scene_spec)
     strip_paper_irrelevant_traces(scene)
     merge_grey_cluster_sample(scene)
+    add_local_bubble_trace(scene)
     scene["title"] = ""
     scene["deck"] = {
         "schema_version": 2,
