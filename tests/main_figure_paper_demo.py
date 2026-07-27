@@ -30,6 +30,28 @@ PANEL_WIDTH_FRACTION = 0.42
 # Push scene subjects toward the visible left region while the panel is open.
 VIEW_OFFSET = {"x": 0.21, "y": 0.0}
 
+# Traces from newer chronology work that play no role in arXiv 2406.06510;
+# the paper demo keeps only the Sun, the two age-sliced cluster samples, the
+# three families, the grid helpers, and the Edenhofer dust volume.
+PAPER_IRRELEVANT_TRACES = {
+    "Full Cluster Catalog",
+    "Lacerta Family",
+    "Trumpler 3 Family",
+    "Proto Orion Family",
+    "Radcliffe Wave Clusters",
+    "Split Selection Clusters",
+    "Cepheus Spur Clusters",
+    "Vela-Sagittarius Clusters",
+}
+
+
+def trace_is_paper_irrelevant(name: object) -> bool:
+    base = str(name or "")
+    if base in PAPER_IRRELEVANT_TRACES:
+        return True
+    return any(base == f"{removed} Track" for removed in PAPER_IRRELEVANT_TRACES)
+
+
 EDENHOFER_GALACTIC_LIGHTING = {
     "lighting_mode": "standard",
     "galactic_center": [8122.0, 0.0, 0.0],
@@ -356,8 +378,44 @@ def build_paper(states: dict) -> dict:
     return paper.to_spec(states=states)
 
 
+def strip_paper_irrelevant_traces(scene: dict) -> None:
+    removed_keys: set[str] = set()
+    for frame in scene.get("frames") or []:
+        traces = frame.get("traces") or []
+        for trace in traces:
+            if trace_is_paper_irrelevant(trace.get("name")) and trace.get("key"):
+                removed_keys.add(str(trace["key"]))
+        frame["traces"] = [
+            trace for trace in traces if not trace_is_paper_irrelevant(trace.get("name"))
+        ]
+    for visibility in (scene.get("group_visibility") or {}).values():
+        if isinstance(visibility, dict):
+            for key in removed_keys:
+                visibility.pop(key, None)
+    legend = scene.get("legend") or {}
+    if isinstance(legend.get("items"), list):
+        legend["items"] = [
+            item for item in legend["items"]
+            if not trace_is_paper_irrelevant(item.get("name"))
+            and str(item.get("key")) not in removed_keys
+        ]
+    animation = scene.get("animation") or {}
+    if isinstance(animation.get("focus_options"), list):
+        animation["focus_options"] = [
+            option for option in animation["focus_options"]
+            if not trace_is_paper_irrelevant(option.get("name"))
+            and str(option.get("key")) not in removed_keys
+        ]
+    members = (scene.get("sky_panel") or {}).get("members_by_cluster")
+    if isinstance(members, dict):
+        for name in list(members.keys()):
+            if trace_is_paper_irrelevant(name):
+                members.pop(name, None)
+
+
 def build_state_only_scene(scene_spec: dict) -> dict:
     scene = deepcopy(scene_spec)
+    strip_paper_irrelevant_traces(scene)
     scene["title"] = ""
     scene["deck"] = {
         "schema_version": 2,

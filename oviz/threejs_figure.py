@@ -6202,22 +6202,29 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-paper-panel {
         position: absolute;
-        top: 0;
-        right: 0;
-        bottom: 0;
+        top: 12px;
+        right: 12px;
+        bottom: 12px;
         width: var(--oviz-paper-panel-width, 42%);
         min-width: 320px;
         max-width: 72vw;
         display: none;
         flex-direction: column;
         z-index: 60;
-        background:
-          linear-gradient(180deg, rgba(10, 12, 16, 0.94), rgba(10, 12, 16, 0.90));
-        border-left: 1px solid var(--oviz-panel-border);
-        box-shadow: -18px 0 42px rgba(0, 0, 0, 0.45);
-        backdrop-filter: blur(18px);
-        -webkit-backdrop-filter: blur(18px);
+        background: linear-gradient(
+          165deg,
+          rgba(16, 20, 27, 0.58),
+          rgba(10, 13, 18, 0.52)
+        );
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 18px;
+        box-shadow:
+          0 24px 70px rgba(0, 0, 0, 0.42),
+          inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        backdrop-filter: blur(26px) saturate(1.5);
+        -webkit-backdrop-filter: blur(26px) saturate(1.5);
         color: var(--oviz-text);
+        overflow: hidden;
       }
       #__ROOT_ID__ .oviz-three-paper-panel[data-open="true"] {
         display: flex;
@@ -6235,101 +6242,137 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
-        padding: 16px 18px 12px 26px;
-        border-bottom: 1px solid var(--oviz-panel-border);
+        padding: 18px 16px 12px 28px;
         flex: 0 0 auto;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.045),
+          rgba(255, 255, 255, 0.0)
+        );
       }
       #__ROOT_ID__ .oviz-three-paper-doc-title {
-        font-size: 15px;
-        font-weight: 650;
-        line-height: 1.3;
-        letter-spacing: 0.01em;
+        font-size: 14.5px;
+        font-weight: 620;
+        line-height: 1.32;
+        letter-spacing: 0.012em;
       }
       #__ROOT_ID__ .oviz-three-paper-doc-title a {
         color: var(--oviz-text);
         text-decoration: none;
-        border-bottom: 1px solid rgba(140, 190, 255, 0.55);
+      }
+      #__ROOT_ID__ .oviz-three-paper-doc-title a:hover {
+        color: #cfe7ff;
       }
       #__ROOT_ID__ .oviz-three-paper-doc-authors {
-        margin-top: 4px;
-        font-size: 11.5px;
-        color: var(--oviz-muted-text, #9aa4b2);
-        line-height: 1.35;
+        margin-top: 5px;
+        font-size: 11px;
+        color: rgba(200, 208, 220, 0.62);
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
       #__ROOT_ID__ .oviz-three-paper-doc-venue {
-        margin-top: 2px;
-        font-size: 11px;
-        color: var(--oviz-muted-text, #9aa4b2);
+        margin-top: 3px;
+        font-size: 10.5px;
+        color: rgba(200, 208, 220, 0.5);
         font-style: italic;
       }
       #__ROOT_ID__ .oviz-three-paper-head-controls {
         display: flex;
-        gap: 8px;
+        gap: 6px;
         align-items: center;
         flex: 0 0 auto;
       }
       #__ROOT_ID__ .oviz-three-paper-sync,
       #__ROOT_ID__ .oviz-three-paper-close {
         appearance: none;
-        border: 1px solid var(--oviz-panel-border);
-        background: rgba(255, 255, 255, 0.05);
-        color: var(--oviz-text);
+        border: 0;
+        background: rgba(255, 255, 255, 0.07);
+        color: rgba(226, 232, 240, 0.85);
         border-radius: 999px;
         font-size: 11px;
-        padding: 4px 10px;
+        padding: 5px 11px;
         cursor: pointer;
         white-space: nowrap;
+        transition: background 160ms ease, color 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-paper-sync:hover,
+      #__ROOT_ID__ .oviz-three-paper-close:hover {
+        background: rgba(255, 255, 255, 0.14);
+        color: #ffffff;
       }
       #__ROOT_ID__ .oviz-three-paper-sync[data-mode="paused"] {
-        border-color: rgba(255, 196, 100, 0.75);
+        background: rgba(255, 196, 100, 0.16);
         color: #ffd89a;
       }
       #__ROOT_ID__ .oviz-three-paper-sync[data-mode="off"] {
-        opacity: 0.62;
+        opacity: 0.55;
       }
       #__ROOT_ID__ .oviz-three-paper-close {
-        font-size: 14px;
+        font-size: 13px;
         line-height: 1;
-        padding: 4px 9px;
+        padding: 5px 9px;
       }
       #__ROOT_ID__ .oviz-three-paper-rail {
         position: absolute;
-        top: 84px;
-        bottom: 14px;
-        left: 8px;
-        width: 10px;
+        top: 96px;
+        bottom: 22px;
+        left: 10px;
+        width: 8px;
         z-index: 2;
       }
       #__ROOT_ID__ .oviz-three-paper-rail-tick {
         position: absolute;
-        left: 1px;
-        width: 8px;
-        height: 8px;
+        left: 2px;
+        width: 5px;
+        height: 5px;
         border-radius: 50%;
-        border: 1px solid rgba(140, 190, 255, 0.65);
-        background: rgba(20, 26, 34, 0.9);
+        border: 0;
+        background: rgba(210, 224, 240, 0.30);
         cursor: pointer;
         padding: 0;
+        transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-paper-rail-tick:hover {
+        background: rgba(210, 224, 240, 0.65);
+        transform: scale(1.35);
       }
       #__ROOT_ID__ .oviz-three-paper-rail-tick[data-active="true"] {
         background: var(--oviz-accent, #6ec5ff);
-        border-color: var(--oviz-accent, #6ec5ff);
-        box-shadow: 0 0 8px rgba(110, 197, 255, 0.8);
+        box-shadow: 0 0 10px rgba(110, 197, 255, 0.75);
+        transform: scale(1.45);
       }
       #__ROOT_ID__ .oviz-three-paper-scroll {
         flex: 1 1 auto;
         overflow-y: auto;
         overscroll-behavior: contain;
         scroll-behavior: smooth;
-        padding: 18px 26px 48px 26px;
+        padding: 14px 28px 56px 28px;
         outline: none;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(210, 224, 240, 0.22) transparent;
+      }
+      #__ROOT_ID__ .oviz-three-paper-scroll::-webkit-scrollbar {
+        width: 8px;
+      }
+      #__ROOT_ID__ .oviz-three-paper-scroll::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      #__ROOT_ID__ .oviz-three-paper-scroll::-webkit-scrollbar-thumb {
+        background: rgba(210, 224, 240, 0.22);
+        border-radius: 999px;
+      }
+      #__ROOT_ID__ .oviz-three-paper-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(210, 224, 240, 0.4);
       }
       #__ROOT_ID__ .oviz-three-paper-body {
         font-family: Georgia, "Iowan Old Style", "Source Serif Pro", serif;
         font-size: 14.5px;
-        line-height: 1.62;
-        color: rgba(235, 238, 243, 0.94);
-        max-width: 62ch;
+        line-height: 1.66;
+        color: rgba(238, 241, 246, 0.92);
+        max-width: 60ch;
         margin: 0 auto;
       }
       #__ROOT_ID__ .oviz-three-paper-body h2,
@@ -6351,71 +6394,75 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-paper-block {
         position: relative;
-        border-radius: 8px;
-        padding: 2px 10px;
-        margin: 0 -10px;
-        transition: background 220ms ease;
-      }
-      #__ROOT_ID__ .oviz-three-paper-block[data-active="true"] {
-        background: rgba(110, 197, 255, 0.08);
+        padding: 2px 0;
+        margin: 0;
+        transition: opacity 220ms ease;
       }
       #__ROOT_ID__ .oviz-three-paper-anchored {
-        border-left: 2px solid rgba(110, 197, 255, 0.30);
-        margin-left: -12px;
-        padding-left: 10px;
+        border-left: 2px solid rgba(210, 224, 240, 0.14);
+        margin-left: -14px;
+        padding-left: 12px;
+        transition: border-color 220ms ease;
       }
       #__ROOT_ID__ .oviz-three-paper-block[data-active="true"].oviz-three-paper-anchored {
         border-left-color: var(--oviz-accent, #6ec5ff);
       }
       #__ROOT_ID__ .oviz-three-paper-anchor-marker {
         position: absolute;
-        left: -30px;
-        top: 6px;
-        width: 18px;
-        height: 18px;
+        left: -32px;
+        top: 7px;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
-        border: 1px solid rgba(140, 190, 255, 0.65);
-        background: rgba(20, 26, 34, 0.9) center / 8px no-repeat;
+        border: 0;
+        background: transparent;
         cursor: pointer;
         padding: 0;
       }
       #__ROOT_ID__ .oviz-three-paper-anchor-marker::after {
         content: "";
         position: absolute;
-        inset: 5px;
+        inset: 4px;
         border-radius: 50%;
-        background: rgba(140, 190, 255, 0.8);
+        background: rgba(210, 224, 240, 0.35);
+        transition: background 180ms ease, box-shadow 180ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-paper-anchor-marker:hover::after {
+        background: rgba(210, 224, 240, 0.75);
       }
       #__ROOT_ID__ .oviz-three-paper-block[data-active="true"] .oviz-three-paper-anchor-marker::after {
         background: var(--oviz-accent, #6ec5ff);
-        box-shadow: 0 0 8px rgba(110, 197, 255, 0.9);
+        box-shadow: 0 0 9px rgba(110, 197, 255, 0.85);
       }
       #__ROOT_ID__ .oviz-three-paper-block figure {
-        margin: 14px 0 18px 0;
+        margin: 16px 0 20px 0;
       }
       #__ROOT_ID__ .oviz-three-paper-block figure img {
         max-width: 100%;
-        border-radius: 6px;
-        border: 1px solid var(--oviz-panel-border);
+        border-radius: 10px;
+        border: 0;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
         cursor: zoom-in;
         display: block;
       }
       #__ROOT_ID__ .oviz-three-paper-block figcaption {
-        margin-top: 8px;
-        font-size: 12px;
+        margin-top: 9px;
+        font-size: 11.5px;
         line-height: 1.5;
-        color: var(--oviz-muted-text, #9aa4b2);
+        color: rgba(200, 208, 220, 0.6);
         font-family: Helvetica, Arial, sans-serif;
       }
       #__ROOT_ID__ .oviz-three-paper-live-badge {
         margin-top: 8px;
         display: inline-block;
         font-family: Helvetica, Arial, sans-serif;
-        font-size: 11px;
-        color: #9ed0ff;
-        border: 1px dashed rgba(140, 190, 255, 0.5);
+        font-size: 10.5px;
+        letter-spacing: 0.02em;
+        color: rgba(158, 208, 255, 0.85);
+        background: rgba(110, 197, 255, 0.10);
+        border: 0;
         border-radius: 999px;
-        padding: 3px 10px;
+        padding: 4px 11px;
       }
       #__ROOT_ID__ .oviz-three-paper-lightbox {
         position: absolute;
@@ -6427,7 +6474,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         justify-content: center;
         gap: 12px;
         padding: 40px;
-        background: rgba(4, 6, 10, 0.9);
+        background: rgba(4, 6, 10, 0.72);
+        backdrop-filter: blur(20px) saturate(1.3);
+        -webkit-backdrop-filter: blur(20px) saturate(1.3);
         cursor: zoom-out;
       }
       #__ROOT_ID__ .oviz-three-paper-lightbox[data-open="true"] {
@@ -6436,13 +6485,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-paper-lightbox img {
         max-width: 92%;
         max-height: 82%;
-        border-radius: 8px;
+        border-radius: 12px;
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
       }
       #__ROOT_ID__ .oviz-three-paper-lightbox-caption {
         max-width: 900px;
         font-size: 12.5px;
         line-height: 1.5;
-        color: var(--oviz-muted-text, #9aa4b2);
+        color: rgba(214, 222, 232, 0.75);
         text-align: center;
       }
       #__ROOT_ID__ .oviz-deck-editor {

@@ -62,6 +62,13 @@ class PaperSpecTests(unittest.TestCase):
         self.assertIn("__oviz_asset_ref__", blocks[0]["image_data_url"])
         self.assertEqual(blocks[0]["image_data_url"], blocks[1]["image_data_url"])
         self.assertEqual(len(spec["assets"]), 1)
+        # Normalization must be idempotent: ThreeJSFigure re-normalizes the
+        # paper spec, and a second pass must keep asset references as objects
+        # rather than coercing them to strings.
+        again = normalize_paper_spec(spec)
+        again_blocks = again["sections"][0]["blocks"]
+        self.assertEqual(again_blocks[0]["image_data_url"], blocks[0]["image_data_url"])
+        self.assertEqual(again["assets"], spec["assets"])
 
     def test_state_binding_resolution_by_name(self):
         states = {"items": [{"id": "state-a", "name": "Overview"}]}

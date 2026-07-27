@@ -1248,12 +1248,23 @@ THREEJS_SKY_RUNTIME_JS = """
           Math.tan(THREE.MathUtils.degToRad(cameraFovDeg * 0.5)) * aspect
         ) * 180.0 / Math.PI;
         const fovDeg = Math.min(Math.max(horizontalFovDeg, 0.05), 179.0);
+        // The background iframe can be wider than the canvas when a camera
+        // view offset is active (see applySkyDomeFrameOffsetGeometry). Aladin
+        // needs the FoV of its own canvas; scaling in tangent space keeps the
+        // pixel scale identical to the Three.js projection.
+        const frameTanHalfFov = Math.tan(THREE.MathUtils.degToRad(fovDeg * 0.5))
+          * Math.max(Number(skyDomeFrameWidthRatio) || 1.0, 1.0);
+        const frameFovDeg = Math.min(Math.max(
+          2.0 * Math.atan(Math.max(frameTanHalfFov, 1e-9)) * 180.0 / Math.PI,
+          0.05
+        ), 179.0);
         return {
           l: Number(galactic.l),
           b: Number(galactic.b),
           ra: Number(icrs.ra),
           dec: Number(icrs.dec),
           fovDeg,
+          frameFovDeg,
           cameraFovDeg,
           direction,
         };
@@ -1458,13 +1469,21 @@ THREEJS_SKY_RUNTIME_JS = """
             dec: active.target.dec,
             l: active.target.l,
             b: active.target.b,
-            fovDeg: active.target.fovDeg,
+            fovDeg: Number.isFinite(Number(active.target.frameFovDeg))
+              ? active.target.frameFovDeg
+              : active.target.fovDeg,
             cameraFovDeg: active.target.cameraFovDeg,
             startRa: active.start ? active.start.ra : null,
             startDec: active.start ? active.start.dec : null,
             startL: active.start ? active.start.l : null,
             startB: active.start ? active.start.b : null,
-            startFovDeg: active.start ? active.start.fovDeg : null,
+            startFovDeg: active.start
+              ? (
+                Number.isFinite(Number(active.start.frameFovDeg))
+                  ? active.start.frameFovDeg
+                  : active.start.fovDeg
+              )
+              : null,
           }, "*");
           return true;
         } catch (_err) {
@@ -1622,10 +1641,72 @@ THREEJS_SKY_RUNTIME_JS = """
         clearSkyDomeBackgroundPredictiveTransform();
       }
 
+      let skyDomeFrameAppliedOffsetX = 0.0;
+      let skyDomeFrameAppliedOffsetY = 0.0;
+      let skyDomeFrameWidthRatio = 1.0;
+      let skyDomeFrameHeightRatio = 1.0;
+
+      function applySkyDomeFrameOffsetGeometry() {
+        if (!skyDomeFrameEl) {
+          return;
+        }
+        const offset = (
+          typeof currentActionCameraViewOffset !== "undefined"
+          && currentActionCameraViewOffset
+        ) ? currentActionCameraViewOffset : { x: 0.0, y: 0.0 };
+        // Quantized so interpolated offsets do not resize the iframe on every
+        // animation frame; half-percent steps stay visually seamless.
+        const offsetX = Math.round((Number(offset.x) || 0.0) * 200.0) / 200.0;
+        const offsetY = Math.round((Number(offset.y) || 0.0) * 200.0) / 200.0;
+        if (
+          offsetX === skyDomeFrameAppliedOffsetX
+          && offsetY === skyDomeFrameAppliedOffsetY
+        ) {
+          return;
+        }
+        skyDomeFrameAppliedOffsetX = offsetX;
+        skyDomeFrameAppliedOffsetY = offsetY;
+        // camera.setViewOffset crops a virtual frame, which lands the Three.js
+        // optical axis at (0.5 - offsetX, 0.5 - offsetY) of the visible canvas,
+        // while Aladin always renders its tangent point at the centre of the
+        // iframe. Recentre the (widened) iframe on the optical axis and scale
+        // the FoV sent to Aladin by the same width ratio: both TAN projections
+        // then share one tangent point and one pixel scale, keeping the
+        // background registered to the traces for any panel view offset.
+        skyDomeFrameWidthRatio = 1.0 + (2.0 * Math.abs(offsetX));
+        skyDomeFrameHeightRatio = 1.0 + (2.0 * Math.abs(offsetY));
+        if (Math.abs(offsetX) <= 1e-6 && Math.abs(offsetY) <= 1e-6) {
+          skyDomeFrameEl.style.left = "0";
+          skyDomeFrameEl.style.top = "0";
+          skyDomeFrameEl.style.width = "100%";
+          skyDomeFrameEl.style.height = "100%";
+          return;
+        }
+        const centerXPercent = 50.0 - (offsetX * 100.0);
+        const centerYPercent = 50.0 - (offsetY * 100.0);
+        skyDomeFrameEl.style.width = `${skyDomeFrameWidthRatio * 100.0}%`;
+        skyDomeFrameEl.style.height = `${skyDomeFrameHeightRatio * 100.0}%`;
+        skyDomeFrameEl.style.left = `${centerXPercent - (skyDomeFrameWidthRatio * 50.0)}%`;
+        skyDomeFrameEl.style.top = `${centerYPercent - (skyDomeFrameHeightRatio * 50.0)}%`;
+      }
+
       function updateSkyDomeBackgroundFrame(timestampMs = 0.0, options = {}) {
         if (!skyDomeFrameEl || !skyDomeUsesAladinBackground()) {
           setSkyDomeBackgroundDebugState("disabled");
           return;
+        }
+        applySkyDomeFrameOffsetGeometry();
+        if (
+          cameraViewMode === "earth"
+          && !skyDomeOpacityAnimationFrame
+          && !(typeof ovizStateTransition !== "undefined" && ovizStateTransition)
+          && skyDomeViewOpacityScale > 0.002
+          && skyDomeViewOpacityScale < 0.999
+        ) {
+          // A one-shot arrival fade can die mid-flight when rAF is starved
+          // (hidden tab) or its animation is cancelled between frames. Settled
+          // Sky always converges back to a fully visible background.
+          skyDomeViewOpacityScale = 1.0;
         }
         const baseOpacity = skyDomeOpacityForCurrentView();
         if (root && root.dataset) {
@@ -1651,10 +1732,13 @@ THREEJS_SKY_RUNTIME_JS = """
           setSkyDomeBackgroundDebugState("missing-camera-view");
           return;
         }
+        const sentFovDeg = Number.isFinite(Number(view.frameFovDeg))
+          ? Number(view.frameFovDeg)
+          : Number(view.fovDeg);
         const signature = [
           view.ra.toFixed(5),
           view.dec.toFixed(5),
-          view.fovDeg.toFixed(3),
+          sentFovDeg.toFixed(3),
         ].join("|");
         const now = Number(timestampMs) || 0.0;
         if (signature !== skyDomeBackgroundLatestViewSignature) {
@@ -1728,7 +1812,7 @@ THREEJS_SKY_RUNTIME_JS = """
           dec: view.dec,
           l: view.l,
           b: view.b,
-          fovDeg: view.fovDeg,
+          fovDeg: sentFovDeg,
           cameraFovDeg: view.cameraFovDeg,
         };
         let appliedDirectly = false;

@@ -92,9 +92,17 @@ def normalize_paper_block(
     }
     if block_type == "figure":
         block["asset"] = str(source.get("asset") or "").strip() or None
-        block["image_data_url"] = (
-            str(source.get("image_data_url") or "").strip() or None
-        )
+        image_value = source.get("image_data_url")
+        if isinstance(image_value, dict) and "__oviz_asset_ref__" in image_value:
+            # Already content-addressed by a prior normalization pass; keep the
+            # asset reference intact so re-normalizing stays idempotent.
+            block["image_data_url"] = {
+                "__oviz_asset_ref__": str(image_value["__oviz_asset_ref__"]),
+            }
+        else:
+            block["image_data_url"] = (
+                str(image_value or "").strip() or None
+            )
         block["caption_html"] = str(source.get("caption_html") or "")
         block["width_px"] = int(_clamp(source.get("width_px"), 64.0, 4096.0, 1400.0))
         block["live"] = bool(source.get("live", False))
