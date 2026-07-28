@@ -7562,6 +7562,95 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: inline-flex !important;
         opacity: 0.72;
       }
+
+      /* Larger desktop authoring chrome. Mobile keeps its dedicated 44px
+         touch layout, while the desktop legend and top-right tools scale as
+         a unit so labels, hit targets, and editing affordances stay aligned. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu {
+        gap: 6px;
+        max-width: min(calc(100vw - 28px), 1140px);
+        padding: 6px;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-tools-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-toggle {
+        height: 45px;
+        min-height: 45px;
+        padding-inline: 12px;
+        font-size: 16.5px !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-search-toggle {
+        width: 45px;
+        min-width: 45px;
+        padding: 0;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-search-toggle svg {
+        width: 22.5px;
+        height: 22.5px;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-panel {
+        width: min(330px, calc(100vw - 28px)) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-row {
+        grid-template-columns: 30px minmax(0, 1fr) !important;
+        column-gap: 6px !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-entry {
+        padding-block: 3px !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-item,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-name {
+        font-size: 19.5px !important;
+        line-height: 1.2 !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-trigger,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-current,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-controls-toggle {
+        font-size: 22.5px !important;
+        line-height: 1.15 !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-option,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-section-title {
+        font-size: 16.5px !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-edit {
+        width: 27px !important;
+        height: 27px !important;
+        min-width: 27px !important;
+        min-height: 27px !important;
+        font-size: 15.75px !important;
+      }
+
+      /* Zen retains the timeline as its only control surface. Keyboard Z
+         remains the desktop exit; on touch layouts, the time readout remains
+         the sole visible interactive surface. */
+      #__ROOT_ID__[data-zen="true"] .oviz-three-topbar,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-action-bar,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-bottom-switches,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-fullscreen,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-fullscreen-notice,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-legend-panel,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-legend-popover,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-key-help,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-widget-panel,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-mobile-sheet,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-mobile-more,
+      #__ROOT_ID__[data-zen="true"] .oviz-states-shell,
+      #__ROOT_ID__[data-zen="true"] .oviz-deck-editor,
+      #__ROOT_ID__[data-zen="true"] .oviz-deck-authoring-layer,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-paper-panel,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-paper-expand-tab,
+      #__ROOT_ID__[data-zen="true"] .oviz-three-paper-toggle {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-zen="true"] .oviz-three-footer {
+        display: flex !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-time-label {
+        cursor: pointer;
+        touch-action: manipulation;
+      }
     </style>
   </head>
   <body>
@@ -8958,7 +9047,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let globalPointSizeScale = 1.0;
       let globalPointOpacityScale = 1.0;
       let globalPointGlowStrength = 0.60;
-      let sizePointsByStarsEnabled = false;
+      let sizePointsByStarsEnabled = !(
+        initialState.global_controls
+        && initialState.global_controls.size_points_by_stars_enabled === false
+      );
       let globalScrollSpeed = 1.0;
       let cameraAutoOrbitBaseSpeed = 1.0;
       let cameraAutoOrbitDirection = 1.0;
@@ -22727,6 +22819,14 @@ __STATE_RUNTIME_JS__
         sliderEl.addEventListener("change", () => {
           setTimelineScrubMotionActive(true, { settleDelayMs: 120.0 });
         });
+        if (timeLabelEl) {
+          timeLabelEl.addEventListener("click", () => {
+            if (mobileModeEnabled && zenModeEnabled) {
+              setZenMode(false);
+              focusViewer();
+            }
+          });
+        }
         if (playBackwardButtonEl) {
           playBackwardButtonEl.addEventListener("click", () => {
             if (!actionInterruptsMuted()) {
@@ -22927,10 +23027,7 @@ __STATE_RUNTIME_JS__
         }
         if (globalPointSizeEl) {
           globalPointSizeEl.addEventListener("input", () => {
-            globalPointSizeScale = Number(globalPointSizeEl.value);
-            applyGlobalControlState();
-            renderSceneControls();
-            renderFrame(currentFrameIndex);
+            setGlobalPointSizeScale(Number(globalPointSizeEl.value));
           });
         }
         if (globalPointOpacityEl) {
@@ -23201,7 +23298,7 @@ __STATE_RUNTIME_JS__
             globalPointSizeScale = 1.0;
             globalPointOpacityScale = 1.0;
             globalPointGlowStrength = 0.60;
-            sizePointsByStarsEnabled = false;
+            sizePointsByStarsEnabled = true;
             fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
             fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
             fadeOpacityByBirthTimeEnabled = Boolean(animationSpec.fade_opacity_by_birth_time_default);

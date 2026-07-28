@@ -889,7 +889,7 @@ def build_threejs_scene_spec(
         "fade_opacity_by_birth_time_default": (
             bool(saved_global_controls.get("fade_opacity_by_birth_time_enabled"))
             if isinstance(saved_global_controls.get("fade_opacity_by_birth_time_enabled"), bool)
-            else False
+            else True
         ),
     }
     if not minimal_mode:

@@ -19,7 +19,7 @@ def _load_module():
     return module
 
 
-def test_build_state_only_scene_disables_and_removes_slides():
+def test_build_scene_exposes_empty_slide_authoring_and_display_defaults():
     module = _load_module()
     source = {
         "title": "Source",
@@ -38,9 +38,13 @@ def test_build_state_only_scene_disables_and_removes_slides():
     scene = module.build_state_only_scene(source)
 
     assert source["deck"]["slides"] == [{"id": "old"}]
-    assert scene["deck"]["available"] is False
+    assert scene["deck"]["available"] is True
     assert scene["deck"]["enabled"] is False
     assert scene["deck"]["slides"] == []
+    assert scene["initial_state"]["global_controls"] == {
+        "size_points_by_stars_enabled": True,
+        "fade_opacity_by_birth_time_enabled": True,
+    }
     defaults = scene["volumes"]["layers"][0]["default_controls"]
     volume_state = scene["initial_state"]["volume_state_by_key"]["volume-0"]
     assert defaults["lighting_mode"] == "standard"
@@ -111,9 +115,12 @@ def test_july25_artifact_keeps_presentation_and_adds_runtime_upgrades(tmp_path):
     # than the July 21 payload; enforce a direct compact-artifact bound rather
     # than requiring unrelated scientific data to gzip to the same size.
     assert ARTIFACT_PATH.stat().st_size < 40 * 1024 * 1024
-    assert scene["deck"]["available"] is False
+    assert scene["deck"]["available"] is True
     assert scene["deck"]["enabled"] is False
     assert scene["deck"]["slides"] == []
+    assert scene["initial_state"]["global_controls"]["size_points_by_stars_enabled"] is True
+    assert scene["initial_state"]["global_controls"]["fade_opacity_by_birth_time_enabled"] is True
+    assert ">Slides ▸</button>" in html
     assert scene["title"] == ""
     velocity_provenance = scene["provenance"]["cluster_velocities"]
     assert velocity_provenance["filename"] == (

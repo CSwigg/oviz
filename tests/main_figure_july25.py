@@ -2,9 +2,10 @@
 """Regenerate the July 25 non-paper Oviz figure with current cluster velocities.
 
 The source scene is rebuilt with the July 4 Chronos ages and a selectable
-cluster-velocity CSV, then converted to the same state-only presentation used
-by the July 21 figure. The embedded Three.js runtime carries the volumetric
-quality and FPS upgrades developed for the July 25 artifact.
+cluster-velocity CSV, then converted to the clean July presentation while
+keeping the editable Slides authoring option available. The embedded Three.js
+runtime carries the volumetric quality and FPS upgrades developed for the
+July 25 artifact.
 """
 
 from __future__ import annotations
@@ -91,7 +92,7 @@ def build_state_only_scene(
     scene["title"] = ""
     scene["deck"] = {
         "schema_version": 2,
-        "available": False,
+        "available": True,
         "enabled": False,
         "embedded": False,
         "revision": 0,
@@ -102,6 +103,10 @@ def build_state_only_scene(
     initial_volume_state = (
         scene.setdefault("initial_state", {}).setdefault("volume_state_by_key", {})
     )
+    scene["initial_state"].setdefault("global_controls", {}).update({
+        "size_points_by_stars_enabled": True,
+        "fade_opacity_by_birth_time_enabled": True,
+    })
     for layer in (scene.get("volumes") or {}).get("layers") or []:
         if "edenhofer" not in str(layer.get("name") or "").lower():
             continue

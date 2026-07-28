@@ -101,6 +101,8 @@ THREEJS_SHELL_HTML = """
           <div>Toggle the first nine legend items in the current group.</div>
           <div class="oviz-three-key-help-keys">Shift + 1 - 9</div>
           <div>Solo the corresponding legend item.</div>
+          <div class="oviz-three-key-help-keys">[ / ]</div>
+          <div>Decrease or increase every point trace size; hold Shift for larger steps.</div>
           <div class="oviz-three-key-help-keys">Space</div>
           <div>Play or pause the animation.</div>
           <div class="oviz-three-key-help-keys">L / C</div>
@@ -115,6 +117,8 @@ THREEJS_SHELL_HTML = """
           <div>Toggle between 3D View and Sky View.</div>
           <div class="oviz-three-key-help-keys">B</div>
           <div>In Sky View, toggle the sky background image on or off.</div>
+          <div class="oviz-three-key-help-keys">G</div>
+          <div>Toggle the Galactic grid.</div>
           <div class="oviz-three-key-help-keys">O</div>
           <div>Toggle automatic orbit around the current anchor point.</div>
           <div class="oviz-three-key-help-keys">Z</div>

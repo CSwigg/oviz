@@ -362,6 +362,32 @@ THREEJS_VIEWER_RUNTIME_JS = """
         camera.updateProjectionMatrix();
       }
 
+      function setGlobalPointSizeScale(value, options = {}) {
+        const nextValue = clampRange(Number(value), 0.25, 4.0);
+        if (!Number.isFinite(nextValue)) {
+          return false;
+        }
+        globalPointSizeScale = Math.round(nextValue * 100.0) / 100.0;
+        applyGlobalControlState();
+        renderSceneControls();
+        if (options.render !== false) {
+          if (typeof renderInterpolatedFrameValue === "function") {
+            renderInterpolatedFrameValue(displayedFrameValue, {
+              syncSlider: false,
+              preserveTransition: true,
+            });
+          } else {
+            renderFrame(currentFrameIndex);
+          }
+        }
+        return true;
+      }
+
+      function nudgeGlobalPointSizeScale(direction, fast = false) {
+        const step = fast ? 0.25 : 0.10;
+        return setGlobalPointSizeScale(globalPointSizeScale + Math.sign(direction || 0) * step);
+      }
+
       function updateControlSensitivityForView() {
         if (!controls || !camera) {
           return;
@@ -2938,8 +2964,10 @@ THREEJS_VIEWER_RUNTIME_JS = """
           || key === " "
           || key === "ArrowLeft"
           || key === "ArrowRight"
+          || key === "["
+          || key === "]"
           || /^[1-9]$/.test(key)
-          || ["l", "c", "v", "b", "o", "t"].includes(lowerKey);
+          || ["g", "l", "c", "v", "b", "o", "t"].includes(lowerKey);
 
         if (interruptsAction && !actionInterruptsMuted()) {
           interruptActionRun("keyboard", { disableOrbit: true });
@@ -2961,7 +2989,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
           return;
         }
 
-        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "b" || lowerKey === "o" || lowerKey === "t" || lowerKey === "z" || lowerKey === "p" || key === "?" || (key === "/" && event.shiftKey))) {
+        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "g" || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "b" || lowerKey === "o" || lowerKey === "t" || lowerKey === "z" || lowerKey === "p" || key === "?" || (key === "/" && event.shiftKey))) {
           event.preventDefault();
           return;
         }
@@ -3061,6 +3089,18 @@ THREEJS_VIEWER_RUNTIME_JS = """
 
         if (lowerKey === "p") {
           setPresentationMode(!presentationModeEnabled);
+          event.preventDefault();
+          return;
+        }
+
+        if (lowerKey === "g") {
+          setGalacticReferenceVisible(!galacticReferenceVisible);
+          event.preventDefault();
+          return;
+        }
+
+        if (key === "[" || key === "]") {
+          nudgeGlobalPointSizeScale(key === "]" ? 1 : -1, fast);
           event.preventDefault();
           return;
         }
