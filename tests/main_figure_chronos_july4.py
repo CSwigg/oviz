@@ -7,7 +7,7 @@ import argparse
 import zipfile
 from pathlib import Path
 
-from main_figure_new_chronos import run_main_figure
+from main_figure_new_chronos import JUN6_CLUSTER_VELOCITIES_PATH, run_main_figure
 
 
 JULY4_CHRONOS_RESULTS_PATH = Path(
@@ -62,6 +62,12 @@ def parse_args() -> argparse.Namespace:
         help="Keep repeated per-frame hover, selection, and motion metadata in the HTML.",
     )
     parser.add_argument(
+        "--cluster-velocities-path",
+        type=Path,
+        default=JUN6_CLUSTER_VELOCITIES_PATH,
+        help="Cluster velocity CSV used to rebuild the source scene.",
+    )
+    parser.add_argument(
         "--zip-output",
         type=Path,
         default=None,
@@ -86,6 +92,7 @@ def main() -> None:
         chronos_model="parsec",
         include_spiral_arms=bool(args.include_spiral_arms),
         jun6_catalog=True,
+        cluster_velocities_path=args.cluster_velocities_path,
         include_background_cluster_trace=False,
         cluster_members_file=CLUSTER_MEMBERS_PATH,
         show_cluster_members_in_sky=True,

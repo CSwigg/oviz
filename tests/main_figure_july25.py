@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""Regenerate the July 25 Oviz figure: July 21 scene + FPS/volumetric runtime upgrades.
+"""Regenerate the July 25 non-paper Oviz figure with current cluster velocities.
 
-The scene content is identical to ``main_figure_july21.py`` (same source
-artifact, same state-only presentation, same Edenhofer galactic lighting
-defaults). What changes is the embedded Three.js runtime, which now carries
-the volumetric quality upgrades (linear-filtered colormap LUT, interleaved
-gradient noise jitter, sub-quantum output dithering) and the FPS work
-(occupancy-grid empty-space skipping in the raymarcher, capped pixel ratio,
-cheaper per-frame bookkeeping).
+The source scene is rebuilt with the July 4 Chronos ages and a selectable
+cluster-velocity CSV, then converted to the same state-only presentation used
+by the July 21 figure. The embedded Three.js runtime carries the volumetric
+quality and FPS upgrades developed for the July 25 artifact.
 """
 
 from __future__ import annotations
@@ -17,14 +14,31 @@ import base64
 import gzip
 import json
 import re
+import sys
+import tempfile
 from copy import deepcopy
 from pathlib import Path
 
 from oviz.threejs_figure import ThreeJSFigure
 
 
+TESTS_DIR = Path(__file__).resolve().parent
+if str(TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(TESTS_DIR))
+
+from main_figure_chronos_july4 import (  # noqa: E402
+    CLUSTER_MEMBERS_PATH,
+    JULY4_CHRONOS_RESULTS_PATH,
+)
+from main_figure_new_chronos import run_main_figure as build_source_main_figure  # noqa: E402
+
+
 SOURCE_HTML = Path(__file__).with_name("main_figure_chronos_july4.html")
 DEFAULT_OUTPUT_HTML = Path(__file__).with_suffix(".html")
+DEFAULT_CLUSTER_VELOCITIES_PATH = Path(
+    "/Users/swiggumc/Desktop/astro_research/cfa/velocity analysis/outputs/release/"
+    "cluster_velocities_sdssv_covariance_audited.csv"
+)
 EDENHOFER_GALACTIC_LIGHTING = {
     "lighting_mode": "standard",
     "galactic_center": [8122.0, 0.0, 0.0],
@@ -69,7 +83,10 @@ def read_embedded_scene_spec(path: Path) -> dict:
     return json.loads(gzip.decompress(base64.b64decode(encoded)))
 
 
-def build_state_only_scene(scene_spec: dict) -> dict:
+def build_state_only_scene(
+    scene_spec: dict,
+    cluster_velocities_path: Path | None = None,
+) -> dict:
     scene = deepcopy(scene_spec)
     scene["title"] = ""
     scene["deck"] = {
@@ -103,31 +120,109 @@ def build_state_only_scene(scene_spec: dict) -> dict:
                 "galacticAnisotropy": 0.45,
                 "galacticWarmth": 0.72,
             })
+    if cluster_velocities_path is not None:
+        velocity_path = Path(cluster_velocities_path).expanduser().resolve()
+        scene.setdefault("provenance", {})["cluster_velocities"] = {
+            "filename": velocity_path.name,
+            "path": str(velocity_path),
+            "release": "SDSS-V covariance audited",
+        }
     return scene
 
 
-def build_figure(source_html: Path, output_html: Path) -> Path:
+def build_figure(
+    source_html: Path,
+    output_html: Path,
+    cluster_velocities_path: Path | None = None,
+) -> Path:
     source_html = Path(source_html).expanduser().resolve()
     output_html = Path(output_html).expanduser().resolve()
     if source_html == output_html:
         raise ValueError("The July 25 figure must be a sibling copy, not the source artifact.")
-    scene = build_state_only_scene(read_embedded_scene_spec(source_html))
+    scene = build_state_only_scene(
+        read_embedded_scene_spec(source_html),
+        cluster_velocities_path=cluster_velocities_path,
+    )
     html = ThreeJSFigure(scene, compress_scene_spec=True).to_html(compress_scene_spec=True)
     output_html.parent.mkdir(parents=True, exist_ok=True)
     output_html.write_text(html, encoding="utf-8")
     return output_html
 
 
+def build_velocity_source_figure(
+    cluster_velocities_path: Path,
+    output_html: Path,
+) -> Path:
+    cluster_velocities_path = Path(cluster_velocities_path).expanduser().resolve()
+    if not cluster_velocities_path.exists():
+        raise FileNotFoundError(
+            f"Missing cluster velocity catalog: {cluster_velocities_path}"
+        )
+    return build_source_main_figure(
+        output_html=output_html,
+        mobile_mode=False,
+        compact_payload=True,
+        mobile_safe_mode=True,
+        chronos_results_path=JULY4_CHRONOS_RESULTS_PATH,
+        chronos_model="parsec",
+        include_spiral_arms=False,
+        jun6_catalog=True,
+        cluster_velocities_path=cluster_velocities_path,
+        include_background_cluster_trace=False,
+        cluster_members_file=CLUSTER_MEMBERS_PATH,
+        show_cluster_members_in_sky=True,
+        website_output_html=None,
+    )
+
+
+def build_figure_from_velocity_catalog(
+    cluster_velocities_path: Path,
+    output_html: Path,
+) -> Path:
+    with tempfile.TemporaryDirectory(prefix="oviz-july25-source-") as temp_dir:
+        source_html = Path(temp_dir) / "main_figure_july25_source.html"
+        build_velocity_source_figure(cluster_velocities_path, source_html)
+        return build_figure(
+            source_html,
+            output_html,
+            cluster_velocities_path=cluster_velocities_path,
+        )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-html", type=Path, default=SOURCE_HTML)
+    parser.add_argument(
+        "--source-html",
+        type=Path,
+        default=None,
+        help=(
+            "Optional prebuilt source scene. If omitted, rebuild the source "
+            "from the selected cluster velocity catalog."
+        ),
+    )
+    parser.add_argument(
+        "--cluster-velocities-path",
+        type=Path,
+        default=DEFAULT_CLUSTER_VELOCITIES_PATH,
+        help="Cluster velocity CSV used when rebuilding the source scene.",
+    )
     parser.add_argument("--output-html", type=Path, default=DEFAULT_OUTPUT_HTML)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    output = build_figure(args.source_html, args.output_html)
+    if args.source_html is not None:
+        output = build_figure(
+            args.source_html,
+            args.output_html,
+            cluster_velocities_path=args.cluster_velocities_path,
+        )
+    else:
+        output = build_figure_from_velocity_catalog(
+            args.cluster_velocities_path,
+            args.output_html,
+        )
     print(f"Wrote {output}")
 
 

@@ -1650,10 +1650,16 @@ THREEJS_SKY_RUNTIME_JS = """
         if (!skyDomeFrameEl) {
           return;
         }
-        const offset = (
-          typeof currentActionCameraViewOffset !== "undefined"
-          && currentActionCameraViewOffset
-        ) ? currentActionCameraViewOffset : { x: 0.0, y: 0.0 };
+        // Match the exact projection used by Three.js.  Layout-only overlays
+        // such as the Paper reader compose on top of the logical State/Action
+        // view offset and must move Aladin by the same amount or the sky image
+        // will drift relative to the point traces.
+        const offset = typeof combinedActionCameraViewOffset === "function"
+          ? combinedActionCameraViewOffset()
+          : (
+            typeof currentActionCameraViewOffset !== "undefined"
+            && currentActionCameraViewOffset
+          ) ? currentActionCameraViewOffset : { x: 0.0, y: 0.0 };
         // Quantized so interpolated offsets do not resize the iframe on every
         // animation frame; half-percent steps stay visually seamless.
         const offsetX = Math.round((Number(offset.x) || 0.0) * 200.0) / 200.0;

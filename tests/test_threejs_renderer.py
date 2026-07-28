@@ -894,6 +894,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertFalse(viz.fig_dict["ar"]["enabled"])
         self.assertTrue(viz.fig_dict["initial_state"]["mobile_mode_enabled"])
         self.assertFalse(viz.fig_dict["initial_state"].get("minimal_mode_enabled", False))
+        self.assertNotIn("mobile_defer_volumes", viz.fig_dict["initial_state"])
         self.assertIn('data-mobile="true"', html)
         self.assertIn('data-ar-enabled="false"', html)
         self.assertIn('root.dataset.mobile = mobileModeEnabled ? "true" : "false";', html)
@@ -966,7 +967,8 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("document.webkitExitFullscreen", html)
         self.assertIn('document.addEventListener("fullscreenchange", syncOvizFullscreenButton);', html)
         self.assertIn('document.addEventListener("webkitfullscreenchange", syncOvizFullscreenButton);', html)
-        self.assertIn("const mobileDeferVolumes = mobileModeEnabled && initialState.mobile_defer_volumes !== false;", html)
+        self.assertIn("const mobileDeferVolumes = mobileModeEnabled && initialState.mobile_defer_volumes === true;", html)
+        self.assertNotIn("initialState.mobile_defer_volumes !== false", html)
         self.assertIn('root.dataset.mobileVolumesDeferred = mobileDeferVolumes ? "true" : "false";', html)
         self.assertIn(
             "!state || (!forceResident && !volumeVisibleForFrame(layer, state, currentFrame()))",

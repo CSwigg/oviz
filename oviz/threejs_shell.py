@@ -324,7 +324,7 @@ THREEJS_SHELL_HTML = """
         <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="sw"></div>
         <div class="oviz-three-dendrogram-resize oviz-three-widget-resize" data-dir="se"></div>
       </div>
-      <aside class="oviz-three-paper-panel" data-open="false" data-collapsed="false" aria-hidden="true" inert aria-label="Paper reader">
+      <aside class="oviz-three-paper-panel" data-open="false" data-collapsed="false" aria-hidden="true" inert aria-label="Paper reader" role="complementary">
         <div class="oviz-three-paper-resizer" title="Drag to resize the paper panel"></div>
         <div class="oviz-three-paper-head">
           <div class="oviz-three-paper-title-wrap">
@@ -332,19 +332,21 @@ THREEJS_SHELL_HTML = """
             <div class="oviz-three-paper-doc-authors"></div>
             <div class="oviz-three-paper-doc-venue"></div>
           </div>
+          <div class="oviz-three-paper-status" role="status" aria-live="polite" aria-atomic="true"></div>
           <div class="oviz-three-paper-head-controls">
             <button class="oviz-three-paper-sync" type="button" title="Toggle scroll-driven scene sync">Sync: on</button>
             <button class="oviz-three-paper-collapse" type="button" title="Hide the paper to the side" aria-label="Hide the paper to the side">⟩</button>
             <button class="oviz-three-paper-close" type="button" title="Close the paper reader" aria-label="Close the paper reader">×</button>
           </div>
         </div>
-        <div class="oviz-three-paper-rail" aria-hidden="true"></div>
-        <div class="oviz-three-paper-scroll" tabindex="0">
+        <div class="oviz-three-paper-rail" role="navigation" aria-label="Paper view anchors"></div>
+        <div class="oviz-three-paper-scroll" tabindex="0" aria-label="Paper content">
           <article class="oviz-three-paper-body"></article>
         </div>
       </aside>
       <button class="oviz-three-paper-expand-tab" type="button" hidden title="Show the paper" aria-label="Show the paper">⟨ Paper</button>
-      <div class="oviz-three-paper-lightbox" data-open="false" aria-hidden="true">
+      <div class="oviz-three-paper-lightbox" data-open="false" aria-hidden="true" inert role="dialog" aria-modal="true" aria-label="Enlarged paper figure" tabindex="-1">
+        <button class="oviz-three-paper-lightbox-close" type="button" title="Close enlarged figure" aria-label="Close enlarged figure">×</button>
         <img alt="Paper figure enlarged" />
         <div class="oviz-three-paper-lightbox-caption"></div>
       </div>

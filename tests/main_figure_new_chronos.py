@@ -976,7 +976,10 @@ print(
 """.strip()
 
 
-def build_jun6_catalog_source_block() -> str:
+def build_jun6_catalog_source_block(
+    cluster_velocities_path: Path = JUN6_CLUSTER_VELOCITIES_PATH,
+) -> str:
+    cluster_velocities_path = Path(cluster_velocities_path).expanduser().resolve()
     velocity_cols = [
         "x_2026",
         "y_2026",
@@ -1022,7 +1025,7 @@ df_hunt_full['mass_source'] = np.where(
 )
 jun6_velocity_cols = ['name', *{velocity_cols!r}]
 jun6_velocity_source = pd.read_csv(
-    {str(JUN6_CLUSTER_VELOCITIES_PATH)!r},
+    {str(cluster_velocities_path)!r},
     usecols=lambda _col: _col in jun6_velocity_cols,
 )
 if jun6_velocity_source['name'].duplicated().any():
@@ -1089,7 +1092,7 @@ df_hunt_full = df_hunt_full.rename(columns={{
     'z_2026': 'z',
 }})
 print(
-    'Using Jun 6 cluster catalog: '
+    'Using cluster velocities from {str(cluster_velocities_path)}: '
     f"{{df_hunt_full['age_myr'].notnull().sum()}} clusters with Chronos mode ages, "
     f"{{df_hunt_full[['x', 'y', 'z', 'U', 'V', 'W']].notnull().all(axis=1).sum()}} with complete positions/velocities."
 )
@@ -1373,6 +1376,7 @@ def patch_script_source(
     chronos_model: str = DEFAULT_CHRONOS_CLUSTER_MODEL,
     include_spiral_arms: bool = False,
     jun6_catalog: bool = False,
+    cluster_velocities_path: Path = JUN6_CLUSTER_VELOCITIES_PATH,
     include_background_cluster_trace: bool = True,
     cluster_members_file: Path | None = None,
     show_cluster_members_in_sky: bool = False,
@@ -1421,7 +1425,12 @@ def patch_script_source(
                 )
 
     if jun6_catalog:
-        jun6_catalog_block = build_jun6_catalog_source_block()
+        cluster_velocities_path = Path(cluster_velocities_path).expanduser().resolve()
+        if not cluster_velocities_path.exists():
+            raise FileNotFoundError(
+                f"Missing cluster velocity catalog: {cluster_velocities_path}"
+            )
+        jun6_catalog_block = build_jun6_catalog_source_block(cluster_velocities_path)
         source, replaced_jun6_catalog = re.subn(
             (
                 r"(?ms)^df_hunt_full\s*=\s*pd\.read_csv\("
@@ -1923,6 +1932,7 @@ def run_main_figure(
     chronos_model: str = DEFAULT_CHRONOS_CLUSTER_MODEL,
     include_spiral_arms: bool = False,
     jun6_catalog: bool = False,
+    cluster_velocities_path: Path = JUN6_CLUSTER_VELOCITIES_PATH,
     include_background_cluster_trace: bool = True,
     cluster_members_file: Path | None = None,
     show_cluster_members_in_sky: bool = False,
@@ -1953,6 +1963,7 @@ def run_main_figure(
         chronos_model=chronos_model,
         include_spiral_arms=include_spiral_arms,
         jun6_catalog=jun6_catalog,
+        cluster_velocities_path=cluster_velocities_path,
         include_background_cluster_trace=include_background_cluster_trace,
         cluster_members_file=cluster_members_file,
         show_cluster_members_in_sky=show_cluster_members_in_sky,
@@ -2029,6 +2040,15 @@ def parse_args() -> argparse.Namespace:
         help="Use the Jun 6 Chronos mode ages and bulkfit no-MWM cluster velocity catalog.",
     )
     parser.add_argument(
+        "--cluster-velocities-path",
+        type=Path,
+        default=JUN6_CLUSTER_VELOCITIES_PATH,
+        help=(
+            "Cluster velocity CSV to merge when --jun6-catalog is enabled. "
+            "The table must contain name plus the *_2026 position/velocity columns."
+        ),
+    )
+    parser.add_argument(
         "--full-payload",
         action="store_true",
         help="Keep repeated per-frame hover, selection, and motion metadata in the HTML.",
@@ -2055,6 +2075,7 @@ def main() -> None:
         chronos_model=args.chronos_model,
         include_spiral_arms=bool(args.include_spiral_arms),
         jun6_catalog=bool(args.jun6_catalog),
+        cluster_velocities_path=args.cluster_velocities_path,
         website_output_html=None if args.no_website_copy else WEBSITE_OUTPUT_HTML,
     )
     print(f"Wrote {output_html}")

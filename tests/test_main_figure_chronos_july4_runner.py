@@ -54,6 +54,7 @@ def test_main_writes_default_zip_for_rendered_html(tmp_path, monkeypatch):
             full_resolution=False,
             force_mobile_mode=False,
             full_payload=False,
+            cluster_velocities_path=module.JUN6_CLUSTER_VELOCITIES_PATH,
             zip_output=None,
             no_zip=False,
         ),
@@ -65,5 +66,6 @@ def test_main_writes_default_zip_for_rendered_html(tmp_path, monkeypatch):
         assert archive.namelist() == ["chronos.html"]
         assert archive.read("chronos.html") == html_path.read_bytes()
     assert run_kwargs["include_background_cluster_trace"] is False
+    assert run_kwargs["cluster_velocities_path"] == module.JUN6_CLUSTER_VELOCITIES_PATH
     assert run_kwargs["cluster_members_file"] == module.CLUSTER_MEMBERS_PATH
     assert run_kwargs["show_cluster_members_in_sky"] is True

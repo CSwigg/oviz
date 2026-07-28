@@ -225,12 +225,39 @@ _THREEJS_TOPBAR_HTML = """
           <button class="oviz-three-mobile-lasso" type="button" title="Arm lasso selection for touch input" aria-pressed="false">Lasso</button>
           __AR_BUTTON_HTML__
           <button class="oviz-three-mobile-legend" type="button" title="Show or hide the legend" aria-expanded="false">Legend</button>
+          <button class="oviz-three-mobile-more" type="button" title="More viewer controls" aria-label="More viewer controls" aria-haspopup="dialog" aria-expanded="false">More</button>
           <button class="oviz-three-reset-camera-view" type="button" title="Reset the camera to the initial 3D view">Reset Camera</button>
           <button class="oviz-three-reset-selection" type="button" title="Clear the current lasso and cluster selection">Reset Selection</button>
           <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
           <select class="oviz-three-widget-select">
             <option value="">Widgets</option>
           </select>
+        </div>
+        <div class="oviz-three-mobile-sheet" data-open="false" data-panel="closed" aria-hidden="true" inert>
+          <button class="oviz-three-mobile-sheet-backdrop" type="button" tabindex="-1" aria-label="Close viewer controls"></button>
+          <section class="oviz-three-mobile-sheet-card" role="dialog" aria-modal="true" aria-labelledby="__ROOT_ID__-mobile-sheet-title" tabindex="-1">
+            <div class="oviz-three-mobile-sheet-head">
+              <strong class="oviz-three-mobile-sheet-title" id="__ROOT_ID__-mobile-sheet-title">More</strong>
+              <button class="oviz-three-mobile-sheet-close" type="button" title="Close viewer controls" aria-label="Close viewer controls">Done</button>
+            </div>
+            <div class="oviz-three-mobile-sheet-body">
+              <div class="oviz-three-mobile-sheet-menu">
+                <button type="button" data-mobile-panel="legend">Legend</button>
+                <button type="button" data-mobile-panel="controls">Controls</button>
+                <button type="button" data-mobile-panel="sky">Sky backgrounds</button>
+                <button type="button" data-mobile-action="sky-members">Sky markers</button>
+                <button type="button" data-mobile-action="galactic-grid">Galactic grid</button>
+                <button type="button" data-mobile-panel="states">States</button>
+                <button type="button" data-mobile-action="lasso">Lasso selection</button>
+                <button type="button" data-mobile-action="reset-camera">Reset camera</button>
+                <button type="button" data-mobile-action="reset-selection">Clear selection</button>
+                <button type="button" data-mobile-action="fullscreen">Fullscreen</button>
+                <button type="button" data-mobile-action="zen">Zen mode</button>
+                <button type="button" data-mobile-action="ar">AR export</button>
+              </div>
+              <div class="oviz-three-mobile-sheet-content"></div>
+            </div>
+          </section>
         </div>
       </div>
 """.strip()
@@ -297,6 +324,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-mobile-lasso,
       #__ROOT_ID__ .oviz-three-mobile-ar,
       #__ROOT_ID__ .oviz-three-mobile-legend,
+      #__ROOT_ID__ .oviz-three-mobile-more,
+      #__ROOT_ID__ .oviz-three-mobile-sheet,
       #__ROOT_ID__ .oviz-three-mobile-selection-status {
         display: none;
       }
@@ -4886,9 +4915,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
       }
       #__ROOT_ID__[data-mobile="true"] {
-        height: 100vh;
         height: 100dvh;
-        min-height: 100dvh;
+        height: var(--oviz-mobile-viewport-height, 100dvh);
+        min-height: var(--oviz-mobile-viewport-height, 100dvh);
         overflow: hidden;
         -webkit-text-size-adjust: 100%;
       }
@@ -4922,7 +4951,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-aladin-attribution {
         left: calc(env(safe-area-inset-left, 0px) + 10px);
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
         width: 58px;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu {
@@ -6025,15 +6054,448 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: none !important;
         width: 100% !important;
       }
-      #__ROOT_ID__[data-mobile="true"][data-camera-view-mode="earth"] .oviz-three-sky-controls-shell[data-visible="true"] {
-        display: flex !important;
-      }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-drawer {
         width: 100% !important;
       }
       @media (max-width: 700px) {
         #__ROOT_ID__ .oviz-three-sky-controls-shell {
           width: min(260px, calc(100vw - 28px)) !important;
+        }
+      }
+
+      /* Mobile keeps only the view switch, search, and a single More entry in
+         persistent chrome. Every secondary surface is mounted into one
+         mutually-exclusive bottom sheet by the runtime below. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-topbar {
+        display: block !important;
+        top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+        left: calc(env(safe-area-inset-left, 0px) + 10px) !important;
+        right: calc(env(safe-area-inset-right, 0px) + 10px) !important;
+        width: auto !important;
+        height: 44px;
+        z-index: 32;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu {
+        position: absolute !important;
+        top: 0;
+        right: 0;
+        display: flex !important;
+        justify-content: flex-end;
+        gap: 6px !important;
+        width: auto !important;
+        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 142px) !important;
+        overflow: visible;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu > * {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu > .oviz-three-search-shell,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu > .oviz-three-mobile-more {
+        display: inline-flex !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-search-open="true"] .oviz-three-widget-menu > .oviz-three-mobile-more {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-search-shell {
+        position: relative;
+        flex: 0 1 auto !important;
+        min-width: 44px;
+        height: 44px;
+        overflow: visible;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-search-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-more {
+        box-sizing: border-box;
+        flex: 0 0 44px !important;
+        width: 44px !important;
+        min-width: 44px !important;
+        max-width: 44px !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        padding: 0 !important;
+        border: 1px solid rgba(238, 242, 247, 0.14) !important;
+        border-radius: 10px !important;
+        background: rgba(10, 12, 16, 0.66) !important;
+        color: rgba(247, 248, 250, 0.94) !important;
+        box-shadow: 0 7px 22px rgba(0, 0, 0, 0.24) !important;
+        backdrop-filter: blur(14px) saturate(122%);
+        -webkit-backdrop-filter: blur(14px) saturate(122%);
+        font: 730 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        text-shadow: none;
+        touch-action: manipulation;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-search-toggle svg {
+        width: 18px;
+        height: 18px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-search-shell[data-open="true"] {
+        min-width: min(286px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 142px));
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-search-shell[data-open="true"] .oviz-three-search-field {
+        width: min(236px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 192px));
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-search-input,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-search-submit {
+        height: 44px !important;
+        min-height: 44px !important;
+        font-size: 14px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-search-popover {
+        top: calc(100% + 7px);
+        right: 0;
+        width: min(330px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px));
+        max-height: min(52dvh, 420px);
+        overflow: auto;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-bottom-switches {
+        position: absolute !important;
+        top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+        right: auto !important;
+        bottom: auto !important;
+        left: calc(env(safe-area-inset-left, 0px) + 10px) !important;
+        z-index: 33;
+        display: flex !important;
+        width: 118px !important;
+        min-width: 118px !important;
+        height: 46px;
+        padding: 0 !important;
+        border: 1px solid rgba(238, 242, 247, 0.14);
+        border-radius: 10px;
+        background: rgba(10, 12, 16, 0.66);
+        box-shadow: 0 7px 22px rgba(0, 0, 0, 0.24);
+        backdrop-filter: blur(14px) saturate(122%);
+        -webkit-backdrop-filter: blur(14px) saturate(122%);
+        transform: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-bottom-switches > * {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-bottom-switches > .oviz-three-earth-view-toggle {
+        display: inline-flex !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        padding: 3px !important;
+        border: 0 !important;
+        border-radius: 9px !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-earth-view-toggle .oviz-three-display-switch-choice {
+        min-width: 0;
+        padding: 0 10px;
+        font-size: 12px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-fullscreen {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] > .oviz-three-legend-panel {
+        display: none !important;
+      }
+
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet {
+        position: fixed;
+        inset: 0;
+        z-index: 74;
+        display: block !important;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-open="true"] {
+        visibility: visible;
+        pointer-events: auto;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-mobile-sheet-panel]:not([data-mobile-sheet-panel="closed"]) .oviz-three-footer,
+      #__ROOT_ID__[data-mobile="true"][data-mobile-sheet-panel]:not([data-mobile-sheet-panel="closed"]) .oviz-three-aladin-attribution,
+      #__ROOT_ID__[data-mobile="true"][data-mobile-sheet-panel]:not([data-mobile-sheet-panel="closed"]) .oviz-three-scale-bar {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-backdrop {
+        position: absolute;
+        inset: 0;
+        display: block !important;
+        width: 100% !important;
+        height: 100% !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: rgba(0, 0, 0, 0.34) !important;
+        opacity: 0;
+        transition: opacity 180ms ease;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-card {
+        position: absolute;
+        right: env(safe-area-inset-right, 0px);
+        bottom: 0;
+        left: env(safe-area-inset-left, 0px);
+        box-sizing: border-box;
+        max-height: min(76dvh, 680px);
+        padding: 0 14px calc(env(safe-area-inset-bottom, 0px) + 12px);
+        overflow: hidden;
+        border: 1px solid rgba(238, 242, 247, 0.13);
+        border-bottom: 0;
+        border-radius: 18px 18px 0 0;
+        background: rgba(13, 15, 20, 0.96);
+        color: rgba(244, 246, 249, 0.95);
+        box-shadow: 0 -18px 52px rgba(0, 0, 0, 0.42);
+        backdrop-filter: blur(22px) saturate(128%);
+        -webkit-backdrop-filter: blur(22px) saturate(128%);
+        transform: translateY(calc(100% + 20px));
+        transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-open="true"] .oviz-three-mobile-sheet-backdrop {
+        opacity: 1;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-open="true"] .oviz-three-mobile-sheet-card {
+        transform: translateY(0);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 52px;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.10);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-title {
+        font: 760 15px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-close {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        width: auto !important;
+        min-width: 44px !important;
+        height: 44px !important;
+        padding: 0 4px !important;
+        border: 0 !important;
+        background: transparent !important;
+        color: rgba(246, 200, 95, 0.98) !important;
+        font: 720 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-body {
+        max-height: calc(min(76dvh, 680px) - 66px - env(safe-area-inset-bottom, 0px));
+        overflow: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1px 14px;
+        padding: 8px 0 4px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu button {
+        display: flex !important;
+        align-items: center;
+        justify-content: flex-start;
+        box-sizing: border-box;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 48px !important;
+        height: 48px !important;
+        padding: 0 3px !important;
+        border: 0 !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.09) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(244, 246, 249, 0.92) !important;
+        font: 650 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        text-align: left;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu button:disabled,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu button[hidden] {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu button[data-active="true"] {
+        color: var(--oviz-accent-strong, #ffffff) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu button[data-active="true"]::after {
+        content: "On";
+        margin-left: auto;
+        color: var(--oviz-muted-text);
+        font-size: 10px;
+        font-weight: 600;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content {
+        display: none;
+        min-width: 0;
+        padding: 8px 0 3px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet:not([data-panel="menu"]) .oviz-three-mobile-sheet-menu {
+        display: none;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet:not([data-panel="menu"]) .oviz-three-mobile-sheet-content {
+        display: block;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content > .oviz-three-controls-shell,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content > .oviz-three-sky-controls-shell,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content > .oviz-three-legend-panel,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content > .oviz-states-shell {
+        position: static !important;
+        display: block !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: none !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+        pointer-events: auto !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-controls-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-sky-controls-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-legend-panel-head,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-legend-resize,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-states-toggle {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-controls-drawer,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-sky-controls-drawer,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-legend-panel-body {
+        position: static !important;
+        display: flex !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+        pointer-events: auto !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-sky-controls-shell {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="sky"] .oviz-three-sky-dock-head {
+        justify-content: flex-end;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-controls-drawer {
+        display: block !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-sky-controls-drawer {
+        display: block !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-three-legend-panel-body {
+        flex-direction: column !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-content .oviz-states-drawer {
+        position: static !important;
+        inset: auto !important;
+        display: block !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="states"] .oviz-states-head {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        min-height: 44px !important;
+        margin: 0 0 10px !important;
+        padding: 0 0 9px !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.09) !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="states"] .oviz-states-head > strong {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="states"] .oviz-states-head > small {
+        margin-right: auto !important;
+        color: rgba(220, 225, 232, 0.68) !important;
+        font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="states"] .oviz-states-drawer button {
+        appearance: none !important;
+        box-sizing: border-box !important;
+        min-width: 0 !important;
+        min-height: 44px !important;
+        height: 44px !important;
+        padding: 0 10px !important;
+        border: 1px solid rgba(238, 242, 247, 0.13) !important;
+        border-radius: 9px !important;
+        background: rgba(255, 255, 255, 0.055) !important;
+        color: rgba(244, 246, 249, 0.94) !important;
+        box-shadow: none !important;
+        font: 650 12.5px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        white-space: nowrap !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="states"] .oviz-states-drawer button:disabled {
+        opacity: 0.38 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="states"] .oviz-states-nav {
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 8px !important;
+        margin: 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="states"] .oviz-states-editbar {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px !important;
+        margin: 10px 0 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="states"] .oviz-states-status {
+        min-height: 18px !important;
+        margin-top: 9px !important;
+        color: rgba(220, 225, 232, 0.66) !important;
+        font: 600 11px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-search-shell,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-bottom-switches,
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-sheet {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-zen="true"] .oviz-three-mobile-more {
+        display: inline-flex !important;
+        opacity: 0.72;
+      }
+      @media (max-width: 360px) {
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-bottom-switches {
+          width: 108px !important;
+          min-width: 108px !important;
+        }
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu {
+          max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 130px) !important;
+        }
+      }
+      @media (orientation: landscape) and (max-height: 600px) {
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-card {
+          right: calc(env(safe-area-inset-right, 0px) + 8px);
+          bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+          left: calc(env(safe-area-inset-left, 0px) + 8px);
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px);
+          border: 1px solid rgba(238, 242, 247, 0.13);
+          border-radius: 16px;
+        }
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-body {
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 84px);
+        }
+        #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
       }
       #__ROOT_ID__ .oviz-deck-authoring-layer {
@@ -6202,27 +6664,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-paper-panel {
         position: absolute;
-        top: 12px;
-        right: 12px;
-        bottom: 12px;
+        top: 10px;
+        right: 10px;
+        bottom: 10px;
         width: var(--oviz-paper-panel-width, 42%);
         min-width: 320px;
         max-width: 72vw;
         display: none;
         flex-direction: column;
         z-index: 60;
-        background: linear-gradient(
-          165deg,
-          rgba(16, 20, 27, 0.58),
-          rgba(10, 13, 18, 0.52)
-        );
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        border-radius: 18px;
+        background: var(--oviz-panel-solid, #121212);
+        border: 1px solid var(--oviz-panel-border);
+        border-radius: 12px;
         box-shadow:
-          0 24px 70px rgba(0, 0, 0, 0.42),
-          inset 0 1px 0 rgba(255, 255, 255, 0.07);
-        backdrop-filter: blur(26px) saturate(1.5);
-        -webkit-backdrop-filter: blur(26px) saturate(1.5);
+          0 20px 58px rgba(0, 0, 0, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.045);
+        backdrop-filter: blur(14px) saturate(1.12);
+        -webkit-backdrop-filter: blur(14px) saturate(1.12);
         color: var(--oviz-text);
         overflow: hidden;
         transition: transform 300ms cubic-bezier(0.4, 0.0, 0.2, 1.0);
@@ -6296,6 +6754,18 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-paper-panel[data-open="true"] {
         display: flex;
       }
+      #__ROOT_ID__[data-paper-open="true"][data-paper-collapsed="false"] .oviz-three-footer {
+        left: calc((100% - var(--oviz-paper-panel-width, 42%) - 20px) / 2);
+        max-width: calc(100% - var(--oviz-paper-panel-width, 42%) - 44px);
+      }
+      #__ROOT_ID__[data-paper-open="true"][data-paper-collapsed="false"] .oviz-three-fullscreen,
+      #__ROOT_ID__[data-paper-open="true"][data-paper-collapsed="false"] .oviz-three-bottom-switches,
+      #__ROOT_ID__[data-paper-open="true"][data-paper-collapsed="false"] .oviz-three-action-bar {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-paper-open="true"][data-paper-collapsed="false"] .oviz-three-widget-menu {
+        display: none !important;
+      }
       #__ROOT_ID__[data-zen="true"] .oviz-three-paper-panel,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-paper-panel,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-paper-panel,
@@ -6305,23 +6775,23 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: none !important;
       }
       #__ROOT_ID__ .oviz-three-paper-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 18px 16px 12px 28px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 8px 12px;
+        padding: 16px 14px 11px 30px;
         flex: 0 0 auto;
-        background: linear-gradient(
-          180deg,
-          rgba(255, 255, 255, 0.045),
-          rgba(255, 255, 255, 0.0)
-        );
+        border-bottom: 1px solid var(--oviz-panel-border);
+        background: color-mix(in srgb, var(--oviz-panel-solid, #121212) 94%, var(--oviz-text) 6%);
+      }
+      #__ROOT_ID__ .oviz-three-paper-title-wrap {
+        min-width: 0;
       }
       #__ROOT_ID__ .oviz-three-paper-doc-title {
-        font-size: 14.5px;
-        font-weight: 620;
+        font-size: 15px;
+        font-weight: 650;
         line-height: 1.32;
-        letter-spacing: 0.012em;
+        letter-spacing: 0.006em;
       }
       #__ROOT_ID__ .oviz-three-paper-doc-title a {
         color: var(--oviz-text);
@@ -6331,9 +6801,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         color: #cfe7ff;
       }
       #__ROOT_ID__ .oviz-three-paper-doc-authors {
-        margin-top: 5px;
-        font-size: 11px;
-        color: rgba(200, 208, 220, 0.62);
+        margin-top: 4px;
+        font-size: 11.5px;
+        color: var(--oviz-muted-text);
         line-height: 1.4;
         display: -webkit-box;
         -webkit-line-clamp: 2;
@@ -6342,9 +6812,21 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-paper-doc-venue {
         margin-top: 3px;
-        font-size: 10.5px;
-        color: rgba(200, 208, 220, 0.5);
+        font-size: 11px;
+        color: var(--oviz-muted-text);
         font-style: italic;
+      }
+      #__ROOT_ID__ .oviz-three-paper-status {
+        grid-column: 1 / -1;
+        min-height: 14px;
+        color: var(--oviz-muted-text);
+        font: 500 10.5px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+      #__ROOT_ID__ .oviz-three-paper-status[data-status="syncing"] {
+        color: var(--oviz-accent);
+      }
+      #__ROOT_ID__ .oviz-three-paper-status[data-status="error"] {
+        color: #ffb1aa;
       }
       #__ROOT_ID__ .oviz-three-paper-head-controls {
         display: flex;
@@ -6357,11 +6839,12 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-paper-close {
         appearance: none;
         border: 0;
-        background: rgba(255, 255, 255, 0.07);
-        color: rgba(226, 232, 240, 0.85);
+        background: color-mix(in srgb, var(--oviz-text) 8%, transparent);
+        color: var(--oviz-text);
         border-radius: 999px;
-        font-size: 11px;
-        padding: 5px 11px;
+        min-height: 30px;
+        font-size: 11.5px;
+        padding: 6px 11px;
         cursor: pointer;
         white-space: nowrap;
         transition: background 160ms ease, color 160ms ease;
@@ -6391,29 +6874,47 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-paper-rail {
         position: absolute;
-        top: 96px;
-        bottom: 22px;
-        left: 10px;
-        width: 8px;
+        top: calc(var(--oviz-paper-head-height, 104px) + 10px);
+        bottom: 20px;
+        left: 7px;
+        width: 20px;
         z-index: 2;
+      }
+      #__ROOT_ID__ .oviz-three-paper-rail::before {
+        content: "";
+        position: absolute;
+        top: 4px;
+        bottom: 4px;
+        left: 9px;
+        width: 1px;
+        background: color-mix(in srgb, var(--oviz-text) 16%, transparent);
       }
       #__ROOT_ID__ .oviz-three-paper-rail-tick {
         position: absolute;
-        left: 2px;
-        width: 5px;
-        height: 5px;
+        left: 0;
+        width: 20px;
+        height: 20px;
+        margin-top: -9px;
         border-radius: 50%;
         border: 0;
-        background: rgba(210, 224, 240, 0.30);
+        background: transparent;
         cursor: pointer;
         padding: 0;
+      }
+      #__ROOT_ID__ .oviz-three-paper-rail-tick::after {
+        content: "";
+        position: absolute;
+        inset: 7px;
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--oviz-text) 36%, transparent);
         transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
       }
-      #__ROOT_ID__ .oviz-three-paper-rail-tick:hover {
-        background: rgba(210, 224, 240, 0.65);
+      #__ROOT_ID__ .oviz-three-paper-rail-tick:hover::after,
+      #__ROOT_ID__ .oviz-three-paper-rail-tick:focus-visible::after {
+        background: color-mix(in srgb, var(--oviz-text) 72%, transparent);
         transform: scale(1.35);
       }
-      #__ROOT_ID__ .oviz-three-paper-rail-tick[data-active="true"] {
+      #__ROOT_ID__ .oviz-three-paper-rail-tick[data-active="true"]::after {
         background: var(--oviz-accent, #6ec5ff);
         box-shadow: 0 0 10px rgba(110, 197, 255, 0.75);
         transform: scale(1.45);
@@ -6423,7 +6924,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         overflow-y: auto;
         overscroll-behavior: contain;
         scroll-behavior: smooth;
-        padding: 14px 28px 56px 28px;
+        padding: 18px 34px 64px 36px;
         outline: none;
         scrollbar-width: thin;
         scrollbar-color: rgba(210, 224, 240, 0.22) transparent;
@@ -6442,24 +6943,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(210, 224, 240, 0.4);
       }
       #__ROOT_ID__ .oviz-three-paper-body {
-        font-family: Helvetica, Arial, sans-serif;
-        font-size: 13.5px;
-        line-height: 1.68;
-        color: rgba(238, 241, 246, 0.92);
-        max-width: 62ch;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.67;
+        color: var(--oviz-text);
+        max-width: 64ch;
         margin: 0 auto;
       }
       #__ROOT_ID__ .oviz-three-paper-body h2,
       #__ROOT_ID__ .oviz-three-paper-body h3,
       #__ROOT_ID__ .oviz-three-paper-body h4 {
-        font-family: Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
         letter-spacing: 0.01em;
         margin: 26px 0 10px 0;
         line-height: 1.3;
       }
-      #__ROOT_ID__ .oviz-three-paper-body h2 { font-size: 16px; }
-      #__ROOT_ID__ .oviz-three-paper-body h3 { font-size: 14px; }
-      #__ROOT_ID__ .oviz-three-paper-body h4 { font-size: 13px; }
+      #__ROOT_ID__ .oviz-three-paper-body h2 { font-size: 19px; }
+      #__ROOT_ID__ .oviz-three-paper-body h3 { font-size: 16px; }
+      #__ROOT_ID__ .oviz-three-paper-body h4 { font-size: 14.5px; }
       #__ROOT_ID__ .oviz-three-paper-body p {
         margin: 0 0 12px 0;
       }
@@ -6497,10 +6998,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-paper-anchor-marker {
         position: absolute;
-        left: -32px;
-        top: 7px;
-        width: 14px;
-        height: 14px;
+        left: -37px;
+        top: 3px;
+        width: 24px;
+        height: 24px;
         border-radius: 50%;
         border: 0;
         background: transparent;
@@ -6510,7 +7011,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-paper-anchor-marker::after {
         content: "";
         position: absolute;
-        inset: 4px;
+        inset: 9px;
         border-radius: 50%;
         background: rgba(210, 224, 240, 0.35);
         transition: background 180ms ease, box-shadow 180ms ease;
@@ -6544,7 +7045,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         margin-top: 8px;
         display: inline-block;
         font-family: Helvetica, Arial, sans-serif;
-        font-size: 10.5px;
+        font-size: 11px;
         letter-spacing: 0.02em;
         color: rgba(158, 208, 255, 0.85);
         background: rgba(110, 197, 255, 0.10);
@@ -6565,7 +7066,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         background: rgba(4, 6, 10, 0.72);
         backdrop-filter: blur(20px) saturate(1.3);
         -webkit-backdrop-filter: blur(20px) saturate(1.3);
-        cursor: zoom-out;
+        cursor: default;
       }
       #__ROOT_ID__ .oviz-three-paper-lightbox[data-open="true"] {
         display: flex;
@@ -6575,6 +7076,24 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         max-height: 82%;
         border-radius: 12px;
         box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+      }
+      #__ROOT_ID__ .oviz-three-paper-lightbox-close {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: 1px solid color-mix(in srgb, var(--oviz-text) 18%, transparent);
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--oviz-panel-solid, #121212) 84%, transparent);
+        color: var(--oviz-text);
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
       }
       #__ROOT_ID__ .oviz-three-paper-lightbox-caption {
         max-width: 900px;
@@ -7031,6 +7550,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-aladin-attribution {
         bottom: calc(env(safe-area-inset-bottom, 0px) + 82px) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-topbar {
+        display: block !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-search-shell,
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-mobile-sheet {
+        display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-mobile-more {
+        display: inline-flex !important;
+        opacity: 0.72;
       }
     </style>
   </head>
@@ -7784,6 +8314,13 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const mobileLassoButtonEl = root.querySelector(".oviz-three-mobile-lasso");
       const mobileArButtonEl = root.querySelector(".oviz-three-mobile-ar");
       const mobileLegendButtonEl = root.querySelector(".oviz-three-mobile-legend");
+      const mobileMoreButtonEl = root.querySelector(".oviz-three-mobile-more");
+      const mobileSheetEl = root.querySelector(".oviz-three-mobile-sheet");
+      const mobileSheetBackdropEl = root.querySelector(".oviz-three-mobile-sheet-backdrop");
+      const mobileSheetTitleEl = root.querySelector(".oviz-three-mobile-sheet-title");
+      const mobileSheetCloseEl = root.querySelector(".oviz-three-mobile-sheet-close");
+      const mobileSheetMenuEl = root.querySelector(".oviz-three-mobile-sheet-menu");
+      const mobileSheetContentEl = root.querySelector(".oviz-three-mobile-sheet-content");
       const resetCameraViewButtonEl = root.querySelector(".oviz-three-reset-camera-view");
       const resetSelectionButtonEl = root.querySelector(".oviz-three-reset-selection");
       const saveStateButtonEl = root.querySelector(".oviz-three-save-state");
@@ -8431,7 +8968,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       );
       let zenModeEnabled = Boolean(initialState.zen_mode_enabled);
       let presentationModeEnabled = false;
-      let legendPanelOpen = initialState.legend_open === undefined ? true : Boolean(initialState.legend_open);
+      let legendPanelOpen = mobileModeEnabled
+        ? false
+        : (initialState.legend_open === undefined ? true : Boolean(initialState.legend_open));
       let fadeInTimeMyr = Number(animationSpec.fade_in_time_default);
       let fadeInAndOutEnabled = Boolean(animationSpec.fade_in_and_out_default);
       let fadeOpacityByBirthTimeEnabled = Boolean(animationSpec.fade_opacity_by_birth_time_default);
@@ -10927,7 +11466,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           activeVolumeKey = mobileActiveVolumeKey;
           setExclusiveVolumeVariantSelection(activeVolumeKey);
         }
-        const mobileDeferVolumes = mobileModeEnabled && initialState.mobile_defer_volumes !== false;
+        const mobileDeferVolumes = mobileModeEnabled && initialState.mobile_defer_volumes === true;
         if (mobileDeferVolumes) {
           volumeStateKeys.forEach((stateKey) => {
             const target = volumeStateByKey[String(stateKey)];
@@ -15537,10 +16076,42 @@ __SKY_RUNTIME_JS__
         }
       }
 
+      let ovizMobileViewportEventsBound = false;
+
+      function syncMobileViewportGeometry() {
+        if (!mobileModeEnabled || !root || !root.style) {
+          return;
+        }
+        const viewportHeight = Number(
+          window.visualViewport && window.visualViewport.height
+            ? window.visualViewport.height
+            : window.innerHeight,
+        );
+        if (Number.isFinite(viewportHeight) && viewportHeight > 0) {
+          root.style.setProperty(
+            "--oviz-mobile-viewport-height",
+            `${Math.round(viewportHeight)}px`,
+          );
+        }
+      }
+
       function syncMobileStaticUi() {
         if (!mobileModeEnabled) {
           return;
         }
+        syncMobileViewportGeometry();
+        if (!ovizMobileViewportEventsBound) {
+          ovizMobileViewportEventsBound = true;
+          window.addEventListener("resize", syncMobileViewportGeometry, { passive: true });
+          window.addEventListener("orientationchange", syncMobileViewportGeometry, { passive: true });
+          if (window.visualViewport) {
+            window.visualViewport.addEventListener("resize", syncMobileViewportGeometry, { passive: true });
+            window.visualViewport.addEventListener("scroll", syncMobileViewportGeometry, { passive: true });
+          }
+        }
+        root.dataset.mobileSheetPanel = (
+          typeof mobileSheetPanelName === "string" ? mobileSheetPanelName : "closed"
+        );
         if (controlsToggleEl) {
           controlsToggleEl.textContent = "Controls";
         }
@@ -21282,6 +21853,15 @@ __VIEWER_RUNTIME_JS__
           return;
         }
         const nextOpen = Boolean(open);
+        if (
+          mobileModeEnabled
+          && nextOpen
+          && mobileSheetEl
+          && mobileSheetEl.dataset.open === "true"
+          && typeof setMobileSheetPanel === "function"
+        ) {
+          setMobileSheetPanel("closed");
+        }
         searchShellEl.dataset.open = nextOpen ? "true" : "false";
         if (root && root.dataset) {
           root.dataset.searchOpen = nextOpen ? "true" : "false";
@@ -21830,6 +22410,13 @@ __STATE_RUNTIME_JS__
         setControlsDrawerOpen(Boolean(controlsShellEl && controlsShellEl.dataset.open === "true"));
         setSkyControlsDrawerOpen(Boolean(skyControlsShellEl && skyControlsShellEl.dataset.open === "true"));
         setLegendPanelOpen(legendPanelOpen);
+        if (mobileModeEnabled) {
+          setToolsDrawerOpen(false);
+          setControlsDrawerOpen(false);
+          setSkyControlsDrawerOpen(false);
+          setLegendPanelOpen(false);
+          setMobileSheetPanel("closed");
+        }
         applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
         groupSelectEl.innerHTML = "";
         const groups = sceneSpec.group_order || [defaultGroup];
@@ -21922,6 +22509,110 @@ __STATE_RUNTIME_JS__
             resetSelectionState();
             focusViewer();
           });
+        }
+        if (mobileMoreButtonEl) {
+          mobileMoreButtonEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (presentationModeEnabled) {
+              setPresentationMode(false);
+              focusViewer();
+              return;
+            }
+            if (zenModeEnabled) {
+              setZenMode(false);
+              focusViewer();
+              return;
+            }
+            setMobileSheetPanel(
+              mobileSheetEl && mobileSheetEl.dataset.open === "true" ? "closed" : "menu"
+            );
+          });
+        }
+        if (mobileSheetBackdropEl) {
+          mobileSheetBackdropEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setMobileSheetPanel("closed");
+          });
+        }
+        if (mobileSheetCloseEl) {
+          mobileSheetCloseEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setMobileSheetPanel("closed");
+            if (mobileMoreButtonEl) {
+              mobileMoreButtonEl.focus();
+            }
+          });
+        }
+        if (mobileSheetEl && typeof trapMobileSheetFocus === "function") {
+          mobileSheetEl.addEventListener("keydown", trapMobileSheetFocus);
+        }
+        if (mobileSheetMenuEl) {
+          mobileSheetMenuEl.addEventListener("click", (event) => {
+            const buttonEl = event.target && event.target.closest
+              ? event.target.closest("button")
+              : null;
+            if (!buttonEl || buttonEl.disabled) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            const panelName = String(buttonEl.dataset.mobilePanel || "");
+            if (panelName) {
+              setMobileSheetPanel(panelName);
+              return;
+            }
+            const actionName = String(buttonEl.dataset.mobileAction || "");
+            if (actionName === "lasso") {
+              lassoArmed = !lassoArmed;
+              updateSelectionUI();
+            } else if (actionName === "sky-members") {
+              if (cameraViewMode === "earth" && skyMemberDisplayAvailable) {
+                setSkyMemberDisplayMode(
+                  skyMemberDisplayMode === "stars" ? "clusters" : "stars",
+                  { animate: true, durationMs: 360.0 },
+                );
+              }
+            } else if (actionName === "galactic-grid") {
+              setGalacticReferenceVisible(!galacticReferenceVisible, { render: true });
+            } else if (actionName === "reset-camera") {
+              if (!actionInterruptsMuted()) {
+                interruptActionRun("camera", { disableOrbit: true });
+              }
+              resetCameraView();
+              renderSceneControls();
+            } else if (actionName === "reset-selection") {
+              resetSelectionState();
+            } else if (actionName === "fullscreen") {
+              toggleOvizNativeFullscreen();
+            } else if (actionName === "zen") {
+              setZenMode(!zenModeEnabled);
+            } else if (actionName === "ar" && typeof openOvizArSnapshotChooser === "function") {
+              openOvizArSnapshotChooser();
+            }
+            setMobileSheetPanel("closed");
+            focusViewer();
+          });
+        }
+        if (mobileModeEnabled) {
+          window.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && mobileSheetEl && mobileSheetEl.dataset.open === "true") {
+              event.preventDefault();
+              setMobileSheetPanel("closed");
+              if (mobileMoreButtonEl) {
+                mobileMoreButtonEl.focus();
+              }
+            } else if (
+              String(event.key || "").toLowerCase() === "z"
+              && mobileSheetEl
+              && mobileSheetEl.dataset.open === "true"
+            ) {
+              setMobileSheetPanel("closed");
+            }
+          });
+          syncMobileSheetAvailability();
         }
         if (mobileLassoButtonEl) {
           mobileLassoButtonEl.addEventListener("click", () => {
@@ -22456,6 +23147,7 @@ __STATE_RUNTIME_JS__
             setControlsDrawerOpen(false);
             setSkyControlsDrawerOpen(false);
             setLegendPanelOpen(false);
+            setMobileSheetPanel("closed");
             toggleEarthView();
             focusViewer();
           });
@@ -22464,6 +23156,9 @@ __STATE_RUNTIME_JS__
           earthViewToggleButtonEl.addEventListener("click", () => {
             if (!actionInterruptsMuted()) {
               interruptActionRun("camera", { disableOrbit: true });
+            }
+            if (mobileModeEnabled) {
+              setMobileSheetPanel("closed");
             }
             toggleEarthView();
             focusViewer();

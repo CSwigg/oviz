@@ -8,7 +8,6 @@ from pathlib import Path
 
 SCRIPT_PATH = Path(__file__).with_name("main_figure_july25.py")
 ARTIFACT_PATH = SCRIPT_PATH.with_suffix(".html")
-JULY21_ARTIFACT_PATH = SCRIPT_PATH.with_name("main_figure_july21.html")
 
 
 def _load_module():
@@ -50,18 +49,77 @@ def test_build_state_only_scene_disables_and_removes_slides():
     assert volume_state["galacticExtinction"] == 2.4
 
 
+def test_default_velocity_catalog_is_the_audited_sdssv_release():
+    module = _load_module()
+
+    assert module.DEFAULT_CLUSTER_VELOCITIES_PATH.name == (
+        "cluster_velocities_sdssv_covariance_audited.csv"
+    )
+    assert "velocity analysis/outputs/release" in str(
+        module.DEFAULT_CLUSTER_VELOCITIES_PATH
+    )
+
+
+def test_state_only_scene_records_velocity_provenance(tmp_path):
+    module = _load_module()
+    velocity_path = tmp_path / "cluster_velocities_sdssv_covariance_audited.csv"
+    source = {"volumes": {"layers": []}, "initial_state": {}}
+
+    scene = module.build_state_only_scene(source, velocity_path)
+
+    provenance = scene["provenance"]["cluster_velocities"]
+    assert provenance["filename"] == velocity_path.name
+    assert provenance["path"] == str(velocity_path.resolve())
+    assert provenance["release"] == "SDSS-V covariance audited"
+
+
+def test_velocity_source_build_forwards_the_selected_catalog(tmp_path, monkeypatch):
+    module = _load_module()
+    velocity_path = tmp_path / "audited.csv"
+    output_path = tmp_path / "source.html"
+    velocity_path.write_text("name,U_2026,V_2026,W_2026\nA,1,2,3\n", encoding="utf-8")
+    captured = {}
+
+    def fake_build_source_main_figure(**kwargs):
+        captured.update(kwargs)
+        output_path.write_text("<!doctype html>", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(
+        module,
+        "build_source_main_figure",
+        fake_build_source_main_figure,
+    )
+
+    result = module.build_velocity_source_figure(velocity_path, output_path)
+
+    assert result == output_path
+    assert captured["cluster_velocities_path"] == velocity_path.resolve()
+    assert captured["chronos_results_path"] == module.JULY4_CHRONOS_RESULTS_PATH
+    assert captured["jun6_catalog"] is True
+    assert captured["include_background_cluster_trace"] is False
+    assert captured["show_cluster_members_in_sky"] is True
+
+
 def test_july25_artifact_keeps_presentation_and_adds_runtime_upgrades(tmp_path):
     module = _load_module()
     html = ARTIFACT_PATH.read_text(encoding="utf-8")
     scene = module.read_embedded_scene_spec(ARTIFACT_PATH)
 
     assert ARTIFACT_PATH.stat().st_size < 100 * 1024 * 1024
-    if JULY21_ARTIFACT_PATH.exists():
-        assert ARTIFACT_PATH.stat().st_size <= JULY21_ARTIFACT_PATH.stat().st_size
+    # Updated trajectories can have a slightly different compression ratio
+    # than the July 21 payload; enforce a direct compact-artifact bound rather
+    # than requiring unrelated scientific data to gzip to the same size.
+    assert ARTIFACT_PATH.stat().st_size < 40 * 1024 * 1024
     assert scene["deck"]["available"] is False
     assert scene["deck"]["enabled"] is False
     assert scene["deck"]["slides"] == []
     assert scene["title"] == ""
+    velocity_provenance = scene["provenance"]["cluster_velocities"]
+    assert velocity_provenance["filename"] == (
+        "cluster_velocities_sdssv_covariance_audited.csv"
+    )
+    assert velocity_provenance["release"] == "SDSS-V covariance audited"
     edenhofer = next(
         layer
         for layer in scene["volumes"]["layers"]

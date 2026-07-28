@@ -423,6 +423,306 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
       }
 
+      let mobileSheetPanelName = "closed";
+      let mobileSheetMountState = null;
+      let mobileSheetRestoreFocusEl = null;
+      let mobileSheetFocusFrame = 0;
+
+      function focusMobileSheetElement(element) {
+        if (!element || typeof element.focus !== "function") {
+          return false;
+        }
+        try {
+          element.focus({ preventScroll: true });
+        } catch (_error) {
+          element.focus();
+        }
+        return true;
+      }
+
+      function mobileSheetFocusableElements(containerEl = mobileSheetEl) {
+        if (!containerEl || typeof containerEl.querySelectorAll !== "function") {
+          return [];
+        }
+        const selector = [
+          "button:not([disabled]):not([hidden])",
+          "a[href]",
+          "input:not([disabled]):not([type=hidden])",
+          "select:not([disabled])",
+          "textarea:not([disabled])",
+          "[tabindex]:not([tabindex='-1'])",
+        ].join(",");
+        return Array.from(containerEl.querySelectorAll(selector)).filter((element) => {
+          if (
+            element.hidden
+            || element.getAttribute("aria-hidden") === "true"
+            || element.closest("[inert]")
+          ) {
+            return false;
+          }
+          return typeof element.getClientRects !== "function" || element.getClientRects().length > 0;
+        });
+      }
+
+      function focusMobileSheetPanel(panelName) {
+        if (mobileSheetFocusFrame) {
+          window.cancelAnimationFrame(mobileSheetFocusFrame);
+        }
+        const requestedName = String(panelName || "menu");
+        mobileSheetFocusFrame = window.requestAnimationFrame(() => {
+          mobileSheetFocusFrame = 0;
+          if (
+            !mobileSheetEl
+            || mobileSheetEl.dataset.open !== "true"
+            || mobileSheetPanelName !== requestedName
+          ) {
+            return;
+          }
+          const scopeEl = requestedName === "menu" ? mobileSheetMenuEl : mobileSheetContentEl;
+          const candidate = mobileSheetFocusableElements(scopeEl)[0]
+            || mobileSheetCloseEl
+            || mobileSheetEl.querySelector(".oviz-three-mobile-sheet-card");
+          focusMobileSheetElement(candidate);
+        });
+      }
+
+      function trapMobileSheetFocus(event) {
+        if (
+          !mobileModeEnabled
+          || !mobileSheetEl
+          || mobileSheetEl.dataset.open !== "true"
+          || event.key !== "Tab"
+        ) {
+          return;
+        }
+        const focusable = mobileSheetFocusableElements(mobileSheetEl);
+        if (!focusable.length) {
+          event.preventDefault();
+          focusMobileSheetElement(mobileSheetEl.querySelector(".oviz-three-mobile-sheet-card"));
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || !mobileSheetEl.contains(active))) {
+          event.preventDefault();
+          focusMobileSheetElement(last);
+        } else if (!event.shiftKey && (active === last || !mobileSheetEl.contains(active))) {
+          event.preventDefault();
+          focusMobileSheetElement(first);
+        }
+      }
+
+      function restoreMobileSheetPanel() {
+        if (!mobileSheetMountState) {
+          if (mobileSheetContentEl) {
+            mobileSheetContentEl.replaceChildren();
+          }
+          return;
+        }
+        const { element, parent, nextSibling } = mobileSheetMountState;
+        mobileSheetMountState = null;
+        if (element && parent) {
+          if (nextSibling && nextSibling.parentNode === parent) {
+            parent.insertBefore(element, nextSibling);
+          } else {
+            parent.appendChild(element);
+          }
+        }
+        if (mobileSheetContentEl) {
+          mobileSheetContentEl.replaceChildren();
+        }
+      }
+
+      function mountMobilePanelInSheet(panelName, panelEl) {
+        if (!mobileModeEnabled || !mobileSheetContentEl || !panelEl || !panelEl.parentNode) {
+          return false;
+        }
+        restoreMobileSheetPanel();
+        mobileSheetMountState = {
+          panelName: String(panelName || ""),
+          element: panelEl,
+          parent: panelEl.parentNode,
+          nextSibling: panelEl.nextSibling,
+        };
+        mobileSheetContentEl.appendChild(panelEl);
+        return true;
+      }
+
+      function syncMobileSheetAvailability() {
+        if (!mobileSheetEl) {
+          return;
+        }
+        const skyButton = mobileSheetEl.querySelector('[data-mobile-panel="sky"]');
+        if (skyButton) {
+          const skyAvailable = cameraViewMode === "earth" && Boolean(
+            skyControlsShellEl && skyControlsShellEl.dataset.visible === "true"
+          );
+          skyButton.disabled = !skyAvailable;
+          skyButton.title = skyAvailable
+            ? "Edit the Sky background layer stack"
+            : "Sky backgrounds are available in Sky view";
+        }
+        const skyMembersButton = mobileSheetEl.querySelector('[data-mobile-action="sky-members"]');
+        if (skyMembersButton) {
+          const available = cameraViewMode === "earth" && Boolean(skyMemberDisplayAvailable);
+          skyMembersButton.hidden = !available;
+          skyMembersButton.textContent = "Member stars";
+          skyMembersButton.title = skyMemberDisplayMode === "stars"
+            ? "Switch Sky markers to cluster points"
+            : "Switch Sky markers to member stars";
+          skyMembersButton.dataset.active = skyMemberDisplayMode === "stars" ? "true" : "false";
+        }
+        const galacticGridButton = mobileSheetEl.querySelector('[data-mobile-action="galactic-grid"]');
+        if (galacticGridButton) {
+          galacticGridButton.textContent = galacticReferenceVisible
+            ? "Hide Galactic grid"
+            : "Show Galactic grid";
+          galacticGridButton.dataset.active = galacticReferenceVisible ? "true" : "false";
+        }
+        const statesButton = mobileSheetEl.querySelector('[data-mobile-panel="states"]');
+        if (statesButton) {
+          statesButton.hidden = !root.querySelector(".oviz-states-toggle");
+        }
+        const lassoButton = mobileSheetEl.querySelector('[data-mobile-action="lasso"]');
+        if (lassoButton) {
+          lassoButton.textContent = lassoArmed ? "Lasso armed" : "Lasso selection";
+          lassoButton.dataset.active = lassoArmed ? "true" : "false";
+        }
+        const arButton = mobileSheetEl.querySelector('[data-mobile-action="ar"]');
+        if (arButton) {
+          arButton.hidden = !mobileArButtonEl;
+          arButton.disabled = Boolean(mobileArButtonEl && mobileArButtonEl.disabled);
+        }
+      }
+
+      function closeMobileOverlayPanels() {
+        setToolsDrawerOpen(false);
+        setControlsDrawerOpen(false);
+        setSkyControlsDrawerOpen(false);
+        setManualLabelMenuOpen(false);
+        setLegendPanelOpen(false);
+        if (typeof setOvizSearchOpen === "function") {
+          setOvizSearchOpen(false);
+        }
+        const statesShellEl = root.querySelector(".oviz-states-shell");
+        if (statesShellEl) {
+          statesShellEl.dataset.open = "false";
+          const statesToggleEl = statesShellEl.querySelector(".oviz-states-toggle");
+          if (statesToggleEl) {
+            statesToggleEl.setAttribute("aria-expanded", "false");
+            statesToggleEl.textContent = "States ▸";
+          }
+          const statesDrawerEl = statesShellEl.querySelector(".oviz-states-drawer");
+          if (statesDrawerEl) {
+            statesDrawerEl.setAttribute("aria-hidden", "true");
+            statesDrawerEl.setAttribute("inert", "");
+          }
+        }
+        if (typeof ovizDeckSetEditorOpen === "function") {
+          ovizDeckSetEditorOpen(false);
+        }
+      }
+
+      function setMobileSheetPanel(panelName) {
+        if (!mobileModeEnabled || !mobileSheetEl || !mobileMoreButtonEl) {
+          return false;
+        }
+        const requestedName = String(panelName || "closed").toLowerCase();
+        const allowedNames = new Set(["closed", "menu", "legend", "controls", "sky", "states"]);
+        let nextName = allowedNames.has(requestedName) ? requestedName : "menu";
+        if (
+          nextName === "sky"
+          && !(cameraViewMode === "earth" && skyControlsShellEl && skyControlsShellEl.dataset.visible === "true")
+        ) {
+          nextName = "menu";
+        }
+        const statesShellEl = root.querySelector(".oviz-states-shell");
+        if (nextName === "states" && !statesShellEl) {
+          nextName = "menu";
+        }
+        const wasOpen = mobileSheetEl.dataset.open === "true";
+        if (wasOpen && nextName === mobileSheetPanelName && nextName !== "menu") {
+          nextName = "closed";
+        }
+        if (!wasOpen && nextName !== "closed") {
+          const activeElement = document.activeElement;
+          mobileSheetRestoreFocusEl = activeElement && root.contains(activeElement)
+            ? activeElement
+            : mobileMoreButtonEl;
+        }
+
+        closeMobileOverlayPanels();
+        restoreMobileSheetPanel();
+        mobileSheetPanelName = nextName;
+        const isOpen = nextName !== "closed";
+        mobileSheetEl.dataset.open = isOpen ? "true" : "false";
+        mobileSheetEl.dataset.panel = nextName;
+        mobileSheetEl.setAttribute("aria-hidden", isOpen ? "false" : "true");
+        if (isOpen) {
+          mobileSheetEl.removeAttribute("inert");
+        } else {
+          mobileSheetEl.setAttribute("inert", "");
+        }
+        mobileMoreButtonEl.dataset.active = isOpen ? "true" : "false";
+        mobileMoreButtonEl.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        if (root && root.dataset) {
+          root.dataset.mobileSheetPanel = nextName;
+        }
+        if (!isOpen) {
+          if (mobileSheetFocusFrame) {
+            window.cancelAnimationFrame(mobileSheetFocusFrame);
+            mobileSheetFocusFrame = 0;
+          }
+          if (mobileSheetTitleEl) {
+            mobileSheetTitleEl.textContent = "More";
+          }
+          const restoreFocusEl = mobileSheetRestoreFocusEl;
+          mobileSheetRestoreFocusEl = null;
+          if (wasOpen) {
+            focusMobileSheetElement(restoreFocusEl || mobileMoreButtonEl);
+          }
+          return true;
+        }
+
+        const titles = {
+          menu: "More",
+          legend: "Legend",
+          controls: "Controls",
+          sky: "Sky backgrounds",
+          states: "States",
+        };
+        if (mobileSheetTitleEl) {
+          mobileSheetTitleEl.textContent = titles[nextName] || "More";
+        }
+        if (nextName === "legend") {
+          setLegendPanelOpen(true);
+          mountMobilePanelInSheet(nextName, legendPanelEl);
+        } else if (nextName === "controls") {
+          setControlsDrawerOpen(true);
+          mountMobilePanelInSheet(nextName, controlsShellEl);
+        } else if (nextName === "sky") {
+          setSkyControlsDrawerOpen(true);
+          mountMobilePanelInSheet(nextName, skyControlsShellEl);
+        } else if (nextName === "states" && statesShellEl) {
+          statesShellEl.dataset.open = "true";
+          const statesToggleEl = statesShellEl.querySelector(".oviz-states-toggle");
+          if (statesToggleEl) {
+            statesToggleEl.setAttribute("aria-expanded", "true");
+            statesToggleEl.textContent = "States ▾";
+          }
+          const statesDrawerEl = statesShellEl.querySelector(".oviz-states-drawer");
+          if (statesDrawerEl) {
+            statesDrawerEl.setAttribute("aria-hidden", "false");
+            statesDrawerEl.removeAttribute("inert");
+          }
+          mountMobilePanelInSheet(nextName, statesShellEl);
+        }
+        syncMobileSheetAvailability();
+        focusMobileSheetPanel(nextName);
+        return true;
+      }
+
       function setManualLabelMenuOpen(isOpen) {
         if (!manualLabelShellEl || !manualLabelToggleEl) {
           return;
@@ -551,6 +851,16 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         const isSkyView = cameraViewMode === "earth";
         const wasVisible = skyControlsShellEl.dataset.visible === "true";
         skyControlsShellEl.dataset.visible = isSkyView ? "true" : "false";
+        if (mobileModeEnabled) {
+          if (!isSkyView) {
+            setSkyControlsDrawerOpen(false);
+            if (mobileSheetPanelName === "sky") {
+              setMobileSheetPanel("closed");
+            }
+          }
+          syncMobileSheetAvailability();
+          return;
+        }
         if (isSkyView && !wasVisible) {
           if (!minimalModeEnabled) {
             setLegendPanelOpen(true);

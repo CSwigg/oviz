@@ -2948,9 +2948,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (open && typeof setManualLabelMenuOpen === "function") setManualLabelMenuOpen(false);
           ovizStatesShellEl.dataset.open = open ? "true" : "false";
           toggle.textContent = open ? "States ▾" : "States ▸";
+          toggle.setAttribute("aria-expanded", open ? "true" : "false");
+          if (ovizStatesDrawerEl) {
+            ovizStatesDrawerEl.setAttribute("aria-hidden", open ? "false" : "true");
+            if (open) ovizStatesDrawerEl.removeAttribute("inert");
+            else ovizStatesDrawerEl.setAttribute("inert", "");
+          }
         }, "oviz-states-toggle");
+        toggle.setAttribute("aria-expanded", "false");
         ovizStatesDrawerEl = document.createElement("div");
         ovizStatesDrawerEl.className = "oviz-states-drawer";
+        ovizStatesDrawerEl.setAttribute("aria-hidden", "true");
+        ovizStatesDrawerEl.setAttribute("inert", "");
         ovizStatesDrawerEl.addEventListener("pointerdown", (event) => event.stopPropagation());
         ovizStatesShellEl.append(toggle, ovizStatesDrawerEl);
         widgetMenuEl.prepend(ovizStatesShellEl);
@@ -3103,6 +3112,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
         ovizStatesProject = ovizNormalizeStatesProject(sceneSpec.states);
         ovizStatesMode = ovizStatesProject.embedded ? ovizStatesProject.default_mode : "edit";
         ovizBuildStatesDrawer();
+        if (typeof syncMobileSheetAvailability === "function") {
+          syncMobileSheetAvailability();
+        }
         postSkyLayerStateToAladin();
         ovizInstallPublicApi();
         window.addEventListener("message", ovizPostMessageHandler);

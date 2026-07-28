@@ -242,7 +242,7 @@ THREEJS_LEGEND_RUNTIME_JS = """
       }
 
       function setLegendPanelOpen(isOpen, options = {}) {
-        legendPanelOpen = minimalModeEnabled ? true : Boolean(isOpen);
+        legendPanelOpen = minimalModeEnabled && !mobileModeEnabled ? true : Boolean(isOpen);
         if (legendPanelEl) {
           legendPanelEl.dataset.open = legendPanelOpen ? "true" : "false";
         }

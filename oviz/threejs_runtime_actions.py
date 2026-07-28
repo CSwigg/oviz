@@ -23,6 +23,10 @@ THREEJS_ACTION_RUNTIME_JS = """
       let actionSceneRenderSerial = 0;
       let initialActionViewState = null;
       let currentActionCameraViewOffset = { x: 0.0, y: 0.0 };
+      // Rendering-only overlays (Paper mode is the first consumer) compose
+      // with the logical Action/State offset.  They must never leak into
+      // captureRuntimeState(), transition targets, or fidelity checks.
+      let currentPaperCameraViewOffset = { x: 0.0, y: 0.0 };
 
       function actionTimestamp(value = null) {
         if (value !== null && value !== undefined) {
@@ -358,10 +362,18 @@ THREEJS_ACTION_RUNTIME_JS = """
         };
       }
 
-      function applyActionCameraViewOffset(viewOffset) {
-        const nextOffset = normalizeActionViewOffset(viewOffset);
-        currentActionCameraViewOffset = nextOffset;
-        if (Math.abs(nextOffset.x) <= 1e-6 && Math.abs(nextOffset.y) <= 1e-6) {
+      function combinedActionCameraViewOffset() {
+        const logical = normalizeActionViewOffset(currentActionCameraViewOffset);
+        const paper = normalizeActionViewOffset(currentPaperCameraViewOffset);
+        return {
+          x: logical.x + paper.x,
+          y: logical.y + paper.y,
+        };
+      }
+
+      function applyActionCameraViewOffsetProjection() {
+        const renderedOffset = combinedActionCameraViewOffset();
+        if (Math.abs(renderedOffset.x) <= 1e-6 && Math.abs(renderedOffset.y) <= 1e-6) {
           if (typeof camera.clearViewOffset === "function") {
             camera.clearViewOffset();
           }
@@ -373,12 +385,22 @@ THREEJS_ACTION_RUNTIME_JS = """
         camera.setViewOffset(
           width,
           height,
-          Math.round(width * nextOffset.x),
-          Math.round(height * nextOffset.y),
+          Math.round(width * renderedOffset.x),
+          Math.round(height * renderedOffset.y),
           width,
           height,
         );
         camera.updateProjectionMatrix();
+      }
+
+      function applyActionCameraViewOffset(viewOffset) {
+        currentActionCameraViewOffset = normalizeActionViewOffset(viewOffset);
+        applyActionCameraViewOffsetProjection();
+      }
+
+      function applyPaperCameraViewOffset(viewOffset) {
+        currentPaperCameraViewOffset = normalizeActionViewOffset(viewOffset);
+        applyActionCameraViewOffsetProjection();
       }
 
       function captureCurrentActionViewState() {

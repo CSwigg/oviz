@@ -2,6 +2,7 @@ import re
 import shutil
 import subprocess
 import unittest
+import importlib.util
 from pathlib import Path
 
 from oviz.paper import Paper
@@ -119,9 +120,121 @@ class PaperRuntimeTests(unittest.TestCase):
         # the paper panel participates in the interaction guards
         self.assertIn('closest(".oviz-three-paper-panel")', html)
 
+    def test_paper_offset_is_composed_without_mutating_state_offset(self):
+        paper = Paper("T", enabled=True)
+        paper.add_section("S")
+        paper.add_paragraph("text")
+        html = self._html(paper.to_spec())
+        self.assertIn("let currentPaperCameraViewOffset = { x: 0.0, y: 0.0 };", html)
+        self.assertIn("function combinedActionCameraViewOffset()", html)
+        self.assertIn("x: logical.x + paper.x", html)
+        self.assertIn("function applyPaperCameraViewOffset(viewOffset)", html)
+        self.assertIn("applyPaperCameraViewOffset(target);", html)
+        self.assertNotIn("applyActionCameraViewOffset(target);", html)
+        self.assertIn("? combinedActionCameraViewOffset()", html)
+
+    def test_paper_navigation_is_debounced_retargetable_and_state_driven(self):
+        paper = Paper("T", enabled=True)
+        paper.add_section("S")
+        paper.add_paragraph("text")
+        html = self._html(paper.to_spec())
+        self.assertIn("let ovizPaperJumpDebounceTimer = 0;", html)
+        self.assertIn("async function ovizPaperFlushStateJump(generation)", html)
+        self.assertIn("void ovizPaperFlushStateJump(generation);", html)
+        self.assertNotIn("await active.promise", html)
+        self.assertIn(
+            'root.addEventListener("transition-complete", ovizPaperHandleTransitionLifecycle);',
+            html,
+        )
+        self.assertIn(
+            'root.addEventListener("transition-cancel", ovizPaperHandleTransitionLifecycle);',
+            html,
+        )
+        self.assertIn("applyState: false", html)
+
+    def test_paper_panel_and_lightbox_are_accessible(self):
+        paper = Paper("T", enabled=True)
+        paper.add_section("S")
+        paper.add_paragraph("text")
+        html = self._html(paper.to_spec())
+        self.assertIn('class="oviz-three-paper-status" role="status"', html)
+        self.assertIn('role="dialog" aria-modal="true"', html)
+        self.assertIn('class="oviz-three-paper-lightbox-close"', html)
+        self.assertIn("function ovizPaperSyncPanelAccessibility()", html)
+        self.assertIn('ovizPaperPanelEl.setAttribute("inert", "")', html)
+        self.assertIn('event.key === "Escape"', html)
+
+    def test_hidden_viewer_modes_suspend_paper_layout_and_interaction(self):
+        paper = Paper("T", enabled=True)
+        paper.add_section("S")
+        paper.add_paragraph("text")
+        html = self._html(paper.to_spec())
+        self.assertIn("function ovizPaperIsVisiblyOpen()", html)
+        self.assertIn("function ovizPaperIsSuppressedByViewerMode()", html)
+        self.assertIn('root.dataset.presentationMode === "true"', html)
+        self.assertIn('root.dataset.zen === "true"', html)
+        self.assertIn('root.dataset.mobile === "true"', html)
+        self.assertIn("const covering = ovizPaperIsVisiblyOpen();", html)
+        self.assertIn('ovizPaperSetDataset("paperVisible", interactive ? "true" : "false")', html)
+        self.assertIn("function ovizPaperWatchViewerModes()", html)
+        self.assertIn(
+            'attributeFilter: ["data-zen", "data-presentation-mode", "data-mobile"]',
+            html,
+        )
+        self.assertIn("const fallback = suppressed", html)
+        self.assertIn("? canvas", html)
+        self.assertIn("activeElement === ovizPaperExpandTabEl", html)
+        self.assertIn("activeElement === ovizPaperToggleButtonEl", html)
+
+    def test_lightbox_traps_keyboard_focus_until_close(self):
+        paper = Paper("T", enabled=True)
+        paper.add_section("S")
+        paper.add_paragraph("text")
+        html = self._html(paper.to_spec())
+        self.assertIn("function ovizPaperLightboxFocusableElements()", html)
+        self.assertIn("function ovizPaperHandleLightboxKeydown(event)", html)
+        self.assertIn('event.key !== "Tab"', html)
+        self.assertIn("event.shiftKey", html)
+        self.assertIn("!ovizPaperLightboxEl.contains(active)", html)
+        self.assertIn('root.addEventListener("keydown", ovizPaperHandleLightboxKeydown)', html)
+
+    def test_paper_anchor_rail_waits_for_visible_layout_and_tracks_reflow(self):
+        paper = Paper("T", enabled=True)
+        paper.add_section("S")
+        paper.add_paragraph("text")
+        html = self._html(paper.to_spec())
+        self.assertIn("function ovizPaperScheduleRailLayout()", html)
+        self.assertIn("function ovizPaperWatchBodyGeometry()", html)
+        self.assertIn("ovizPaperBodyResizeObserver = new ResizeObserver", html)
+        self.assertIn("ovizPaperBodyResizeObserver.observe(ovizPaperBodyEl)", html)
+        self.assertIn("ovizPaperScheduleRailLayout();\n          ovizPaperRequestKatex();", html)
+        self.assertIn(
+            "The panel is still display:none during initial construction",
+            html,
+        )
+
+    def test_generated_paper_viewer_javascript_is_valid(self):
+        if not shutil.which("node"):
+            self.skipTest("node is unavailable")
+        paper = Paper("T", enabled=True)
+        paper.add_section("S")
+        paper.add_paragraph("text")
+        html = self._html(paper.to_spec())
+        scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+        viewer_script = next(
+            script for script in scripts if "/*__SCENE_SPEC_START__*/" in script
+        )
+        subprocess.run(
+            ["node", "--check", "-"],
+            input=viewer_script,
+            text=True,
+            check=True,
+            capture_output=True,
+        )
+
     def test_paper_button_absent_without_paper(self):
         html = self._html(None)
-        self.assertNotIn("Paper ▸", html)
+        self.assertNotIn('<button class="oviz-three-paper-toggle"', html)
         self.assertIn('class="oviz-three-paper-panel"', html)  # markup ships, runtime removes
         # The collapse/expand edge tab must never flash or linger in figures
         # without a paper: hidden in markup, removed by the runtime.
@@ -150,6 +263,29 @@ class PaperDemoArtifactTests(unittest.TestCase):
                 subprocess.run(["node", "--check", str(script_path)], check=True)
             finally:
                 script_path.unlink(missing_ok=True)
+
+    def test_demo_states_are_present_mode_with_layout_neutral_cameras(self):
+        module_path = Path(__file__).with_name("main_figure_paper_demo.py")
+        spec = importlib.util.spec_from_file_location("main_figure_paper_demo_test", module_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        scene = {
+            "frames": [
+                {"time": value, "traces": []}
+                for value in (0.0, -30.0, -35.0, -40.0)
+            ],
+            "volumes": {"layers": []},
+        }
+        states = module.build_states(scene)
+        self.assertEqual(states["default_mode"], "present")
+        self.assertEqual(module.SOURCE_HTML.name, "main_figure_july25.html")
+        for item in states["items"]:
+            self.assertEqual(
+                item["snapshot"]["camera"]["view_offset"],
+                {"x": 0.0, "y": 0.0},
+            )
 
 
 if __name__ == "__main__":

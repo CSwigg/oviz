@@ -23,12 +23,14 @@ from oviz.paper import Paper
 from oviz.threejs_figure import ThreeJSFigure
 
 
-SOURCE_HTML = Path(__file__).with_name("main_figure_chronos_july4.html")
+SOURCE_HTML = Path(__file__).with_name("main_figure_july25.html")
 DEFAULT_OUTPUT_HTML = Path(__file__).with_suffix(".html")
 CONTENT_DIR = Path(__file__).with_name("paper_2406_06510")
 PANEL_WIDTH_FRACTION = 0.42
-# Push scene subjects toward the visible left region while the panel is open.
-VIEW_OFFSET = {"x": 0.21, "y": 0.0}
+# State snapshots retain the canonical camera.  The Paper runtime composes a
+# separate rendering-only offset while the panel is visible, so closing Paper
+# restores the scene exactly and State fidelity remains independent of layout.
+VIEW_OFFSET = {"x": 0.0, "y": 0.0}
 
 # Traces from newer chronology work that play no role in arXiv 2406.06510;
 # the paper demo keeps only the Sun, the paper's cluster sample (three
@@ -315,7 +317,7 @@ def build_states(scene: dict) -> dict:
         "project_id": "paper-2406-06510-demo",
         "revision": 1,
         "synchronized_revision": 1,
-        "default_mode": "edit",
+        "default_mode": "present",
         "default_transition": {"duration_ms": 1600, "easing": "easeInOutCubic"},
         "items": items,
         "assets": {},

@@ -2221,9 +2221,35 @@ THREEJS_VIEWER_RUNTIME_JS = """
         syncCameraAutoOrbitUi();
       }
 
+      function syncMobileMoreButtonMode() {
+        if (!mobileMoreButtonEl) {
+          return;
+        }
+        const mode = presentationModeEnabled
+          ? "presentation"
+          : (zenModeEnabled ? "zen" : "default");
+        const labels = {
+          default: ["More", "More viewer controls"],
+          zen: ["Exit", "Exit Zen mode"],
+          presentation: ["Exit", "Exit presentation mode"],
+        };
+        const [label, description] = labels[mode];
+        mobileMoreButtonEl.textContent = label;
+        mobileMoreButtonEl.title = description;
+        mobileMoreButtonEl.setAttribute("aria-label", description);
+      }
+
       function setZenMode(enabled) {
         zenModeEnabled = Boolean(enabled);
         root.dataset.zen = zenModeEnabled ? "true" : "false";
+        syncMobileMoreButtonMode();
+        if (
+          zenModeEnabled
+          && mobileModeEnabled
+          && typeof setMobileSheetPanel === "function"
+        ) {
+          setMobileSheetPanel("closed");
+        }
         if (zenModeButtonEl) {
           zenModeButtonEl.dataset.active = zenModeEnabled ? "true" : "false";
           zenModeButtonEl.textContent = zenModeEnabled ? "Exit Zen" : "Zen";
@@ -2272,6 +2298,14 @@ THREEJS_VIEWER_RUNTIME_JS = """
           );
         }
         root.dataset.presentationMode = presentationModeEnabled ? "true" : "false";
+        syncMobileMoreButtonMode();
+        if (
+          presentationModeEnabled
+          && mobileModeEnabled
+          && typeof setMobileSheetPanel === "function"
+        ) {
+          setMobileSheetPanel("closed");
+        }
         if (presentationModeButtonEl) {
           presentationModeButtonEl.dataset.active = presentationModeEnabled ? "true" : "false";
           presentationModeButtonEl.setAttribute(
