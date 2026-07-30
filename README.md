@@ -5,6 +5,9 @@ be explored in space and time. Its current focus is Gaia data for young star
 clusters and associations, together with emerging three-dimensional maps of the
 interstellar medium (ISM).
 
+Figure authors work in Python. Oviz generates the browser viewer and its
+controls automatically; using Oviz does not require writing JavaScript.
+
 Oviz combines:
 
 - [Three.js](https://threejs.org/) for the interactive 3D scene;
@@ -29,6 +32,12 @@ Oviz is designed around data products such as:
 
 The data model can also represent other point, line, image, and volume layers.
 Broader astronomical views and analysis tools are planned.
+
+Oviz is being developed especially for the arrival of
+[Gaia Data Release 4](https://www.esa.int/Science_Exploration/Space_Science/Gaia/%28archive%29),
+currently expected in December 2026. Its 3D, time, Sky, and sharing tools are
+intended to help researchers explore and communicate the richer Gaia data as
+they become available.
 
 ## Install
 
@@ -106,18 +115,10 @@ sample without requiring them to install Python or reproduce the analysis.
 Three.js and Aladin Lite are loaded from public CDNs, and HiPS backgrounds load
 from their survey servers, so those features require an internet connection.
 
-States can also be controlled from JavaScript:
-
-```javascript
-const root = document.querySelector('[id^="oviz-three-"]');
-const viewer = window.Oviz.get(root.id);
-await viewer.states.goTo(1);       // one-based State index
-await viewer.states.next();
-const html = await viewer.states.exportHtml({ download: false });
-```
-
-See the [browser API reference](docs/source/browser_api.rst) for navigation,
-authoring, events, and `postMessage` commands.
+Authors create the data, scene, and initial settings in Python, then use the
+viewer controls to capture States and export the finished HTML. The embedded
+JavaScript runtime is an implementation detail, not part of the normal authoring
+workflow.
 
 ## Input conventions
 
@@ -132,7 +133,7 @@ authoring, events, and `postMessage` commands.
 
 - [Overview](docs/source/overview.rst)
 - [Python API](docs/source/python_api.rst)
-- [Browser API](docs/source/browser_api.rst)
+- [Internal browser API](docs/source/browser_api.rst) for maintainers and hosts
 - [Agent guide](AGENTS.md)
 
 Run the maintained test suite with:
