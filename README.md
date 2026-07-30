@@ -52,18 +52,20 @@ Data and image credits for this example:
 
 ## What Oviz is for
 
-Oviz can follow clusters through space and time, show their member stars on the
-sky, and compare them with dust or emission maps. It currently works with data
-products such as:
+Oviz is for astronomical data with a position, motion, or extent in the
+Galaxy. A scene can mix point catalogues, orbit tracks, labels, images, and 3D
+volumes. Time-dependent data can move through their calculated histories while
+stationary catalogues remain fixed in the same coordinate system.
 
-- [Gaia Data Release 3](https://doi.org/10.1051/0004-6361/202243940)
-- the [Gaia DR3 all-sky open-cluster catalogue](https://doi.org/10.1051/0004-6361/202346285)
-- the [SigMA view of the Sco-Cen association](https://doi.org/10.1051/0004-6361/202243690)
-- the [Edenhofer et al. parsec-scale 3D dust map](https://doi.org/10.1051/0004-6361/202347628)
-- the [Vergely et al. Gaia-2MASS 3D dust maps](https://cdsarc.cds.unistra.fr/viz-bin/ReadMe/J/A%2BA/664/A174?format=html&tex=true)
+The same scene can be viewed from outside the Galaxy or projected onto the sky
+as seen from Earth. Researchers can examine the spatial relationships between
+stars, clusters, gas, dust, and other Galactic structures directly instead of
+comparing a series of static panels.
 
-The same data model can hold other point, line, image, and volume layers.
-Support for more astronomical views and analysis tools is planned.
+Development currently focuses on Gaia astrometry, young stellar populations,
+and 3D maps of the interstellar medium. The viewer itself is not tied to a
+particular catalogue or map. Support for more astronomical views and analysis
+tools is planned.
 
 Oviz is being developed with
 [Gaia Data Release 4](https://www.esa.int/Science_Exploration/Space_Science/Gaia/%28archive%29)
