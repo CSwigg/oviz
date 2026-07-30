@@ -319,13 +319,59 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         )
 
     def test_sky_layers_are_resident_and_crossfaded_in_the_iframe(self):
-        self.assertHtmlContains('type: "oviz-sky-layer-transition"')
+        self.assertHtmlContains('data.type === "oviz-sky-layer-transition"')
+        self.assertHtmlContains('type: "oviz-sky-layer-transition-prepare"')
+        self.assertHtmlContains('type: "oviz-sky-layer-transition-start"')
+        self.assertHtmlContains('type: "oviz-aladin-sky-layer-transition-ready"')
         self.assertHtmlContains('type: "oviz-sky-layer-transition-cancel"')
         self.assertHtmlContains("function startSkyLayerSemanticTransition(data)")
+        self.assertHtmlContains("function prepareSkyLayerSemanticTransition(data)")
+        self.assertHtmlContains("function beginSkyLayerSemanticTransition(data)")
         self.assertHtmlContains("function applySkyLayerTransitionFrame(")
         self.assertHtmlContains("applySkyImageLayerEffectiveOpacity(")
         self.assertHtmlContains("const stackLayers = residentStack")
         self.assertHtmlContains("skyLayerSemanticTransitionSerial")
+
+    def test_sky_layer_fade_waits_for_aladin_tiles_to_finish_painting(self):
+        prepare_layers = _function_region(
+            self.html,
+            "prepareSkyLayerSemanticTransition",
+            "beginSkyLayerSemanticTransition",
+        )
+        idle_wait = _function_region(
+            self.html,
+            "waitForAladinLayerPaintIdle",
+            "postSkyLayerTransitionReady",
+        )
+        update_transition = _function_region(
+            self.html,
+            "updateOvizStateTransition",
+            "ovizFinishStateTransition",
+        )
+        self.assertIn("waitForSkyImageSurveyReady", prepare_layers)
+        self.assertIn("waitForAladinLayerPaintIdle", prepare_layers)
+        self.assertIn("aladinInstance.isStillActive()", idle_wait)
+        self.assertIn("transition.skyLayerTransitionStarted && !transition.skyLayerReady", update_transition)
+        self.assertIn("transition.startedAt += frameGapMs", update_transition)
+
+    def test_completed_sky_crossfade_keeps_its_painted_resident_stack(self):
+        finish_transition = _function_region(
+            self.html,
+            "ovizFinishStateTransition",
+            "ovizFailStateTransition",
+        )
+        self.assertIn(
+            "if (!transition.skyLayerTransitionStarted || !transition.skyLayerFadeStarted)",
+            finish_transition,
+        )
+        exact_restore = finish_transition.split(
+            "root.dataset.stateFidelity",
+            1,
+        )[0]
+        self.assertNotIn(
+            "postSkyLayerStateToAladin();\n          root.dataset.stateFidelity",
+            exact_restore,
+        )
 
     def test_sky_layer_crossfade_is_scheduled_in_the_appearance_phase(self):
         start_layers = _function_region(
@@ -342,7 +388,7 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         self.assertIn("phaseDurationMs", start_layers)
         self.assertIn('phaseState.name === "appearance"', update_transition)
         self.assertIn(
-            "ovizStartSkyLayerTransition(transition, transition.sourceSkyLayers)",
+            "transition.skyLayerTransitionStarted = ovizStartSkyLayerTransition(",
             update_transition,
         )
 
@@ -461,7 +507,7 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
             self.html,
         )
 
-    def test_parent_child_layer_transitions_share_one_epoch(self):
+    def test_parent_child_layer_transition_clock_starts_after_prepare_ack(self):
         begin_transition = _function_region(
             self.html,
             "ovizBeginStateTransition",
@@ -472,15 +518,21 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
             "startSkyBackgroundSemanticTransition",
             "skyLayerNameFor",
         )
+        parent_layer_start = _function_region(
+            self.html,
+            "ovizBeginPreparedSkyLayerTransition",
+            "ovizCreateEarthCameraTrack",
+        )
         child_layers = _function_region(
             self.html,
-            "startSkyLayerSemanticTransition",
+            "beginSkyLayerSemanticTransition",
             "scheduleSkyBackgroundView",
         )
 
         self.assertIn("startedAtEpochMs: ovizTransitionEpochMs(now)", begin_transition)
-        self.assertIn("startedAtEpochMs: phaseStartedAtEpochMs", self.html)
         self.assertIn("skyBackgroundTransitionStartedAt(data, transitionNow)", child_camera)
+        self.assertIn('type: "oviz-sky-layer-transition-start"', parent_layer_start)
+        self.assertIn("startedAtEpochMs: ovizTransitionEpochMs(", parent_layer_start)
         self.assertIn("skyBackgroundTransitionStartedAt(data, transitionNow)", child_layers)
 
     def test_view_offset_is_interpolated_before_exact_state_restoration(self):

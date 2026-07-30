@@ -375,6 +375,8 @@ class ThreeJSStatesSchemaTests(unittest.TestCase):
         self.assertEqual(first["project_id"], second["project_id"])
         self.assertEqual(first["schema_version"], 1)
         self.assertEqual(first["default_mode"], "edit")
+        self.assertFalse(first["present_only"])
+        self.assertFalse(first["preserve_camera_on_navigation"])
         self.assertEqual(first["default_transition"], DEFAULT_STATE_TRANSITION)
         self.assertEqual(first["items"], [])
 
@@ -396,6 +398,32 @@ class ThreeJSStatesSchemaTests(unittest.TestCase):
         self.assertNotEqual(states["items"][1]["id"], "same")
         self.assertEqual(states["project_id"], "project-fixed")
         self.assertEqual(states["default_mode"], "present")
+        self.assertEqual(
+            [item["camera_behavior"] for item in states["items"]],
+            ["follow", "follow"],
+        )
+
+    def test_camera_preservation_policy_round_trips(self):
+        states = normalize_states_spec({
+            "preserve_camera_on_navigation": True,
+            "items": [
+                {"name": "Legacy default", "snapshot": {}},
+                {"name": "Explicit follow", "camera_behavior": "follow", "snapshot": {}},
+                {"name": "Explicit keep", "cameraBehavior": "keep", "snapshot": {}},
+            ],
+        })
+
+        self.assertTrue(states["preserve_camera_on_navigation"])
+        self.assertEqual(
+            [item["camera_behavior"] for item in states["items"]],
+            ["keep", "follow", "keep"],
+        )
+
+    def test_present_only_export_mode_round_trips(self):
+        states = normalize_states_spec({"default_mode": "present", "present_only": True})
+
+        self.assertEqual(states["default_mode"], "present")
+        self.assertTrue(states["present_only"])
 
     def test_target_transition_override_is_normalized_independently(self):
         states = normalize_states_spec({
@@ -422,12 +450,89 @@ class ThreeJSStatesSchemaTests(unittest.TestCase):
 
 
 class ThreeJSStatesRuntimeTests(unittest.TestCase):
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_keep_camera_policy_replaces_only_camera_domains(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        helper_source = (
+            "function ovizPreserveDestinationCamera(destination, source)"
+            + html.split("function ovizPreserveDestinationCamera(destination, source)", 1)[1].split(
+                "function ovizBeginStateTransition", 1
+            )[0]
+        )
+        script = f"""
+        function ovizStatesClone(value, fallback = null) {{
+          try {{ return JSON.parse(JSON.stringify(value)); }} catch (_err) {{ return fallback; }}
+        }}
+        {helper_source}
+        const destination = {{
+          camera: {{ position: {{ x: 100, y: 200, z: 300 }} }},
+          global_controls: {{
+            camera_view_mode: "earth",
+            camera_fov: 20,
+            camera_auto_orbit_enabled: true,
+            point_opacity_scale: 0.35,
+          }},
+          current_frame_value: 7.5,
+        }};
+        const source = {{
+          camera: {{ position: {{ x: 1, y: 2, z: 3 }}, target: {{ x: 4, y: 5, z: 6 }} }},
+          global_controls: {{
+            camera_view_mode: "free",
+            camera_fov: 61,
+            camera_auto_orbit_enabled: false,
+            camera_auto_orbit_speed: 0.2,
+            earth_view_focus_distance_pc: 8122,
+          }},
+        }};
+        const result = ovizPreserveDestinationCamera(destination, source);
+        process.stdout.write(JSON.stringify(result));
+        """
+        result = subprocess.run(
+            ["node"], input=script, text=True, capture_output=True, check=True
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertEqual(payload["camera"], {
+            "position": {"x": 1, "y": 2, "z": 3},
+            "target": {"x": 4, "y": 5, "z": 6},
+        })
+        self.assertEqual(payload["global_controls"]["camera_view_mode"], "free")
+        self.assertEqual(payload["global_controls"]["camera_fov"], 61)
+        self.assertFalse(payload["global_controls"]["camera_auto_orbit_enabled"])
+        self.assertEqual(payload["global_controls"]["point_opacity_scale"], 0.35)
+        self.assertEqual(payload["current_frame_value"], 7.5)
+
     def test_runtime_and_non_dom_api_are_embedded(self):
         figure = ThreeJSFigure({"width": 640, "height": 480, "frames": [], "initial_state": {}})
         html = figure.to_html(compress_scene_spec=False)
 
         self.assertIn("const OVIZ_STATES_VERSION = 1", html)
         self.assertIn("window.Oviz.get =", html)
+        self.assertIn("quickAdd: ovizQuickAddState", html)
+        self.assertIn("setPreserveCamera: ovizSetPreserveCameraOnNavigation", html)
+        self.assertIn("setCameraBehavior: ovizSetStateCameraBehavior", html)
+        self.assertIn("exportPresentOnlyHtml:", html)
+        self.assertIn("function ovizPreserveDestinationCamera(destination, source)", html)
+        self.assertIn("ovizPreserveDestinationCamera(destination, from);", html)
+        self.assertIn('"camera_view_mode"', html)
+        self.assertIn('"earth_view_return_camera_state"', html)
+        self.assertIn("Cam: Keep", html)
+        self.assertIn("Cam: Follow", html)
+        self.assertIn('target.camera_behavior || target.cameraBehavior || ""', html)
+        self.assertIn("row.dataset.cameraGroup = String(cameraGroupIndex)", html)
+        self.assertIn("const allowLiveCameraOrbit = Boolean(", html)
+        self.assertIn("if (!transition.preserveCamera) {", html)
+        self.assertIn("transition.targetSnapshot,\n            ovizCurrentTransitionSnapshot()", html)
+        self.assertIn("&& !activeStateTransition.finishing", html)
+        self.assertIn("stateAllowsLiveCameraOrbit && cameraAutoOrbitEnabled", html)
+        self.assertIn("updateGalacticSimpleDefaultOrbit(deltaSeconds);", html)
+        self.assertIn('.oviz-three-topbar:has(.oviz-states-shell[data-open=true]){z-index:90 !important}', html)
+        self.assertIn("states-preload-complete", html)
         self.assertIn('ovizStateEvent("states-ready"', html)
         self.assertIn('ovizStateEvent("transition-progress"', html)
         self.assertIn('data.source !== "oviz-command"', html)
@@ -567,6 +672,13 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             'ovizMakeButton("Export HTML", ovizPromptExportStatesHtml)',
             html,
         )
+        self.assertIn(
+            'ovizMakeButton("Export Present Only", ovizPromptExportStatesPresentOnlyHtml)',
+            html,
+        )
+        self.assertIn('"Name the present-only HTML file"', html)
+        self.assertIn("compact.present_only = presentOnly", html)
+        self.assertIn("delete exportSceneSpec.deck", html)
 
     def test_states_export_filename_is_safe_and_gets_html_extension(self):
         html = ThreeJSFigure({
@@ -576,12 +688,137 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             "initial_state": {},
         }).to_html(compress_scene_spec=False)
         normalize_body = html.split(
-            "function ovizNormalizeStatesExportFilename(value)", 1
+            "function ovizNormalizeStatesExportFilename(value, options = {})", 1
         )[1].split("function ovizPromptExportStatesHtml", 1)[0]
 
         self.assertIn('.replace(/[\\\\/:*?"<>|]+/g, "_")', normalize_body)
         self.assertIn(r"/\.html?$/i.test(cleaned)", normalize_body)
         self.assertIn('cleaned + ".html"', normalize_body)
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_present_only_export_locks_states_and_excludes_slides(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        export_source = (
+            "async function ovizExportStatesHtml(options = {})"
+            + html.split("async function ovizExportStatesHtml(options = {})", 1)[1].split(
+                "function ovizOpenDraftDb", 1
+            )[0]
+        )
+        script = f"""
+        const sceneSpec = {{
+          title: "Fixture",
+          width: 640,
+          height: 480,
+          initial_state: {{ old: true }},
+          deck: {{ available: true, slides: [{{ id: "slide-1" }}] }},
+        }};
+        const ovizOriginalSceneInitialState = {{ original: true }};
+        const root = {{ clientWidth: 800, clientHeight: 600 }};
+        const ovizStatesProject = {{ revision: 3 }};
+        function ovizStatesPublicProject() {{
+          return {{ revision: 3, items: [{{ id: "state-1" }}], assets: {{}} }};
+        }}
+        async function ovizCompactProjectForStorage(value) {{
+          return JSON.parse(JSON.stringify(value));
+        }}
+        function safeJsonClone(value, fallback) {{
+          try {{ return JSON.parse(JSON.stringify(value)); }} catch (_err) {{ return fallback; }}
+        }}
+        function ovizStatesClone(value, fallback) {{ return safeJsonClone(value, fallback); }}
+        function ovizDeckExportSpec() {{
+          return {{ available: true, slides: [{{ id: "exported-slide" }}] }};
+        }}
+        async function buildExportHtml(value) {{ return JSON.stringify(value); }}
+        {export_source}
+        (async () => {{
+          const presentOnly = JSON.parse(await ovizExportStatesHtml({{ download: false, presentOnly: true }}));
+          const editable = JSON.parse(await ovizExportStatesHtml({{ download: false }}));
+          process.stdout.write(JSON.stringify({{ presentOnly, editable }}));
+        }})().catch((error) => {{ throw error; }});
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertTrue(payload["presentOnly"]["states"]["present_only"])
+        self.assertEqual(payload["presentOnly"]["states"]["default_mode"], "present")
+        self.assertNotIn("deck", payload["presentOnly"])
+        self.assertEqual(payload["presentOnly"]["initial_state"], {"original": True})
+        self.assertFalse(payload["editable"]["states"]["present_only"])
+        self.assertEqual(
+            payload["editable"]["deck"]["slides"],
+            [{"id": "exported-slide"}],
+        )
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_present_only_initialization_applies_first_authored_state(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        helper_source = (
+            "async function ovizApplyPresentOnlyInitialState()"
+            + html.split("async function ovizApplyPresentOnlyInitialState()", 1)[1].split(
+                "async function initializeOvizStates()", 1
+            )[0]
+        )
+        script = f"""
+        const ovizStatesProject = {{
+          present_only: true,
+          items: [{{ id: "first", snapshot: {{ marker: "first-snapshot" }} }}],
+        }};
+        let ovizActiveStateId = null;
+        let ovizStateDirty = true;
+        const root = {{ dataset: {{}} }};
+        const applied = [];
+        function ovizStateTargetFor() {{
+          return {{ id: "first", snapshot: ovizStatesProject.items[0].snapshot }};
+        }}
+        function ovizHydrateAssets(value) {{ return value; }}
+        async function ovizApplyStateImmediately(snapshot, options) {{
+          applied.push({{ snapshot, options }});
+          return snapshot;
+        }}
+        {helper_source}
+        (async () => {{
+          const result = await ovizApplyPresentOnlyInitialState();
+          process.stdout.write(JSON.stringify({{
+            result,
+            active: ovizActiveStateId,
+            dirty: ovizStateDirty,
+            dataset: root.dataset,
+            applied,
+          }}));
+        }})().catch((error) => {{ throw error; }});
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertTrue(payload["result"])
+        self.assertEqual(payload["active"], "first")
+        self.assertFalse(payload["dirty"])
+        self.assertEqual(payload["dataset"]["activeStatePosition"], "1")
+        self.assertEqual(payload["dataset"]["presentOnlyInitialState"], "first")
+        self.assertEqual(payload["applied"][0]["snapshot"]["marker"], "first-snapshot")
+        self.assertTrue(payload["applied"][0]["options"]["forceSkyBackground"])
 
     def test_3d_camera_and_time_share_one_phase_by_default(self):
         html = ThreeJSFigure({

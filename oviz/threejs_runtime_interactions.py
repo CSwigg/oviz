@@ -666,6 +666,11 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
         mobileMoreButtonEl.dataset.active = isOpen ? "true" : "false";
         mobileMoreButtonEl.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        if (mobileControlsButtonEl) {
+          const controlsActive = isOpen && nextName === "controls";
+          mobileControlsButtonEl.dataset.active = controlsActive ? "true" : "false";
+          mobileControlsButtonEl.setAttribute("aria-expanded", controlsActive ? "true" : "false");
+        }
         if (root && root.dataset) {
           root.dataset.mobileSheetPanel = nextName;
         }
@@ -696,6 +701,14 @@ THREEJS_INTERACTION_RUNTIME_JS = """
           mobileSheetTitleEl.textContent = titles[nextName] || "More";
         }
         if (nextName === "legend") {
+          const includeSkyLayers = (
+            cameraViewMode === "earth"
+            && skyControlsShellEl
+            && skyControlsShellEl.dataset.visible === "true"
+          );
+          if (includeSkyLayers) {
+            setSkyControlsDrawerOpen(true, { keepLegendOpen: true });
+          }
           setLegendPanelOpen(true);
           mountMobilePanelInSheet(nextName, legendPanelEl);
         } else if (nextName === "controls") {
@@ -800,6 +813,9 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         skyAddToggleEl.setAttribute("aria-expanded", nextOpen ? "true" : "false");
         skyAddPopoverEl.setAttribute("aria-hidden", nextOpen ? "false" : "true");
         if (nextOpen) {
+          if (typeof setSkyLayerGroupDropdownOpen === "function") {
+            setSkyLayerGroupDropdownOpen(false);
+          }
           if (skyLayerListEl) {
             Array.from(skyLayerListEl.querySelectorAll(".oviz-three-sky-layer-row[open]")).forEach((row) => {
               row.open = false;
@@ -811,7 +827,7 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         }
       }
 
-      function setSkyControlsDrawerOpen(isOpen) {
+      function setSkyControlsDrawerOpen(isOpen, options = {}) {
         if (!skyControlsShellEl || !skyControlsToggleEl) {
           return;
         }
@@ -820,12 +836,23 @@ THREEJS_INTERACTION_RUNTIME_JS = """
         if (root && root.dataset) {
           root.dataset.skyBackgroundDock = nextOpen ? "open" : "closed";
         }
-        skyControlsToggleEl.title = nextOpen ? "Hide sky backgrounds" : "Show sky backgrounds";
+        skyControlsToggleEl.title = mobileModeEnabled
+          ? (nextOpen ? "Hide sky backgrounds" : "Show sky backgrounds")
+          : "Choose sky background group";
         setDrawerAccessibility(skyControlsShellEl, skyControlsToggleEl, ".oviz-three-sky-controls-drawer", nextOpen);
+        if (!mobileModeEnabled) {
+          skyControlsToggleEl.setAttribute(
+            "aria-expanded",
+            typeof skyLayerGroupDropdownOpen === "boolean" && skyLayerGroupDropdownOpen ? "true" : "false"
+          );
+        }
         if (!nextOpen) {
           setSkyAddPopoverOpen(false);
+          if (typeof setSkyLayerGroupDropdownOpen === "function") {
+            setSkyLayerGroupDropdownOpen(false);
+          }
         }
-        if (mobileModeEnabled && nextOpen) {
+        if (mobileModeEnabled && nextOpen && options.keepLegendOpen !== true) {
           setLegendPanelOpen(false);
         }
         if (nextOpen && toolsShellEl && toolsShellEl.dataset.open === "true") {
@@ -901,25 +928,26 @@ THREEJS_INTERACTION_RUNTIME_JS = """
       }
 
       function galacticReferenceTimeOpacity() {
-        return galacticPresentDayGridOpacity();
+        return presentDayOnlyTimelineOpacity();
       }
 
-      function galacticPresentDayGridOpacity() {
+      function presentDayOnlyTimelineOpacity() {
         const timeMyr = Number(frameTimeForValue(displayedFrameValue));
         if (!Number.isFinite(timeMyr)) {
           return 1.0;
         }
-        // The quadrant grid is a present-day orientation aid. Fade it away
-        // smoothly during the first Myr in either timeline direction.
+        // Present-day-only scene elements share one smooth one-Myr fade.
+        // This matches the retained endpoint fade used by t=0-only volumes
+        // while scrubbing or animating between adjacent timeline frames.
         return 1.0 - smoothstep01(clampRange(Math.abs(timeMyr), 0.0, 1.0));
       }
 
+      function galacticPresentDayGridOpacity() {
+        return presentDayOnlyTimelineOpacity();
+      }
+
       function milkyWayTimelineOpacity() {
-        const timeMyr = Number(frameTimeForValue(displayedFrameValue));
-        if (!Number.isFinite(timeMyr)) {
-          return 1.0;
-        }
-        return Math.abs(timeMyr) <= 1e-9 ? 1.0 : 0.0;
+        return presentDayOnlyTimelineOpacity();
       }
 
       function setSkyDomeTimelineOpacityScale(value) {

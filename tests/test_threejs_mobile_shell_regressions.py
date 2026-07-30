@@ -83,6 +83,103 @@ def test_legacy_sky_shell_cannot_escape_the_mobile_sheet_or_zen(
     )
 
 
+def test_mobile_legend_is_touch_scrollable_and_includes_sky_layers(
+    mobile_html: str,
+):
+    assert (
+        '.oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-mobile-sheet-body {'
+        in mobile_html
+    )
+    assert "overflow-y: auto !important;" in mobile_html
+    assert "touch-action: pan-y !important;" in mobile_html
+    assert (
+        '.oviz-three-mobile-sheet[data-panel="legend"] '
+        '.oviz-three-sky-controls-shell[data-visible="true"] {'
+        in mobile_html
+    )
+    assert (
+        '.oviz-three-mobile-sheet[data-panel="legend"] '
+        '.oviz-three-sky-controls-shell[data-visible="false"] {'
+        in mobile_html
+    )
+
+    coordinator = _function_region(
+        mobile_html,
+        "setMobileSheetPanel(panelName)",
+        "setManualLabelMenuOpen(isOpen)",
+    )
+    assert 'cameraViewMode === "earth"' in coordinator
+    assert 'setSkyControlsDrawerOpen(true, { keepLegendOpen: true });' in coordinator
+
+    sky_drawer = _function_region(
+        mobile_html,
+        "setSkyControlsDrawerOpen(isOpen, options = {})",
+        "syncSkyBackgroundDockVisibility()",
+    )
+    assert "options.keepLegendOpen !== true" in sky_drawer
+
+
+def test_mobile_text_entry_does_not_trigger_ios_focus_zoom_or_page_refresh(
+    mobile_html: str,
+):
+    # Do not solve input zoom by disabling user pinch zoom in the viewport.
+    viewport = re.search(
+        r'<meta name="viewport" content="([^"]+)"', mobile_html
+    )
+    assert viewport is not None
+    assert "maximum-scale" not in viewport.group(1)
+    assert "user-scalable=no" not in viewport.group(1)
+
+    for selector in (
+        'input[type="text"]',
+        'input[type="search"]',
+        'input[type="email"]',
+        'input[type="url"]',
+        'input[type="tel"]',
+        'input[type="password"]',
+        'input[type="number"]',
+        "textarea",
+        "select",
+    ):
+        assert f'#__ROOT_ID__[data-mobile="true"] {selector}' not in mobile_html
+        assert f'[data-mobile="true"] {selector}' in mobile_html
+
+    mobile_text_rule = mobile_html.split(
+        '[data-mobile="true"] input[type="text"]', 1
+    )[1].split("}", 1)[0]
+    assert "font-size: 16px !important;" in mobile_text_rule
+    assert "touch-action: manipulation;" in mobile_text_rule
+    assert "scroll-margin-block: 18px;" in mobile_text_rule
+
+    page_rule = mobile_html.split("html, body {", 1)[1].split("}", 1)[0]
+    assert "overflow: hidden;" in page_rule
+    assert "overscroll-behavior: none;" in page_rule
+
+
+def test_mobile_refresh_guard_preserves_controls_and_scrollable_panels(
+    mobile_html: str,
+):
+    guard = _function_region(
+        mobile_html,
+        "installMobileRefreshGuard()",
+        "syncMobileViewportGeometry()",
+    )
+    assert 'root.addEventListener("touchmove"' in guard
+    assert "{ passive: false }" in guard
+    assert "mobileNativeTouchTarget(event.target)" in guard
+    assert "mobileScrollableTouchAncestor(event.target)" in guard
+    assert "deltaY > 0 && atTop" in guard
+    assert "deltaY < 0 && atBottom" in guard
+    assert "event.preventDefault();" in guard
+
+    sync_mobile = _function_region(
+        mobile_html,
+        "syncMobileStaticUi()",
+        "onWindowMessage(event)",
+    )
+    assert "installMobileRefreshGuard();" in sync_mobile
+
+
 def test_mobile_zen_and_presentation_close_the_sheet_and_keep_touch_exit(
     mobile_html: str,
 ):
@@ -142,3 +239,41 @@ def test_mobile_sheet_transfers_traps_and_restores_focus(mobile_html: str):
     assert "focusMobileSheetElement(restoreFocusEl || mobileMoreButtonEl);" in coordinator
     assert "focusMobileSheetPanel(nextName);" in coordinator
     assert 'mobileSheetEl.addEventListener("keydown", trapMobileSheetFocus);' in mobile_html
+
+
+def test_mobile_topbar_keeps_legend_controls_and_lasso_reachable(
+    mobile_html: str,
+):
+    for class_name in (
+        "oviz-three-mobile-legend",
+        "oviz-three-mobile-controls",
+        "oviz-three-mobile-lasso",
+    ):
+        assert f'class="{class_name}"' in mobile_html
+        assert (
+            f".oviz-three-widget-menu > .{class_name}" in mobile_html
+        )
+
+    controls_handler = mobile_html.split(
+        'mobileControlsButtonEl.addEventListener("click", (event) => {', 1
+    )[1].split("if (mobileArButtonEl)", 1)[0]
+    assert 'mobileSheetPanelName === "controls"' in controls_handler
+    assert ': "controls"' in controls_handler
+
+    legend_handler = mobile_html.split(
+        'mobileLegendButtonEl.addEventListener("click", (event) => {', 1
+    )[1].split('legendPanelEl.addEventListener("click"', 1)[0]
+    assert 'mobileSheetPanelName === "legend"' in legend_handler
+    assert ': "legend"' in legend_handler
+
+    lasso_handler = mobile_html.split(
+        'mobileLassoButtonEl.addEventListener("click", () => {', 1
+    )[1].split("if (mobileControlsButtonEl)", 1)[0]
+    assert "lassoArmed = !lassoArmed;" in lasso_handler
+
+    assert 'data-mobile-action="search">Search clusters</button>' in mobile_html
+    mobile_menu_handler = mobile_html.split(
+        'mobileSheetMenuEl.addEventListener("click", (event) => {', 1
+    )[1].split('if (mobileModeEnabled) {', 1)[0]
+    assert 'actionName === "search"' in mobile_menu_handler
+    assert 'setOvizSearchOpen(true, { focus: true });' in mobile_menu_handler

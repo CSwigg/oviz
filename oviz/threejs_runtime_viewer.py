@@ -367,17 +367,27 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (!Number.isFinite(nextValue)) {
           return false;
         }
+        const previousValue = Math.max(Number(globalPointSizeScale) || 1.0, 0.05);
         globalPointSizeScale = Math.round(nextValue * 100.0) / 100.0;
-        applyGlobalControlState();
-        renderSceneControls();
+        if (globalPointSizeEl) {
+          globalPointSizeEl.value = String(globalPointSizeScale);
+        }
+        if (globalPointSizeLabelEl) {
+          globalPointSizeLabelEl.textContent = `Point size (${globalPointSizeScale.toFixed(2)}x)`;
+        }
         if (options.render !== false) {
-          if (typeof renderInterpolatedFrameValue === "function") {
-            renderInterpolatedFrameValue(displayedFrameValue, {
-              syncSlider: false,
-              preserveTransition: true,
-            });
-          } else {
-            renderFrame(currentFrameIndex);
+          const ratio = globalPointSizeScale / previousValue;
+          if (Number.isFinite(ratio) && ratio > 0.0 && Math.abs(ratio - 1.0) > 1e-9) {
+            if (typeof ovizScheduleRenderedPointSizeScale === "function") {
+              ovizScheduleRenderedPointSizeScale(ratio);
+            } else if (typeof renderInterpolatedFrameValue === "function") {
+              renderInterpolatedFrameValue(displayedFrameValue, {
+                syncSlider: false,
+                preserveTransition: true,
+              });
+            } else {
+              renderFrame(currentFrameIndex);
+            }
           }
         }
         return true;
@@ -2260,13 +2270,51 @@ THREEJS_VIEWER_RUNTIME_JS = """
           presentation: ["Exit", "Exit presentation mode"],
         };
         const [label, description] = labels[mode];
-        mobileMoreButtonEl.textContent = label;
+        mobileMoreButtonEl.textContent = mode === "default" ? "⋯" : label;
+        mobileMoreButtonEl.dataset.mode = mode;
         mobileMoreButtonEl.title = description;
         mobileMoreButtonEl.setAttribute("aria-label", description);
       }
 
+      let skyControlsDrawerOpenBeforeZen = null;
+      let legendOverlayModeRestoreFrame = 0;
+
+      function scheduleLegendPanelRestoreAfterOverlayMode() {
+        if (legendOverlayModeRestoreFrame) {
+          window.cancelAnimationFrame(legendOverlayModeRestoreFrame);
+        }
+        legendOverlayModeRestoreFrame = window.requestAnimationFrame(() => {
+          legendOverlayModeRestoreFrame = window.requestAnimationFrame(() => {
+            legendOverlayModeRestoreFrame = 0;
+            if (zenModeEnabled || presentationModeEnabled || !legendPanelEl) {
+              return;
+            }
+            if (typeof applyLegendPanelRect === "function") {
+              applyLegendPanelRect(
+                legendPanelRectState || defaultLegendPanelRect(),
+                { allowAutoCap: false },
+              );
+            }
+          });
+        });
+      }
+
       function setZenMode(enabled) {
-        zenModeEnabled = Boolean(enabled);
+        const nextZenModeEnabled = Boolean(enabled);
+        const wasZenModeEnabled = Boolean(zenModeEnabled);
+        if (nextZenModeEnabled && !wasZenModeEnabled) {
+          skyControlsDrawerOpenBeforeZen = Boolean(
+            skyControlsShellEl
+            && skyControlsShellEl.dataset.open === "true"
+          );
+        }
+        const restoreSkyControlsDrawer = Boolean(
+          !nextZenModeEnabled
+          && wasZenModeEnabled
+          && skyControlsDrawerOpenBeforeZen
+          && cameraViewMode === "earth"
+        );
+        zenModeEnabled = nextZenModeEnabled;
         root.dataset.zen = zenModeEnabled ? "true" : "false";
         syncMobileMoreButtonMode();
         if (
@@ -2308,11 +2356,43 @@ THREEJS_VIEWER_RUNTIME_JS = """
           if (typeof setSkyControlsDrawerOpen === "function") {
             setSkyControlsDrawerOpen(false);
           }
+        } else if (
+          restoreSkyControlsDrawer
+          && typeof setSkyControlsDrawerOpen === "function"
+        ) {
+          setSkyControlsDrawerOpen(true);
+        }
+        if (!zenModeEnabled && wasZenModeEnabled) {
+          skyControlsDrawerOpenBeforeZen = null;
+          scheduleLegendPanelRestoreAfterOverlayMode();
         }
       }
 
+      function ovizNavigatePresentation(direction) {
+        const previous = Number(direction) < 0;
+        const deckOwnsNavigation = Boolean(
+          typeof ovizDeckIsPresenting === "function"
+          && ovizDeckIsPresenting()
+        );
+        const navigation = previous
+          ? (
+              deckOwnsNavigation && typeof ovizDeckPrevious === "function"
+                ? ovizDeckPrevious()
+                : ovizStatesPresentationPrevious()
+            )
+          : (
+              deckOwnsNavigation && typeof ovizDeckNext === "function"
+                ? ovizDeckNext()
+                : ovizStatesPresentationNext()
+            );
+        return Promise.resolve(navigation).catch((error) => {
+          console.error("Presentation navigation failed.", error);
+          throw error;
+        });
+      }
+
       function setPresentationMode(enabled) {
-        const nextPresentationMode = Boolean(enabled);
+        const nextPresentationMode = presentationModeLocked ? true : Boolean(enabled);
         const presentationModeChanged = presentationModeEnabled !== nextPresentationMode;
         presentationModeEnabled = nextPresentationMode;
         if (
@@ -2324,6 +2404,13 @@ THREEJS_VIEWER_RUNTIME_JS = """
           );
         }
         root.dataset.presentationMode = presentationModeEnabled ? "true" : "false";
+        root.dataset.presentationLocked = presentationModeLocked ? "true" : "false";
+        if (presentationNavEl) {
+          presentationNavEl.setAttribute(
+            "aria-hidden",
+            presentationModeEnabled ? "false" : "true",
+          );
+        }
         syncMobileMoreButtonMode();
         if (
           presentationModeEnabled
@@ -2379,6 +2466,9 @@ THREEJS_VIEWER_RUNTIME_JS = """
           Promise.resolve(ovizDeckSetPresenting(presentationModeEnabled)).catch((error) => {
             console.error("Oviz Reveal presentation failed.", error);
           });
+        }
+        if (presentationModeChanged && !presentationModeEnabled) {
+          scheduleLegendPanelRestoreAfterOverlayMode();
         }
       }
 
@@ -2984,12 +3074,13 @@ THREEJS_VIEWER_RUNTIME_JS = """
         }
 
         if (isMovementKey) {
+          handleManualCameraInteractionStart();
           pressedKeys.add(lowerKey);
           event.preventDefault();
           return;
         }
 
-        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "g" || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "b" || lowerKey === "o" || lowerKey === "t" || lowerKey === "z" || lowerKey === "p" || key === "?" || (key === "/" && event.shiftKey))) {
+        if (event.repeat && (key === " " || key === "Escape" || /^[1-9]$/.test(key) || lowerKey === "g" || lowerKey === "l" || lowerKey === "c" || lowerKey === "v" || lowerKey === "b" || lowerKey === "n" || lowerKey === "o" || lowerKey === "t" || lowerKey === "z" || lowerKey === "p" || key === "?" || (key === "/" && event.shiftKey))) {
           event.preventDefault();
           return;
         }
@@ -3039,14 +3130,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (key === "ArrowLeft") {
           if (presentationModeEnabled) {
             if (!event.repeat) {
-              const navigation = (
-                typeof ovizDeckIsPresenting === "function"
-                && ovizDeckIsPresenting()
-                && typeof ovizDeckPrevious === "function"
-              ) ? ovizDeckPrevious() : ovizStatesPresentationPrevious();
-              Promise.resolve(navigation).catch((error) => {
-                console.error("Presentation navigation failed.", error);
-              });
+              ovizNavigatePresentation(-1).catch(() => {});
             }
           } else {
             stepFrame(fast ? -5 : -1);
@@ -3057,14 +3141,7 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (key === "ArrowRight") {
           if (presentationModeEnabled) {
             if (!event.repeat) {
-              const navigation = (
-                typeof ovizDeckIsPresenting === "function"
-                && ovizDeckIsPresenting()
-                && typeof ovizDeckNext === "function"
-              ) ? ovizDeckNext() : ovizStatesPresentationNext();
-              Promise.resolve(navigation).catch((error) => {
-                console.error("Presentation navigation failed.", error);
-              });
+              ovizNavigatePresentation(1).catch(() => {});
             }
           } else {
             stepFrame(fast ? 5 : 1);
@@ -3101,6 +3178,18 @@ THREEJS_VIEWER_RUNTIME_JS = """
 
         if (key === "[" || key === "]") {
           nudgeGlobalPointSizeScale(key === "]" ? 1 : -1, fast);
+          event.preventDefault();
+          return;
+        }
+
+        if (lowerKey === "n") {
+          if (!minimalModeEnabled && !presentationModeEnabled && typeof ovizQuickAddState === "function") {
+            try {
+              ovizQuickAddState();
+            } catch (error) {
+              console.warn("Quick State capture failed.", error);
+            }
+          }
           event.preventDefault();
           return;
         }

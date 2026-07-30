@@ -899,14 +899,10 @@ THREEJS_ACTION_RUNTIME_JS = """
         if (activeActionRun) {
           return interruptActionRun("camera", { disableOrbit: true });
         }
-        if (minimalModeEnabled && cameraAutoOrbitEnabled) {
-          cameraAutoOrbitSpeedMultiplier = 1.0;
-          setCameraAutoOrbitEnabled(false);
-          actionCameraOrbitOwned = false;
-          actionCameraOrbitShouldPersist = true;
-          return true;
-        }
-        if (cameraAutoOrbitEnabled && typeof galacticSimpleDefaultOrbitActive === "function" && galacticSimpleDefaultOrbitActive()) {
+        if (cameraAutoOrbitEnabled) {
+          // Manual camera input always takes ownership from auto-orbit. This
+          // changes only the live runtime flag; a saved State's snapshot stays
+          // immutable, so returning to that State restores its orbit.
           cameraAutoOrbitSpeedMultiplier = 1.0;
           setCameraAutoOrbitEnabled(false);
           actionCameraOrbitOwned = false;

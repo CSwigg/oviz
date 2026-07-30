@@ -270,9 +270,9 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
     def test_galactic_quadrant_grid_fades_away_from_present_day(self):
         html = _runtime_html()
         helper_source = (
-            "function galacticPresentDayGridOpacity()"
+            "function presentDayOnlyTimelineOpacity()"
             + html.split(
-                "function galacticPresentDayGridOpacity()", 1
+                "function presentDayOnlyTimelineOpacity()", 1
             )[1].split("function milkyWayTimelineOpacity()", 1)[0]
         )
         script = f"""
@@ -300,6 +300,44 @@ class ThreeJSRetainedSceneTests(unittest.TestCase):
             check=True,
         )
         self.assertEqual(json.loads(result.stdout), [1, 0, 0.5, 0, 0])
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_milky_way_uses_the_same_present_day_fade_as_longitude_markers(self):
+        html = _runtime_html()
+        helper_source = (
+            "function presentDayOnlyTimelineOpacity()"
+            + html.split(
+                "function presentDayOnlyTimelineOpacity()", 1
+            )[1].split("function setSkyDomeTimelineOpacityScale", 1)[0]
+        )
+        script = f"""
+        function clampRange(value, minimum, maximum) {{
+          return Math.min(Math.max(Number(value) || 0, minimum), maximum);
+        }}
+        function smoothstep01(value) {{
+          const x = clampRange(value, 0, 1);
+          return x * x * (3 - (2 * x));
+        }}
+        function frameTimeForValue(value) {{ return value; }}
+        let displayedFrameValue = 0;
+        {helper_source}
+        const values = [0, -0.25, -0.5, -0.75, -1].map((time) => {{
+          displayedFrameValue = time;
+          return [galacticPresentDayGridOpacity(), milkyWayTimelineOpacity()];
+        }});
+        process.stdout.write(JSON.stringify(values));
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        values = json.loads(result.stdout)
+        self.assertEqual([pair[0] for pair in values], [pair[1] for pair in values])
+        self.assertEqual(values[0], [1, 1])
+        self.assertEqual(values[-1], [0, 0])
 
     @unittest.skipIf(shutil.which("node") is None, "node is not available")
     def test_galactic_circle_geometry_interpolates_in_place_without_crossfade(self):

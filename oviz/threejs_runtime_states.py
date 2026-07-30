@@ -166,16 +166,23 @@ THREEJS_STATE_RUNTIME_JS = r"""
         };
       }
 
-      function ovizNormalizeStateRecord(value, index, seenIds) {
+      function ovizNormalizeStateRecord(value, index, seenIds, defaultCameraBehavior = "follow") {
         const source = value && typeof value === "object" ? value : {};
         let id = String(source.id || "").trim() || ovizStatesUuid("state");
         while (seenIds.has(id)) {
           id = ovizStatesUuid("state");
         }
         seenIds.add(id);
+        const requestedCameraBehavior = String(
+          source.camera_behavior || source.cameraBehavior || ""
+        ).trim().toLowerCase();
+        const cameraBehavior = ["follow", "keep"].includes(requestedCameraBehavior)
+          ? requestedCameraBehavior
+          : (defaultCameraBehavior === "keep" ? "keep" : "follow");
         return {
           id,
           name: String(source.name || `State ${index + 1}`).trim() || `State ${index + 1}`,
+          camera_behavior: cameraBehavior,
           transition: source.transition ? ovizNormalizeTransition(source.transition) : null,
           snapshot: ovizStatesClone(source.snapshot || source.state || {}, {}),
           degraded: Boolean(source.degraded),
@@ -189,16 +196,23 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ? source.items
           : (Array.isArray(source.ordered_states) ? source.ordered_states : []);
         const seenIds = new Set();
+        const defaultCameraBehavior = Boolean(source.preserve_camera_on_navigation)
+          ? "keep"
+          : "follow";
         return {
           schema_version: OVIZ_STATES_VERSION,
           project_id: String(source.project_id || "").trim() || ovizStatesUuid("project"),
           revision: Math.max(0, Math.floor(Number(source.revision) || 0)),
           default_mode: source.default_mode === "present" ? "present" : "edit",
+          preserve_camera_on_navigation: Boolean(source.preserve_camera_on_navigation),
           default_transition: ovizNormalizeTransition(source.default_transition),
-          items: rawItems.map((item, index) => ovizNormalizeStateRecord(item, index, seenIds)),
+          items: rawItems.map((item, index) => (
+            ovizNormalizeStateRecord(item, index, seenIds, defaultCameraBehavior)
+          )),
           assets: source.assets && typeof source.assets === "object" ? ovizStatesClone(source.assets, {}) : {},
           embedded,
           synchronized_revision: Math.max(0, Math.floor(Number(source.synchronized_revision) || 0)),
+          present_only: Boolean(source.present_only),
         };
       }
 
@@ -209,6 +223,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
           revision: ovizStatesProject.revision,
           synchronized_revision: ovizStatesProject.synchronized_revision,
           default_mode: ovizStatesProject.default_mode,
+          present_only: Boolean(ovizStatesProject.present_only),
+          preserve_camera_on_navigation: Boolean(ovizStatesProject.preserve_camera_on_navigation),
           default_transition: ovizStatesClone(ovizStatesProject.default_transition, {}),
           items: ovizStatesClone(ovizStatesProject.items, []),
           assets: ovizStatesClone(ovizStatesProject.assets, {}),
@@ -300,6 +316,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           id: item.id,
           index: index + 1,
           name: item.name,
+          camera_behavior: item.camera_behavior,
           transition: ovizStatesClone(item.transition, null),
           active: item.id === ovizActiveStateId,
           degraded: Boolean(item.degraded),
@@ -317,7 +334,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       function ovizStateTargetFor(idOrIndex) {
         if (idOrIndex === null || idOrIndex === undefined || idOrIndex === 0 || idOrIndex === "original") {
-          return { id: null, index: -1, name: "Original", snapshot: ovizOriginalRuntimeState };
+          return {
+            id: null,
+            index: -1,
+            name: "Original",
+            camera_behavior: "follow",
+            snapshot: ovizOriginalRuntimeState,
+          };
         }
         const index = ovizStateIndexFor(idOrIndex);
         if (index < 0 || index >= ovizStatesProject.items.length) {
@@ -1206,6 +1229,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
           !transition.forceSkyLayerRetarget
           && JSON.stringify(fromLayers) === JSON.stringify(toLayers)
         ) {
+          transition.skyLayerReady = true;
+          transition.skyLayerFadeStarted = false;
           transition.skyLayerPromise = Promise.resolve({ unchanged: true });
           return false;
         }
@@ -1214,17 +1239,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const phaseDurationMs = appearancePhase
             ? Math.max(appearancePhase.endMs - appearancePhase.startMs, 0.0)
             : 0.0;
-          const phaseStartedAtEpochMs = transition.startedAtEpochMs
-            + (appearancePhase ? appearancePhase.startMs : 0.0);
+          transition.skyLayerReady = false;
+          transition.skyLayerFadeStarted = false;
+          transition.skyLayerStartPayload = {
+            durationMs: phaseDurationMs,
+            easing: transition.transitionSpec.easing,
+          };
           transition.skyLayerPromise = new Promise((resolve) => {
             ovizSkyLayerTransitionWaiters.set(String(transition.transitionId), resolve);
           });
           skyDomeFrameEl.contentWindow.postMessage({
-            type: "oviz-sky-layer-transition",
+            type: "oviz-sky-layer-transition-prepare",
             transitionId: transition.transitionId,
-            durationMs: phaseDurationMs,
-            easing: transition.transitionSpec.easing,
-            startedAtEpochMs: phaseStartedAtEpochMs,
             residentStack: true,
             fromLayers,
             toLayers,
@@ -1233,9 +1259,36 @@ THREEJS_STATE_RUNTIME_JS = r"""
         } catch (_err) {
           ovizSkyLayerTransitionWaiters.delete(String(transition.transitionId));
           transition.skyLayerPromise = Promise.resolve({ failed: true });
+          transition.skyLayerReady = true;
           postSkyLayerStateToAladin();
           return false;
         }
+      }
+
+      function ovizBeginPreparedSkyLayerTransition(transition) {
+        if (
+          !transition
+          || transition !== ovizStateTransition
+          || transition.skyLayerFadeStarted
+          || !skyDomeFrameEl
+          || !skyDomeFrameEl.contentWindow
+        ) {
+          return false;
+        }
+        const payload = transition.skyLayerStartPayload || {};
+        transition.skyLayerFadeStarted = true;
+        skyDomeFrameEl.contentWindow.postMessage({
+          type: "oviz-sky-layer-transition-start",
+          transitionId: transition.transitionId,
+          durationMs: Math.max(Number(payload.durationMs) || 0.0, 0.0),
+          easing: String(payload.easing || transition.transitionSpec.easing || "easeInOutCubic"),
+          startedAtEpochMs: ovizTransitionEpochMs(
+            (typeof performance !== "undefined" && performance.now)
+              ? performance.now()
+              : Date.now()
+          ),
+        }, "*");
+        return true;
       }
 
       function ovizCreateEarthCameraTrack(destination) {
@@ -1416,10 +1469,45 @@ THREEJS_STATE_RUNTIME_JS = r"""
         renderFrame(currentFrameIndex);
       }
 
+      function ovizPreserveDestinationCamera(destination, source) {
+        const preserved = destination && typeof destination === "object" ? destination : {};
+        const sourceState = source && typeof source === "object" ? source : {};
+        preserved.camera = ovizStatesClone(sourceState.camera || {}, {});
+        preserved.global_controls = ovizStatesClone(preserved.global_controls || {}, {});
+        const sourceControls = sourceState.global_controls || {};
+        [
+          "camera_view_mode",
+          "camera_fov",
+          "camera_auto_orbit_enabled",
+          "camera_auto_orbit_speed",
+          "camera_auto_orbit_direction",
+          "earth_view_focus_distance_pc",
+          "earth_view_return_camera_state",
+        ].forEach((key) => {
+          if (Object.prototype.hasOwnProperty.call(sourceControls, key)) {
+            preserved.global_controls[key] = ovizStatesClone(sourceControls[key], sourceControls[key]);
+          } else {
+            delete preserved.global_controls[key];
+          }
+        });
+        return preserved;
+      }
+
       function ovizBeginStateTransition(target, options = {}) {
         const destination = ovizHydrateAssets(target.snapshot || {});
         const transitionSpec = ovizNormalizeTransition(target.transition, ovizStatesProject.default_transition);
         const from = ovizCurrentTransitionSnapshot();
+        const targetCameraBehavior = String(
+          target.camera_behavior || target.cameraBehavior || ""
+        ).trim().toLowerCase();
+        const preserveCamera = targetCameraBehavior === "keep"
+          || (
+            !["follow", "keep"].includes(targetCameraBehavior)
+            && Boolean(ovizStatesProject && ovizStatesProject.preserve_camera_on_navigation)
+          );
+        if (preserveCamera) {
+          ovizPreserveDestinationCamera(destination, from);
+        }
         const sourceAppearanceComposite = (
           typeof actionHeldAppearanceRollback !== "undefined"
           && actionHeldAppearanceRollback
@@ -1541,7 +1629,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
         }
         playbackDirection = 0;
         lastPlaybackAdvanceTimestamp = null;
-        setCameraAutoOrbitEnabled(false);
+        const allowLiveCameraOrbit = Boolean(
+          preserveCamera
+          && (from.global_controls || {}).camera_auto_orbit_enabled
+        );
+        if (!allowLiveCameraOrbit) {
+          setCameraAutoOrbitEnabled(false);
+        }
         const transitionFromFrame = ovizStateFrameValue(from);
         const transitionToFrame = ovizStateFrameValue(destination);
         ovizStateTimelineMotionActive = Math.abs(transitionToFrame - transitionFromFrame) > 1e-9;
@@ -1583,6 +1677,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
           fromSnapshot: from,
           sourceAppearanceComposite,
           transitionSpec,
+          preserveCamera,
+          cameraBehavior: preserveCamera ? "keep" : "follow",
+          allowLiveCameraOrbit,
           phasePlan,
           startedAt: now,
           startedAtEpochMs: ovizTransitionEpochMs(now),
@@ -1603,6 +1700,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ) ? ovizCreateNativeViewCameraTrack(destination) : null,
           skyBackgroundPromise: null,
           skyLayerPromise: Promise.resolve({ unchanged: true }),
+          skyLayerReady: true,
+          skyLayerFadeStarted: false,
+          skyLayerStartPayload: null,
           forceSkyLayerRetarget,
           fromViewMode,
           toViewMode,
@@ -1943,7 +2043,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (frameGapMs > 50) transition.longFrameCount += 1;
           let elapsedMs = Math.max(0.0, now - transition.startedAt);
           let phaseState = ovizTransitionPhaseState(transition, elapsedMs);
-          if (phaseState.name === "appearance" && !transition.lassoReady) {
+          if (
+            phaseState.name === "appearance"
+            && (
+              !transition.lassoReady
+              || (transition.skyLayerTransitionStarted && !transition.skyLayerReady)
+            )
+          ) {
             transition.startedAt += frameGapMs;
             transition.startedAtEpochMs += frameGapMs;
             elapsedMs = Math.max(0.0, now - transition.startedAt);
@@ -1965,8 +2071,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
             && !transition.skyLayerTransitionStarted
             && transition.sourceSkyLayers
           ) {
-            transition.skyLayerTransitionStarted = true;
-            ovizStartSkyLayerTransition(transition, transition.sourceSkyLayers);
+            transition.skyLayerTransitionStarted = ovizStartSkyLayerTransition(
+              transition,
+              transition.sourceSkyLayers
+            );
           }
           const modeCameraRaw = transition.nativeViewTransition
             ? clampRange((cameraRaw - 0.20) / 0.60, 0, 1)
@@ -1974,53 +2082,55 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const modeCameraProgress = ovizEasing(transition.transitionSpec.easing, modeCameraRaw);
           const from = transition.fromSnapshot;
           const to = transition.targetSnapshot;
-          const fromPosition = ovizPointFrom(from, "position", camera.position);
-          const toPosition = ovizPointFrom(to, "position", fromPosition);
-          const fromTarget = ovizPointFrom(from, "target", controls.target);
-          const toTarget = ovizPointFrom(to, "target", fromTarget);
-          const fromUp = ovizPointFrom(from, "up", camera.up);
-          const toUp = ovizPointFrom(to, "up", fromUp);
-          if (transition.viewTransitionKind === "earth-to-earth") {
-            ovizApplyEarthCameraTrack(transition.earthCameraTrack, cameraProgress);
-          } else if (
-            !transition.usesViewButtonHandoff
-            && (
-              transition.viewTransitionKind === "enter-earth"
-              || transition.viewTransitionKind === "exit-earth"
-            )
-          ) {
-            ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, modeCameraProgress);
-          } else if (!transition.nativeViewTransition) {
-            camera.position.set(
-              ovizLerp(fromPosition.x, toPosition.x, cameraProgress),
-              ovizLerp(fromPosition.y, toPosition.y, cameraProgress),
-              ovizLerp(fromPosition.z, toPosition.z, cameraProgress)
-            );
-            controls.target.set(
-              ovizLerp(fromTarget.x, toTarget.x, cameraProgress),
-              ovizLerp(fromTarget.y, toTarget.y, cameraProgress),
-              ovizLerp(fromTarget.z, toTarget.z, cameraProgress)
-            );
-            camera.up.set(
-              ovizLerp(fromUp.x, toUp.x, cameraProgress),
-              ovizLerp(fromUp.y, toUp.y, cameraProgress),
-              ovizLerp(fromUp.z, toUp.z, cameraProgress)
-            ).normalize();
-          }
-          const fromFov = Number((from.global_controls || {}).camera_fov);
-          const toFov = Number((to.global_controls || {}).camera_fov);
-          if (!transition.nativeViewTransition && Number.isFinite(fromFov) && Number.isFinite(toFov)) {
-            camera.fov = ovizLerp(fromFov, toFov, cameraProgress);
+          if (!transition.preserveCamera) {
+            const fromPosition = ovizPointFrom(from, "position", camera.position);
+            const toPosition = ovizPointFrom(to, "position", fromPosition);
+            const fromTarget = ovizPointFrom(from, "target", controls.target);
+            const toTarget = ovizPointFrom(to, "target", fromTarget);
+            const fromUp = ovizPointFrom(from, "up", camera.up);
+            const toUp = ovizPointFrom(to, "up", fromUp);
+            if (transition.viewTransitionKind === "earth-to-earth") {
+              ovizApplyEarthCameraTrack(transition.earthCameraTrack, cameraProgress);
+            } else if (
+              !transition.usesViewButtonHandoff
+              && (
+                transition.viewTransitionKind === "enter-earth"
+                || transition.viewTransitionKind === "exit-earth"
+              )
+            ) {
+              ovizApplyNativeViewCameraTrack(transition.nativeCameraTrack, modeCameraProgress);
+            } else if (!transition.nativeViewTransition) {
+              camera.position.set(
+                ovizLerp(fromPosition.x, toPosition.x, cameraProgress),
+                ovizLerp(fromPosition.y, toPosition.y, cameraProgress),
+                ovizLerp(fromPosition.z, toPosition.z, cameraProgress)
+              );
+              controls.target.set(
+                ovizLerp(fromTarget.x, toTarget.x, cameraProgress),
+                ovizLerp(fromTarget.y, toTarget.y, cameraProgress),
+                ovizLerp(fromTarget.z, toTarget.z, cameraProgress)
+              );
+              camera.up.set(
+                ovizLerp(fromUp.x, toUp.x, cameraProgress),
+                ovizLerp(fromUp.y, toUp.y, cameraProgress),
+                ovizLerp(fromUp.z, toUp.z, cameraProgress)
+              ).normalize();
+            }
+            const fromFov = Number((from.global_controls || {}).camera_fov);
+            const toFov = Number((to.global_controls || {}).camera_fov);
+            if (!transition.nativeViewTransition && Number.isFinite(fromFov) && Number.isFinite(toFov)) {
+              camera.fov = ovizLerp(fromFov, toFov, cameraProgress);
+              camera.updateProjectionMatrix();
+            }
+            if (!transition.nativeViewTransition) {
+              const fromViewOffset = from.camera && (from.camera.view_offset || from.camera.viewOffset);
+              const toViewOffset = to.camera && (to.camera.view_offset || to.camera.viewOffset);
+              ovizApplyInterpolatedViewOffset(fromViewOffset, toViewOffset, cameraProgress);
+            }
             camera.updateProjectionMatrix();
+            camera.lookAt(controls.target);
+            camera.updateMatrixWorld(true);
           }
-          if (!transition.nativeViewTransition) {
-            const fromViewOffset = from.camera && (from.camera.view_offset || from.camera.viewOffset);
-            const toViewOffset = to.camera && (to.camera.view_offset || to.camera.viewOffset);
-            ovizApplyInterpolatedViewOffset(fromViewOffset, toViewOffset, cameraProgress);
-          }
-          camera.updateProjectionMatrix();
-          camera.lookAt(controls.target);
-          camera.updateMatrixWorld(true);
           if (root && root.dataset) {
             const liveDirection = new THREE.Vector3();
             camera.getWorldDirection(liveDirection);
@@ -2202,6 +2312,21 @@ THREEJS_STATE_RUNTIME_JS = r"""
           return;
         }
         transition.finishing = true;
+        if (transition.preserveCamera) {
+          // A Keep State owns no camera track. Capture the latest live pose at
+          // the completion boundary so exact restoration cannot snap an
+          // orbiting camera back to where the transition began.
+          ovizPreserveDestinationCamera(
+            transition.targetSnapshot,
+            ovizCurrentTransitionSnapshot(),
+          );
+          if (transition.allowLiveCameraOrbit) {
+            // Pause only for the exact apply/fidelity frame. The target keeps
+            // its enabled orbit flag and resumes immediately after ownership
+            // is released below.
+            setCameraAutoOrbitEnabled(false);
+          }
+        }
         const targetPosition = ovizPointFrom(transition.targetSnapshot, "position", camera.position);
         const targetControlsTarget = ovizPointFrom(transition.targetSnapshot, "target", controls.target);
         const preApplyCameraError = Math.sqrt(
@@ -2308,7 +2433,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
               );
             }
           }
-          postSkyLayerStateToAladin();
+          // A completed semantic layer transition already holds the exact
+          // destination as a resident Aladin stack. Reposting the compact
+          // logical stack here would detach that painted overlay and recreate
+          // it as the base survey, exposing a late loading flash.
+          if (!transition.skyLayerTransitionStarted || !transition.skyLayerFadeStarted) {
+            postSkyLayerStateToAladin();
+          }
           root.dataset.stateFidelity = JSON.stringify({
             exact: fidelityDifferences.length === 0,
             differences: fidelityDifferences,
@@ -2623,6 +2754,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const item = ovizNormalizeStateRecord({
           id: options.id,
           name: options.name || `State ${ovizStatesProject.items.length + 1}`,
+          camera_behavior: options.camera_behavior || options.cameraBehavior || "follow",
           transition: options.transition || null,
           snapshot: options.snapshot || captureRuntimeState(),
         }, ovizStatesProject.items.length, new Set(ovizStatesProject.items.map((state) => state.id)));
@@ -2630,6 +2762,37 @@ THREEJS_STATE_RUNTIME_JS = r"""
         ovizActiveStateId = item.id;
         ovizStatesChanged("add");
         return ovizStatesClone(item, {});
+      }
+
+      function ovizQuickAddState(options = {}) {
+        if (!ovizStateControllerReady) {
+          throw new Error("Oviz States controller is not ready.");
+        }
+        if (ovizStateTransition) {
+          throw new Error("A State cannot be added during a transition.");
+        }
+        if (ovizStatesMode !== "edit") {
+          ovizSetStatesMode("edit");
+        }
+        const item = ovizAddState(options);
+        if (root && root.dataset) {
+          root.dataset.stateQuickAddedId = item.id;
+        }
+        const toggle = ovizStatesShellEl
+          ? ovizStatesShellEl.querySelector(".oviz-states-toggle")
+          : null;
+        if (toggle && ovizStatesShellEl.dataset.open !== "true") {
+          toggle.textContent = `${item.name} added ✓`;
+          window.setTimeout(() => {
+            if (toggle && ovizStatesShellEl && ovizStatesShellEl.dataset.open !== "true") {
+              toggle.textContent = "States ▸";
+            }
+          }, 1100);
+        } else {
+          ovizSetStatesStatus(`${item.name} added`);
+        }
+        ovizStateEvent("state-quick-add", { id: item.id, name: item.name });
+        return item;
       }
 
       function ovizUpdateState(idOrIndex, options = {}) {
@@ -2640,6 +2803,15 @@ THREEJS_STATE_RUNTIME_JS = r"""
         item.snapshot = ovizStatesClone(options.snapshot || captureRuntimeState(), {});
         if (options.transition !== undefined) item.transition = options.transition ? ovizNormalizeTransition(options.transition) : null;
         if (options.name !== undefined) item.name = String(options.name).trim() || item.name;
+        if (options.camera_behavior !== undefined || options.cameraBehavior !== undefined) {
+          const requested = String(
+            options.camera_behavior ?? options.cameraBehavior
+          ).trim().toLowerCase();
+          if (!["follow", "keep"].includes(requested)) {
+            throw new Error("Camera behavior must be 'follow' or 'keep'.");
+          }
+          item.camera_behavior = requested;
+        }
         ovizActiveStateId = item.id;
         ovizStatesChanged("update");
         return ovizStatesClone(item, {});
@@ -2661,6 +2833,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const source = ovizStatesProject.items[index];
         const copy = ovizNormalizeStateRecord({
           name: options.name || `${source.name} copy`,
+          camera_behavior: source.camera_behavior,
           transition: source.transition,
           snapshot: source.snapshot,
         }, index + 1, new Set(ovizStatesProject.items.map((item) => item.id)));
@@ -2698,6 +2871,36 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return ovizStatesMode;
       }
 
+      function ovizSetPreserveCameraOnNavigation(enabled) {
+        const next = Boolean(enabled);
+        if (Boolean(ovizStatesProject.preserve_camera_on_navigation) === next) {
+          return next;
+        }
+        ovizStatesProject.preserve_camera_on_navigation = next;
+        if (root && root.dataset) {
+          root.dataset.stateCameraPolicy = next ? "keep-current" : "follow-states";
+        }
+        ovizStatesChanged("camera-policy");
+        return next;
+      }
+
+      function ovizSetStateCameraBehavior(idOrIndex, behavior) {
+        ovizAssertEditable();
+        const index = ovizStateIndexFor(idOrIndex);
+        if (index < 0) throw new Error("Unknown state.");
+        const requested = String(behavior || "").trim().toLowerCase();
+        if (!["follow", "keep"].includes(requested)) {
+          throw new Error("Camera behavior must be 'follow' or 'keep'.");
+        }
+        const item = ovizStatesProject.items[index];
+        if (item.camera_behavior === requested) {
+          return ovizStatesClone(item, {});
+        }
+        item.camera_behavior = requested;
+        ovizStatesChanged("state-camera-behavior");
+        return ovizStatesClone(item, {});
+      }
+
       async function ovizWriteHtmlFile(htmlText, suggestedName) {
         if (typeof window.showSaveFilePicker === "function") {
           try {
@@ -2725,13 +2928,16 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return { saved: true, filename: suggestedName };
       }
 
-      function ovizDefaultStatesExportFilename() {
+      function ovizDefaultStatesExportFilename(options = {}) {
+        if (options.presentOnly === true) {
+          return slugifyFilename(sceneSpec.title || "oviz") + "-present.html";
+        }
         const hasDeck = typeof ovizDeckHasSlides === "function" && ovizDeckHasSlides();
         return slugifyFilename(sceneSpec.title || "oviz") + (hasDeck ? "-presentation.html" : "-states.html");
       }
 
-      function ovizNormalizeStatesExportFilename(value) {
-        const fallback = ovizDefaultStatesExportFilename();
+      function ovizNormalizeStatesExportFilename(value, options = {}) {
+        const fallback = ovizDefaultStatesExportFilename(options);
         const cleaned = String(value || "")
           .trim()
           .replace(/[\\/:*?"<>|]+/g, "_");
@@ -2752,21 +2958,44 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
       }
 
+      function ovizPromptExportStatesPresentOnlyHtml() {
+        const filename = window.prompt(
+          "Name the present-only HTML file",
+          ovizDefaultStatesExportFilename({ presentOnly: true }),
+        );
+        if (filename === null) {
+          return { saved: false, cancelled: true };
+        }
+        return ovizExportStatesHtml({
+          filename: ovizNormalizeStatesExportFilename(filename, { presentOnly: true }),
+          presentOnly: true,
+        });
+      }
+
       async function ovizExportStatesHtml(options = {}) {
+        const presentOnly = options.presentOnly === true;
         const compact = await ovizCompactProjectForStorage(ovizStatesPublicProject());
         compact.default_mode = "present";
+        compact.present_only = presentOnly;
         compact.synchronized_revision = compact.revision;
         const exportSceneSpec = safeJsonClone(sceneSpec, {});
         exportSceneSpec.initial_state = ovizStatesClone(ovizOriginalSceneInitialState, {});
         exportSceneSpec.states = compact;
-        if (typeof ovizDeckExportSpec === "function") {
+        if (presentOnly) {
+          // Present-only State exports deliberately exclude authored slides;
+          // their edge arrows always navigate the ordered State sequence.
+          delete exportSceneSpec.deck;
+        } else if (typeof ovizDeckExportSpec === "function") {
           exportSceneSpec.deck = ovizDeckExportSpec({ embedded: true });
         }
         exportSceneSpec.width = Math.max(root.clientWidth || sceneSpec.width || 900, 1);
         exportSceneSpec.height = Math.max(root.clientHeight || sceneSpec.height || 700, 1);
         const html = await buildExportHtml(exportSceneSpec);
         if (options.download === false) return html;
-        const result = await ovizWriteHtmlFile(html, options.filename || `${slugifyFilename(sceneSpec.title || "oviz")}-states.html`);
+        const result = await ovizWriteHtmlFile(
+          html,
+          options.filename || ovizDefaultStatesExportFilename({ presentOnly }),
+        );
         if (result.saved) {
           ovizStatesProject.synchronized_revision = ovizStatesProject.revision;
           ovizStateDirty = false;
@@ -2891,6 +3120,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
         style.id = "oviz-states-styles";
         style.textContent = `
           .oviz-states-shell{position:relative;display:flex;align-items:center}
+          .oviz-three-topbar:has(.oviz-states-shell[data-open=true]){z-index:90 !important}
           .oviz-states-toggle{white-space:nowrap}
           .oviz-states-drawer{position:absolute;right:0;top:calc(100% + 8px);width:min(390px,92vw);max-height:min(72vh,680px);overflow:auto;padding:10px;background:var(--oviz-panel-bg,#fff);color:var(--oviz-text,#222);border:1px solid rgba(127,127,127,.35);border-radius:10px;box-shadow:0 12px 35px rgba(0,0,0,.22);z-index:80;display:none}
           .oviz-states-shell[data-open=true] .oviz-states-drawer{display:block}
@@ -2898,9 +3128,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
           .oviz-states-head strong{flex:1}.oviz-states-head small{opacity:.7}
           .oviz-states-drawer button,.oviz-states-drawer select,.oviz-states-drawer input{font:inherit}
           .oviz-states-nav button{flex:1}.oviz-states-editbar{flex-wrap:wrap}
-          .oviz-states-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:6px;align-items:center;padding:5px 4px;border-radius:6px}
+          .oviz-states-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:5px 4px;border-radius:6px}
           .oviz-states-row:hover{background:rgba(127,127,127,.1)}.oviz-states-row[data-active=true]{background:rgba(70,130,255,.16)}
+          .oviz-states-row[data-camera-behavior=follow]:not(:first-child){margin-top:5px;border-top:1px solid rgba(127,127,127,.25);padding-top:7px}
           .oviz-states-row-name{border:0;background:transparent;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}
+          .oviz-states-row-camera{padding:2px 5px;white-space:nowrap;font-size:10px}
+          .oviz-states-row-camera[aria-pressed=true]{background:rgba(70,130,255,.16);border-color:rgba(70,130,255,.45)}
           .oviz-states-row-actions{display:flex;gap:3px}.oviz-states-row-actions button{padding:2px 5px}
           .oviz-states-status{min-height:1.2em;font-size:11px;opacity:.75}.oviz-states-recovery{padding:7px;margin-bottom:8px;background:rgba(255,174,0,.18);border-radius:6px}
           .oviz-states-mode-edit .oviz-states-present-only{display:none}.oviz-states-mode-present .oviz-states-edit-only{display:none}
@@ -2975,6 +3208,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
           root.dataset.activeStateId = ovizActiveStateId || "original";
           root.dataset.activeStatePosition = String(Math.max(activeIndex + 1, 0));
           root.dataset.presentationStateCount = String(ovizStatesProject.items.length);
+          root.dataset.stateCameraPolicy = ovizStatesProject.preserve_camera_on_navigation
+            ? "keep-current"
+            : "follow-states";
         }
         ovizStatesDrawerEl.className = `oviz-states-drawer oviz-states-mode-${ovizStatesMode}`;
         ovizStatesDrawerEl.innerHTML = "";
@@ -2999,15 +3235,33 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ovizMakeButton("Add", () => ovizAddState()),
           ovizMakeButton("Update", () => ovizUpdateState(ovizActiveStateId)),
           ovizMakeButton("Export HTML", ovizPromptExportStatesHtml),
+          ovizMakeButton("Export Present Only", ovizPromptExportStatesPresentOnlyHtml),
           ovizMakeButton("Current view only", () => saveSceneStateToHtml())
         );
         if (ovizStateTransition) editbar.querySelectorAll("button").forEach((button, index) => { if (index < 2) button.disabled = true; });
         ovizStatesDrawerEl.append(editbar);
         ovizStatesRowsEl = document.createElement("div");
+        let cameraGroupIndex = 0;
         ovizStatesProject.items.forEach((item, index) => {
+          const cameraBehavior = item.camera_behavior === "keep" ? "keep" : "follow";
+          if (index === 0 || cameraBehavior === "follow") cameraGroupIndex += 1;
           const row = document.createElement("div"); row.className = "oviz-states-row"; row.dataset.active = item.id === ovizActiveStateId ? "true" : "false";
+          row.dataset.cameraBehavior = cameraBehavior;
+          row.dataset.cameraGroup = String(cameraGroupIndex);
           const number = document.createElement("span"); number.textContent = String(index + 1);
           const name = ovizMakeButton(`${item.name}${item.degraded ? " ⚠" : ""}`, () => ovizGoToState(item.id), "oviz-states-row-name");
+          const cameraButton = ovizMakeButton(
+            cameraBehavior === "keep" ? "Cam: Keep" : "Cam: Follow",
+            () => ovizSetStateCameraBehavior(
+              item.id,
+              cameraBehavior === "keep" ? "follow" : "keep",
+            ),
+            "oviz-states-row-camera oviz-states-edit-only",
+          );
+          cameraButton.setAttribute("aria-pressed", cameraBehavior === "keep" ? "true" : "false");
+          cameraButton.title = cameraBehavior === "keep"
+            ? `Camera group ${cameraGroupIndex}: keep the incoming camera while applying this State.`
+            : `Camera group ${cameraGroupIndex}: apply this State's saved camera and begin a new group.`;
           const actions = document.createElement("span"); actions.className = "oviz-states-row-actions oviz-states-edit-only";
           actions.append(
             ovizMakeButton("↑", () => ovizMoveState(item.id, Math.max(1, index))),
@@ -3016,7 +3270,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             ovizMakeButton("⧉", () => ovizDuplicateState(item.id)),
             ovizMakeButton("×", () => ovizRemoveState(item.id))
           );
-          row.append(number, name, actions); ovizStatesRowsEl.append(row);
+          row.append(number, name, cameraButton, actions); ovizStatesRowsEl.append(row);
         });
         ovizStatesDrawerEl.append(ovizStatesRowsEl);
         ovizStatesStatusEl = document.createElement("div"); ovizStatesStatusEl.className = "oviz-states-status";
@@ -3060,14 +3314,20 @@ THREEJS_STATE_RUNTIME_JS = r"""
           previous: ovizStatesPrevious,
           original: () => ovizGoToState("original"),
           add: ovizAddState,
+          quickAdd: ovizQuickAddState,
           update: ovizUpdateState,
           rename: ovizRenameState,
           duplicate: ovizDuplicateState,
           move: ovizMoveState,
           remove: ovizRemoveState,
+          setCameraBehavior: ovizSetStateCameraBehavior,
           setMode: ovizSetStatesMode,
+          setPreserveCamera: ovizSetPreserveCameraOnNavigation,
           capture: () => captureRuntimeState(),
           exportHtml: ovizExportStatesHtml,
+          exportPresentOnlyHtml: (options = {}) => ovizExportStatesHtml(
+            Object.assign({}, options, { presentOnly: true })
+          ),
         };
         window.Oviz = window.Oviz || {};
         const registry = window.Oviz.__viewers || new Map();
@@ -3078,6 +3338,26 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       function ovizPostMessageHandler(event) {
         const data = event.data;
+        if (data && data.type === "oviz-aladin-sky-layer-transition-ready") {
+          const transitionId = String(data.transitionId || "");
+          const transition = ovizStateTransition;
+          if (
+            transition
+            && transitionId === String(transition.transitionId || "")
+            && transition.skyLayerTransitionStarted
+          ) {
+            transition.skyLayerReady = true;
+            transition.skyLayerPreparation = {
+              degraded: Boolean(data.degraded),
+              failedLayers: Array.isArray(data.failedLayers) ? data.failedLayers.slice() : [],
+            };
+            if (root && root.dataset) {
+              root.dataset.stateTransitionSkyLayers = data.degraded ? "degraded" : "ready";
+            }
+            ovizBeginPreparedSkyLayerTransition(transition);
+          }
+          return;
+        }
         if (data && data.type === "oviz-aladin-sky-layer-transition-complete") {
           const transitionId = String(data.transitionId || "");
           const resolve = ovizSkyLayerTransitionWaiters.get(transitionId);
@@ -3099,6 +3379,31 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
       }
 
+      async function ovizApplyPresentOnlyInitialState() {
+        if (
+          !ovizStatesProject
+          || !ovizStatesProject.present_only
+          || !Array.isArray(ovizStatesProject.items)
+          || !ovizStatesProject.items.length
+        ) {
+          return false;
+        }
+        const firstState = ovizStateTargetFor(1);
+        const firstSnapshot = ovizHydrateAssets(firstState.snapshot || {});
+        await ovizApplyStateImmediately(firstSnapshot, {
+          forceSkyBackground: true,
+          postSkyLayersToAladin: true,
+        });
+        ovizActiveStateId = firstState.id;
+        ovizStateDirty = false;
+        if (root && root.dataset) {
+          root.dataset.activeStateId = firstState.id;
+          root.dataset.activeStatePosition = "1";
+          root.dataset.presentOnlyInitialState = firstState.id;
+        }
+        return true;
+      }
+
       async function initializeOvizStates() {
         ovizOriginalSceneInitialState = ovizStatesClone(sceneSpec.initial_state, {});
         ovizOriginalRuntimeState = captureRuntimeState();
@@ -3118,14 +3423,23 @@ THREEJS_STATE_RUNTIME_JS = r"""
         postSkyLayerStateToAladin();
         ovizInstallPublicApi();
         window.addEventListener("message", ovizPostMessageHandler);
+        await ovizApplyPresentOnlyInitialState();
         root.addEventListener("pointerdown", (event) => {
           const insideStatesShell = ovizStatesShellEl && ovizStatesShellEl.contains(event.target);
+          const insidePresentationNav = event.target
+            && typeof event.target.closest === "function"
+            && event.target.closest(".oviz-three-presentation-nav");
           // Scrolling or clicking inside the paper reader must not abort a
           // scroll-driven transition; only direct scene interaction cancels.
           const insidePaperPanel = event.target
             && typeof event.target.closest === "function"
             && event.target.closest(".oviz-three-paper-panel");
-          if (ovizStateTransition && !insideStatesShell && !insidePaperPanel) {
+          if (
+            ovizStateTransition
+            && !insideStatesShell
+            && !insidePresentationNav
+            && !insidePaperPanel
+          ) {
             ovizCancelStateTransitionWithoutSnap("user-interaction", { restorePresentation: true });
           }
         }, { capture: true });
@@ -3133,14 +3447,27 @@ THREEJS_STATE_RUNTIME_JS = r"""
         if (draft && Number(draft.revision) > Number(ovizStatesProject.revision)) {
           ovizShowDraftRecovery(draft);
         }
-        await ovizPreloadAllAladinSources();
         ovizStateControllerReady = true;
         ovizRenderStatesDrawer();
         ovizStateEvent("states-ready", {
           mode: ovizStatesMode,
           states: ovizStatesList(),
-          degraded: ovizStatesPreloadStatus.failed.length > 0,
+          degraded: false,
+          preloadPending: true,
           preload: ovizStatesClone(ovizStatesPreloadStatus, {}),
+        });
+        ovizPreloadAllAladinSources().then(() => {
+          ovizRenderStatesDrawer();
+          ovizStateEvent("states-preload-complete", {
+            degraded: ovizStatesPreloadStatus.failed.length > 0,
+            preload: ovizStatesClone(ovizStatesPreloadStatus, {}),
+          });
+        }).catch((error) => {
+          ovizStateEvent("states-preload-complete", {
+            degraded: true,
+            error: String(error && error.message || error),
+            preload: ovizStatesClone(ovizStatesPreloadStatus, {}),
+          });
         });
       }
 """.strip()

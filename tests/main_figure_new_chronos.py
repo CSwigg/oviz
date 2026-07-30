@@ -88,6 +88,8 @@ MAIN_FIGURE_CLUSTER_YOUNG_AGE_MYR = 15
 MAIN_FIGURE_CLUSTER_BLUE_MAX_AGE_MYR = 60
 MAIN_FIGURE_CLUSTER_GREY_MAX_AGE_MYR = 150
 MAIN_FIGURE_CLUSTER_GREY_COLOR = "#9ca3af"
+RATZENBOECK_SCOCEN_TRACE_NAME = "Sco-Cen (Ratzenböck/SigMA)"
+RATZENBOECK_SCOCEN_TRACE_COLOR = "#c77dff"
 MAIN_FIGURE_SPIRAL_ARM_TRACE_NAMES = (
     "Spiral Arm: Perseus",
     "Spiral Arm: Local",
@@ -99,13 +101,16 @@ MAIN_FIGURE_DUST_MAX_RESOLUTION_CAP = 512
 MAIN_FIGURE_DUST_SAMPLES = 200
 MAIN_FIGURE_DUST_OPACITY = 1.0
 MAIN_FIGURE_DUST_ALPHA_COEF = 105.0
-MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION = 512
-MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP = 512
-MAIN_FIGURE_MCCALLUM_SAMPLES = 200
-MAIN_FIGURE_VERGELY_MAX_RESOLUTION = 512
-MAIN_FIGURE_VERGELY_MAX_RESOLUTION_CAP = 512
-MAIN_FIGURE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION = 256
-MAIN_FIGURE_VERGELY_SAMPLES = 220
+# Optional, initially hidden volumes are sampled at a compact but still smooth
+# resolution so adding them does not double the size or startup cost of the
+# canonical stored HTML.
+MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION = 128
+MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP = 128
+MAIN_FIGURE_MCCALLUM_SAMPLES = 160
+MAIN_FIGURE_VERGELY_MAX_RESOLUTION = 128
+MAIN_FIGURE_VERGELY_MAX_RESOLUTION_CAP = 128
+MAIN_FIGURE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION = 128
+MAIN_FIGURE_VERGELY_SAMPLES = 160
 MAIN_FIGURE_VERGELY_OPACITY = 0.46
 MAIN_FIGURE_VERGELY_ALPHA_COEF = 200.0
 MAIN_FIGURE_VERGELY_VMIN = 0.0
@@ -580,7 +585,12 @@ supernova_volumes = _build_supernova_volumes_for_main_figure(time_int)
 """.strip()
 
 
-def build_mccallum_ne_volume_source_block() -> str:
+def build_mccallum_ne_volume_source_block(
+    *,
+    max_resolution: int = MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION,
+    max_resolution_cap: int = MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP,
+    samples: int = MAIN_FIGURE_MCCALLUM_SAMPLES,
+) -> str:
     return f"""
 import os
 from pathlib import Path as _OvizPath
@@ -599,15 +609,15 @@ def _build_mccallum_ne_volumes_for_main_figure():
         {{
             "key": "mccallum-ne",
             "state_key": "mccallum-ne",
-            "state_name": "McCallum+2025 electron density",
-            "name": "McCallum+2025 Electron Density",
+            "state_name": "McCallum Hα",
+            "name": "McCallum Hα",
             "path": str(MCCALLUM_NE_GRID_PATH),
             "hdu": "PRIMARY",
             "clip_bounds": {{"z": [{float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[0])}, {float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[1])}]}},
-            "max_resolution": {int(MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION)},
-            "max_resolution_cap": {int(MAIN_FIGURE_MCCALLUM_MAX_RESOLUTION_CAP)},
+            "max_resolution": {int(max_resolution)},
+            "max_resolution_cap": {int(max_resolution_cap)},
             "opacity": 0.12,
-            "samples": {int(MAIN_FIGURE_MCCALLUM_SAMPLES)},
+            "samples": {int(samples)},
             "alpha_coef": 200,
             "gradient_step": 0.006,
             "stretch": "log10",
@@ -616,8 +626,8 @@ def _build_mccallum_ne_volumes_for_main_figure():
             "colormap": "inferno",
             "unit_label": "cm^-3",
             "visible": False,
-            "supports_show_all_times": True,
-            "co_rotate_with_frame": True,
+            "only_at_t0": True,
+            "supports_show_all_times": False,
             "show_all_times": False,
         }}
     ]
@@ -627,19 +637,34 @@ mccallum_ne_volumes = _build_mccallum_ne_volumes_for_main_figure()
 """.strip()
 
 
-def build_vergely_dust_volume_source_block(*, mobile_safe_mode: bool = False) -> str:
-    max_resolution = MOBILE_SAFE_VERGELY_MAX_RESOLUTION if mobile_safe_mode else MAIN_FIGURE_VERGELY_MAX_RESOLUTION
-    max_resolution_cap = (
+def build_vergely_dust_volume_source_block(
+    *,
+    mobile_safe_mode: bool = False,
+    max_resolution: int | None = None,
+    max_resolution_cap: int | None = None,
+    sky_overlay_max_resolution: int | None = None,
+    samples: int | None = None,
+) -> str:
+    resolved_max_resolution = max_resolution or (
+        MOBILE_SAFE_VERGELY_MAX_RESOLUTION
+        if mobile_safe_mode
+        else MAIN_FIGURE_VERGELY_MAX_RESOLUTION
+    )
+    resolved_max_resolution_cap = max_resolution_cap or (
         MOBILE_SAFE_VERGELY_MAX_RESOLUTION_CAP
         if mobile_safe_mode
         else MAIN_FIGURE_VERGELY_MAX_RESOLUTION_CAP
     )
-    sky_overlay_max_resolution = (
+    resolved_sky_overlay_max_resolution = sky_overlay_max_resolution or (
         MOBILE_SAFE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION
         if mobile_safe_mode
         else MAIN_FIGURE_VERGELY_SKY_OVERLAY_MAX_RESOLUTION
     )
-    samples = MOBILE_SAFE_VERGELY_SAMPLES if mobile_safe_mode else MAIN_FIGURE_VERGELY_SAMPLES
+    resolved_samples = samples or (
+        MOBILE_SAFE_VERGELY_SAMPLES
+        if mobile_safe_mode
+        else MAIN_FIGURE_VERGELY_SAMPLES
+    )
     return f"""
 import os
 from pathlib import Path as _OvizPath
@@ -663,12 +688,12 @@ def _build_vergely_dust_volumes_for_main_figure():
             "path": str(VERGELY_DUST_PATH),
             "hdu": "PRIMARY",
             "clip_bounds": {{"z": [{float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[0])}, {float(MAIN_FIGURE_VOLUME_Z_CLIP_BOUNDS[1])}]}},
-            "max_resolution": {int(max_resolution)},
-            "max_resolution_cap": {int(max_resolution_cap)},
-            "sky_overlay_max_resolution": {int(sky_overlay_max_resolution)},
+            "max_resolution": {int(resolved_max_resolution)},
+            "max_resolution_cap": {int(resolved_max_resolution_cap)},
+            "sky_overlay_max_resolution": {int(resolved_sky_overlay_max_resolution)},
             "data_encoding": "png_atlas_uint8",
             "opacity": {float(MAIN_FIGURE_VERGELY_OPACITY)!r},
-            "samples": {int(samples)},
+            "samples": {int(resolved_samples)},
             "alpha_coef": {float(MAIN_FIGURE_VERGELY_ALPHA_COEF)!r},
             "gradient_step": 0.006,
             "stretch": "asinh",
@@ -676,11 +701,11 @@ def _build_vergely_dust_volumes_for_main_figure():
             "vmax": {float(MAIN_FIGURE_VERGELY_VMAX)!r},
             "default_vmin_quantile": {float(MAIN_FIGURE_VERGELY_DEFAULT_VMIN_QUANTILE)!r},
             "default_vmax_quantile": {float(MAIN_FIGURE_VERGELY_DEFAULT_VMAX_QUANTILE)!r},
-            "colormap": "magma",
+            "colormap": "Greys",
             "unit_label": "mag pc^-1",
-            "visible": True,
-            "supports_show_all_times": True,
-            "co_rotate_with_frame": True,
+            "visible": False,
+            "only_at_t0": True,
+            "supports_show_all_times": False,
             "show_all_times": False,
         }}
     ]
@@ -1361,6 +1386,97 @@ print(
 """.strip()
 
 
+def build_ratzenboeck_scocen_source_block(
+    cluster_catalog_path: Path,
+    cluster_metadata_path: Path,
+) -> str:
+    """Build the source block for the 37 Ratzenboeck/SigMA cluster centers."""
+    return f"""
+ratzenboeck_scocen = pd.read_csv({str(cluster_catalog_path)!r})
+from astropy.io import fits as _ratzenboeck_fits
+with _ratzenboeck_fits.open({str(cluster_metadata_path)!r}, memmap=True) as _ratzenboeck_hdus:
+    _ratzenboeck_group_data = _ratzenboeck_hdus[1].data
+    ratzenboeck_scocen_metadata = pd.DataFrame({{
+        'sigma_id': np.asarray(_ratzenboeck_group_data['sigma_label'], dtype=int),
+        'sigma_region': [
+            str(_value).strip()
+            for _value in _ratzenboeck_group_data['scocen_region']
+        ],
+        'ratzenboeck_group': [
+            str(_value).strip()
+            for _value in _ratzenboeck_group_data['cluster_name']
+        ],
+        'n_sigma_sources': np.asarray(
+            _ratzenboeck_group_data['nr_sources'],
+            dtype=int,
+        ),
+    }})
+ratzenboeck_required_cols = ['name', 'age_myr', 'x', 'y', 'z', 'U', 'V', 'W']
+ratzenboeck_missing_cols = [
+    _col for _col in ratzenboeck_required_cols
+    if _col not in ratzenboeck_scocen.columns
+]
+if ratzenboeck_missing_cols:
+    raise RuntimeError(
+        f'Ratzenboeck/SigMA catalog is missing {{ratzenboeck_missing_cols!r}}.'
+    )
+ratzenboeck_metadata_required_cols = [
+    'sigma_id',
+    'sigma_region',
+    'ratzenboeck_group',
+    'n_sigma_sources',
+]
+ratzenboeck_metadata_missing_cols = [
+    _col for _col in ratzenboeck_metadata_required_cols
+    if _col not in ratzenboeck_scocen_metadata.columns
+]
+if ratzenboeck_metadata_missing_cols:
+    raise RuntimeError(
+        f'Ratzenboeck/SigMA metadata is missing {{ratzenboeck_metadata_missing_cols!r}}.'
+    )
+if ratzenboeck_scocen['name'].duplicated().any():
+    raise RuntimeError('Ratzenboeck/SigMA catalog has duplicate cluster names.')
+if ratzenboeck_scocen_metadata['ratzenboeck_group'].duplicated().any():
+    raise RuntimeError('Ratzenboeck/SigMA metadata has duplicate cluster names.')
+ratzenboeck_scocen = ratzenboeck_scocen.merge(
+    ratzenboeck_scocen_metadata[ratzenboeck_metadata_required_cols],
+    left_on='name',
+    right_on='ratzenboeck_group',
+    how='left',
+    validate='1:1',
+)
+if len(ratzenboeck_scocen) != 37:
+    raise RuntimeError(
+        f'Expected 37 Ratzenboeck/SigMA clusters, found {{len(ratzenboeck_scocen)}}.'
+    )
+if ratzenboeck_scocen[ratzenboeck_metadata_required_cols].isnull().any().any():
+    raise RuntimeError('Could not match every Ratzenboeck/SigMA cluster to metadata.')
+ratzenboeck_scocen['n_stars'] = pd.to_numeric(
+    ratzenboeck_scocen['n_sigma_sources'],
+    errors='raise',
+)
+ratzenboeck_scocen['name_all'] = (
+    'SigMA ' + ratzenboeck_scocen['sigma_id'].astype(int).astype(str)
+    + '; ' + ratzenboeck_scocen['sigma_region'].astype(str)
+)
+ratzenboeck_scocen_trace = Trace(
+    ratzenboeck_scocen,
+    data_name={RATZENBOECK_SCOCEN_TRACE_NAME!r},
+    min_size=2.5,
+    max_size=10.0,
+    color={RATZENBOECK_SCOCEN_TRACE_COLOR!r},
+    opacity=0.95,
+    marker_style='circle',
+    show_tracks=True,
+    size_by_n_stars=True,
+)
+print(
+    f'Loaded {{len(ratzenboeck_scocen)}} Ratzenboeck/SigMA Sco-Cen clusters '
+    f'from {str(cluster_catalog_path)}.'
+)
+""".strip()
+
+
 def patch_script_source(
     source: str,
     output_html: Path,
@@ -1372,6 +1488,7 @@ def patch_script_source(
     mist_ages: bool = False,
     compact_payload: bool = True,
     mobile_safe_mode: bool = False,
+    lookback_myr: int = MAIN_FIGURE_LOOKBACK_MYR,
     chronos_results_path: Path = CHRONOS_CLUSTER_RESULTS_PATH,
     chronos_model: str = DEFAULT_CHRONOS_CLUSTER_MODEL,
     include_spiral_arms: bool = False,
@@ -1380,7 +1497,13 @@ def patch_script_source(
     include_background_cluster_trace: bool = True,
     cluster_members_file: Path | None = None,
     show_cluster_members_in_sky: bool = False,
+    include_mccallum_halpha_volume: bool = False,
+    include_vergely_dust_volume: bool = False,
+    ratzenboeck_scocen_catalog_path: Path | None = None,
+    ratzenboeck_scocen_metadata_path: Path | None = None,
 ) -> str:
+    if lookback_myr < 1:
+        raise ValueError("lookback_myr must be at least 1 Myr.")
     source = source.replace("/Users/cam", str(HOME_DIR))
     source = source.replace("/Users/cam/Desktop", str(DESKTOP_ROOT))
 
@@ -1582,7 +1705,7 @@ def patch_script_source(
     time_step_myr = MOBILE_SAFE_TIMESTEP_MYR if mobile_safe_mode else MAIN_FIGURE_TIMESTEP_MYR
     source, replaced_time_grid = re.subn(
         r"(?m)^time_int\s*=\s*np\.round\(np\.arange\(0,\s*-66,\s*-1\),\s*1\)\s*$",
-        f"time_int = np.round(np.arange(0, -{MAIN_FIGURE_LOOKBACK_MYR + 1}, -{time_step_myr}), 1)",
+        f"time_int = np.round(np.arange(0, -{lookback_myr + 1}, -{time_step_myr}), 1)",
         source,
         count=1,
     )
@@ -1592,7 +1715,7 @@ def patch_script_source(
     if galactic_simple:
         source, replaced_time_grid = re.subn(
             r"(?m)^time_int\s*=\s*np\.round\(np\.arange\(0,\s*-\d+,\s*-\d+\),\s*1\)\s*$",
-            f"time_int = np.round(np.arange(0, -{MAIN_FIGURE_LOOKBACK_MYR + 1}, -{time_step_myr}), 1)",
+            f"time_int = np.round(np.arange(0, -{lookback_myr + 1}, -{time_step_myr}), 1)",
             source,
             count=1,
         )
@@ -1657,8 +1780,8 @@ def patch_script_source(
         volume_initial_state_bits = [
             "'active_volume_key': ('supernova-density' if supernova_volumes else 'volume-0')",
             "'mobile_defer_volumes': False",
-            "'legend_state': ({'volume-0': False, 'supernova-density': True} if supernova_volumes else {'volume-0': True})",
-            f"'volume_state_by_key': ({{'volume-0': {{'visible': False, 'opacity': {dust_opacity_literal}, 'stretch': 'asinh', 'vmax': 0.07}}, 'supernova-density': {{'visible': True}}}} if supernova_volumes else {{'volume-0': {{'visible': True, 'opacity': {dust_opacity_literal}, 'stretch': 'asinh', 'vmax': 0.07}}}})",
+            "'legend_state': ({'volume-0': False, **optional_static_legend_state, 'supernova-density': True} if supernova_volumes else {'volume-0': True, **optional_static_legend_state})",
+            f"'volume_state_by_key': ({{'volume-0': {{'visible': False, 'opacity': {dust_opacity_literal}, 'stretch': 'asinh', 'vmax': 0.07}}, **optional_static_volume_state, 'supernova-density': {{'visible': True}}}} if supernova_volumes else {{'volume-0': {{'visible': True, 'opacity': {dust_opacity_literal}, 'stretch': 'asinh', 'vmax': 0.07}}, **optional_static_volume_state}})",
         ]
         initial_state_bits = [
             "'current_group': 'Clusters'",
@@ -1791,6 +1914,79 @@ trace_groupings = {
         if inserted_groupings != 1:
             raise RuntimeError("Could not patch trace groupings with Full Cluster Catalog.")
 
+    if ratzenboeck_scocen_catalog_path is not None:
+        if ratzenboeck_scocen_metadata_path is None:
+            raise ValueError(
+                "ratzenboeck_scocen_catalog_path requires "
+                "ratzenboeck_scocen_metadata_path."
+            )
+        ratzenboeck_scocen_catalog_path = Path(
+            ratzenboeck_scocen_catalog_path
+        ).expanduser().resolve()
+        ratzenboeck_scocen_metadata_path = Path(
+            ratzenboeck_scocen_metadata_path
+        ).expanduser().resolve()
+        for _label, _path in [
+            ("cluster catalog", ratzenboeck_scocen_catalog_path),
+            ("cluster metadata", ratzenboeck_scocen_metadata_path),
+        ]:
+            if not _path.exists():
+                raise FileNotFoundError(
+                    f"Missing Ratzenboeck/SigMA {_label}: {_path}"
+                )
+
+        ratzenboeck_block = build_ratzenboeck_scocen_source_block(
+            ratzenboeck_scocen_catalog_path,
+            ratzenboeck_scocen_metadata_path,
+        )
+        source, inserted_ratzenboeck_trace = re.subn(
+            r"(?m)^(sun_trace\s*=\s*Trace\(sun,.*\)\s*)$",
+            r"\1\n\n" + ratzenboeck_block,
+            source,
+            count=1,
+        )
+        if inserted_ratzenboeck_trace != 1:
+            raise RuntimeError(
+                "Could not inject the Ratzenboeck/SigMA trace definition."
+            )
+
+        source, inserted_ratzenboeck_collection = re.subn(
+            r"(?m)^(\s*full_catalog_trace,\s*)$",
+            r"\1\n    ratzenboeck_scocen_trace,",
+            source,
+            count=1,
+        )
+        if inserted_ratzenboeck_collection != 1:
+            raise RuntimeError(
+                "Could not add the Ratzenboeck/SigMA trace to the TraceCollection."
+            )
+
+        ratzenboeck_grouping_block = f"""
+ratzenboeck_scocen_trace_name = {RATZENBOECK_SCOCEN_TRACE_NAME!r}
+for _ratzenboeck_group_name in ['All', 'Clusters']:
+    if ratzenboeck_scocen_trace_name not in trace_groupings.get(
+        _ratzenboeck_group_name,
+        [],
+    ):
+        trace_groupings.setdefault(_ratzenboeck_group_name, ['Sun']).append(
+            ratzenboeck_scocen_trace_name
+        )
+trace_groupings[ratzenboeck_scocen_trace_name] = [
+    'Sun',
+    ratzenboeck_scocen_trace_name,
+]
+""".strip()
+        source, inserted_ratzenboeck_grouping = re.subn(
+            r"(?m)^(plot_3d\s*=\s*Animate3D\()",
+            ratzenboeck_grouping_block + "\n\n" + r"\1",
+            source,
+            count=1,
+        )
+        if inserted_ratzenboeck_grouping != 1:
+            raise RuntimeError(
+                "Could not add the Ratzenboeck/SigMA trace grouping."
+            )
+
     if minimal_mode:
         source, replaced_young_min_size = re.subn(
             r"(young_trace\s*=\s*Trace\([^\n]*?data_name\s*=\s*'Clusters\s*\(<\s*15\s*Myr\)'[^\n]*?min_size\s*=\s*)([^,]+)",
@@ -1887,7 +2083,52 @@ trace_groupings['Spiral Arms'] = ['Sun', *spiral_arm_trace_names]
         if inserted_supernova != 1:
             raise RuntimeError("Could not inject supernova volume helper block.")
 
-    volume_list_source = "volumes=[edenhofer_volume, *supernova_volumes]"
+    if "optional_static_volume_state =" not in source:
+        optional_volume_blocks = []
+        if include_mccallum_halpha_volume:
+            optional_volume_blocks.append(build_mccallum_ne_volume_source_block())
+        else:
+            optional_volume_blocks.append("mccallum_ne_volumes = []")
+        if include_vergely_dust_volume:
+            optional_volume_blocks.append(
+                build_vergely_dust_volume_source_block(
+                    mobile_safe_mode=mobile_safe_mode,
+                )
+            )
+        else:
+            optional_volume_blocks.append("vergely_dust_volumes = []")
+        optional_volume_blocks.append(
+            """
+optional_static_volume_state = {
+    str(_volume.get("state_key") or _volume.get("key")): {
+        "visible": False,
+        "showAllTimes": False,
+    }
+    for _volume in [*mccallum_ne_volumes, *vergely_dust_volumes]
+}
+optional_static_legend_state = {
+    _state_key: False
+    for _state_key in optional_static_volume_state
+}
+""".strip()
+        )
+        optional_volume_source = "\n\n".join(optional_volume_blocks)
+        source, inserted_optional_volumes = re.subn(
+            (
+                r"(?m)^(supernova_volumes\s*=\s*"
+                r"(?:_build_supernova_volumes_for_main_figure\(time_int\)|\[\])\s*)$"
+            ),
+            r"\1\n\n" + optional_volume_source,
+            source,
+            count=1,
+        )
+        if inserted_optional_volumes != 1:
+            raise RuntimeError("Could not inject optional McCallum/Vergely volumes.")
+
+    volume_list_source = (
+        "volumes=[edenhofer_volume, *mccallum_ne_volumes, "
+        "*vergely_dust_volumes, *supernova_volumes]"
+    )
     source, replaced_supernova_volumes = re.subn(
         r"volumes\s*=\s*\[\s*edenhofer_volume\s*,\s*mccallum_ne\s*\]",
         volume_list_source,
@@ -1928,6 +2169,7 @@ def run_main_figure(
     mist_ages: bool = False,
     compact_payload: bool = True,
     mobile_safe_mode: bool = False,
+    lookback_myr: int = MAIN_FIGURE_LOOKBACK_MYR,
     chronos_results_path: Path = CHRONOS_CLUSTER_RESULTS_PATH,
     chronos_model: str = DEFAULT_CHRONOS_CLUSTER_MODEL,
     include_spiral_arms: bool = False,
@@ -1936,6 +2178,10 @@ def run_main_figure(
     include_background_cluster_trace: bool = True,
     cluster_members_file: Path | None = None,
     show_cluster_members_in_sky: bool = False,
+    include_mccallum_halpha_volume: bool = False,
+    include_vergely_dust_volume: bool = False,
+    ratzenboeck_scocen_catalog_path: Path | None = None,
+    ratzenboeck_scocen_metadata_path: Path | None = None,
     website_output_html: Path | None = WEBSITE_OUTPUT_HTML,
 ) -> Path:
     output_html.parent.mkdir(parents=True, exist_ok=True)
@@ -1959,6 +2205,7 @@ def run_main_figure(
         mist_ages=mist_ages,
         compact_payload=compact_payload,
         mobile_safe_mode=mobile_safe_mode,
+        lookback_myr=lookback_myr,
         chronos_results_path=chronos_results_path,
         chronos_model=chronos_model,
         include_spiral_arms=include_spiral_arms,
@@ -1967,6 +2214,10 @@ def run_main_figure(
         include_background_cluster_trace=include_background_cluster_trace,
         cluster_members_file=cluster_members_file,
         show_cluster_members_in_sky=show_cluster_members_in_sky,
+        include_mccallum_halpha_volume=include_mccallum_halpha_volume,
+        include_vergely_dust_volume=include_vergely_dust_volume,
+        ratzenboeck_scocen_catalog_path=ratzenboeck_scocen_catalog_path,
+        ratzenboeck_scocen_metadata_path=ratzenboeck_scocen_metadata_path,
     )
 
     run_script_source(patched_source)

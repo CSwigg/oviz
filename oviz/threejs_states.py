@@ -63,6 +63,9 @@ def normalize_states_spec(
     items = source.get("items", source.get("ordered_states", []))
     if not isinstance(items, list):
         items = []
+    default_camera_behavior = (
+        "keep" if bool(source.get("preserve_camera_on_navigation", False)) else "follow"
+    )
     seen: set[str] = set()
     normalized_items: list[dict[str, Any]] = []
     for index, raw_item in enumerate(items):
@@ -72,10 +75,16 @@ def normalize_states_spec(
             state_id = _stable_id("state")
         seen.add(state_id)
         transition = item.get("transition")
+        camera_behavior = str(
+            item.get("camera_behavior", item.get("cameraBehavior", ""))
+        ).strip().lower()
+        if camera_behavior not in {"follow", "keep"}:
+            camera_behavior = default_camera_behavior
         normalized_items.append(
             {
                 "id": state_id,
                 "name": str(item.get("name") or f"State {index + 1}").strip() or f"State {index + 1}",
+                "camera_behavior": camera_behavior,
                 "transition": normalize_transition(transition) if isinstance(transition, dict) else None,
                 "snapshot": deepcopy(item.get("snapshot", item.get("state", {})))
                 if isinstance(item.get("snapshot", item.get("state", {})), dict)
@@ -89,6 +98,8 @@ def normalize_states_spec(
         "revision": max(int(source.get("revision") or 0), 0),
         "synchronized_revision": max(int(source.get("synchronized_revision") or 0), 0),
         "default_mode": "present" if source.get("default_mode") == "present" else "edit",
+        "present_only": bool(source.get("present_only", False)),
+        "preserve_camera_on_navigation": bool(source.get("preserve_camera_on_navigation", False)),
         "default_transition": normalize_transition(source.get("default_transition")),
         "items": normalized_items,
         "assets": deepcopy(source.get("assets")) if isinstance(source.get("assets"), dict) else {},

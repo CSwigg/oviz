@@ -1918,6 +1918,15 @@ THREEJS_SCENE_RUNTIME_JS = """
         if (!frame) {
           return;
         }
+        // A newly rendered scene already contains the latest logical point
+        // sizes. Drop a not-yet-flushed slider scale so it cannot be applied
+        // a second time to the replacement buffers.
+        if (
+          resetRegistries
+          && typeof ovizCancelPendingRenderedPointSizeScales === "function"
+        ) {
+          ovizCancelPendingRenderedPointSizeScales();
+        }
         if (typeof ovizInvalidateRender === "function") {
           ovizInvalidateRender();
         }

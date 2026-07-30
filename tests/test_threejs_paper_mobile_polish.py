@@ -159,30 +159,45 @@ def test_paper_scroll_retarget_is_last_wins_and_reports_status(paper_html: str):
         assert f'root.addEventListener("{event_name}"' in paper_html
 
 
-def test_mobile_keeps_only_view_search_and_more_persistent(mobile_html: str):
-    """The always-visible mobile shell stays intentionally small."""
+def test_mobile_keeps_primary_authoring_actions_persistent(mobile_html: str):
+    """Legend, Controls, and Lasso remain one tap away on mobile."""
 
     assert "oviz-three-earth-view-toggle oviz-three-view-segmented" in mobile_html
     assert 'class="oviz-three-search-shell"' in mobile_html
+    assert 'class="oviz-three-mobile-legend"' in mobile_html
+    assert 'class="oviz-three-mobile-controls"' in mobile_html
+    assert 'class="oviz-three-mobile-lasso"' in mobile_html
     assert 'class="oviz-three-mobile-more"' in mobile_html
-    assert "min-width: 44px" in mobile_html or "width: 44px" in mobile_html
-    assert "min-height: 44px" in mobile_html or "height: 44px" in mobile_html
+    assert 'data-mobile-action="search"' in mobile_html
+    assert "min-height: 38px" in mobile_html or "height: 38px" in mobile_html
 
     assert '.oviz-three-widget-menu > * {' in mobile_html
     assert (
-        ".oviz-three-widget-menu > .oviz-three-search-shell," in mobile_html
+        '[data-search-open="true"] .oviz-three-widget-menu > .oviz-three-search-shell {'
+        in mobile_html
+    )
+    assert (
+        ".oviz-three-widget-menu > .oviz-three-mobile-legend," in mobile_html
+    )
+    assert (
+        ".oviz-three-widget-menu > .oviz-three-mobile-controls," in mobile_html
+    )
+    assert (
+        ".oviz-three-widget-menu > .oviz-three-mobile-lasso," in mobile_html
     )
     assert (
         ".oviz-three-widget-menu > .oviz-three-mobile-more {" in mobile_html
     )
+    assert "grid-template-rows: 44px 44px" not in mobile_html
+    assert "repeat(3, max-content)" not in mobile_html
     assert ".oviz-three-bottom-switches > * {" in mobile_html
     assert (
         ".oviz-three-bottom-switches > .oviz-three-earth-view-toggle {"
         in mobile_html
     )
 
-    # Legacy direct-access buttons remain in the DOM for compatibility but
-    # must not reappear as a second persistent mobile toolbar.
+    # The legacy Sky shortcut remains in the DOM for compatibility, while the
+    # three requested authoring actions are the persistent mobile toolbar.
     assert (
         '[data-mobile="true"] .oviz-three-mobile-sky-view' in mobile_html
     )

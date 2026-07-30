@@ -35,10 +35,16 @@ THREEJS_SHELL_HTML = """
           </div>
           <div class="oviz-three-legend-section oviz-three-sky-controls-shell" data-open="false" data-visible="false" data-add-open="false">
             <div class="oviz-three-sky-dock-head">
-              <button class="oviz-three-sky-controls-toggle" type="button" title="Show sky backgrounds" aria-expanded="false">
-                <span class="oviz-three-sky-controls-toggle-chevron" aria-hidden="true">⌄</span>
-                <span>Sky Backgrounds</span>
-              </button>
+              <div class="oviz-three-group-dropdown oviz-three-sky-group-dropdown" data-open="false">
+                <button class="oviz-three-sky-controls-toggle oviz-three-group-trigger oviz-three-sky-group-trigger" type="button" title="Choose sky background group" aria-label="Sky background group" aria-expanded="false">
+                  <span class="oviz-three-group-current oviz-three-sky-group-current"></span>
+                  <span class="oviz-three-group-chevron" aria-hidden="true">⌄</span>
+                </button>
+                <div class="oviz-three-group-menu oviz-three-sky-group-menu" role="listbox" aria-label="Sky background group" aria-hidden="true" inert>
+                  <div class="oviz-three-group-menu-list oviz-three-sky-group-menu-list"></div>
+                </div>
+                <select class="oviz-three-group-select oviz-three-sky-group-select" aria-label="Sky background group"></select>
+              </div>
               <button class="oviz-three-sky-add-toggle" type="button" title="Add a sky background" aria-label="Add a sky background" aria-expanded="false">+</button>
             </div>
             <div class="oviz-three-sky-controls-drawer" aria-hidden="true" inert>
@@ -109,6 +115,8 @@ THREEJS_SHELL_HTML = """
           <div>Toggle lasso mode or hide/show the active selection effect.</div>
           <div class="oviz-three-key-help-keys">T</div>
           <div>Hide or show all legend items in the current group.</div>
+          <div class="oviz-three-key-help-keys">N</div>
+          <div>Capture a new State without opening the States menu.</div>
           <div class="oviz-three-key-help-keys">Cmd/Ctrl + Z / Shift + Z</div>
           <div>Undo or redo slide changes while Slides is open; otherwise undo the last selection change.</div>
           <div class="oviz-three-key-help-keys">Backspace / Delete</div>
@@ -132,6 +140,10 @@ THREEJS_SHELL_HTML = """
         </div>
       </div>
       <canvas class="oviz-three-canvas" tabindex="0"></canvas>
+      <nav class="oviz-three-presentation-nav" aria-label="State navigation" aria-hidden="true">
+        <button class="oviz-three-presentation-previous" type="button" aria-label="Previous State" title="Previous State (Left Arrow)">‹</button>
+        <button class="oviz-three-presentation-next" type="button" aria-label="Next State" title="Next State (Right Arrow)">›</button>
+      </nav>
       <div class="oviz-deck-authoring-layer" data-visible="false" aria-hidden="true"></div>
       <aside class="oviz-deck-editor" data-open="false" aria-hidden="true" aria-label="Presentation slide editor"></aside>
       <div class="reveal oviz-deck-reveal" data-visible="false" aria-hidden="true" aria-label="Oviz Reveal presentation">

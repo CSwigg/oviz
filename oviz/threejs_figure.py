@@ -222,10 +222,17 @@ _THREEJS_TOPBAR_HTML = """
           </button>
           <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
           <button class="oviz-three-mobile-sky-view" type="button" title="Switch between 3D and Sky view" aria-pressed="false">Sky</button>
-          <button class="oviz-three-mobile-lasso" type="button" title="Arm lasso selection for touch input" aria-pressed="false">Lasso</button>
+          <button class="oviz-three-mobile-lasso" type="button" title="Arm lasso selection for touch input" aria-label="Lasso selection" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.2 5.9c-2.7 2.1-3.6 5.9-1.8 8.8 2 3.2 6.4 4.5 10.2 3.1 3.6-1.3 5.9-4.9 4.7-8.1-1.2-3.1-5.3-4.8-9-3.6"></path><path d="m7.1 4.3 3.3 1.8-2.9 2.4"></path></svg>
+          </button>
+          <button class="oviz-three-mobile-controls" type="button" title="Show global scene controls" aria-label="Controls" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h4m4 0h6M5 12h8m4 0h2M5 17h2m4 0h8"></path><circle cx="11" cy="7" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="9" cy="17" r="2"></circle></svg>
+          </button>
           __AR_BUTTON_HTML__
-          <button class="oviz-three-mobile-legend" type="button" title="Show or hide the legend" aria-expanded="false">Legend</button>
-          <button class="oviz-three-mobile-more" type="button" title="More viewer controls" aria-label="More viewer controls" aria-haspopup="dialog" aria-expanded="false">More</button>
+          <button class="oviz-three-mobile-legend" type="button" title="Show or hide the legend" aria-label="Legend" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7h9M10 12h9M10 17h9"></path><path d="M5 7h1M5 12h1M5 17h1"></path></svg>
+          </button>
+          <button class="oviz-three-mobile-more" type="button" title="More viewer controls" aria-label="More viewer controls" aria-haspopup="dialog" aria-expanded="false">⋯</button>
           <button class="oviz-three-reset-camera-view" type="button" title="Reset the camera to the initial 3D view">Reset Camera</button>
           <button class="oviz-three-reset-selection" type="button" title="Clear the current lasso and cluster selection">Reset Selection</button>
           <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
@@ -242,6 +249,7 @@ _THREEJS_TOPBAR_HTML = """
             </div>
             <div class="oviz-three-mobile-sheet-body">
               <div class="oviz-three-mobile-sheet-menu">
+                <button type="button" data-mobile-action="search">Search clusters</button>
                 <button type="button" data-mobile-panel="legend">Legend</button>
                 <button type="button" data-mobile-panel="controls">Controls</button>
                 <button type="button" data-mobile-panel="sky">Sky backgrounds</button>
@@ -283,6 +291,10 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       html, body {
         margin: 0;
         padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
         background: var(--oviz-paper-bg, #000);
       }
       #__ROOT_ID__ {
@@ -322,6 +334,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-mobile-sky-view,
       #__ROOT_ID__ .oviz-three-mobile-lasso,
+      #__ROOT_ID__ .oviz-three-mobile-controls,
       #__ROOT_ID__ .oviz-three-mobile-ar,
       #__ROOT_ID__ .oviz-three-mobile-legend,
       #__ROOT_ID__ .oviz-three-mobile-more,
@@ -1744,6 +1757,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
       #__ROOT_ID__ .oviz-three-startup-status[data-visible="false"] {
         display: none !important;
+      }
+      #__ROOT_ID__[data-startup-ready="false"] > :not(.oviz-three-startup-status) {
+        visibility: hidden !important;
       }
       #__ROOT_ID__ .oviz-three-debug-panel {
         position: absolute;
@@ -5588,17 +5604,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         text-shadow: 0 0 8px rgba(0, 0, 0, 0.92), 0 1px 2px rgba(0, 0, 0, 0.88);
         pointer-events: auto !important;
       }
-      #__ROOT_ID__ .oviz-three-sky-controls-toggle-chevron {
-        flex: 0 0 auto;
-        color: rgba(255, 255, 255, 0.56);
-        font: 760 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        transform: rotate(-90deg);
-        transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), color 160ms ease;
-      }
-      #__ROOT_ID__ .oviz-three-sky-controls-shell[data-open="true"] .oviz-three-sky-controls-toggle-chevron {
-        color: rgba(255, 255, 255, 0.9);
-        transform: rotate(0deg);
-      }
       #__ROOT_ID__ .oviz-three-sky-add-toggle {
         display: inline-flex;
         align-items: center;
@@ -6063,9 +6068,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         }
       }
 
-      /* Mobile keeps only the view switch, search, and a single More entry in
-         persistent chrome. Every secondary surface is mounted into one
-         mutually-exclusive bottom sheet by the runtime below. */
+      /* Keep the three primary authoring actions reachable in mobile chrome.
+         Legend and Controls still mount their existing panels into the same
+         mutually-exclusive bottom sheet used by More. */
       #__ROOT_ID__[data-mobile="true"] .oviz-three-topbar {
         display: block !important;
         top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
@@ -6081,18 +6086,39 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         right: 0;
         display: flex !important;
         justify-content: flex-end;
-        gap: 6px !important;
+        align-items: center;
+        gap: 0 !important;
         width: auto !important;
         max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 142px) !important;
+        height: 44px;
+        padding: 3px !important;
+        border: 1px solid rgba(238, 242, 247, 0.13) !important;
+        border-radius: 12px !important;
+        background: rgba(10, 12, 16, 0.64) !important;
+        box-shadow: 0 7px 22px rgba(0, 0, 0, 0.24) !important;
+        backdrop-filter: blur(14px) saturate(122%);
+        -webkit-backdrop-filter: blur(14px) saturate(122%);
         overflow: visible;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu > * {
         display: none !important;
       }
-      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu > .oviz-three-search-shell,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu > .oviz-three-mobile-legend,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu > .oviz-three-mobile-controls,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu > .oviz-three-mobile-lasso,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu > .oviz-three-mobile-more {
         display: inline-flex !important;
       }
+      #__ROOT_ID__[data-mobile="true"][data-search-open="true"] .oviz-three-widget-menu {
+        width: min(286px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px)) !important;
+        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-search-open="true"] .oviz-three-widget-menu > .oviz-three-search-shell {
+        display: inline-flex !important;
+      }
+      #__ROOT_ID__[data-mobile="true"][data-search-open="true"] .oviz-three-widget-menu > .oviz-three-mobile-legend,
+      #__ROOT_ID__[data-mobile="true"][data-search-open="true"] .oviz-three-widget-menu > .oviz-three-mobile-controls,
+      #__ROOT_ID__[data-mobile="true"][data-search-open="true"] .oviz-three-widget-menu > .oviz-three-mobile-lasso,
       #__ROOT_ID__[data-mobile="true"][data-search-open="true"] .oviz-three-widget-menu > .oviz-three-mobile-more {
         display: none !important;
       }
@@ -6104,41 +6130,90 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         overflow: visible;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-search-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-legend,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-controls,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-lasso,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-more {
         box-sizing: border-box;
-        flex: 0 0 44px !important;
-        width: 44px !important;
-        min-width: 44px !important;
-        max-width: 44px !important;
-        height: 44px !important;
-        min-height: 44px !important;
+        flex: 0 0 38px !important;
+        width: 38px !important;
+        min-width: 38px !important;
+        max-width: 38px !important;
+        height: 38px !important;
+        min-height: 38px !important;
         padding: 0 !important;
-        border: 1px solid rgba(238, 242, 247, 0.14) !important;
-        border-radius: 10px !important;
-        background: rgba(10, 12, 16, 0.66) !important;
+        border: 0 !important;
+        border-radius: 9px !important;
+        background: transparent !important;
         color: rgba(247, 248, 250, 0.94) !important;
-        box-shadow: 0 7px 22px rgba(0, 0, 0, 0.24) !important;
-        backdrop-filter: blur(14px) saturate(122%);
-        -webkit-backdrop-filter: blur(14px) saturate(122%);
-        font: 730 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
+        box-shadow: none !important;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        font: 760 20px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif !important;
         text-shadow: none;
         touch-action: manipulation;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-search-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-more {
+        flex-basis: 38px !important;
+        width: 38px !important;
+        padding: 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-lasso svg,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-controls svg,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-legend svg {
+        width: 19px;
+        height: 19px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.65;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        pointer-events: none;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button.oviz-three-mobile-controls svg circle {
+        fill: rgba(10, 12, 16, 0.96);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button[data-active="true"],
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button[aria-pressed="true"] {
+        background: rgba(246, 200, 95, 0.13) !important;
+        color: rgba(255, 215, 120, 0.99) !important;
+        box-shadow: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button:hover,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button:focus-visible {
+        background: rgba(255, 255, 255, 0.075) !important;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-search-toggle svg {
         width: 18px;
         height: 18px;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-search-shell[data-open="true"] {
-        min-width: min(286px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 142px));
+        min-width: min(286px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px));
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-search-shell[data-open="true"] .oviz-three-search-field {
-        width: min(236px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 192px));
+        width: min(236px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 70px));
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-search-input,
       #__ROOT_ID__[data-mobile="true"] .oviz-three-search-submit {
         height: 44px !important;
         min-height: 44px !important;
-        font-size: 14px !important;
+      }
+      /* iOS Safari zooms the page when a focused form control is below 16px.
+         Keep every text-entry surface at that threshold while leaving sliders,
+         toggles, colors, and the authored scene typography untouched. */
+      #__ROOT_ID__[data-mobile="true"] input[type="text"],
+      #__ROOT_ID__[data-mobile="true"] input[type="search"],
+      #__ROOT_ID__[data-mobile="true"] input[type="email"],
+      #__ROOT_ID__[data-mobile="true"] input[type="url"],
+      #__ROOT_ID__[data-mobile="true"] input[type="tel"],
+      #__ROOT_ID__[data-mobile="true"] input[type="password"],
+      #__ROOT_ID__[data-mobile="true"] input[type="number"],
+      #__ROOT_ID__[data-mobile="true"] textarea,
+      #__ROOT_ID__[data-mobile="true"] select {
+        font-size: 16px !important;
+        touch-action: manipulation;
+        scroll-margin-block: 18px;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-search-popover {
         top: calc(100% + 7px);
@@ -6281,6 +6356,29 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
       }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-mobile-sheet-card {
+        display: flex;
+        flex-direction: column;
+        height: min(84dvh, 720px);
+        max-height: min(84dvh, 720px);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-mobile-sheet-head {
+        flex: 0 0 52px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-mobile-sheet-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        overscroll-behavior-y: contain;
+        touch-action: pan-y !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-mobile-sheet-content {
+        min-height: min-content;
+        padding-bottom: 24px;
+      }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6379,8 +6477,29 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         transform: none !important;
         pointer-events: auto !important;
       }
-      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-sky-controls-shell {
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-sky-controls-shell[data-visible="false"] {
         display: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-sky-controls-shell[data-visible="true"] {
+        display: flex !important;
+        width: 100% !important;
+        margin: 18px 0 0 !important;
+        padding: 13px 0 0 !important;
+        border-top: 1px solid rgba(238, 242, 247, 0.10) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-sky-controls-shell[data-visible="true"] .oviz-three-sky-dock-head {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) 34px !important;
+        min-height: 38px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-sky-controls-shell[data-visible="true"] .oviz-three-sky-controls-toggle {
+        display: inline-flex !important;
+        min-height: 38px !important;
+        font-size: 14px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-sky-controls-shell[data-visible="true"] .oviz-three-sky-add-toggle {
+        width: 34px !important;
+        height: 38px !important;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="sky"] .oviz-three-sky-dock-head {
         justify-content: flex-end;
@@ -7529,7 +7648,6 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-legend-popover,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-key-help,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-widget-panel,
-      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-footer,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-note,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-tooltip,
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-lasso-overlay,
@@ -7544,6 +7662,66 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: flex !important;
         z-index: 84 !important;
       }
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-footer {
+        display: flex !important;
+        z-index: 84 !important;
+      }
+      #__ROOT_ID__ .oviz-three-presentation-nav {
+        display: none;
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 86;
+      }
+      #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-presentation-nav {
+        display: block;
+      }
+      #__ROOT_ID__ .oviz-three-presentation-nav button {
+        position: absolute;
+        top: 50%;
+        width: 36px;
+        height: 64px;
+        padding: 0 0 5px;
+        transform: translateY(-50%);
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.68);
+        box-shadow: none;
+        text-shadow: 0 2px 7px rgba(0, 0, 0, 0.48);
+        font: 300 58px/1 Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+        cursor: pointer;
+        pointer-events: auto;
+        touch-action: manipulation;
+        transition: color 140ms ease, transform 140ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-presentation-nav button:hover,
+      #__ROOT_ID__ .oviz-three-presentation-nav button:focus-visible {
+        background: transparent;
+        color: #fff;
+        outline: 0;
+      }
+      #__ROOT_ID__ .oviz-three-presentation-nav button:active {
+        transform: translateY(-50%) scale(0.96);
+      }
+      #__ROOT_ID__ .oviz-three-presentation-previous {
+        left: 20px;
+      }
+      #__ROOT_ID__ .oviz-three-presentation-next {
+        right: 20px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-presentation-nav button {
+        width: 32px;
+        height: 56px;
+        border-radius: 0;
+        font-size: 50px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-presentation-previous {
+        left: 8px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-presentation-next {
+        right: 8px;
+      }
       #__ROOT_ID__[data-presentation-mode="true"] .oviz-three-aladin-attribution {
         bottom: 82px !important;
         z-index: 84 !important;
@@ -7555,6 +7733,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: block !important;
       }
       #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-search-shell,
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-mobile-legend,
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-mobile-controls,
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-mobile-lasso,
       #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"] .oviz-three-mobile-sheet {
         display: none !important;
       }
@@ -7562,64 +7743,98 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: inline-flex !important;
         opacity: 0.72;
       }
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"][data-presentation-locked="true"] .oviz-three-mobile-more {
+        display: none !important;
+      }
 
-      /* Larger desktop authoring chrome. Mobile keeps its dedicated 44px
-         touch layout, while the desktop legend and top-right tools scale as
-         a unit so labels, hit targets, and editing affordances stay aligned. */
+      /* Desktop authoring chrome. Mobile keeps its dedicated 44px touch
+         layout; desktop labels stay compact and never wrap away from their
+         trailing disclosure arrows. */
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu {
-        gap: 6px;
-        max-width: min(calc(100vw - 28px), 1140px);
-        padding: 6px;
+        gap: 4px;
+        max-width: min(calc(100vw - 28px), 900px);
+        padding: 4px;
       }
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button,
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu select,
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-tools-toggle,
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-toggle {
-        height: 45px;
-        min-height: 45px;
-        padding-inline: 12px;
-        font-size: 16.5px !important;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 36px;
+        min-height: 36px;
+        padding-inline: 9px;
+        font-size: 13px !important;
+        line-height: 1 !important;
+        white-space: nowrap !important;
       }
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-search-toggle {
-        width: 45px;
-        min-width: 45px;
+        width: 36px;
+        min-width: 36px;
         padding: 0;
       }
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-search-toggle svg {
-        width: 22.5px;
-        height: 22.5px;
+        width: 18px;
+        height: 18px;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-mobile-sky-view,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-mobile-lasso,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-mobile-controls,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-mobile-ar,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-mobile-legend,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-mobile-more {
+        display: none !important;
       }
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-panel {
         width: min(330px, calc(100vw - 28px)) !important;
       }
-      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-row {
-        grid-template-columns: 30px minmax(0, 1fr) !important;
-        column-gap: 6px !important;
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-group-field {
+        padding-bottom: 0 !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-trigger {
+        padding: 2px 0 !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-panel .oviz-three-legend-row {
+        display: inline-grid !important;
+        grid-template-columns: 16px minmax(0, 1fr) !important;
+        align-items: center !important;
+        column-gap: 5px !important;
+        min-height: 22px !important;
       }
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-entry {
-        padding-block: 3px !important;
+        margin: 0 !important;
+        padding-block: 0 !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-trace-list,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-volume-list {
+        gap: 0 !important;
       }
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-item,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-name,
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-name {
-        font-size: 19.5px !important;
-        line-height: 1.2 !important;
+        font-size: 16.15px !important;
+        line-height: 1 !important;
       }
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-trigger,
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-current,
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-controls-toggle {
-        font-size: 22.5px !important;
-        line-height: 1.15 !important;
+        font-size: 18.08px !important;
+        line-height: 1.05 !important;
       }
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-option,
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-section-title {
-        font-size: 16.5px !important;
+        font-size: 12.69px !important;
       }
       #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-edit {
-        width: 27px !important;
-        height: 27px !important;
-        min-width: 27px !important;
-        min-height: 27px !important;
-        font-size: 15.75px !important;
+        width: 16px !important;
+        height: 20px !important;
+        min-width: 16px !important;
+        min-height: 20px !important;
+        padding: 0 !important;
+        color: rgba(255, 255, 255, 0.46) !important;
+        font-size: 15px !important;
+        line-height: 1 !important;
       }
 
       /* Zen retains the timeline as its only control surface. Keyboard Z
@@ -7654,7 +7869,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
     </style>
   </head>
   <body>
-    <div id="__ROOT_ID__" tabindex="0" data-zen="false" data-presentation-mode="false" __ROOT_MINIMAL_ATTR__ __ROOT_MOBILE_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__ __ROOT_AR_ATTR__>
+    <div id="__ROOT_ID__" tabindex="0" data-zen="false" data-presentation-mode="false" data-presentation-locked="false" data-startup-ready="false" __ROOT_MINIMAL_ATTR__ __ROOT_MOBILE_ATTR__ __ROOT_GALACTIC_SIMPLE_ATTR__ __ROOT_AR_ATTR__>
       __TOPBAR_HTML__
       <div class="oviz-three-bottom-switches" aria-label="View and overlay controls" data-layout="inline">
         <button class="oviz-three-display-switch oviz-three-galactic-coordinate-toggle" type="button" role="switch" title="Hide Galactic coordinates" aria-checked="true" aria-label="Galactic coordinates" data-active="true">
@@ -7773,6 +7988,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         if (!root) {
           return;
         }
+        root.dataset.startupReady = "error";
         root.innerHTML = "";
         const box = document.createElement("div");
         box.style.cssText = [
@@ -7882,13 +8098,37 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return loadedSceneSpec;
       }
 
-      function decodeOvizBase64ToUint8Array(encoded) {
-        const binary = window.atob(String(encoded || "").replace(/\s+/g, ""));
-        const bytes = new Uint8Array(binary.length);
-        for (let idx = 0; idx < binary.length; idx += 1) {
-          bytes[idx] = binary.charCodeAt(idx);
+      function decodeOvizBase64PayloadChunks(payloadSource) {
+        const decodedChunks = [];
+        let totalBytes = 0;
+        const decodeText = (encodedText) => {
+          const encoded = String(encodedText || "").replace(/\s+/g, "");
+          const decodeChunkSize = 64 * 1024;
+          for (let offset = 0; offset < encoded.length; offset += decodeChunkSize) {
+            const binary = window.atob(encoded.slice(offset, offset + decodeChunkSize));
+            const bytes = new Uint8Array(binary.length);
+            for (let idx = 0; idx < binary.length; idx += 1) {
+              bytes[idx] = binary.charCodeAt(idx);
+            }
+            decodedChunks.push(bytes);
+            totalBytes += bytes.length;
+          }
+        };
+
+        if (payloadSource && Array.isArray(payloadSource.elements)) {
+          payloadSource.elements.forEach((payloadEl, chunkIndex) => {
+            if (!payloadEl) {
+              return;
+            }
+            decodeText(payloadEl.textContent || "");
+            payloadEl.textContent = "";
+            payloadEl.remove();
+            payloadSource.elements[chunkIndex] = null;
+          });
+        } else {
+          decodeText(payloadSource);
         }
-        return bytes;
+        return { chunks: decodedChunks, totalBytes };
       }
 
       function readOvizSceneSpecPayload(payloadId) {
@@ -7901,13 +8141,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             Number(a.getAttribute("data-oviz-payload-index") || 0)
             - Number(b.getAttribute("data-oviz-payload-index") || 0)
           ));
-          const chunkedPayload = chunkEls.map((payloadEl) => payloadEl.textContent || "").join("");
-          ovizStartupTiming.payloadChars = chunkedPayload.length;
+          const payloadChars = chunkEls.reduce(
+            (total, payloadEl) => total + String(payloadEl.textContent || "").length,
+            0,
+          );
+          ovizStartupTiming.payloadChars = payloadChars;
           ovizStartupRecordPhase("payloadRead", readStartMs, {
             chunks: chunkEls.length,
-            chars: chunkedPayload.length,
+            chars: payloadChars,
           });
-          return chunkedPayload;
+          return { elements: chunkEls, chars: payloadChars };
         }
         const payloadEl = document.getElementById(payloadId);
         if (!payloadEl) {
@@ -7917,16 +8160,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           );
           return "";
         }
-        const payload = payloadEl.textContent || "";
-        ovizStartupTiming.payloadChars = payload.length;
+        const payloadChars = String(payloadEl.textContent || "").length;
+        ovizStartupTiming.payloadChars = payloadChars;
         ovizStartupRecordPhase("payloadRead", readStartMs, {
           chunks: 1,
-          chars: payload.length,
+          chars: payloadChars,
         });
-        return payload;
+        return { elements: [payloadEl], chars: payloadChars };
       }
 
-      async function inflateOvizGzipBase64SceneSpec(encoded) {
+      async function inflateOvizGzipBase64SceneSpec(payloadSource) {
         if (typeof DecompressionStream === "undefined") {
           renderError(
             root,
@@ -7939,13 +8182,16 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         try {
           setStartupStatus("Decompressing scene payload...");
           const decodeStartMs = ovizStartupNow();
-          const compressedBytes = decodeOvizBase64ToUint8Array(encoded);
-          ovizStartupTiming.payloadBytes = compressedBytes.length;
+          const decodedPayload = decodeOvizBase64PayloadChunks(payloadSource);
+          const compressedChunks = decodedPayload.chunks;
+          ovizStartupTiming.payloadBytes = decodedPayload.totalBytes;
           ovizStartupRecordPhase("payloadDecode", decodeStartMs, {
-            bytes: compressedBytes.length,
+            bytes: decodedPayload.totalBytes,
           });
           const inflateStartMs = ovizStartupNow();
-          const stream = new Blob([compressedBytes])
+          const compressedBlob = new Blob(compressedChunks);
+          compressedChunks.length = 0;
+          const stream = compressedBlob
             .stream()
             .pipeThrough(new DecompressionStream("gzip"));
           const buffer = await new Response(stream).arrayBuffer();
@@ -8396,11 +8642,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const manualLabelDrawerEl = root.querySelector(".oviz-three-text-drawer");
       const zenModeButtonEl = root.querySelector(".oviz-three-zen-mode");
       const presentationModeButtonEl = root.querySelector(".oviz-three-presentation-mode");
+      const presentationNavEl = root.querySelector(".oviz-three-presentation-nav");
+      const presentationPreviousButtonEl = root.querySelector(".oviz-three-presentation-previous");
+      const presentationNextButtonEl = root.querySelector(".oviz-three-presentation-next");
       const fullscreenButtonEl = root.querySelector(".oviz-three-fullscreen");
       const fullscreenNoticeEl = root.querySelector(".oviz-three-fullscreen-notice");
       const bottomSwitchesEl = root.querySelector(".oviz-three-bottom-switches");
       const mobileSkyViewButtonEl = root.querySelector(".oviz-three-mobile-sky-view");
       const mobileLassoButtonEl = root.querySelector(".oviz-three-mobile-lasso");
+      const mobileControlsButtonEl = root.querySelector(".oviz-three-mobile-controls");
       const mobileArButtonEl = root.querySelector(".oviz-three-mobile-ar");
       const mobileLegendButtonEl = root.querySelector(".oviz-three-mobile-legend");
       const mobileMoreButtonEl = root.querySelector(".oviz-three-mobile-more");
@@ -8494,6 +8744,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const skyLayerSearchDatalistEl = root.querySelector(".oviz-three-sky-hips-search");
       const skyLayerAddButtonEl = root.querySelector(".oviz-three-sky-layer-add");
       const skyLayerListEl = root.querySelector(".oviz-three-sky-layer-list");
+      const skyGroupDropdownEl = root.querySelector(".oviz-three-sky-group-dropdown");
+      const skyGroupDropdownTriggerEl = root.querySelector(".oviz-three-sky-group-trigger");
+      const skyGroupDropdownLabelEl = root.querySelector(".oviz-three-sky-group-current");
+      const skyGroupDropdownListEl = root.querySelector(".oviz-three-sky-group-menu-list");
+      const skyGroupSelectEl = root.querySelector(".oviz-three-sky-group-select");
       const sizeByStarsToggleEl = root.querySelector(".oviz-three-size-by-stars-toggle");
       const focusGroupSelectEl = root.querySelector(".oviz-three-focus-group-select");
       const fadeTimeEl = root.querySelector(".oviz-three-fade-time");
@@ -8975,8 +9230,46 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         { key: "P/2MASS/color", label: "2MASS Color", survey: "P/2MASS/color", color: "#ff9a7a" },
         { key: "P/allWISE/color", label: "AllWISE Color", survey: "P/allWISE/color", color: "#d6a4ff" },
         { key: "P/GALEXGR6/AIS/color", label: "GALEX AIS Color", survey: "P/GALEXGR6/AIS/color", color: "#94f4ff" },
+        { key: "CDS/P/SDSS9/color", label: "SDSS9 Color", survey: "CDS/P/SDSS9/color", color: "#a7e0ff" },
         { key: "P/SDSS9/color", label: "SDSS9 Color", survey: "P/SDSS9/color", color: "#a7e0ff" },
         { key: "P/DECaLS/DR5/color", label: "DECaLS DR5 Color", survey: "P/DECaLS/DR5/color", color: "#c7ef9f" },
+      ];
+      const fallbackSkyLayerGroupDefinitions = [
+        {
+          key: "all",
+          label: "All",
+          surveys: [],
+        },
+        {
+          key: "all-sky",
+          label: "All-Sky",
+          surveys: [
+            "P/Mellinger/color",
+            "P/DSS2/color",
+            "P/PLANCK/R2/HFI/color",
+          ],
+        },
+        {
+          key: "optical-surveys",
+          label: "Optical Surveys",
+          surveys: [
+            "P/PanSTARRS/DR1/color-z-zg-g",
+            "CDS/P/SDSS9/color",
+            "P/SDSS9/color",
+            "P/DECaLS/DR5/color",
+          ],
+        },
+        {
+          key: "infrared-ultraviolet",
+          label: "Infrared & UV",
+          surveys: [
+            "P/2MASS/color",
+            "P/allWISE/color",
+            "CDS/P/IRIS/color",
+            "CDS/P/AKARI/FIS/Color",
+            "P/GALEXGR6/AIS/color",
+          ],
+        },
       ];
       const defaultSkyAperturePresetOptions = [
         { key: "CDS/P/GALEXGR6/AIS/color", label: "GALEX UV", survey: "CDS/P/GALEXGR6/AIS/color", color: "#76dfff" },
@@ -9018,6 +9311,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let skyLayerStateInitialized = false;
       let activeSkyLayerKey = "";
       let skyLayerDragKey = "";
+      let currentSkyLayerGroupKey = "all-sky";
+      let skyLayerGroupDropdownOpen = false;
+      let ovizInitialSkyLayersReady = false;
+      let ovizInitialSkyLayersReadyDetail = null;
+      let ovizInitialSkyLayersReadyResolve = null;
+      let ovizSkyLayerMetadataPreloadScheduled = false;
+      const ovizInitialSkyLayersReadyPromise = new Promise((resolve) => {
+        ovizInitialSkyLayersReadyResolve = resolve;
+      });
       const skyPanelImageCache = new Map();
       let skyPanelRenderSerial = 0;
       let currentZoomAnchorPoint = null;
@@ -9059,7 +9361,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled
       );
       let zenModeEnabled = Boolean(initialState.zen_mode_enabled);
-      let presentationModeEnabled = false;
+      const presentationModeLocked = Boolean(
+        sceneSpec.states && sceneSpec.states.present_only
+      );
+      let presentationModeEnabled = presentationModeLocked;
+      root.dataset.presentationLocked = presentationModeLocked ? "true" : "false";
       let legendPanelOpen = mobileModeEnabled
         ? false
         : (initialState.legend_open === undefined ? true : Boolean(initialState.legend_open));
@@ -9914,6 +10220,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
 
       function applyLegendPanelRect(rectState, options = {}) {
         if (!legendPanelEl) {
+          return;
+        }
+        // Presentation and Zen hide the legend with display:none. Measuring
+        // its contents in that state reports a zero-height body and used to
+        // overwrite the saved panel rectangle with the minimum height. Keep
+        // the last visible geometry intact; the mode-exit path reapplies it
+        // after layout becomes visible again.
+        if (
+          options.allowWhileOverlayHidden !== true
+          && (
+            root.dataset.presentationMode === "true"
+            || root.dataset.zen === "true"
+          )
+        ) {
           return;
         }
         const allowAutoCap = options.allowAutoCap !== false;
@@ -11887,6 +12207,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           legend_sections_open: safeJsonClone(legendSectionOpenState, { traces: true, volumes: true }),
           sky_layers: serializableSkyLayers(),
           active_sky_layer_key: activeSkyLayerKey || "",
+          active_sky_layer_group_key: currentSkyLayerGroupKey || "all",
           zen_mode_enabled: zenModeEnabled,
           widgets: {
             sky: captureWidgetState("sky"),
@@ -11944,7 +12265,11 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         exportDocumentElement.querySelectorAll(".oviz-states-shell").forEach((element) => element.remove());
         const exportRoot = exportDocumentElement.querySelector(`#${root.id}`);
         if (exportRoot) {
-          exportRoot.dataset.presentationMode = "false";
+          const exportPresentOnly = Boolean(
+            exportSceneSpec.states && exportSceneSpec.states.present_only
+          );
+          exportRoot.dataset.presentationMode = exportPresentOnly ? "true" : "false";
+          exportRoot.dataset.presentationLocked = exportPresentOnly ? "true" : "false";
           exportRoot.dataset.deckPresenting = "false";
           exportRoot.dataset.deckEditing = "false";
         }
@@ -13211,10 +13536,16 @@ __SKY_RUNTIME_JS__
         const cleanSurvey = cleanSkyLayerSurvey(survey) || defaultSkyLayerSurvey();
         const preset = skyLayerPresetForSurvey(cleanSurvey);
         const key = normalizeSkyLayerKey(options.key || cleanSurvey);
+        const groupKey = String(options.groupKey || options.group_key || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
         return {
           key,
           label: cleanSkyLayerSurvey(options.label) || (preset ? preset.label : cleanSurvey),
           survey: cleanSurvey,
+          groupKey,
           color: cleanSkyLayerSurvey(options.color) || (preset ? preset.color : "#8fbfff"),
           opacity: clampSkyLayerOpacity(options.opacity, skyDomeDefaultOpacity),
           visible: options.visible === undefined ? true : Boolean(options.visible),
@@ -13260,6 +13591,239 @@ __SKY_RUNTIME_JS__
         return unique;
       }
 
+      function normalizedSkyLayerGroupDefinitions() {
+        const configured = Array.isArray(skyDomeSpec.layer_groups)
+          ? skyDomeSpec.layer_groups
+          : fallbackSkyLayerGroupDefinitions;
+        const seenKeys = new Set();
+        const definitions = [];
+        configured.forEach((rawGroup, index) => {
+          const rawDefinition = typeof rawGroup === "string"
+            ? { key: rawGroup, label: rawGroup, surveys: [] }
+            : rawGroup;
+          if (!rawDefinition || typeof rawDefinition !== "object") {
+            return;
+          }
+          const label = cleanSkyLayerSurvey(rawDefinition.label || rawDefinition.name || rawDefinition.key);
+          const key = normalizeSkyLayerKey(rawDefinition.key || label || `group-${index + 1}`)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+          if (!key || !label || seenKeys.has(key)) {
+            return;
+          }
+          seenKeys.add(key);
+          const surveys = Array.from(new Set(
+            (Array.isArray(rawDefinition.surveys) ? rawDefinition.surveys : (rawDefinition.layers || []))
+              .map((survey) => cleanSkyLayerSurvey(
+                typeof survey === "string" ? survey : (survey && (survey.survey || survey.key))
+              ))
+              .filter(Boolean)
+          ));
+          definitions.push({ key, label, surveys });
+        });
+        const resolved = definitions.length ? definitions : fallbackSkyLayerGroupDefinitions.slice();
+        if (!resolved.some((definition) => definition.key === "all")) {
+          resolved.unshift({ key: "all", label: "All", surveys: [] });
+        }
+        return resolved;
+      }
+
+      function skyLayerGroupKeyForLayer(layer, definitions = normalizedSkyLayerGroupDefinitions()) {
+        const explicitGroupKey = String(layer && (layer.groupKey || layer.group_key) || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        if (
+          explicitGroupKey
+          && explicitGroupKey !== "all"
+          && (
+            explicitGroupKey === "other"
+            || definitions.some((definition) => definition.key === explicitGroupKey)
+          )
+        ) {
+          return explicitGroupKey;
+        }
+        const survey = cleanSkyLayerSurvey(layer && (layer.survey || layer.key));
+        const matched = definitions.find((definition) => (
+          definition.key !== "all"
+          &&
+          definition.surveys.some((candidate) => cleanSkyLayerSurvey(candidate) === survey)
+        ));
+        return matched ? matched.key : "other";
+      }
+
+      function availableSkyLayerGroupDefinitions() {
+        ensureInitialSkyLayers();
+        const definitions = normalizedSkyLayerGroupDefinitions();
+        const availableKeys = new Set(
+          skyLayerState.map((layer) => skyLayerGroupKeyForLayer(layer, definitions))
+        );
+        const available = definitions.filter((definition) => (
+          definition.key === "all" || availableKeys.has(definition.key)
+        ));
+        if (availableKeys.has("other")) {
+          available.push({
+            key: "other",
+            label: "Other",
+            surveys: [],
+          });
+        }
+        return available;
+      }
+
+      function ensureCurrentSkyLayerGroup() {
+        const groups = availableSkyLayerGroupDefinitions();
+        if (!groups.some((definition) => definition.key === currentSkyLayerGroupKey)) {
+          currentSkyLayerGroupKey = groups[0] ? groups[0].key : "other";
+        }
+        return groups;
+      }
+
+      function skyLayersForCurrentGroup() {
+        const groups = ensureCurrentSkyLayerGroup();
+        const activeGroup = groups.find((definition) => definition.key === currentSkyLayerGroupKey);
+        if (!activeGroup) {
+          return skyLayerState.slice();
+        }
+        if (activeGroup.key === "all") {
+          return skyLayerState.slice();
+        }
+        const definitions = normalizedSkyLayerGroupDefinitions();
+        return skyLayerState.filter((layer) => (
+          skyLayerGroupKeyForLayer(layer, definitions) === activeGroup.key
+        ));
+      }
+
+      function skyLayerIsInCurrentGroup(layer) {
+        const groups = ensureCurrentSkyLayerGroup();
+        const activeGroup = groups.find((definition) => definition.key === currentSkyLayerGroupKey);
+        if (!activeGroup || activeGroup.key === "all") {
+          return true;
+        }
+        return skyLayerGroupKeyForLayer(layer) === activeGroup.key;
+      }
+
+      function setSkyLayerGroupDropdownOpen(isOpen, options = {}) {
+        skyLayerGroupDropdownOpen = Boolean(isOpen);
+        if (skyGroupDropdownEl) {
+          skyGroupDropdownEl.dataset.open = skyLayerGroupDropdownOpen ? "true" : "false";
+        }
+        if (skyGroupDropdownTriggerEl) {
+          skyGroupDropdownTriggerEl.setAttribute("aria-expanded", skyLayerGroupDropdownOpen ? "true" : "false");
+        }
+        const menuEl = skyGroupDropdownEl && skyGroupDropdownEl.querySelector(".oviz-three-sky-group-menu");
+        if (menuEl) {
+          menuEl.setAttribute("aria-hidden", skyLayerGroupDropdownOpen ? "false" : "true");
+          if (skyLayerGroupDropdownOpen) {
+            menuEl.removeAttribute("inert");
+          } else {
+            menuEl.setAttribute("inert", "");
+          }
+        }
+        if (skyLayerGroupDropdownOpen && options.focusCurrent && skyGroupDropdownListEl) {
+          window.requestAnimationFrame(() => {
+            const activeOption = Array.from(skyGroupDropdownListEl.querySelectorAll(".oviz-three-group-option"))
+              .find((option) => option.dataset.group === currentSkyLayerGroupKey);
+            if (activeOption) {
+              activeOption.focus();
+            }
+          });
+        }
+      }
+
+      function setSkyLayerGroup(groupKey) {
+        const requestedKey = String(groupKey || "");
+        const groups = availableSkyLayerGroupDefinitions();
+        if (!groups.some((definition) => definition.key === requestedKey)) {
+          return false;
+        }
+        currentSkyLayerGroupKey = requestedKey;
+        setSkyLayerGroupDropdownOpen(false);
+        setSkyAddPopoverOpen(false);
+        applySkyLayerState({ forceTiles: true });
+        return true;
+      }
+
+      function renderSkyLayerGroupDropdown() {
+        if (!skyGroupDropdownEl || !skyGroupDropdownTriggerEl || !skyGroupDropdownListEl) {
+          return;
+        }
+        const groups = ensureCurrentSkyLayerGroup();
+        const activeGroup = groups.find((definition) => definition.key === currentSkyLayerGroupKey) || groups[0];
+        if (skyGroupDropdownLabelEl) {
+          skyGroupDropdownLabelEl.textContent = activeGroup ? activeGroup.label : "Backgrounds";
+        }
+        skyGroupDropdownTriggerEl.title = "Choose sky background group";
+        skyGroupDropdownTriggerEl.disabled = groups.length <= 1;
+        skyGroupDropdownListEl.innerHTML = "";
+        groups.forEach((definition, optionIndex) => {
+          const option = document.createElement("button");
+          option.type = "button";
+          option.className = "oviz-three-group-option oviz-three-sky-group-option";
+          option.dataset.group = definition.key;
+          option.dataset.active = definition.key === currentSkyLayerGroupKey ? "true" : "false";
+          option.style.setProperty("--group-option-delay", `${Math.min(optionIndex * 26, 112)}ms`);
+          option.setAttribute("role", "option");
+          option.setAttribute("aria-selected", definition.key === currentSkyLayerGroupKey ? "true" : "false");
+          option.textContent = definition.label;
+          option.title = `Show ${definition.label}`;
+          option.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setSkyLayerGroup(definition.key);
+          });
+          option.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setSkyLayerGroupDropdownOpen(false);
+              skyGroupDropdownTriggerEl.focus();
+            }
+          });
+          skyGroupDropdownListEl.appendChild(option);
+        });
+        if (skyGroupSelectEl) {
+          skyGroupSelectEl.innerHTML = "";
+          groups.forEach((definition) => {
+            const option = document.createElement("option");
+            option.value = definition.key;
+            option.textContent = definition.label;
+            skyGroupSelectEl.appendChild(option);
+          });
+          skyGroupSelectEl.value = currentSkyLayerGroupKey;
+        }
+        if (!skyGroupDropdownTriggerEl.dataset.bound) {
+          skyGroupDropdownTriggerEl.dataset.bound = "true";
+          skyGroupDropdownTriggerEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setSkyLayerGroupDropdownOpen(!skyLayerGroupDropdownOpen, {
+              focusCurrent: !skyLayerGroupDropdownOpen,
+            });
+          });
+          skyGroupDropdownTriggerEl.addEventListener("keydown", (event) => {
+            if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
+              event.preventDefault();
+              setSkyLayerGroupDropdownOpen(true, { focusCurrent: true });
+            }
+          });
+        }
+        if (skyGroupSelectEl && !skyGroupSelectEl.dataset.bound) {
+          skyGroupSelectEl.dataset.bound = "true";
+          skyGroupSelectEl.addEventListener("change", () => setSkyLayerGroup(skyGroupSelectEl.value));
+        }
+        if (!skyGroupDropdownEl.dataset.closeBound) {
+          skyGroupDropdownEl.dataset.closeBound = "true";
+          window.addEventListener("pointerdown", (event) => {
+            if (skyLayerGroupDropdownOpen && !skyGroupDropdownEl.contains(event.target)) {
+              setSkyLayerGroupDropdownOpen(false);
+            }
+          });
+        }
+        setSkyLayerGroupDropdownOpen(skyLayerGroupDropdownOpen);
+      }
+
       function savedSkyLayers() {
         const savedGlobalControls = initialState && initialState.global_controls;
         const candidates = [
@@ -13287,6 +13851,16 @@ __SKY_RUNTIME_JS__
         );
       }
 
+      function savedActiveSkyLayerGroupKey() {
+        const savedGlobalControls = initialState && initialState.global_controls;
+        return String(
+          initialState.active_sky_layer_group_key
+          || (savedGlobalControls && savedGlobalControls.active_sky_layer_group_key)
+          || skyDomeSpec.active_sky_layer_group_key
+          || "all-sky"
+        );
+      }
+
       function ensureInitialSkyLayers() {
         if (skyLayerStateInitialized) {
           return;
@@ -13306,6 +13880,8 @@ __SKY_RUNTIME_JS__
             ? savedActiveKey
             : (skyLayerState[0] ? skyLayerState[0].key : "")
         );
+        currentSkyLayerGroupKey = savedActiveSkyLayerGroupKey();
+        ensureCurrentSkyLayerGroup();
       }
 
       function activeSkyLayer() {
@@ -13317,6 +13893,7 @@ __SKY_RUNTIME_JS__
         ensureInitialSkyLayers();
         return skyLayerState.filter((layer) => (
           layer
+          && skyLayerIsInCurrentGroup(layer)
           && layer.visible !== false
           && clampSkyLayerOpacity(layer.opacity, skyDomeDefaultOpacity) > 0.0
         ));
@@ -13328,6 +13905,7 @@ __SKY_RUNTIME_JS__
           key: layer.key,
           label: layer.label,
           survey: layer.survey,
+          group_key: layer.groupKey || "",
           color: layer.color,
           opacity: clampSkyLayerOpacity(layer.opacity, skyDomeDefaultOpacity),
           visible: layer.visible !== false,
@@ -13336,6 +13914,47 @@ __SKY_RUNTIME_JS__
           cut_min: skyLayerCutValue(layer.cutMin),
           cut_max: skyLayerCutValue(layer.cutMax),
         }));
+      }
+
+      function markInitialSkyLayersReady(detail = {}) {
+        if (ovizInitialSkyLayersReady) {
+          return;
+        }
+        ovizInitialSkyLayersReady = true;
+        ovizInitialSkyLayersReadyDetail = Object.assign({}, detail);
+        if (typeof ovizInitialSkyLayersReadyResolve === "function") {
+          ovizInitialSkyLayersReadyResolve(ovizInitialSkyLayersReadyDetail);
+          ovizInitialSkyLayersReadyResolve = null;
+        }
+      }
+
+      async function waitForInitialSkyLayers(options = {}) {
+        ensureInitialSkyLayers();
+        const expectedCount = skyLayersForCurrentGroup().length;
+        if (!skyDomeUsesAladinBackground() || !expectedCount) {
+          return { status: "not-required", expectedCount };
+        }
+        if (ovizInitialSkyLayersReady) {
+          return ovizInitialSkyLayersReadyDetail || { status: "ready", expectedCount };
+        }
+        const timeoutMs = Math.max(Number(options.timeoutMs) || 30000.0, 1000.0);
+        setStartupStatus(`Loading sky backgrounds (0/${expectedCount})...`);
+        const timeoutResult = new Promise((resolve) => {
+          window.setTimeout(() => resolve({
+            status: "degraded",
+            expectedCount,
+            loadedCount: 0,
+            failedCount: expectedCount,
+            reason: "timeout",
+          }), timeoutMs);
+        });
+        const result = await Promise.race([ovizInitialSkyLayersReadyPromise, timeoutResult]);
+        if (result && result.status !== "ready" && root && root.dataset) {
+          root.dataset.skyLayersStartup = "degraded";
+          root.dataset.skyLayersLoaded = String(Math.max(Number(result && result.loadedCount) || 0, 0));
+          root.dataset.skyLayersExpected = String(Math.max(Number(result && result.expectedCount) || expectedCount, 0));
+        }
+        return result;
       }
 
       function restoreSkyLayerStateFromSnapshot(snapshot, options = {}) {
@@ -13349,6 +13968,10 @@ __SKY_RUNTIME_JS__
         activeSkyLayerKey = requestedActiveKey && skyLayerState.some((layer) => layer.key === requestedActiveKey)
           ? requestedActiveKey
           : (skyLayerState[0] ? skyLayerState[0].key : "");
+        if (snapshot.active_sky_layer_group_key) {
+          currentSkyLayerGroupKey = String(snapshot.active_sky_layer_group_key);
+        }
+        ensureCurrentSkyLayerGroup();
         renderSkyLayerList();
         if (typeof updateSkyDomeCaptureFrame === "function") {
           updateSkyDomeCaptureFrame();
@@ -13364,18 +13987,45 @@ __SKY_RUNTIME_JS__
           return;
         }
         try {
-          const currentLayers = serializableSkyLayers();
-          const layers = typeof ovizResidentSkyLayers === "function"
-            ? ovizResidentSkyLayers(currentLayers)
-            : currentLayers;
+          const currentGroupKeys = new Set(skyLayersForCurrentGroup().map((layer) => layer.key));
+          const layers = serializableSkyLayers()
+            .filter((layer) => currentGroupKeys.has(layer.key))
+            .map((layer) => Object.assign({}, layer, {
+              visible: layer.visible !== false,
+            }));
           skyDomeFrameEl.contentWindow.postMessage({
             type: "oviz-sky-layer-state",
             layers,
-            residentStack: typeof ovizResidentSkyLayers === "function",
             activeKey: activeSkyLayerKey || "",
             residentStack: skyDomeUsesAladinBackground(),
           }, "*");
         } catch (_err) {
+        }
+      }
+
+      function scheduleRemainingSkyLayerMetadataPreload() {
+        if (
+          ovizSkyLayerMetadataPreloadScheduled
+          || !skyDomeUsesAladinBackground()
+          || !skyDomeFrameEl
+          || !skyDomeFrameEl.contentWindow
+        ) {
+          return;
+        }
+        ovizSkyLayerMetadataPreloadScheduled = true;
+        const postPreload = () => {
+          try {
+            skyDomeFrameEl.contentWindow.postMessage({
+              type: "oviz-sky-layer-preload",
+              layers: serializableSkyLayers(),
+            }, "*");
+          } catch (_err) {
+          }
+        };
+        if (typeof window.requestIdleCallback === "function") {
+          window.requestIdleCallback(postPreload, { timeout: 2500 });
+        } else {
+          window.setTimeout(postPreload, 1500);
         }
       }
 
@@ -13544,17 +14194,21 @@ __SKY_RUNTIME_JS__
           root.dataset.skyBackgroundEditor = "false";
         }
         skyLayerListEl.hidden = false;
-        if (!skyLayerState.length) {
+        renderSkyLayerGroupDropdown();
+        const groupedSkyLayers = skyLayersForCurrentGroup();
+        if (!groupedSkyLayers.length) {
           const emptyEl = document.createElement("div");
           emptyEl.className = "oviz-three-sky-layer-order";
-          emptyEl.textContent = "No sky layers";
+          emptyEl.textContent = "No backgrounds in this group";
           skyLayerListEl.appendChild(emptyEl);
           return;
         }
-        skyLayerState.forEach((layer, index) => {
+        groupedSkyLayers.forEach((layer, groupIndex) => {
+          const index = skyLayerState.findIndex((candidate) => candidate.key === layer.key);
           const row = document.createElement("details");
           row.className = "oviz-three-sky-layer-row";
           row.dataset.layerKey = layer.key;
+          row.dataset.layerGroup = currentSkyLayerGroupKey;
           row.dataset.active = layer.key === activeSkyLayerKey ? "true" : "false";
           row.dataset.dragging = "false";
           row.dataset.dropTarget = "false";
@@ -13799,10 +14453,10 @@ __SKY_RUNTIME_JS__
           upButton.textContent = "↑";
           upButton.title = "Move image up";
           upButton.setAttribute("aria-label", "Move sky image up");
-          upButton.disabled = index === 0;
+          upButton.disabled = groupIndex === 0;
           upButton.addEventListener("click", () => {
             activeSkyLayerKey = layer.key;
-            moveActiveSkyLayer(-1);
+            moveActiveSkyLayerWithinCurrentGroup(-1);
             focusViewer();
           });
           const downButton = document.createElement("button");
@@ -13810,10 +14464,10 @@ __SKY_RUNTIME_JS__
           downButton.textContent = "↓";
           downButton.title = "Move image down";
           downButton.setAttribute("aria-label", "Move sky image down");
-          downButton.disabled = index >= skyLayerState.length - 1;
+          downButton.disabled = groupIndex >= groupedSkyLayers.length - 1;
           downButton.addEventListener("click", () => {
             activeSkyLayerKey = layer.key;
-            moveActiveSkyLayer(1);
+            moveActiveSkyLayerWithinCurrentGroup(1);
             focusViewer();
           });
           const removeButton = document.createElement("button");
@@ -13883,13 +14537,18 @@ __SKY_RUNTIME_JS__
 
       function addOrActivateSkyLayer(survey) {
         ensureInitialSkyLayers();
+        const destinationGroupKey = currentSkyLayerGroupKey;
         const layer = skyLayerFromSurvey(survey || defaultSkyLayerSurvey(), {
           opacity: skyDomeDefaultOpacity,
           visible: true,
+          groupKey: destinationGroupKey !== "all" ? destinationGroupKey : "",
         });
         const existing = skyLayerState.find((candidate) => candidate.key === layer.key);
         if (existing) {
           existing.visible = true;
+          if (destinationGroupKey !== "all") {
+            existing.groupKey = destinationGroupKey;
+          }
           activeSkyLayerKey = existing.key;
         } else {
           skyLayerState.unshift(layer);
@@ -13929,6 +14588,27 @@ __SKY_RUNTIME_JS__
         skyLayerState.splice(targetIndex, 0, layer);
         activeSkyLayerKey = layer.key;
         applySkyLayerState({ forceTiles: true });
+      }
+
+      function moveActiveSkyLayerWithinCurrentGroup(offset) {
+        ensureInitialSkyLayers();
+        const groupedLayers = skyLayersForCurrentGroup();
+        const currentIndex = groupedLayers.findIndex((layer) => layer.key === activeSkyLayerKey);
+        if (currentIndex < 0) {
+          return false;
+        }
+        const direction = Math.sign(Number(offset) || 0);
+        const targetIndex = Math.min(Math.max(currentIndex + direction, 0), groupedLayers.length - 1);
+        if (!direction || targetIndex === currentIndex) {
+          syncSkyLayerControls();
+          return false;
+        }
+        const targetLayer = groupedLayers[targetIndex];
+        return reorderSkyLayerByKey(
+          activeSkyLayerKey,
+          targetLayer.key,
+          direction > 0 ? "after" : "before"
+        );
       }
 
       function skyPanelProjectionName(source) {
@@ -14398,6 +15078,7 @@ __SKY_RUNTIME_JS__
         let skyLayerSemanticTransitionSerial = 0;
         let skyLayerSemanticTransitionFrame = 0;
         let skyLayerTransitionPaintSerial = 0;
+        let preparedSkyLayerSemanticTransition = null;
         let activeSkyLayerSemanticTransition = null;
         let pendingSkyLayerSemanticCompletion = null;
         let activeSkyApertureLayerStackSignature = "";
@@ -14405,6 +15086,8 @@ __SKY_RUNTIME_JS__
         const managedSkyApertureOverlayLayerNames = new Set();
         const skyLayerCanvasScopes = new Map();
         const latestSkyLayerStateByName = new Map();
+        const preloadedSkyImageSurveys = new Map();
+        const skyImageSurveyReadyPromises = new Map();
         function normalizeClusterKey(value) {
           return String(value || "")
             .trim()
@@ -14536,6 +15219,22 @@ __SKY_RUNTIME_JS__
             type: "oviz-aladin-sky-background-ready",
             survey: ${survey},
           }, "*");
+        }
+        function postSkyLayerStackReady(signature, generation, expectedCount, loadedCount, failedLayers) {
+          if (!window.parent || window.parent === window || !skyDomeBackgroundOnly) {
+            return;
+          }
+          const failures = Array.isArray(failedLayers) ? failedLayers.slice() : [];
+          const postReady = () => window.parent.postMessage({
+            type: "oviz-aladin-sky-layers-ready",
+            signature: String(signature || ""),
+            generation: Number(generation) || 0,
+            expectedCount: Math.max(Number(expectedCount) || 0, 0),
+            loadedCount: Math.max(Number(loadedCount) || 0, 0),
+            failedCount: failures.length,
+            failedLayers: failures,
+          }, "*");
+          window.requestAnimationFrame(() => window.requestAnimationFrame(postReady));
         }
         function aladinFavoriteValue(favorite, fieldNames) {
           const fields = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
@@ -15244,7 +15943,7 @@ __SKY_RUNTIME_JS__
         }
         function setBaseSkyImageLayer(survey) {
           if (!aladinInstance || !survey) {
-            return;
+            return false;
           }
           try {
             if (typeof aladinInstance.setImageSurvey === "function") {
@@ -15253,27 +15952,96 @@ __SKY_RUNTIME_JS__
               aladinInstance.setBaseImageLayer(survey);
             }
             activeImageSurvey = survey;
+            return true;
           } catch (_err) {
             if (typeof aladinInstance.setImageSurvey === "function") {
               try {
                 aladinInstance.setImageSurvey(survey);
                 activeImageSurvey = survey;
+                return true;
               } catch (__err) {
               }
             }
           }
+          return false;
         }
         function skyImageSurveyObject(survey) {
           if (!aladinInstance || !survey) {
             return null;
           }
+          if (preloadedSkyImageSurveys.has(survey)) {
+            if (!skyImageSurveyReadyPromises.has(survey)) {
+              skyImageSurveyReadyPromises.set(survey, Promise.resolve({ ready: true, cached: true }));
+            }
+            return preloadedSkyImageSurveys.get(survey);
+          }
+          let settleSurveyReady = null;
+          const surveyReadyPromise = new Promise((resolve) => {
+            let settled = false;
+            settleSurveyReady = (result) => {
+              if (settled) return;
+              settled = true;
+              resolve(Object.assign({ survey }, result || {}));
+            };
+          });
+          skyImageSurveyReadyPromises.set(survey, surveyReadyPromise);
           try {
             if (typeof aladinInstance.newImageSurvey === "function") {
-              return aladinInstance.newImageSurvey(survey);
+              const imageSurvey = aladinInstance.newImageSurvey(survey, {
+                name: survey,
+                successCallback: () => settleSurveyReady({ ready: true }),
+                errorCallback: () => settleSurveyReady({ ready: false, failed: true }),
+              });
+              if (imageSurvey) {
+                preloadedSkyImageSurveys.set(survey, imageSurvey);
+                const query = imageSurvey && imageSurvey.query;
+                if (query && typeof query.then === "function") {
+                  Promise.resolve(query)
+                    .then(() => settleSurveyReady({ ready: true }))
+                    .catch(() => settleSurveyReady({ ready: false, failed: true }));
+                }
+              }
+              return imageSurvey;
             }
           } catch (_err) {
+            settleSurveyReady({ ready: false, failed: true });
           }
+          settleSurveyReady({ ready: true, legacy: true });
           return survey;
+        }
+
+        function waitForSkyImageSurveyReady(survey, timeoutMs = 12000) {
+          const safeSurvey = String(survey || "").trim();
+          if (!safeSurvey) {
+            return Promise.resolve({ ready: false, failed: true, survey: safeSurvey });
+          }
+          skyImageSurveyObject(safeSurvey);
+          const readiness = skyImageSurveyReadyPromises.get(safeSurvey)
+            || Promise.resolve({ ready: true, cached: true, survey: safeSurvey });
+          return Promise.race([
+            readiness,
+            new Promise((resolve) => window.setTimeout(() => resolve({
+              ready: false,
+              timedOut: true,
+              survey: safeSurvey,
+            }), Math.max(Number(timeoutMs) || 0, 0))),
+          ]);
+        }
+
+        function preloadSkyLayerSurveys(data) {
+          const layers = Array.isArray(data && data.layers) ? data.layers : [];
+          let preloadChain = Promise.resolve();
+          layers.forEach((layer) => {
+            const survey = String(layer && (layer.survey || layer.key) || "").trim();
+            if (!survey || preloadedSkyImageSurveys.has(survey)) {
+              return;
+            }
+            preloadChain = preloadChain.then(() => {
+              skyImageSurveyObject(survey);
+              return waitForSkyImageSurveyReady(survey, 12000).catch(() => null);
+            });
+          });
+          return preloadChain;
         }
         function setOverlaySkyImageLayer(layerName, survey, layer, expectedSignature, expectedGeneration) {
           if (!aladinInstance || !survey || !layerName) {
@@ -15396,8 +16164,9 @@ __SKY_RUNTIME_JS__
         }
         function applySkyLayerState(data) {
           if (!data || typeof data !== "object") {
-            return;
+            return Promise.resolve({ failed: true, reason: "invalid-state" });
           }
+          let stackReadyPromise = Promise.resolve({ unchanged: true });
           const optionApplySerial = ++skyLayerOptionApplySerial;
           const layers = (Array.isArray(data.layers) ? data.layers : [])
             .filter((layer) => layer && String(layer.survey || layer.key || "").trim());
@@ -15424,7 +16193,8 @@ __SKY_RUNTIME_JS__
             activeSkyLayerStackSignature = "";
             residentSkyLayerState = [];
             removeManagedSkyOverlays();
-            return;
+            postSkyLayerStackReady("", activeSkyLayerStackGeneration, 0, 0, []);
+            return Promise.resolve({ loadedCount: 0, failedLayers: [] });
           }
           if (aladinEl) {
             aladinEl.style.opacity = visibleLayers.length ? "1" : "0";
@@ -15441,18 +16211,51 @@ __SKY_RUNTIME_JS__
             const stackGeneration = ++activeSkyLayerStackGeneration;
             activeSkyLayerStackSignature = stackSignature;
             removeManagedSkyOverlays();
-            setBaseSkyImageLayer(baseSurvey);
+            const baseLayerAttached = setBaseSkyImageLayer(baseSurvey);
             let overlayAttachChain = Promise.resolve();
+            let loadedLayerCount = baseLayerAttached ? 1 : 0;
+            const failedLayerSurveys = [];
+            if (baseSurvey && !baseLayerAttached) {
+              failedLayerSurveys.push(baseSurvey);
+            }
             for (let index = stackLayers.length - 2; index >= 0; index -= 1) {
               const layer = stackLayers[index];
-              overlayAttachChain = overlayAttachChain.then(() => setOverlaySkyImageLayer(
-                skyLayerNameFor(layer),
-                String(layer.survey || layer.key || "").trim(),
-                layer,
-                stackSignature,
-                stackGeneration
-              ));
+              const layerSurvey = String(layer.survey || layer.key || "").trim();
+              overlayAttachChain = overlayAttachChain
+                .then(() => setOverlaySkyImageLayer(
+                  skyLayerNameFor(layer),
+                  layerSurvey,
+                  layer,
+                  stackSignature,
+                  stackGeneration
+                ))
+                .then((attached) => {
+                  if (attached) {
+                    loadedLayerCount += 1;
+                  } else {
+                    failedLayerSurveys.push(layerSurvey);
+                  }
+                });
             }
+            stackReadyPromise = overlayAttachChain.then(() => {
+              if (
+                stackSignature !== activeSkyLayerStackSignature
+                || stackGeneration !== activeSkyLayerStackGeneration
+              ) {
+                return { cancelled: true };
+              }
+              postSkyLayerStackReady(
+                stackSignature,
+                stackGeneration,
+                stackLayers.length,
+                loadedLayerCount,
+                failedLayerSurveys
+              );
+              return {
+                loadedCount: loadedLayerCount,
+                failedLayers: failedLayerSurveys.slice(),
+              };
+            });
           } else if (baseSurvey && baseSurvey !== activeImageSurvey) {
             setBaseSkyImageLayer(baseSurvey);
           }
@@ -15476,6 +16279,7 @@ __SKY_RUNTIME_JS__
           } else {
             [0, 32, 120, 360, 1000].forEach((delayMs) => window.setTimeout(applyLatestOptions, delayMs));
           }
+          return stackReadyPromise;
         }
         function normalizeSkyLayerTransitionLayers(rawLayers) {
           const seen = new Set();
@@ -15556,7 +16360,10 @@ __SKY_RUNTIME_JS__
             window.cancelAnimationFrame(skyLayerSemanticTransitionFrame);
             skyLayerSemanticTransitionFrame = 0;
           }
-          const previous = activeSkyLayerSemanticTransition || pendingSkyLayerSemanticCompletion;
+          const previous = activeSkyLayerSemanticTransition
+            || pendingSkyLayerSemanticCompletion
+            || preparedSkyLayerSemanticTransition;
+          preparedSkyLayerSemanticTransition = null;
           activeSkyLayerSemanticTransition = null;
           pendingSkyLayerSemanticCompletion = null;
           if (notify && previous) {
@@ -15564,7 +16371,9 @@ __SKY_RUNTIME_JS__
           }
         }
         function cancelSkyLayerSemanticTransitionFromParent(data) {
-          const active = activeSkyLayerSemanticTransition || pendingSkyLayerSemanticCompletion;
+          const active = activeSkyLayerSemanticTransition
+            || pendingSkyLayerSemanticCompletion
+            || preparedSkyLayerSemanticTransition;
           if (!active) {
             return;
           }
@@ -15625,11 +16434,64 @@ __SKY_RUNTIME_JS__
             postSkyLayerTransitionResult(transition, false, "");
           });
         }
-        function startSkyLayerSemanticTransition(data) {
+        function waitForAladinLayerPaintIdle(timeoutMs = 12000) {
+          const startedAt = (typeof performance !== "undefined" && performance.now)
+            ? performance.now()
+            : Date.now();
+          return new Promise((resolve) => {
+            let idleFrames = 0;
+            let sawActive = false;
+            const check = (timestampMs) => {
+              const now = Number(timestampMs) || ((typeof performance !== "undefined" && performance.now)
+                ? performance.now()
+                : Date.now());
+              let stillActive = false;
+              try {
+                stillActive = typeof aladinInstance.isStillActive === "function"
+                  ? Boolean(aladinInstance.isStillActive())
+                  : false;
+              } catch (_err) {
+                stillActive = false;
+              }
+              sawActive = sawActive || stillActive;
+              idleFrames = stillActive ? 0 : idleFrames + 1;
+              const elapsedMs = now - startedAt;
+              if (idleFrames >= 2 && (sawActive || elapsedMs >= 360.0)) {
+                skyBackgroundAfterPaint(() => resolve({ ready: true }));
+                return;
+              }
+              if (elapsedMs >= Math.max(Number(timeoutMs) || 0, 0)) {
+                skyBackgroundAfterPaint(() => resolve({ ready: false, timedOut: true }));
+                return;
+              }
+              window.requestAnimationFrame(check);
+            };
+            window.requestAnimationFrame(check);
+          });
+        }
+
+        function postSkyLayerTransitionReady(transition, result = {}) {
+          if (!transition || !window.parent || window.parent === window) {
+            return;
+          }
+          window.parent.postMessage({
+            type: "oviz-aladin-sky-layer-transition-ready",
+            transitionId: transition.transitionId,
+            seq: transition.seq,
+            degraded: Boolean(result.degraded),
+            failedLayers: Array.isArray(result.failedLayers) ? result.failedLayers.slice() : [],
+          }, "*");
+        }
+
+        function prepareSkyLayerSemanticTransition(data) {
           if (!skyDomeBackgroundOnly || !aladinInstance || !data || typeof data !== "object") {
             return;
           }
-          const wasRetargeting = Boolean(activeSkyLayerSemanticTransition || pendingSkyLayerSemanticCompletion);
+          const wasRetargeting = Boolean(
+            preparedSkyLayerSemanticTransition
+            || activeSkyLayerSemanticTransition
+            || pendingSkyLayerSemanticCompletion
+          );
           const liveLayers = wasRetargeting ? captureResidentSkyLayers() : [];
           cancelSkyLayerSemanticTransition("retargeted", true);
           const serial = ++skyLayerSemanticTransitionSerial;
@@ -15648,28 +16510,97 @@ __SKY_RUNTIME_JS__
               visible: true,
             });
           });
-          applySkyLayerState({
-            layers: initialLayers,
-            residentStack: true,
-            deferOptionRetries: false,
-          });
-          const transitionNow = (typeof performance !== "undefined" && performance.now)
-            ? performance.now()
-            : Date.now();
           const transition = {
             transitionId: String(data.transitionId || ("sky-layer-transition-" + String(serial))),
             seq: data.seq == null ? null : data.seq,
             serial,
             durationMs: Math.max(Number(data.durationMs ?? data.duration_ms) || 0.0, 0.0),
             easing: String(data.easing || "easeInOutCubic"),
-            startedAt: skyBackgroundTransitionStartedAt(data, transitionNow),
+            startedAt: 0.0,
             unionLayers: initialLayers.map((layer) => Object.assign({}, layer)),
             fromByIdentity,
             toByIdentity,
             midpointApplied: false,
+            autoStart: Boolean(data.autoStart),
+            legacyStartData: data,
           };
+          preparedSkyLayerSemanticTransition = transition;
+          applySkyLayerTransitionFrame(transition, 0.0, 0.0, true);
+          const targetSurveys = toLayers
+            .filter((layer) => effectiveSkyLayerOpacity(layer) > 0.0)
+            .map((layer) => String(layer.survey || layer.key || "").trim())
+            .filter(Boolean);
+          Promise.resolve(applySkyLayerState({
+            layers: initialLayers,
+            residentStack: true,
+            deferOptionRetries: false,
+          })).then((attachmentResult) => Promise.all(
+            targetSurveys.map((survey) => waitForSkyImageSurveyReady(survey, 12000))
+          ).then((surveyResults) => ({ attachmentResult, surveyResults })))
+            .then((preparation) => waitForAladinLayerPaintIdle(12000)
+              .then((paintResult) => Object.assign({}, preparation, { paintResult })))
+            .then((preparation) => {
+              if (
+                serial !== skyLayerSemanticTransitionSerial
+                || preparedSkyLayerSemanticTransition !== transition
+              ) {
+                return;
+              }
+              const failedLayers = [];
+              const attachmentFailures = preparation.attachmentResult
+                && Array.isArray(preparation.attachmentResult.failedLayers)
+                ? preparation.attachmentResult.failedLayers
+                : [];
+              failedLayers.push(...attachmentFailures);
+              (preparation.surveyResults || []).forEach((result) => {
+                if (result && (result.failed || result.timedOut)) {
+                  failedLayers.push(String(result.survey || ""));
+                }
+              });
+              const degraded = failedLayers.length > 0
+                || Boolean(preparation.paintResult && preparation.paintResult.timedOut);
+              postSkyLayerTransitionReady(transition, { degraded, failedLayers });
+              if (transition.autoStart) {
+                beginSkyLayerSemanticTransition(Object.assign({}, transition.legacyStartData, {
+                  transitionId: transition.transitionId,
+                }));
+              }
+            })
+            .catch(() => {
+              if (
+                serial !== skyLayerSemanticTransitionSerial
+                || preparedSkyLayerSemanticTransition !== transition
+              ) {
+                return;
+              }
+              postSkyLayerTransitionReady(transition, { degraded: true, failedLayers: targetSurveys });
+              if (transition.autoStart) {
+                beginSkyLayerSemanticTransition(Object.assign({}, transition.legacyStartData, {
+                  transitionId: transition.transitionId,
+                }));
+              }
+            });
+        }
+
+        function beginSkyLayerSemanticTransition(data) {
+          const transition = preparedSkyLayerSemanticTransition;
+          if (
+            !transition
+            || String(data && data.transitionId || "") !== String(transition.transitionId || "")
+          ) {
+            return false;
+          }
+          preparedSkyLayerSemanticTransition = null;
+          transition.durationMs = Math.max(Number(data.durationMs ?? data.duration_ms) || transition.durationMs || 0.0, 0.0);
+          transition.easing = String(data.easing || transition.easing || "easeInOutCubic");
+          const transitionNow = (typeof performance !== "undefined" && performance.now)
+            ? performance.now()
+            : Date.now();
+          transition.startedAt = skyBackgroundTransitionStartedAt(data, transitionNow);
+          transition.midpointApplied = false;
           activeSkyLayerSemanticTransition = transition;
           applySkyLayerTransitionFrame(transition, 0.0, 0.0, true);
+          const serial = transition.serial;
           const step = (timestampMs) => {
             if (serial !== skyLayerSemanticTransitionSerial || activeSkyLayerSemanticTransition !== transition) {
               return;
@@ -15693,6 +16624,11 @@ __SKY_RUNTIME_JS__
             finishSkyLayerSemanticTransitionAfterPaint(transition);
           };
           skyLayerSemanticTransitionFrame = window.requestAnimationFrame(step);
+          return true;
+        }
+
+        function startSkyLayerSemanticTransition(data) {
+          prepareSkyLayerSemanticTransition(Object.assign({}, data || {}, { autoStart: true }));
         }
         function scheduleSkyBackgroundView(data) {
           if (activeSkyBackgroundSemanticTransition || pendingSkyBackgroundSemanticCompletion) {
@@ -16003,6 +16939,15 @@ __SKY_RUNTIME_JS__
                   applySkyLayerState(data);
                 }
               }
+              if (data.type === "oviz-sky-layer-preload") {
+                preloadSkyLayerSurveys(data);
+              }
+              if (data.type === "oviz-sky-layer-transition-prepare") {
+                prepareSkyLayerSemanticTransition(data);
+              }
+              if (data.type === "oviz-sky-layer-transition-start") {
+                beginSkyLayerSemanticTransition(data);
+              }
               if (data.type === "oviz-sky-layer-transition") {
                 startSkyLayerSemanticTransition(data);
               }
@@ -16150,7 +17095,10 @@ __SKY_RUNTIME_JS__
         if (mobileLassoButtonEl) {
           mobileLassoButtonEl.dataset.active = lassoArmed ? "true" : "false";
           mobileLassoButtonEl.setAttribute("aria-pressed", lassoArmed ? "true" : "false");
-          mobileLassoButtonEl.textContent = lassoArmed ? "Armed" : "Lasso";
+          mobileLassoButtonEl.setAttribute(
+            "aria-label",
+            lassoArmed ? "Lasso armed" : "Lasso selection"
+          );
           mobileLassoButtonEl.title = lassoArmed ? "Lasso is armed. Drag on the scene to select." : "Arm lasso selection for touch input.";
         }
         if (mobileSelectionStatusEl) {
@@ -16169,6 +17117,81 @@ __SKY_RUNTIME_JS__
       }
 
       let ovizMobileViewportEventsBound = false;
+      let ovizMobileRefreshGuardBound = false;
+      let ovizMobileLastTouchY = null;
+
+      function mobileNativeTouchTarget(target) {
+        if (!target || typeof target.closest !== "function") {
+          return false;
+        }
+        return Boolean(target.closest(
+          'input, textarea, select, [contenteditable="true"]'
+        ));
+      }
+
+      function mobileScrollableTouchAncestor(target) {
+        let element = target && target.nodeType === 1 ? target : null;
+        while (element && element !== root) {
+          const style = window.getComputedStyle(element);
+          const overflowY = String(style && style.overflowY || "");
+          if (
+            (overflowY === "auto" || overflowY === "scroll")
+            && element.scrollHeight > element.clientHeight + 1
+          ) {
+            return element;
+          }
+          element = element.parentElement;
+        }
+        return null;
+      }
+
+      function installMobileRefreshGuard() {
+        if (!mobileModeEnabled || ovizMobileRefreshGuardBound || !root) {
+          return;
+        }
+        ovizMobileRefreshGuardBound = true;
+        root.addEventListener("touchstart", (event) => {
+          ovizMobileLastTouchY = event.touches && event.touches.length === 1
+            ? Number(event.touches[0].clientY)
+            : null;
+        }, { passive: true });
+        root.addEventListener("touchmove", (event) => {
+          if (!event.touches || event.touches.length !== 1) {
+            ovizMobileLastTouchY = null;
+            return;
+          }
+          const currentY = Number(event.touches[0].clientY);
+          const previousY = Number(ovizMobileLastTouchY);
+          ovizMobileLastTouchY = currentY;
+          if (!Number.isFinite(currentY) || !Number.isFinite(previousY)) {
+            return;
+          }
+          if (mobileNativeTouchTarget(event.target)) {
+            return;
+          }
+          const deltaY = currentY - previousY;
+          const scroller = mobileScrollableTouchAncestor(event.target);
+          if (scroller) {
+            const atTop = scroller.scrollTop <= 0;
+            const atBottom = (
+              scroller.scrollTop + scroller.clientHeight
+              >= scroller.scrollHeight - 1
+            );
+            if ((deltaY > 0 && atTop) || (deltaY < 0 && atBottom)) {
+              event.preventDefault();
+            }
+            return;
+          }
+          // The viewer owns all remaining single-finger movement. Prevent it
+          // from escaping to Safari's document-level pull-to-refresh gesture.
+          event.preventDefault();
+        }, { passive: false });
+        const clearTouch = () => {
+          ovizMobileLastTouchY = null;
+        };
+        root.addEventListener("touchend", clearTouch, { passive: true });
+        root.addEventListener("touchcancel", clearTouch, { passive: true });
+      }
 
       function syncMobileViewportGeometry() {
         if (!mobileModeEnabled || !root || !root.style) {
@@ -16191,6 +17214,7 @@ __SKY_RUNTIME_JS__
         if (!mobileModeEnabled) {
           return;
         }
+        installMobileRefreshGuard();
         syncMobileViewportGeometry();
         if (!ovizMobileViewportEventsBound) {
           ovizMobileViewportEventsBound = true;
@@ -16303,6 +17327,30 @@ __SKY_RUNTIME_JS__
           updateSkyDomeBackgroundFrame(
             (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()
           );
+        } else if (data.type === "oviz-aladin-sky-layers-ready") {
+          if (!fromSkyDomeCapture) {
+            return;
+          }
+          const expectedCount = skyLayersForCurrentGroup().length;
+          const reportedExpectedCount = Math.max(Number(data.expectedCount) || 0, 0);
+          if (reportedExpectedCount < expectedCount) {
+            return;
+          }
+          const loadedCount = Math.max(Number(data.loadedCount) || 0, 0);
+          const failedCount = Math.max(Number(data.failedCount) || 0, 0);
+          const status = failedCount > 0 ? "degraded" : "ready";
+          if (root && root.dataset) {
+            root.dataset.skyLayersStartup = status;
+            root.dataset.skyLayersLoaded = String(loadedCount);
+            root.dataset.skyLayersExpected = String(reportedExpectedCount);
+          }
+          markInitialSkyLayersReady({
+            status,
+            expectedCount: reportedExpectedCount,
+            loadedCount,
+            failedCount,
+            failedLayers: Array.isArray(data.failedLayers) ? data.failedLayers.slice() : [],
+          });
         } else if (data.type === "oviz-aladin-debug-event") {
           const eventName = String(data.event || "event");
           if (fromSkyApertureFrame) {
@@ -17641,6 +18689,145 @@ __SKY_RUNTIME_JS__
           }
         });
         updateSkyMemberBatchOverflowSprites();
+      }
+
+      let ovizPendingRenderedPointSizeFrame = 0;
+      const ovizPendingRenderedPointSizeScales = new Map();
+      let ovizRenderedPointSizeUpdateCount = 0;
+
+      function ovizResponsivePointTraceKey(entry) {
+        const userData = entry && entry.sprite && entry.sprite.userData;
+        const retained = userData && userData.ovizRetainedPoint;
+        return String(
+          (retained && retained.traceKey)
+          || (retained && retained.trace && retained.trace.key)
+          || ""
+        );
+      }
+
+      function ovizScaleRenderedPointSizes(ratio, requestedTraceKey = "") {
+        const scaleRatio = Number(ratio);
+        if (!Number.isFinite(scaleRatio) || !(scaleRatio > 0.0)) {
+          return 0;
+        }
+        const traceKey = String(requestedTraceKey || "");
+        const sizeAttributes = new Set();
+        let updatedEntries = 0;
+        cameraResponsivePointEntries.forEach((entry) => {
+          if (!entry || !entry.sprite) {
+            return;
+          }
+          if (traceKey && ovizResponsivePointTraceKey(entry) !== traceKey) {
+            return;
+          }
+          entry.pointScale = Math.max(Number(entry.pointScale) || 0.0, 0.0) * scaleRatio;
+          entry.baseScale = Math.max(Number(entry.baseScale) || 0.0, 0.0) * scaleRatio;
+          const userData = entry.sprite.userData;
+          if (userData && typeof userData === "object") {
+            if (Number.isFinite(Number(userData.baseScale))) {
+              userData.baseScale = Number(userData.baseScale) * scaleRatio;
+            }
+            if (Number.isFinite(Number(userData.pickWorldScale))) {
+              userData.pickWorldScale = Number(userData.pickWorldScale) * scaleRatio;
+            }
+          }
+          if (entry.batchSizeAttribute && entry.batchSizeAttribute.array) {
+            sizeAttributes.add(entry.batchSizeAttribute);
+          } else if (entry.sprite.scale) {
+            entry.sprite.scale.multiplyScalar(scaleRatio);
+          }
+          const overflowSprite = entry.batchOverflow && entry.batchOverflow.sprite;
+          if (overflowSprite && overflowSprite.scale) {
+            overflowSprite.scale.multiplyScalar(scaleRatio);
+          }
+          updatedEntries += 1;
+        });
+        skyMemberBatchOpacityEntries.forEach((entry) => {
+          const entryTraceKey = String(entry && entry.parentTrace && entry.parentTrace.key || "");
+          if (!entry || (traceKey && entryTraceKey !== traceKey)) {
+            return;
+          }
+          entry.pointSize = Math.max(Number(entry.pointSize) || 0.0, 0.0) * scaleRatio;
+          if (entry.batchSizeAttribute && entry.batchSizeAttribute.array) {
+            sizeAttributes.add(entry.batchSizeAttribute);
+          } else if (entry.material) {
+            entry.material.size = Math.max(Number(entry.material.size) || 0.0, 0.0) * scaleRatio;
+            const sizeUniform = entry.material.uniforms && entry.material.uniforms.ovizPointSize;
+            if (sizeUniform) {
+              sizeUniform.value = Math.max(Number(sizeUniform.value) || 0.0, 0.0) * scaleRatio;
+            }
+          }
+          updatedEntries += Math.max(Number(entry.batchCount) || 1, 1);
+        });
+        sizeAttributes.forEach((attribute) => {
+          const values = attribute && attribute.array;
+          if (!values) {
+            return;
+          }
+          for (let index = 0; index < values.length; index += 1) {
+            values[index] *= scaleRatio;
+          }
+          attribute.needsUpdate = true;
+        });
+        if (updatedEntries > 0) {
+          ovizRenderedPointSizeUpdateCount += 1;
+          if (root && root.dataset) {
+            root.dataset.pointSizeLiveUpdates = String(ovizRenderedPointSizeUpdateCount);
+            root.dataset.pointSizeLiveEntries = String(updatedEntries);
+            root.dataset.pointSizeLiveBuffers = String(sizeAttributes.size);
+          }
+          if (typeof ovizInvalidateRender === "function") {
+            ovizInvalidateRender();
+          }
+        }
+        return updatedEntries;
+      }
+
+      function ovizFlushRenderedPointSizeScales() {
+        ovizPendingRenderedPointSizeFrame = 0;
+        const pending = Array.from(ovizPendingRenderedPointSizeScales.entries());
+        ovizPendingRenderedPointSizeScales.clear();
+        // Global changes apply before any simultaneous per-trace change.
+        pending.sort(([leftKey], [rightKey]) => Number(Boolean(leftKey)) - Number(Boolean(rightKey)));
+        pending.forEach(([traceKey, ratio]) => {
+          ovizScaleRenderedPointSizes(ratio, traceKey);
+        });
+      }
+
+      function ovizScheduleRenderedPointSizeScale(ratio, traceKey = "") {
+        const scaleRatio = Number(ratio);
+        if (!Number.isFinite(scaleRatio) || !(scaleRatio > 0.0)) {
+          return false;
+        }
+        const key = String(traceKey || "");
+        ovizPendingRenderedPointSizeScales.set(
+          key,
+          (Number(ovizPendingRenderedPointSizeScales.get(key)) || 1.0) * scaleRatio,
+        );
+        if (!ovizPendingRenderedPointSizeFrame) {
+          ovizPendingRenderedPointSizeFrame = window.requestAnimationFrame(
+            ovizFlushRenderedPointSizeScales,
+          );
+        }
+        return true;
+      }
+
+      function ovizFlushPendingRenderedPointSizeScales() {
+        if (ovizPendingRenderedPointSizeFrame) {
+          window.cancelAnimationFrame(ovizPendingRenderedPointSizeFrame);
+          ovizPendingRenderedPointSizeFrame = 0;
+        }
+        if (ovizPendingRenderedPointSizeScales.size) {
+          ovizFlushRenderedPointSizeScales();
+        }
+      }
+
+      function ovizCancelPendingRenderedPointSizeScales() {
+        if (ovizPendingRenderedPointSizeFrame) {
+          window.cancelAnimationFrame(ovizPendingRenderedPointSizeFrame);
+          ovizPendingRenderedPointSizeFrame = 0;
+        }
+        ovizPendingRenderedPointSizeScales.clear();
       }
 
       function registerCameraResponsiveImagePlane(mesh, options = {}) {
@@ -19982,7 +21169,7 @@ __SKY_RUNTIME_JS__
         );
         const sizeRatio = clampRange(
           1.0 / memberSizeDenominator,
-          0.001,
+          0.00001,
           1.0,
         );
         const memberBaseScale = Math.max(Number(options.scale) || 0.0, 0.0) * sizeRatio;
@@ -21559,9 +22746,36 @@ __SKY_RUNTIME_JS__
           const sizeField = createLegendField(`${sizeLabel} (${Number(state.sizeScale).toFixed(2)}x)`, sizeInput);
           controls.appendChild(sizeField.field);
           sizeInput.addEventListener("input", () => {
+            const previousSizeScale = Math.max(Number(state.sizeScale) || 1.0, 0.05);
             state.sizeScale = Math.max(Number(sizeInput.value), 0.05);
             sizeField.label.textContent = `${sizeLabel} (${state.sizeScale.toFixed(2)}x)`;
-            renderFrame(currentFrameIndex);
+            const ratio = state.sizeScale / previousSizeScale;
+            if (
+              state.hasPoints
+              && typeof ovizScheduleRenderedPointSizeScale === "function"
+            ) {
+              ovizScheduleRenderedPointSizeScale(ratio, String(item.key || ""));
+            } else {
+              renderInterpolatedFrameValue(displayedFrameValue, {
+                syncSlider: false,
+                preserveTransition: true,
+              });
+            }
+          });
+          sizeInput.addEventListener("change", () => {
+            if (typeof ovizFlushPendingRenderedPointSizeScales === "function") {
+              ovizFlushPendingRenderedPointSizeScales();
+            }
+            // Pure point traces are already exact: their displayed scale is
+            // multiplicative, so the live buffer update is the final state.
+            // Labels and vectors still need one exact rebuild after release.
+            if (state.hasPoints && !state.hasLabels && !state.hasVectors) {
+              return;
+            }
+            renderInterpolatedFrameValue(displayedFrameValue, {
+              syncSlider: false,
+              preserveTransition: true,
+            });
           });
 
           const summary = document.createElement("div");
@@ -22578,6 +23792,22 @@ __STATE_RUNTIME_JS__
             focusViewer();
           });
         }
+        if (presentationPreviousButtonEl) {
+          presentationPreviousButtonEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            ovizNavigatePresentation(-1).catch(() => {});
+            focusViewer();
+          });
+        }
+        if (presentationNextButtonEl) {
+          presentationNextButtonEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            ovizNavigatePresentation(1).catch(() => {});
+            focusViewer();
+          });
+        }
         if (fullscreenButtonEl) {
           fullscreenButtonEl.addEventListener("click", (event) => {
             event.preventDefault();
@@ -22657,7 +23887,13 @@ __STATE_RUNTIME_JS__
               return;
             }
             const actionName = String(buttonEl.dataset.mobileAction || "");
-            if (actionName === "lasso") {
+            if (actionName === "search") {
+              setMobileSheetPanel("closed");
+              if (typeof setOvizSearchOpen === "function") {
+                setOvizSearchOpen(true, { focus: true });
+              }
+              return;
+            } else if (actionName === "lasso") {
               lassoArmed = !lassoArmed;
               updateSelectionUI();
             } else if (actionName === "sky-members") {
@@ -22713,6 +23949,19 @@ __STATE_RUNTIME_JS__
             focusViewer();
           });
         }
+        if (mobileControlsButtonEl) {
+          mobileControlsButtonEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setMobileSheetPanel(
+              mobileSheetEl
+              && mobileSheetEl.dataset.open === "true"
+              && mobileSheetPanelName === "controls"
+                ? "closed"
+                : "controls"
+            );
+          });
+        }
         if (mobileArButtonEl) {
           mobileArButtonEl.addEventListener("click", (event) => {
             event.preventDefault();
@@ -22765,8 +24014,14 @@ __STATE_RUNTIME_JS__
             event.preventDefault();
             event.stopPropagation();
             if (mobileModeEnabled) {
-              setControlsDrawerOpen(false);
-              setSkyControlsDrawerOpen(false);
+              setMobileSheetPanel(
+                mobileSheetEl
+                && mobileSheetEl.dataset.open === "true"
+                && mobileSheetPanelName === "legend"
+                  ? "closed"
+                  : "legend"
+              );
+              return;
             }
             setLegendPanelOpen(!legendPanelOpen);
             if (activeLegendEditorKey) {
@@ -22855,7 +24110,11 @@ __STATE_RUNTIME_JS__
         }
         if (skyControlsToggleEl && skyControlsShellEl) {
           skyControlsToggleEl.addEventListener("click", () => {
-            setSkyControlsDrawerOpen(skyControlsShellEl.dataset.open !== "true");
+            if (mobileModeEnabled) {
+              setSkyControlsDrawerOpen(skyControlsShellEl.dataset.open !== "true");
+            } else if (skyControlsShellEl.dataset.open !== "true") {
+              setSkyControlsDrawerOpen(true);
+            }
           });
         }
         if (skyControlsCollapseEl) {
@@ -23553,6 +24812,14 @@ __STATE_RUNTIME_JS__
           : clampRange((now - lastAnimationTimestamp) / 1000.0, 0.0, 0.05);
         lastAnimationTimestamp = now;
         updateOvizUnifiedTransitionSession(now);
+        const activeStateTransition = (
+          typeof ovizStateTransition !== "undefined" ? ovizStateTransition : null
+        );
+        const stateAllowsLiveCameraOrbit = Boolean(
+          activeStateTransition
+          && activeStateTransition.allowLiveCameraOrbit
+          && !activeStateTransition.finishing
+        );
         const transitionOwnsCameraAndTime = Boolean(
           (typeof ovizStateTransition !== "undefined" && ovizStateTransition)
           || (typeof activeActionRun !== "undefined" && activeActionRun)
@@ -23565,6 +24832,14 @@ __STATE_RUNTIME_JS__
         let controlsChanged = false;
         if (controls.enabled && !transitionOwnsCameraAndTime) {
           controlsChanged = Boolean(controls.update());
+        } else if (stateAllowsLiveCameraOrbit && cameraAutoOrbitEnabled) {
+          // Cam: Keep transitions continue the already-running orbit while
+          // the State controller independently animates appearance or time.
+          // Follow transitions still retain exclusive camera ownership.
+          updateGalacticSimpleDefaultOrbit(deltaSeconds);
+          if (!galacticSimpleDefaultOrbitActive() && controls.enabled) {
+            controlsChanged = Boolean(controls.update());
+          }
         } else if (
           cameraViewMode === "earth"
           && !cameraTransitionAnimationFrame
@@ -23660,9 +24935,22 @@ __STATE_RUNTIME_JS__
         console.error("Oviz States initialization failed", err);
       });
       ovizStartupRecordPhase("sceneInitialize", ovizSceneInitializeStartMs);
+      const ovizSkyLayersStartupStartMs = ovizStartupNow();
+      waitForInitialSkyLayers({ timeoutMs: 30000.0 }).then((ovizSkyLayersStartupResult) => {
+        ovizStartupRecordPhase("skyLayerStartup", ovizSkyLayersStartupStartMs, {
+          status: String(ovizSkyLayersStartupResult && ovizSkyLayersStartupResult.status || "unknown"),
+          expectedCount: Number(ovizSkyLayersStartupResult && ovizSkyLayersStartupResult.expectedCount) || 0,
+          loadedCount: Number(ovizSkyLayersStartupResult && ovizSkyLayersStartupResult.loadedCount) || 0,
+          failedCount: Number(ovizSkyLayersStartupResult && ovizSkyLayersStartupResult.failedCount) || 0,
+        });
+        scheduleRemainingSkyLayerMetadataPreload();
+      }).catch(() => {
+        scheduleRemainingSkyLayerMetadataPreload();
+      });
       ovizStartupTiming.totalMs = ovizStartupRound(ovizStartupNow() - ovizStartupStartedAtMs, 1);
       ovizStartupMark("ready");
       ovizDebugSchedulePanel();
+      root.dataset.startupReady = "true";
       setStartupStatus("", false);
       window.setTimeout(() => focusViewer(), 0);
       animate();
