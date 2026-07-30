@@ -1,3 +1,5 @@
+"""Embedded JavaScript for the scroll-synchronized paper reader."""
+
 from __future__ import annotations
 
 

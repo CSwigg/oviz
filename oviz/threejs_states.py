@@ -38,6 +38,8 @@ def normalize_transition(
     *,
     fallback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Normalize a transition duration and easing name."""
+
     base = fallback or DEFAULT_STATE_TRANSITION
     source = value if isinstance(value, dict) else {}
     try:
@@ -59,6 +61,8 @@ def normalize_states_spec(
     *,
     project_id: str | None = None,
 ) -> dict[str, Any]:
+    """Validate an ordered States project while preserving saved snapshots."""
+
     source = value if isinstance(value, dict) else {}
     items = source.get("items", source.get("ordered_states", []))
     if not isinstance(items, list):

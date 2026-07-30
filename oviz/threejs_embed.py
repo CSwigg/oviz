@@ -1,3 +1,5 @@
+"""Assemble standalone viewer HTML and optionally compress its scene payload."""
+
 from __future__ import annotations
 
 import base64
@@ -162,6 +164,12 @@ def render_threejs_html(
     compress_scene_spec: bool | str | None = "auto",
     scene_spec_compression_threshold_bytes: int | None = None,
 ) -> str:
+    """Insert a scene spec and runtime modules into the viewer template.
+
+    Parameters are intentionally low level. Use
+    :meth:`oviz.threejs_figure.ThreeJSFigure.to_html` for normal exports.
+    """
+
     width = int(scene_spec.get("width") or 900)
     height = int(scene_spec.get("height") or 700)
     initial_state = scene_spec.get("initial_state") or {}
@@ -234,11 +242,15 @@ def render_threejs_html(
 
 
 def threejs_data_url(html: str) -> str:
+    """Encode viewer HTML as a base64 ``data:text/html`` URL."""
+
     encoded = base64.b64encode(html.encode("utf-8")).decode("ascii")
     return f"data:text/html;charset=utf-8;base64,{encoded}"
 
 
 def threejs_iframe_html(data_url: str) -> str:
+    """Return responsive iframe markup for an encoded viewer URL."""
+
     return (
         f'<iframe src="{data_url}" '
         'style="width: 100vw; height: 100vh; border: 0; display: block; max-width: none; margin: 0 0 0 calc(50% - 50vw);" '

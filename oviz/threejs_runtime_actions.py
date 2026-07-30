@@ -1,3 +1,5 @@
+"""Embedded JavaScript for Action scheduling and transition coordination."""
+
 from __future__ import annotations
 
 

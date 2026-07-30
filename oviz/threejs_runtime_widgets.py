@@ -1,3 +1,5 @@
+"""Embedded JavaScript for draggable panels and widget lifecycle."""
+
 from __future__ import annotations
 
 

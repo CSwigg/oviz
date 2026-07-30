@@ -1,3 +1,5 @@
+"""HTML-backed figure object for the standalone Three.js viewer."""
+
 from __future__ import annotations
 
 import tempfile
@@ -25039,6 +25041,8 @@ class ThreeJSFigure:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the mutable scene specification used by this figure."""
+
         return self.scene_spec
 
     def to_html(
@@ -25047,6 +25051,12 @@ class ThreeJSFigure:
         compress_scene_spec: bool | str | None = None,
         scene_spec_compression_threshold_bytes: int | None = None,
     ) -> str:
+        """Render the complete standalone viewer HTML.
+
+        ``compress_scene_spec`` accepts ``True``, ``False``, or ``"auto"``.
+        Per-call values override the settings supplied to the constructor.
+        """
+
         deck_available = bool(self.scene_spec.get("deck", {}).get("available", True))
         paper_available = bool(self.scene_spec.get("paper", {}).get("available", False))
         topbar_html = _THREEJS_TOPBAR_HTML.replace(
@@ -25100,6 +25110,8 @@ class ThreeJSFigure:
         return self._iframe_html()
 
     def write_html(self, file: str | Path, **kwargs: Any) -> None:
+        """Write the standalone viewer to ``file`` using UTF-8 encoding."""
+
         compress_scene_spec = kwargs.pop("compress_scene_spec", None)
         scene_spec_compression_threshold_bytes = kwargs.pop(
             "scene_spec_compression_threshold_bytes",
@@ -25114,6 +25126,8 @@ class ThreeJSFigure:
         )
 
     def show(self) -> str | None:
+        """Display in IPython, or open a temporary HTML file in a browser."""
+
         try:
             from IPython.display import HTML, display
 

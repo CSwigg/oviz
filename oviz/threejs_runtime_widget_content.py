@@ -1,3 +1,5 @@
+"""Embedded JavaScript for the scientific content inside viewer widgets."""
+
 from __future__ import annotations
 
 

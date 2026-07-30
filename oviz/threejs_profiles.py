@@ -1,3 +1,5 @@
+"""Reusable initial-state profiles for Three.js viewer exports."""
+
 from __future__ import annotations
 
 import copy
@@ -14,6 +16,8 @@ def _deep_merge_dicts(base, overrides):
 
 
 def normalize_threejs_initial_state(initial_state=None):
+    """Return a copied initial-state mapping with legacy aliases normalized."""
+
     state = copy.deepcopy(initial_state or {})
 
     if "lite_mode_enabled" not in state and "minimal_mode_enabled" in state:
@@ -41,14 +45,20 @@ def normalize_threejs_initial_state(initial_state=None):
 
 
 def merge_threejs_profile(base_state=None, override_state=None):
+    """Deep-merge two initial-state mappings and normalize the result."""
+
     return normalize_threejs_initial_state(_deep_merge_dicts(base_state or {}, override_state or {}))
 
 
 def threejs_profile(**overrides):
+    """Return the standard full-viewer profile with optional overrides."""
+
     return merge_threejs_profile({}, overrides)
 
 
 def lite_profile(**overrides):
+    """Return a minimal viewer profile with optional overrides."""
+
     return merge_threejs_profile({"lite_mode_enabled": True}, overrides)
 
 
@@ -64,6 +74,8 @@ def galactic_lite_profile(
     global_controls=None,
     **overrides,
 ):
+    """Return a compact Galactic profile, optionally with a plane image."""
+
     profile = {
         "lite_mode_enabled": True,
         "galactic_lite_mode_enabled": True,
@@ -86,6 +98,8 @@ def galactic_lite_profile(
 
 
 def galactic_simple_profile(**overrides):
+    """Backward-compatible alias for :func:`galactic_lite_profile`."""
+
     return galactic_lite_profile(**overrides)
 
 
@@ -97,6 +111,8 @@ def website_background_profile(
     global_controls=None,
     **overrides,
 ):
+    """Return an auto-orbiting Galactic profile suited to page backgrounds."""
+
     base_camera = {
         "position": {"x": 500.0, "y": -4600.0, "z": 3300.0},
         "target": {"x": 0.0, "y": 0.0, "z": 0.0},
@@ -137,6 +153,17 @@ _PROFILE_BUILDERS = {
 
 
 def build_threejs_profile(name=None, **overrides):
+    """Build a named profile and apply keyword overrides.
+
+    Parameters
+    ----------
+    name : str or None
+        One of ``full``, ``lite``, ``galactic_lite``, ``galactic_simple``, or
+        ``website_background``. ``None`` selects the standard profile.
+    **overrides
+        Initial-state values merged into the selected profile.
+    """
+
     if name is None:
         return threejs_profile(**overrides)
 

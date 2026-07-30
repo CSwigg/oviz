@@ -1,3 +1,5 @@
+"""Embedded JavaScript for retained Three.js scene objects and volumes."""
+
 from __future__ import annotations
 
 

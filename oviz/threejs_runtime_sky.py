@@ -1,3 +1,5 @@
+"""Embedded JavaScript for registered Sky mode and Aladin Lite layers."""
+
 from __future__ import annotations
 
 

@@ -1,3 +1,5 @@
+"""Build time-dependent Oviz scenes from traces, volumes, and sky layers."""
+
 import base64
 import json
 import copy
@@ -205,8 +207,11 @@ DEFAULT_THREEJS_VOLUME_MAX_RESOLUTION_CAP = 512
 DEFAULT_THREEJS_AR_VOLUME_MAX_RESOLUTION = 64
 
 class Animate3D:
-    """
-    Class for generating 3D plots of star clusters.
+    """Build interactive time-dependent scenes from a trace collection.
+
+    The class prepares galpy orbit frames, optional static and volume layers,
+    and the standalone Three.js viewer. :class:`oviz.Scene3D` is an equivalent
+    astronomy-facing name.
     """
 
     def __init__(
@@ -299,9 +304,39 @@ class Animate3D:
         compress_scene_spec="auto",
         scene_spec_compression_threshold_bytes=None,
     ):
-        """
-        Main method to generate a 3D animated plot. Integrates orbits if necessary and
-        constructs frames for each time step. Optionally saves the figure to HTML.
+        """Integrate the data, build timeline frames, and return a figure.
+
+        Parameters
+        ----------
+        time : array-like
+            Timeline values in Myr. The array must include zero.
+        renderer : str, default ``"threejs"``
+            Output renderer. Three.js is the maintained interactive path.
+        galactic_mode : bool
+            Use the Galactic-scale layout and reference geometry.
+        enable_sky_panel : bool
+            Enable the registered Aladin Lite Sky view.
+        cluster_members_file : path-like, optional
+            CSV containing cluster labels and Galactic or ICRS member positions.
+        show_cluster_members_in_sky : bool
+            Replace eligible bulk cluster markers with member stars in Sky mode.
+        volumes : sequence of mappings, optional
+            Scalar-volume definitions, including data source, bounds, and style.
+        threejs_initial_state : mapping, optional
+            Initial camera, control, layer, panel, and presentation settings.
+        actions : sequence of mappings, optional
+            Declarative camera, legend, State, or timeline Actions.
+        compress_scene_spec : bool or ``"auto"``
+            Store the scene payload as gzip-compressed base64 when requested.
+        show : bool
+            Display the figure after construction.
+        save_name : path-like, optional
+            Write the generated figure to this HTML path.
+
+        Returns
+        -------
+        ThreeJSFigure
+            HTML-backed interactive figure when ``renderer="threejs"``.
         """
         renderer_name = _normalize_renderer_name(renderer)
 

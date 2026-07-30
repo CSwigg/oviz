@@ -1,3 +1,5 @@
+"""Embedded JavaScript for AR previews and USDZ export."""
+
 from .threejs_runtime_usdz import THREEJS_AR_USDZ_RUNTIME_JS
 
 

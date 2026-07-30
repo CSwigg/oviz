@@ -1,4 +1,5 @@
-# Classes and functions for handling spiral arm visualization in oviz
+"""Create time-dependent spiral-arm traces from galpy potentials."""
+
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord

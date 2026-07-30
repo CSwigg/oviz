@@ -1,3 +1,5 @@
+"""Embedded JavaScript primitives shared by State and Action transitions."""
+
 from __future__ import annotations
 
 

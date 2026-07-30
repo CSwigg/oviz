@@ -1,3 +1,5 @@
+"""Public Python entry points for building Oviz scenes and viewer profiles."""
+
 from .scene import Scene3D
 from .threejs_profiles import (
 	build_threejs_profile,

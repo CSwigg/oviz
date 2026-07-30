@@ -1,3 +1,5 @@
+"""Embedded JavaScript for trace grouping, visibility, and style controls."""
+
 THREEJS_LEGEND_RUNTIME_JS = """
       let legendGroupChooserGroups = [];
       let legendGroupDropdownOpen = false;

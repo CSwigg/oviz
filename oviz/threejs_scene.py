@@ -1,3 +1,5 @@
+"""Translate an :class:`oviz.Animate3D` build into a browser scene spec."""
+
 from __future__ import annotations
 
 import copy
@@ -617,6 +619,12 @@ def build_threejs_scene_spec(
     catalog_from_frame_spec,
     annotate_point_motion_ranges,
 ):
+    """Build the JSON-compatible scene specification consumed by the viewer.
+
+    This lower-level function is called by :class:`oviz.Animate3D`; applications
+    normally use :meth:`oviz.Animate3D.make_plot` instead.
+    """
+
     minimal_mode = _lite_mode_enabled(plot)
     galactic_simple = _galactic_simple_config(
         plot,

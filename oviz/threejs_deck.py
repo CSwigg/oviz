@@ -167,6 +167,8 @@ def normalize_deck_block(value: dict[str, Any] | None, *, index: int = 0) -> dic
 
 
 def normalize_deck_spec(value: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize a slide deck and migrate legacy percentage-based text blocks."""
+
     source = value if isinstance(value, dict) else {}
     source_version = int(_finite_number(source.get("schema_version"), 1.0))
     raw_slides = source.get("slides", [])

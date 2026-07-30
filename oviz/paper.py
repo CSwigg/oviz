@@ -94,6 +94,8 @@ class Paper:
 
     # -- structure -----------------------------------------------------
     def add_section(self, title: str, *, level: int = 1, section_id: str | None = None) -> str:
+        """Append a section and return its stable ID."""
+
         section_id = section_id or f"section-{len(self._sections) + 1}"
         self._sections.append(
             {
@@ -136,6 +138,8 @@ class Paper:
         transition_ms: float | None = None,
         easing: str | None = None,
     ) -> None:
+        """Append trusted HTML, optionally anchored to a saved State."""
+
         self._target_section()["blocks"].append(
             {
                 "type": "html",
@@ -145,6 +149,8 @@ class Paper:
         )
 
     def add_paragraph(self, text: str, **anchor_kwargs: Any) -> None:
+        """Append an escaped paragraph, optionally anchored to a State."""
+
         self.add_html(f"<p>{_escape(text)}</p>", **anchor_kwargs)
 
     def add_figure(
@@ -160,6 +166,8 @@ class Paper:
         transition_ms: float | None = None,
         easing: str | None = None,
     ) -> None:
+        """Embed an image block and optionally bind it to a saved State."""
+
         data_url, width = _image_to_data_url(
             image, max_width_px=max_width_px, jpeg_quality=jpeg_quality
         )
@@ -176,6 +184,8 @@ class Paper:
 
     # -- output ---------------------------------------------------------
     def to_spec(self, *, states: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Return a normalized paper spec and resolve optional State names."""
+
         spec = normalize_paper_spec(
             {
                 "available": True,

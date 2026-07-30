@@ -1,3 +1,5 @@
+"""Compute time-dependent marker sizes and opacities for cluster traces."""
+
 import numpy as np
 import pandas as pd
 

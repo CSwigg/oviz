@@ -1,4 +1,5 @@
-# Classes for storing user input data
+"""Data containers for orbiting traces and general spatial layers."""
+
 import numpy as np
 import pandas as pd
 from . import orbit_maker
@@ -6,101 +7,26 @@ from . import point_sizes
 import copy
 
 class Trace:
-    """
-    Class for storing user input data of a star cluster.
+    """A styled phase-space sample that can be integrated through time.
 
     Parameters
     ----------
     df : pandas.DataFrame
-        Input data containing the following columns: x, y, z, U, V, W, name, age_myr.
+        Rows with ``x``, ``y``, ``z`` in pc; ``U``, ``V``, ``W`` in km/s;
+        ``name``; and ``age_myr``.
     data_name : str
-        Name of the star cluster data.
-    min_size : int, optional
-        Minimum size of the marker points (default is 1).
-    max_size : int, optional
-        Maximum size of the marker points (default is 5).
-    color : str, optional
-        Color of the marker points (default is 'gray').
-    colormap : str, optional
-        Colorscale name for age-based coloring (default is None).
-    cmin : float, optional
-        Minimum value for the colorscale (default is None, auto-computed).
-    cmax : float, optional
-        Maximum value for the colorscale (default is None, auto-computed).
-    opacity : float, optional
-        Opacity of the marker points (default is 1.0).
-    marker_style : str, optional
-        Style of the marker points (default is 'circle').
-    show_tracks : bool, optional
-        Whether to show tracks (default is False).
-    size_by_n_stars : bool, optional
-        Whether to size by number of stars (default is False).
-    fade_in_time : float, optional
-        Duration of time for size easing (default is None, uses make_plot default).
-    fade_in_and_out : bool, optional
-        Whether to fade in and out (default is None, uses make_plot default).
-    fade_in_and_disp : bool, optional
-        Whether to fade in then drop to min size after disp_time (default is None, uses make_plot default).
-    disp_time : float, optional
-        Time after birth to keep max size before dropping to min size (default is None, uses make_plot default).
-
-    Attributes
-    ----------
-    df : pandas.DataFrame
-        Input data containing the following columns: x, y, z, U, V, W, name, age_myr.
-    data_name : str
-        Name of the star cluster data.
-    cluster_int_coords : tuple
-        Integrated coordinates of the star cluster.
-    coordinates : numpy.ndarray
-        Array of coordinates (x, y, z, U, V, W) of the star cluster.
-    integrated : bool
-        Whether the star cluster has been integrated.
+        Viewer label for the complete sample.
+    min_size, max_size : float
+        Marker-size bounds.
     color : str
-        Color of the marker points.
-    colormap : str or None
-        Colorscale name for age-based coloring.
-    cmin : float or None
-        Minimum value for the colorscale.
-    cmax : float or None
-        Maximum value for the colorscale.
+        CSS color used when no colormap is active.
     opacity : float
-        Opacity of the marker points.
-    min_size : int
-        Minimum size of the marker points.
-    max_size : int
-        Maximum size of the marker points.
-    marker_style : str
-        Style of the marker points.
-    show_tracks : bool
-        Whether to show tracks.
+        Base opacity from zero to one.
     size_by_n_stars : bool
-        Whether to size by number of stars.
-    fade_in_time : float or None
-        Duration of time for size easing (instance-specific).
-    fade_in_and_out : bool or None
-        Whether to fade in and out (instance-specific).
-    fade_in_and_disp : bool or None
-        Whether to fade in then drop to min size after disp_time (instance-specific).
-    disp_time : float or None
-        Time after birth to keep max size before dropping to min size (instance-specific).
+        Scale markers by the optional ``n_stars`` column.
 
-    Methods
-    -------
-    __init__(self, df, data_name, min_size=1, max_size=5, color='gray', opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False, fade_in_time=None, fade_in_and_out=None, colormap=None, cmin=None, cmax=None, fade_in_and_disp=None, disp_time=None)
-        Initializes the Trace object.
-    create_integrated_dataframe(self, time)
-        Creates an integrated DataFrame of the star cluster.
-    set_age_based_sizes(self, fade_in_time=None, fade_in_and_out=None)
-        Set the point sizes for clusters based on the number of stars.
-    integrate_orbits(self, time, reference_frame_center=None)
-        Integrates the orbits of the star cluster.
-    limit_cluster_age(self, age_min, age_max)
-        Limit the age of the star cluster.
-    limit_cluster_by_name(self, names)
-        Limit the star cluster by name.
-    copy(self)
-        Returns a copy of the Trace object.
+    Other keyword arguments control marker style, tracks, colormaps, and
+    age-based size or opacity timing.
     """
 
     def __init__(
@@ -354,20 +280,30 @@ class Trace:
 
     @property
     def layer_name(self):
+        """Return the display name used for this trace in the viewer."""
+
         return self.data_name
 
     @property
     def integrated_coords(self):
+        """Return centered, heliocentric, and Galactocentric orbit arrays."""
+
         return self.cluster_int_coords
 
     @property
     def has_time_varying_geometry(self):
+        """Return whether this trace changes position across timeline frames."""
+
         return True
 
     def limit_age(self, age_min, age_max):
+        """Keep rows with ages inside the inclusive range in Myr."""
+
         self.limit_cluster_age(age_min, age_max)
 
     def limit_by_name(self, names):
+        """Keep rows whose ``name`` is present in ``names``."""
+
         self.limit_cluster_by_name(names)
 
 
@@ -472,14 +408,20 @@ class Layer(Trace):
 
     @classmethod
     def from_dataframe(cls, df, layer_name, **kwargs):
+        """Construct a layer from a dataframe and keyword styling options."""
+
         return cls(df=df, layer_name=layer_name, **kwargs)
 
     @property
     def supports_orbit_tracing(self):
+        """Return whether the original input supplied all velocity columns."""
+
         return bool(self._has_velocity_columns)
 
     @property
     def has_time_varying_geometry(self):
+        """Return whether this layer is orbit integrated rather than static."""
+
         return self.supports_orbit_tracing
 
     def _static_cluster_int_coords(self, time):
@@ -500,6 +442,8 @@ class Layer(Trace):
         )
 
     def integrate_orbits(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
+        """Integrate a phase-space layer or replicate a stationary layer in time."""
+
         if self.supports_orbit_tracing:
             return super().integrate_orbits(
                 time,
@@ -515,32 +459,12 @@ class Layer(Trace):
         self.integrated = True
 
 class TraceCollection:
-    """
-    Class for storing a collection of star clusters.
+    """An ordered collection of :class:`Trace` objects.
 
-    Attributes
+    Parameters
     ----------
-    clusters : list
-        List of Trace objects.
-
-    Methods
-    -------
-    __init__(self, clusters=[])
-        Initializes the TraceCollection object.
-    add_cluster(self, cluster)
-        Adds a star cluster to the collection.
-    get_cluster(self, identifier)
-        Retrieves a star cluster from the collection.
-    get_all_clusters(self)
-        Retrieves all star clusters from the collection.
-    integrate_all_orbits(self, time, reference_frame_center=None)
-        Integrates the orbits of all star clusters in the collection.
-    set_all_cluster_sizes(self, fade_in_time, fade_in_and_out)
-        Set the point sizes for all clusters in the collection.
-    limit_all_cluster_ages(self, age_min, age_max)
-        Limit the age of all star clusters in the collection.
-    limit_all_cluster_names(self, names)
-        Limit the star clusters in the collection by name.
+    clusters : sequence of Trace, optional
+        Initial traces in display order.
     """
 
     def __init__(self, clusters=None):
@@ -728,18 +652,28 @@ class TraceCollection:
 
     @property
     def layers(self):
+        """Return the stored traces using layer terminology."""
+
         return self.clusters
 
     def add_layer(self, layer):
+        """Add one :class:`Layer` or compatible :class:`Trace`."""
+
         self.add_cluster(layer)
 
     def get_layer(self, identifier):
+        """Return a layer by display name or zero-based collection index."""
+
         return self.get_cluster(identifier)
 
     def get_all_layers(self):
+        """Return all layers in insertion order."""
+
         return self.get_all_clusters()
 
     def integrate_all_layers(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
+        """Prepare every layer for the supplied timeline."""
+
         self.integrate_all_orbits(
             time,
             reference_frame_center=reference_frame_center,
@@ -750,6 +684,8 @@ class TraceCollection:
         )
 
     def set_all_layer_sizes(self, fade_in_time, fade_in_and_out, fade_in_and_disp=False, disp_time=0):
+        """Apply the collection-wide marker-size defaults to every layer."""
+
         self.set_all_cluster_sizes(
             fade_in_time,
             fade_in_and_out,
@@ -759,4 +695,6 @@ class TraceCollection:
 
 
 class LayerCollection(TraceCollection):
+    """A :class:`TraceCollection` exposed with general layer terminology."""
+
     pass

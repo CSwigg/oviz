@@ -1,3 +1,5 @@
+"""Validate and normalize declarative Three.js Action definitions."""
+
 from __future__ import annotations
 
 import copy
@@ -179,6 +181,12 @@ def normalize_threejs_actions(
     trace_key_by_name: dict[str, str],
     playback_interval_ms: int,
 ) -> list[dict[str, Any]]:
+    """Validate Actions and return scene-spec records with resolved trace keys.
+
+    Action steps may target a saved State, legend group, camera, or timeline.
+    Invalid references and conflicting identifiers raise :class:`ValueError`.
+    """
+
     if actions in (None, []):
         return []
     if not isinstance(actions, (list, tuple)):

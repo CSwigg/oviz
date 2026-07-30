@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="oviz",
     version="0.1.0",
-    description="A Python package for visualizing the 3D orbits of star clusters and associations.",
+    description="Interactive 3D, Sky, and time visualization for Gaia and Galactic ISM data.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     author="Cameren Swiggum",
@@ -20,6 +20,9 @@ setup(
         "astropy",
         "pandas",
     ],
+    extras_require={
+        "docs": ["sphinx>=7", "sphinx-rtd-theme>=2"],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

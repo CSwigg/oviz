@@ -1,3 +1,5 @@
+"""Embedded JavaScript for viewer modes, rendering, and shared controls."""
+
 from __future__ import annotations
 
 

@@ -44,6 +44,8 @@ def _unique_id(raw: Any, prefix: str, seen: set[str]) -> str:
 
 
 def normalize_paper_anchor(value: Any, *, seen_ids: set[str]) -> dict[str, Any] | None:
+    """Normalize one paper-to-State anchor and assign a unique ID."""
+
     if not isinstance(value, dict):
         return None
     state_id = value.get("state_id")
@@ -81,6 +83,8 @@ def normalize_paper_block(
     seen_block_ids: set[str],
     seen_anchor_ids: set[str],
 ) -> dict[str, Any]:
+    """Normalize one HTML or figure block in a paper section."""
+
     source = value if isinstance(value, dict) else {}
     block_type = str(source.get("type") or "html").strip().lower()
     if block_type not in SUPPORTED_BLOCK_TYPES:
@@ -112,6 +116,8 @@ def normalize_paper_block(
 
 
 def normalize_paper_spec(value: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize the complete paper-reader specification and embedded assets."""
+
     source = value if isinstance(value, dict) else {}
     raw_sections = source.get("sections", [])
     if not isinstance(raw_sections, list):

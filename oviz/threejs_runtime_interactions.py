@@ -1,3 +1,5 @@
+"""Embedded JavaScript for timeline, pointer, keyboard, and selection input."""
+
 from __future__ import annotations
 
 

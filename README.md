@@ -1,157 +1,142 @@
-# oviz
+# Oviz
 
-`oviz` is a Python package for 3D astronomical spatial visualization, with orbit tracing as a core workflow.
+Oviz turns three-dimensional stellar data into interactive web figures that can
+be explored in space and time. Its current focus is Gaia data for young star
+clusters and associations, together with emerging three-dimensional maps of the
+interstellar medium (ISM).
 
-It combines:
-- orbital integration (`galpy`)
-- a standalone Three.js viewer for interactive 3D exploration
-- on-sky Aladin Lite backgrounds and sky controls inside the Three.js viewer
+Oviz combines:
 
-## Installation
+- [Three.js](https://threejs.org/) for the interactive 3D scene;
+- [Aladin Lite](https://aladin.cds.unistra.fr/AladinLite/doc/) for registered
+  all-sky HiPS imagery;
+- [galpy](https://docs.galpy.org/en/latest/) for Galactic orbit integration;
+- Astropy, NumPy, and pandas for astronomical coordinates and tabular data.
+
+Together these tools let a viewer move between a Galactic 3D scene and the sky,
+follow clusters through time, compare stars with dust or emission maps, and save
+a scientific narrative as an ordered sequence of viewer States.
+
+## Scientific scope
+
+Oviz is designed around data products such as:
+
+- [Gaia Data Release 3](https://doi.org/10.1051/0004-6361/202243940);
+- the [Gaia DR3 all-sky open-cluster catalogue](https://doi.org/10.1051/0004-6361/202346285);
+- the [SigMA view of the Sco-Cen association](https://doi.org/10.1051/0004-6361/202243690);
+- the [Edenhofer et al. parsec-scale 3D dust map](https://doi.org/10.1051/0004-6361/202347628);
+- the [Vergely et al. Gaia-2MASS 3D dust maps](https://cdsarc.cds.unistra.fr/viz-bin/ReadMe/J/A%2BA/664/A174?format=html&tex=true).
+
+The data model can also represent other point, line, image, and volume layers.
+Broader astronomical views and analysis tools are planned.
+
+## Install
 
 ```bash
 python -m pip install -e .
 ```
 
-or
+Oviz requires Python 3.8 or newer. Its core Python dependencies are NumPy,
+pandas, Astropy, and galpy.
 
-```bash
-python -m pip install .
-```
+## Minimal example
 
-Main dependencies:
-- `numpy`
-- `pandas`
-- `astropy`
-- `galpy`
-
-The supported renderer is the standalone Three.js export path.
-
-## Core Data Model
-
-`Trace` requires a dataframe with these columns:
-- `x`, `y`, `z` (pc)
-- `U`, `V`, `W` (km/s)
-- `name`
-- `age_myr`
-
-Optional:
-- `n_stars` (required only if `size_by_n_stars=True`)
-
-For a more general astronomy-facing API, `oviz` also exposes:
-- `Layer`
-- `LayerCollection`
-- `Scene3D`
-
-`Layer` preserves the same rendering/orbit behavior as `Trace`, but it can also represent static spatial layers when you pass `assume_stationary=True`.
-
-## Quick Start
+A time-varying `Trace` needs Cartesian Galactic positions in parsecs, velocities
+in km/s, a name, and an age:
 
 ```python
 import numpy as np
 import pandas as pd
 
-from oviz import Layer, LayerCollection, Scene3D, build_threejs_profile
+from oviz import Animate3D, Trace, TraceCollection
 
-# Example minimal cluster dataframe
-cluster_df = pd.DataFrame(
+clusters = pd.DataFrame(
     {
-        "x": [10.0, 12.0],
-        "y": [20.0, 19.0],
-        "z": [5.0, 6.0],
-        "U": [-12.0, -11.5],
-        "V": [220.0, 221.0],
-        "W": [7.0, 7.2],
-        "name": ["Cluster A", "Cluster A"],
-        "age_myr": [8.0, 8.0],
+        "x": [35.0, -80.0],
+        "y": [120.0, 60.0],
+        "z": [15.0, -25.0],
+        "U": [-11.0, -9.5],
+        "V": [-18.0, -21.0],
+        "W": [-7.0, -5.0],
+        "name": ["Cluster A", "Cluster B"],
+        "age_myr": [12.0, 28.0],
+        "n_stars": [180, 75],
     }
 )
 
-layer = Layer.from_dataframe(
-    cluster_df,
-    layer_name="Cluster A",
-    color="cyan",
-    marker_style="circle",
+trace = Trace(
+    clusters,
+    data_name="Young clusters",
+    color="#e34a4a",
+    size_by_n_stars=True,
 )
-collection = LayerCollection([layer])
-
-viz = Scene3D(
-    data_collection=collection,
-    xyz_widths=(1000, 1000, 400),
+scene = Animate3D(
+    TraceCollection([trace]),
+    xyz_widths=(2000, 2000, 600),
     figure_theme="dark",
 )
 
-time = np.round(np.arange(0, -20.5, -0.5), 1)
-fig = viz.make_plot(
-    time=time,
-    show=False,
+figure = scene.make_plot(
+    time=np.arange(-30.0, 0.5, 0.5),
     galactic_mode=True,
-    show_galactic_guides=False,
-    threejs_initial_state=build_threejs_profile("full"),
-)
-fig.write_html("oviz_scene.html")
-```
-
-## Sky View
-
-Enable sky features directly on the Three.js viewer:
-
-```python
-fig = viz.make_plot(
-    time=time,
-    show=False,
     enable_sky_panel=True,
-    sky_radius_deg=7.0,
-    sky_frame="galactic",
-    sky_survey="P/DSS2/color",
-    cluster_members_file="/absolute/path/to/members.csv",  # optional
-    show_cluster_members_in_sky=True,
+    renderer="threejs",
+    show=False,
+    compress_scene_spec=True,
 )
+figure.write_html("young_clusters.html")
 ```
 
-Sky behavior:
-- when `show_cluster_members_in_sky=True`, matched cluster members replace the
-  bulk cluster marker in Sky view and inherit the parent trace color/visibility
-- member stars use `1/20` of the parent cluster point size; a small 2.5 px
-  render-only floor keeps them visible in wide Sky views, while the normal
-  bulk marker remains unchanged in 3D
-- click a cluster member in 3D at `t = 0` to set the footprint and sky target
-- cone footprint is shown only at `t = 0`
-- sky layers, Aladin backgrounds, and spectrum aperture controls are built into the viewer
+Use `Layer(..., assume_stationary=True)` for a static XYZ catalogue. Volume
+layers and optional cluster-member catalogues can be passed to
+`Animate3D.make_plot()`; see the [Python API](docs/source/python_api.rst).
 
-## Optional Member File Format
+## States and sharing
 
-If `cluster_members_file` is passed, it should be a CSV with:
-- a cluster label column: `name`, `cluster_name`, `cluster`, or `group_name`
-- either Galactic coordinates (`l`/`b`) or ICRS coordinates
-  (`ra`/`dec`, including common `RA_ICRS`/`DE_ICRS` aliases)
-- optionally, `source_id`, `gaia_source_id`, or `GaiaDR3`
+A State is a complete viewer snapshot: camera, time, 3D/Sky mode, trace and
+volume settings, Aladin layers, selections, panels, and presentation settings.
+Open **States**, arrange the views you want to explain, and export either an
+editable States HTML or a present-only HTML with forward/back controls.
 
-When a cluster is selected, only that cluster's member stars are rendered in Aladin.
+The result is one HTML file containing the scientific scene and saved States.
+It can be opened locally, served from any static web host, or sent directly to a
+collaborator. This makes it practical to link someone to a guided view of a Gaia
+sample without requiring them to install Python or reproduce the analysis.
 
-## Public Entry Points
+Three.js and Aladin Lite are loaded from public CDNs, and HiPS backgrounds load
+from their survey servers, so those features require an internet connection.
 
-From `oviz`:
-- `Trace`
-- `TraceCollection`
-- `Animate3D`
-- `Layer`
-- `LayerCollection`
-- `Scene3D`
-- `build_threejs_profile`
-- `threejs_profile`
-- `lite_profile`
-- `galactic_lite_profile`
-- `website_background_profile`
+States can also be controlled from JavaScript:
 
-## Testing
+```javascript
+const root = document.querySelector('[id^="oviz-three-"]');
+const viewer = window.Oviz.get(root.id);
+await viewer.states.goTo(1);       // one-based State index
+await viewer.states.next();
+const html = await viewer.states.exportHtml({ download: false });
+```
 
-Run the test suite with:
+See the [browser API reference](docs/source/browser_api.rst) for navigation,
+authoring, events, and `postMessage` commands.
+
+## Input conventions
+
+- Positions `x`, `y`, and `z` are parsecs in Galactic Cartesian coordinates.
+- Velocities `U`, `V`, and `W` are km/s.
+- `age_myr` is in Myr; `n_stars` is optional unless size scaling uses it.
+- Every time array must include `t = 0`.
+- A member-star table must include a cluster-name column and either Galactic
+  (`l`, `b`) or ICRS (`ra`, `dec`) sky coordinates.
+
+## Documentation and tests
+
+- [Overview](docs/source/overview.rst)
+- [Python API](docs/source/python_api.rst)
+- [Browser API](docs/source/browser_api.rst)
+- [Agent guide](AGENTS.md)
+
+Run the maintained test suite with:
 
 ```bash
 pytest -q tests
 ```
-
-## Notes
-
-- Live Aladin sky backgrounds load remote Aladin/HiPS assets, so network access is required at runtime for those layers.

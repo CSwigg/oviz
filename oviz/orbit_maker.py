@@ -1,4 +1,5 @@
-# Description: This file contains the functions to create the orbits of star clusters
+"""Integrate Galactic orbits and convert them to Oviz coordinate frames."""
+
 from astropy.coordinates import SkyCoord, concatenate
 import astropy.units as u
 from copy import deepcopy

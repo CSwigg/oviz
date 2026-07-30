@@ -1,3 +1,5 @@
+"""HTML shell inserted around each standalone Three.js viewer."""
+
 THREEJS_SHELL_HTML = """
       <div class="oviz-three-action-bar" data-visible="false"></div>
       <div class="oviz-three-legend-panel" data-open="true" data-dragging="false">
