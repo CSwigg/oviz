@@ -695,6 +695,208 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn(r"/\.html?$/i.test(cleaned)", normalize_body)
         self.assertIn('cleaned + ".html"', normalize_body)
 
+    def test_authoring_document_autosaves_states_actions_and_slides(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+
+        self.assertIn("const OVIZ_AUTHORING_DRAFT_VERSION = 2", html)
+        self.assertIn("draft_schema_version: OVIZ_AUTHORING_DRAFT_VERSION", html)
+        self.assertIn("states: compact", html)
+        self.assertIn("deck: typeof ovizDeckExportSpec", html)
+        self.assertIn("actions: ovizStatesClone(sceneSpec.actions", html)
+        self.assertIn("file_handle: ovizAuthoringFileHandle || null", html)
+        self.assertIn('window.addEventListener("beforeunload"', html)
+        self.assertIn('window.addEventListener("pagehide"', html)
+        self.assertIn('document.addEventListener("visibilitychange"', html)
+        self.assertIn('ovizStateEvent("authoring-draft-restored"', html)
+        self.assertIn("ovizRestoreActionsSpec(normalized.actions)", html)
+
+    def test_cmd_s_saves_an_editable_authoring_html_even_while_editing_text(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        keydown_body = html.split("function onKeyDown(event)", 1)[1].split(
+            "function onKeyUp(event)", 1
+        )[0]
+
+        self.assertIn("const saveShortcut = (", keydown_body)
+        self.assertIn('(event.metaKey || event.ctrlKey)', keydown_body)
+        self.assertIn('lowerKey === "s"', keydown_body)
+        self.assertIn("event.preventDefault()", keydown_body)
+        self.assertIn('ovizSaveAuthoringDocument({ source: "keyboard" })', keydown_body)
+        self.assertLess(
+            keydown_body.index("if (saveShortcut)"),
+            keydown_body.index("keyboardTargetIsEditable(event.target)"),
+        )
+        self.assertIn("save: ovizSaveAuthoringDocument", html)
+        self.assertIn("isDirty: () => Boolean(ovizAuthoringDirty)", html)
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_authoring_save_builds_editable_scene_with_original_initial_state(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        helper_source = (
+            "async function ovizBuildAuthoringSceneSpec()"
+            + html.split("async function ovizBuildAuthoringSceneSpec()", 1)[1].split(
+                "async function ovizSaveAuthoringDocument", 1
+            )[0]
+        )
+        script = f"""
+        const sceneSpec = {{
+          width: 640,
+          height: 480,
+          initial_state: {{ stale: true }},
+          actions: {{ enabled: true, items: [{{ key: "tour" }}] }},
+        }};
+        const ovizOriginalSceneInitialState = {{ original: true }};
+        const root = {{ clientWidth: 800, clientHeight: 600 }};
+        function ovizStatesPublicProject() {{
+          return {{ revision: 4, items: [{{ id: "state-1" }}], assets: {{}} }};
+        }}
+        async function ovizCompactProjectForStorage(value) {{
+          return JSON.parse(JSON.stringify(value));
+        }}
+        function safeJsonClone(value, fallback) {{
+          try {{ return JSON.parse(JSON.stringify(value)); }} catch (_err) {{ return fallback; }}
+        }}
+        function ovizStatesClone(value, fallback) {{ return safeJsonClone(value, fallback); }}
+        function ovizDeckExportSpec() {{
+          return {{ enabled: true, embedded: true, revision: 7, slides: [{{ id: "opening" }}] }};
+        }}
+        {helper_source}
+        (async () => {{
+          const result = await ovizBuildAuthoringSceneSpec();
+          process.stdout.write(JSON.stringify(result.exportSceneSpec));
+        }})().catch((error) => {{ throw error; }});
+        """
+        result = subprocess.run(
+            ["node"], input=script, text=True, capture_output=True, check=True
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertEqual(payload["initial_state"], {"original": True})
+        self.assertEqual(payload["states"]["default_mode"], "edit")
+        self.assertFalse(payload["states"]["present_only"])
+        self.assertEqual(payload["deck"]["slides"], [{"id": "opening"}])
+        self.assertEqual(payload["actions"]["items"], [{"key": "tour"}])
+        self.assertEqual((payload["width"], payload["height"]), (800, 600))
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_authoring_save_reuses_a_previously_granted_file_handle(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        helper_source = (
+            "async function ovizWriteHtmlFile(htmlText, suggestedName, options = {})"
+            + html.split(
+                "async function ovizWriteHtmlFile(htmlText, suggestedName, options = {})", 1
+            )[1].split("function ovizDefaultAuthoringFilename", 1)[0]
+        )
+        script = f"""
+        const writes = [];
+        const handle = {{
+          name: "saved-viewer.html",
+          async queryPermission() {{ return "granted"; }},
+          async createWritable() {{
+            return {{
+              async write(value) {{ writes.push(value); }},
+              async close() {{ writes.push("closed"); }},
+            }};
+          }},
+        }};
+        const window = {{}};
+        {helper_source}
+        (async () => {{
+          const result = await ovizWriteHtmlFile("<html>saved</html>", "fallback.html", {{
+            fileHandle: handle,
+          }});
+          process.stdout.write(JSON.stringify({{
+            saved: result.saved,
+            direct: result.direct,
+            filename: result.filename,
+            sameHandle: result.fileHandle === handle,
+            writes,
+          }}));
+        }})().catch((error) => {{ throw error; }});
+        """
+        result = subprocess.run(
+            ["node"], input=script, text=True, capture_output=True, check=True
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertTrue(payload["saved"])
+        self.assertTrue(payload["direct"])
+        self.assertTrue(payload["sameHandle"])
+        self.assertEqual(payload["filename"], "saved-viewer.html")
+        self.assertEqual(payload["writes"], ["<html>saved</html>", "closed"])
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_unified_draft_normalizes_legacy_records_and_detects_slide_changes(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        helper_source = (
+            "function ovizNormalizeAuthoringDraft(raw)"
+            + html.split("function ovizNormalizeAuthoringDraft(raw)", 1)[1].split(
+                "async function ovizReadDraft", 1
+            )[0]
+        )
+        script = f"""
+        const OVIZ_AUTHORING_DRAFT_VERSION = 2;
+        const ovizStatesProject = {{ revision: 3 }};
+        const sceneSpec = {{
+          states: {{ revision: 3 }},
+          deck: {{ revision: 2 }},
+          actions: {{ enabled: false, items: [] }},
+        }};
+        {helper_source}
+        const legacy = ovizNormalizeAuthoringDraft({{
+          project_id: "legacy",
+          revision: 5,
+          items: [],
+        }});
+        const unified = ovizNormalizeAuthoringDraft({{
+          draft_schema_version: 2,
+          project_id: "project",
+          states: {{ revision: 3, items: [] }},
+          deck: {{ revision: 4, slides: [{{ id: "slide" }}] }},
+          actions: {{ enabled: false, items: [] }},
+          dirty: true,
+        }});
+        process.stdout.write(JSON.stringify({{
+          legacyVersion: legacy.draft_schema_version,
+          legacyRevision: legacy.states.revision,
+          unifiedVersion: unified.draft_schema_version,
+          newer: ovizAuthoringDraftIsNewer(unified),
+        }}));
+        """
+        result = subprocess.run(
+            ["node"], input=script, text=True, capture_output=True, check=True
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertEqual(payload["legacyVersion"], 1)
+        self.assertEqual(payload["legacyRevision"], 5)
+        self.assertEqual(payload["unifiedVersion"], 2)
+        self.assertTrue(payload["newer"])
+
     @unittest.skipIf(shutil.which("node") is None, "node is not available")
     def test_present_only_export_locks_states_and_excludes_slides(self):
         html = ThreeJSFigure({

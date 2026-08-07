@@ -3000,6 +3000,22 @@ THREEJS_VIEWER_RUNTIME_JS = """
       function onKeyDown(event) {
         const key = String(event.key || "");
         const lowerKey = normalizedKeyboardKey(key);
+        const saveShortcut = (
+          (event.metaKey || event.ctrlKey)
+          && !event.altKey
+          && lowerKey === "s"
+        );
+        if (saveShortcut) {
+          clearPressedKeys();
+          event.preventDefault();
+          event.stopPropagation();
+          if (typeof ovizSaveAuthoringDocument === "function") {
+            Promise.resolve(ovizSaveAuthoringDocument({ source: "keyboard" })).catch((error) => {
+              console.error("Oviz HTML save failed", error);
+            });
+          }
+          return;
+        }
         const targetTagName = String(event.target && event.target.tagName || "").toLowerCase();
         const viewerModeShortcutFromButton = (
           (lowerKey === "z" || lowerKey === "p")

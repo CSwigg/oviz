@@ -295,6 +295,9 @@ THREEJS_DECK_RUNTIME_JS = r"""
         ovizDeckRenderAuthoringSlide();
         ovizDeckRenderRevealSlides();
         ovizDeckEvent("deck-changed", { reason, slides: ovizDeckList() });
+        if (typeof ovizMarkAuthoringChanged === "function") {
+          ovizMarkAuthoringChanged(`deck:${reason}`);
+        }
         ovizDeckSyncHistoryUi();
         return true;
       }
@@ -324,6 +327,9 @@ THREEJS_DECK_RUNTIME_JS = r"""
         ovizDeckProject.revision += 1;
         ovizDeckDirty = true;
         sceneSpec.deck = ovizDeckExportSpec({ embedded: false });
+        if (typeof ovizMarkAuthoringChanged === "function") {
+          ovizMarkAuthoringChanged(`deck:${reason}`);
+        }
         ovizDeckRecordHistory(reason);
         if (options.render !== false) {
           ovizDeckRenderEditor();
@@ -866,8 +872,22 @@ THREEJS_DECK_RUNTIME_JS = r"""
         const missing = slide && slide.state_id && !ovizDeckStateExists(slide.state_id);
         if (missing) {
           ovizDeckSetStatus("This slide's State was removed. Capture or link a new view.", true);
+        } else if (typeof ovizAuthoringSaveStatus !== "undefined" && ovizAuthoringSaveStatus === "saving") {
+          ovizDeckSetStatus("Saving HTML…", false);
+        } else if (typeof ovizAuthoringSaveStatus !== "undefined" && ovizAuthoringSaveStatus === "error") {
+          ovizDeckSetStatus(
+            typeof ovizAuthoringSaveMessage !== "undefined" && ovizAuthoringSaveMessage
+              ? `Save failed: ${ovizAuthoringSaveMessage}`
+              : "Save failed",
+            true,
+          );
+        } else if (
+          ovizDeckDirty
+          || (typeof ovizAuthoringDirty !== "undefined" && ovizAuthoringDirty)
+        ) {
+          ovizDeckSetStatus("Unsaved document · draft autosaved", false);
         } else {
-          ovizDeckSetStatus(ovizDeckDirty ? "Unexported changes" : "", false);
+          ovizDeckSetStatus("Saved", false);
         }
       }
 

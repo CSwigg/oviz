@@ -4,10 +4,10 @@ from __future__ import annotations
 
 
 THREEJS_ACTION_RUNTIME_JS = """
-      const actionsSpec = sceneSpec.actions && typeof sceneSpec.actions === "object"
+      let actionsSpec = sceneSpec.actions && typeof sceneSpec.actions === "object"
         ? sceneSpec.actions
         : { enabled: false, items: [] };
-      const actionDefinitions = Array.isArray(actionsSpec.items) ? actionsSpec.items : [];
+      let actionDefinitions = Array.isArray(actionsSpec.items) ? actionsSpec.items : [];
       const actionButtonByKey = new Map();
       let activeActionKey = "";
       let selectedActionKey = "";
@@ -342,6 +342,24 @@ THREEJS_ACTION_RUNTIME_JS = """
           actionButtonByKey.set(String(action.key || ""), button);
           actionBarEl.appendChild(button);
         });
+      }
+
+      function ovizRestoreActionsSpec(raw) {
+        if (activeActionRun && typeof interruptActionRun === "function") {
+          interruptActionRun("restore-authoring-draft", { disableOrbit: false });
+        }
+        try {
+          actionsSpec = JSON.parse(JSON.stringify(
+            raw && typeof raw === "object" ? raw : { enabled: false, items: [] }
+          ));
+        } catch (_err) {
+          actionsSpec = { enabled: false, items: [] };
+        }
+        actionDefinitions = Array.isArray(actionsSpec.items) ? actionsSpec.items : [];
+        sceneSpec.actions = actionsSpec;
+        renderActionBar();
+        syncActionButtons();
+        return actionDefinitions.slice();
       }
 
       function syncActionButtons() {

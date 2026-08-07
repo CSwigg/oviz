@@ -8,6 +8,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
       });
       const OVIZ_STATES_DB_NAME = "oviz-viewer-states";
       const OVIZ_STATES_DB_STORE = "drafts";
+      const OVIZ_AUTHORING_DRAFT_VERSION = 2;
       let ovizStatesProject = null;
       let ovizOriginalRuntimeState = null;
       let ovizOriginalSceneInitialState = null;
@@ -30,6 +31,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
       let ovizStatesStatusEl = null;
       let ovizStatesRecoveryEl = null;
       let ovizStatesDraftTimer = null;
+      let ovizAuthoringFileHandle = null;
+      let ovizAuthoringDirty = false;
+      let ovizAuthoringSaveInProgress = false;
+      let ovizAuthoringSaveStatus = "saved";
+      let ovizAuthoringSaveMessage = "";
+      let ovizAuthoringSuppressBeforeUnload = false;
+      let ovizAuthoringLifecycleInstalled = false;
       let ovizStatesPreloadStatus = { loaded: 0, total: 0, failed: [] };
       let ovizResidentSkyBaseLayerKey = "";
       const ovizSkyLayerTransitionWaiters = new Map();
@@ -78,6 +86,23 @@ THREEJS_STATE_RUNTIME_JS = r"""
         } catch (_err) {
           return fallback;
         }
+      }
+
+      function ovizAuthoringSetStatus(status, message = "") {
+        ovizAuthoringSaveStatus = String(status || "");
+        ovizAuthoringSaveMessage = String(message || "");
+        if (root && root.dataset) {
+          root.dataset.authoringDirty = ovizAuthoringDirty ? "true" : "false";
+          root.dataset.authoringSaveStatus = ovizAuthoringSaveStatus;
+          root.dataset.authoringSaveMessage = ovizAuthoringSaveMessage;
+        }
+      }
+
+      function ovizMarkAuthoringChanged(reason = "change") {
+        ovizAuthoringDirty = true;
+        ovizAuthoringSetStatus("unsaved", reason);
+        ovizScheduleDraftSave();
+        if (typeof ovizDeckSyncStatus === "function") ovizDeckSyncStatus();
       }
 
       const OVIZ_MAX_VOLUME_MASK_SOURCE_COMPONENTS = 4;
@@ -249,7 +274,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
       function ovizStatesChanged(reason) {
         ovizStatesProject.revision += 1;
         ovizStateDirty = true;
-        ovizScheduleDraftSave();
+        ovizMarkAuthoringChanged(`states:${reason}`);
         ovizRenderStatesDrawer();
         if (typeof postSkyLayerStateToAladin === "function") {
           postSkyLayerStateToAladin();
@@ -2901,19 +2926,49 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return ovizStatesClone(item, {});
       }
 
-      async function ovizWriteHtmlFile(htmlText, suggestedName) {
-        if (typeof window.showSaveFilePicker === "function") {
+      async function ovizWriteHtmlFile(htmlText, suggestedName, options = {}) {
+        const writeHandle = async (handle) => {
+          if (!handle || typeof handle.createWritable !== "function") return null;
+          if (typeof handle.queryPermission === "function") {
+            let permission = await handle.queryPermission({ mode: "readwrite" });
+            if (permission !== "granted" && typeof handle.requestPermission === "function") {
+              permission = await handle.requestPermission({ mode: "readwrite" });
+            }
+            if (permission !== "granted") return null;
+          }
+          const writable = await handle.createWritable();
+          await writable.write(htmlText);
+          await writable.close();
+          return {
+            saved: true,
+            filename: String(handle.name || suggestedName),
+            fileHandle: handle,
+            direct: true,
+          };
+        };
+
+        const preferredHandle = options.fileHandle || null;
+        if (preferredHandle) {
+          try {
+            const result = await writeHandle(preferredHandle);
+            if (result) return result;
+          } catch (err) {
+            if (err && err.name === "AbortError") return { saved: false, cancelled: true };
+            console.warn("Oviz could not reuse the previous file permission.", err);
+          }
+        }
+
+        if (typeof window.showSaveFilePicker === "function" && options.skipPicker !== true) {
           try {
             const handle = await window.showSaveFilePicker({
               suggestedName,
               types: [{ description: "HTML file", accept: { "text/html": [".html"] } }],
             });
-            const writable = await handle.createWritable();
-            await writable.write(htmlText);
-            await writable.close();
-            return { saved: true, filename: suggestedName };
+            const result = await writeHandle(handle);
+            if (result) return result;
           } catch (err) {
             if (err && err.name === "AbortError") return { saved: false, cancelled: true };
+            console.warn("Oviz could not write through the file picker; downloading a copy instead.", err);
           }
         }
         const blob = new Blob([htmlText], { type: "text/html;charset=utf-8" });
@@ -2925,7 +2980,92 @@ THREEJS_STATE_RUNTIME_JS = r"""
         link.click();
         link.remove();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        return { saved: true, filename: suggestedName };
+        return { saved: true, filename: suggestedName, downloaded: true };
+      }
+
+      function ovizDefaultAuthoringFilename() {
+        try {
+          const pathname = decodeURIComponent(String(window.location && window.location.pathname || ""));
+          const filename = pathname.split("/").filter(Boolean).pop() || "";
+          if (/\.html?$/i.test(filename)) return filename;
+        } catch (_err) {
+          // Fall through to the title-derived name.
+        }
+        return slugifyFilename(sceneSpec.title || "oviz") + ".html";
+      }
+
+      async function ovizBuildAuthoringSceneSpec() {
+        const compact = await ovizCompactProjectForStorage(ovizStatesPublicProject());
+        compact.default_mode = "edit";
+        compact.present_only = false;
+        compact.synchronized_revision = compact.revision;
+        const exportSceneSpec = safeJsonClone(sceneSpec, {});
+        exportSceneSpec.initial_state = ovizStatesClone(ovizOriginalSceneInitialState, {});
+        exportSceneSpec.states = compact;
+        if (typeof ovizDeckExportSpec === "function") {
+          exportSceneSpec.deck = ovizDeckExportSpec({ embedded: true });
+        }
+        exportSceneSpec.actions = ovizStatesClone(sceneSpec.actions || { enabled: false, items: [] }, {});
+        exportSceneSpec.width = Math.max(root.clientWidth || sceneSpec.width || 900, 1);
+        exportSceneSpec.height = Math.max(root.clientHeight || sceneSpec.height || 700, 1);
+        return { compact, exportSceneSpec };
+      }
+
+      async function ovizSaveAuthoringDocument(options = {}) {
+        if (ovizAuthoringSaveInProgress) {
+          return { saved: false, busy: true };
+        }
+        ovizAuthoringSaveInProgress = true;
+        ovizAuthoringSetStatus("saving", "Saving HTML…");
+        ovizRenderStatesDrawer();
+        if (typeof ovizDeckSyncStatus === "function") ovizDeckSyncStatus();
+        ovizStateEvent("authoring-save-start", { source: String(options.source || "api") });
+        try {
+          const { compact, exportSceneSpec } = await ovizBuildAuthoringSceneSpec();
+          const html = await buildExportHtml(exportSceneSpec);
+          const result = await ovizWriteHtmlFile(
+            html,
+            options.filename || ovizDefaultAuthoringFilename(),
+            { fileHandle: options.fileHandle || ovizAuthoringFileHandle }
+          );
+          if (!result.saved) {
+            ovizAuthoringSetStatus("unsaved", result.cancelled ? "Save cancelled" : "Not saved");
+            ovizRenderStatesDrawer();
+            if (typeof ovizDeckSyncStatus === "function") ovizDeckSyncStatus();
+            return result;
+          }
+          if (result.fileHandle) ovizAuthoringFileHandle = result.fileHandle;
+          ovizStatesProject.synchronized_revision = ovizStatesProject.revision;
+          sceneSpec.states = ovizStatesClone(compact, {});
+          if (typeof ovizDeckExportSpec === "function") {
+            sceneSpec.deck = ovizDeckExportSpec({ embedded: true });
+          }
+          ovizStateDirty = false;
+          if (typeof ovizDeckDirty !== "undefined") ovizDeckDirty = false;
+          ovizAuthoringDirty = false;
+          ovizAuthoringSetStatus("saved", result.downloaded ? "Downloaded saved copy" : "Saved");
+          if (root && root.dataset) root.dataset.authoringLastSavedAt = String(Date.now());
+          await ovizSaveDraftNow();
+          ovizRenderStatesDrawer();
+          if (typeof ovizDeckRenderEditor === "function") ovizDeckRenderEditor();
+          ovizStateEvent("authoring-save-complete", {
+            filename: result.filename,
+            downloaded: Boolean(result.downloaded),
+            direct: Boolean(result.direct),
+          });
+          return result;
+        } catch (error) {
+          ovizAuthoringDirty = true;
+          ovizAuthoringSetStatus("error", String(error && error.message || error));
+          ovizRenderStatesDrawer();
+          if (typeof ovizDeckSyncStatus === "function") ovizDeckSyncStatus();
+          ovizStateEvent("authoring-save-error", {
+            error: String(error && error.message || error),
+          });
+          throw error;
+        } finally {
+          ovizAuthoringSaveInProgress = false;
+        }
       }
 
       function ovizDefaultStatesExportFilename(options = {}) {
@@ -2997,9 +3137,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
           options.filename || ovizDefaultStatesExportFilename({ presentOnly }),
         );
         if (result.saved) {
+          if (result.fileHandle) ovizAuthoringFileHandle = result.fileHandle;
           ovizStatesProject.synchronized_revision = ovizStatesProject.revision;
           ovizStateDirty = false;
           if (typeof ovizDeckDirty !== "undefined") ovizDeckDirty = false;
+          ovizAuthoringDirty = false;
+          ovizAuthoringSetStatus("saved", result.downloaded ? "Downloaded saved copy" : "Saved");
           await ovizSaveDraftNow();
           ovizRenderStatesDrawer();
           if (typeof ovizDeckRenderEditor === "function") ovizDeckRenderEditor();
@@ -3025,6 +3168,45 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
       }
 
+      function ovizNormalizeAuthoringDraft(raw) {
+        if (!raw || typeof raw !== "object") return null;
+        const unified = Number(raw.draft_schema_version) >= OVIZ_AUTHORING_DRAFT_VERSION
+          || (raw.states && typeof raw.states === "object");
+        const states = unified ? raw.states : raw;
+        if (!states || typeof states !== "object") return null;
+        return {
+          draft_schema_version: unified
+            ? Math.max(OVIZ_AUTHORING_DRAFT_VERSION, Number(raw.draft_schema_version) || 0)
+            : 1,
+          project_id: String(raw.project_id || states.project_id || ""),
+          saved_at: Number(raw.saved_at || states.saved_at || 0),
+          dirty: unified ? raw.dirty !== false : true,
+          states,
+          deck: unified && raw.deck && typeof raw.deck === "object" ? raw.deck : null,
+          actions: unified && raw.actions && typeof raw.actions === "object" ? raw.actions : null,
+          file_handle: unified ? (raw.file_handle || null) : null,
+        };
+      }
+
+      function ovizAuthoringDraftIsNewer(draft) {
+        const normalized = ovizNormalizeAuthoringDraft(draft);
+        if (!normalized) return false;
+        const embeddedStatesRevision = Number(ovizStatesProject && ovizStatesProject.revision) || 0;
+        const draftStatesRevision = Number(normalized.states && normalized.states.revision) || 0;
+        if (draftStatesRevision > embeddedStatesRevision) return true;
+        const embeddedDeckRevision = Number(sceneSpec.deck && sceneSpec.deck.revision) || 0;
+        const draftDeckRevision = Number(normalized.deck && normalized.deck.revision) || 0;
+        if (draftDeckRevision > embeddedDeckRevision) return true;
+        if (normalized.actions) {
+          try {
+            if (JSON.stringify(normalized.actions) !== JSON.stringify(sceneSpec.actions || {})) return true;
+          } catch (_err) {
+            // Revisions remain the fallback for non-serializable extension data.
+          }
+        }
+        return false;
+      }
+
       async function ovizReadDraft() {
         const db = await ovizOpenDraftDb();
         if (!db) return null;
@@ -3037,17 +3219,68 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
       }
 
+      async function ovizPutDraftRecord(record) {
+        const db = await ovizOpenDraftDb();
+        if (!db) return false;
+        return new Promise((resolve) => {
+          let settled = false;
+          const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            try { db.close(); } catch (_err) { /* no-op */ }
+            resolve(Boolean(value));
+          };
+          try {
+            const transaction = db.transaction(OVIZ_STATES_DB_STORE, "readwrite");
+            transaction.objectStore(OVIZ_STATES_DB_STORE).put(record);
+            transaction.oncomplete = () => finish(true);
+            transaction.onerror = () => finish(false);
+            transaction.onabort = () => finish(false);
+          } catch (_err) {
+            finish(false);
+          }
+        });
+      }
+
       async function ovizSaveDraftNow() {
         if (!ovizStatesProject) return;
-        const db = await ovizOpenDraftDb();
-        if (!db) return;
         const compact = await ovizCompactProjectForStorage(ovizStatesPublicProject());
-        compact.saved_at = Date.now();
+        const record = {
+          draft_schema_version: OVIZ_AUTHORING_DRAFT_VERSION,
+          project_id: ovizStatesProject.project_id,
+          saved_at: Date.now(),
+          dirty: Boolean(ovizAuthoringDirty),
+          states: compact,
+          deck: typeof ovizDeckExportSpec === "function"
+            ? ovizDeckExportSpec({ embedded: false })
+            : ovizStatesClone(sceneSpec.deck || {}, {}),
+          actions: ovizStatesClone(sceneSpec.actions || { enabled: false, items: [] }, {}),
+          file_handle: ovizAuthoringFileHandle || null,
+        };
+        let saved = await ovizPutDraftRecord(record);
+        if (!saved && record.file_handle) {
+          // FileSystemHandle is cloneable in Chromium but not every browser.
+          // Preserve the authoring draft even when the handle itself cannot be stored.
+          record.file_handle = null;
+          saved = await ovizPutDraftRecord(record);
+        }
+        if (saved) {
+          ovizStateEvent("authoring-draft-saved", {
+            savedAt: record.saved_at,
+            dirty: record.dirty,
+          });
+        }
+        return saved;
+      }
+
+      async function ovizDeleteDraft() {
+        const db = await ovizOpenDraftDb();
+        if (!db || !ovizStatesProject) return false;
         return new Promise((resolve) => {
           const transaction = db.transaction(OVIZ_STATES_DB_STORE, "readwrite");
-          transaction.objectStore(OVIZ_STATES_DB_STORE).put(compact);
-          transaction.oncomplete = () => { db.close(); resolve(); };
-          transaction.onerror = () => { db.close(); resolve(); };
+          transaction.objectStore(OVIZ_STATES_DB_STORE).delete(ovizStatesProject.project_id);
+          transaction.oncomplete = () => { db.close(); resolve(true); };
+          transaction.onerror = () => { db.close(); resolve(false); };
         });
       }
 
@@ -3057,6 +3290,27 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ovizStatesDraftTimer = null;
           ovizSaveDraftNow();
         }, 250);
+      }
+
+      function ovizInstallAuthoringLifecycle() {
+        if (ovizAuthoringLifecycleInstalled) return;
+        ovizAuthoringLifecycleInstalled = true;
+        window.addEventListener("beforeunload", (event) => {
+          if (ovizStatesDraftTimer) {
+            window.clearTimeout(ovizStatesDraftTimer);
+            ovizStatesDraftTimer = null;
+          }
+          ovizSaveDraftNow();
+          if (!ovizAuthoringDirty || ovizAuthoringSuppressBeforeUnload) return;
+          event.preventDefault();
+          event.returnValue = "";
+        });
+        window.addEventListener("pagehide", () => {
+          ovizSaveDraftNow();
+        });
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "hidden") ovizSaveDraftNow();
+        });
       }
 
       function ovizCollectAladinSources() {
@@ -3277,31 +3531,59 @@ THREEJS_STATE_RUNTIME_JS = r"""
         const preload = ovizStatesPreloadStatus.total
           ? ` · assets ${ovizStatesPreloadStatus.loaded}/${ovizStatesPreloadStatus.total}${ovizStatesPreloadStatus.failed.length ? " degraded" : ""}`
           : "";
-        ovizStatesStatusEl.textContent = `${ovizStateTransition ? "Transitioning" : (ovizStateDirty ? "Unsaved changes" : "Ready")}${preload}`;
+        const authoringStatus = ovizAuthoringSaveStatus === "saving"
+          ? "Saving HTML…"
+          : (
+            ovizAuthoringSaveStatus === "error"
+              ? `Save failed${ovizAuthoringSaveMessage ? `: ${ovizAuthoringSaveMessage}` : ""}`
+              : (ovizAuthoringDirty ? "Unsaved HTML · draft autosaved" : "Saved")
+          );
+        ovizStatesStatusEl.textContent = `${ovizStateTransition ? "Transitioning · " : ""}${authoringStatus}${preload}`;
+        ovizStatesStatusEl.style.color = ovizAuthoringSaveStatus === "error" ? "#d54b4b" : "";
         ovizStatesDrawerEl.append(ovizStatesStatusEl);
+      }
+
+      function ovizRestoreAuthoringDraft(draft) {
+        const normalized = ovizNormalizeAuthoringDraft(draft);
+        if (!normalized) return false;
+        ovizStatesProject = ovizNormalizeStatesProject(normalized.states);
+        sceneSpec.states = ovizStatesClone(normalized.states, {});
+        ovizStatesMode = "edit";
+        ovizStateDirty = true;
+        if (normalized.file_handle) ovizAuthoringFileHandle = normalized.file_handle;
+        if (normalized.deck) {
+          sceneSpec.deck = ovizStatesClone(normalized.deck, {});
+        }
+        if (normalized.actions) {
+          if (typeof ovizRestoreActionsSpec === "function") {
+            ovizRestoreActionsSpec(normalized.actions);
+          } else {
+            sceneSpec.actions = ovizStatesClone(normalized.actions, {});
+          }
+        }
+        // The recovered content differs from the HTML file that is currently
+        // open, even when the draft was synchronized with another saved copy.
+        ovizAuthoringDirty = true;
+        ovizAuthoringSetStatus("recovered", "Recovered local draft");
+        ovizRenderStatesDrawer();
+        ovizStateEvent("authoring-draft-restored", {
+          savedAt: normalized.saved_at,
+          states: ovizStatesList(),
+          deckRevision: Number(normalized.deck && normalized.deck.revision) || 0,
+        });
+        ovizStateEvent("states-changed", { reason: "restore-draft", states: ovizStatesList() });
+        return true;
       }
 
       function ovizShowDraftRecovery(draft) {
         if (!ovizStatesRecoveryEl) return;
         ovizStatesRecoveryEl.hidden = false;
-        ovizStatesRecoveryEl.textContent = "A newer local draft is available. ";
+        ovizStatesRecoveryEl.textContent = "Recovered a newer local draft. Cmd+S saves it into an HTML file. ";
         ovizStatesRecoveryEl.append(
-          ovizMakeButton("Restore", () => {
-            ovizStatesProject = ovizNormalizeStatesProject(draft);
-            ovizStatesMode = "edit";
-            ovizStateDirty = true;
-            ovizRenderStatesDrawer();
-            ovizStateEvent("states-changed", { reason: "restore-draft", states: ovizStatesList() });
-          }),
-          ovizMakeButton("Discard", async () => {
-            draft.revision = -1;
-            const db = await ovizOpenDraftDb();
-            if (db) {
-              const transaction = db.transaction(OVIZ_STATES_DB_STORE, "readwrite");
-              transaction.objectStore(OVIZ_STATES_DB_STORE).delete(ovizStatesProject.project_id);
-              transaction.oncomplete = () => db.close();
-            }
-            ovizRenderStatesDrawer();
+          ovizMakeButton("Discard recovered draft", async () => {
+            ovizAuthoringSuppressBeforeUnload = true;
+            await ovizDeleteDraft();
+            window.location.reload();
           })
         );
       }
@@ -3328,11 +3610,21 @@ THREEJS_STATE_RUNTIME_JS = r"""
           exportPresentOnlyHtml: (options = {}) => ovizExportStatesHtml(
             Object.assign({}, options, { presentOnly: true })
           ),
+          save: ovizSaveAuthoringDocument,
         };
         window.Oviz = window.Oviz || {};
         const registry = window.Oviz.__viewers || new Map();
         window.Oviz.__viewers = registry;
-        registry.set(root.id, { root, states: api });
+        registry.set(root.id, {
+          root,
+          states: api,
+          document: {
+            save: ovizSaveAuthoringDocument,
+            saveDraft: ovizSaveDraftNow,
+            discardDraft: ovizDeleteDraft,
+            isDirty: () => Boolean(ovizAuthoringDirty),
+          },
+        });
         window.Oviz.get = (rootId) => registry.get(String(rootId));
       }
 
@@ -3416,6 +3708,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
         };
         ovizStatesProject = ovizNormalizeStatesProject(sceneSpec.states);
         ovizStatesMode = ovizStatesProject.embedded ? ovizStatesProject.default_mode : "edit";
+        ovizAuthoringDirty = false;
+        ovizAuthoringSetStatus("saved", "Saved");
+        ovizInstallAuthoringLifecycle();
         ovizBuildStatesDrawer();
         if (typeof syncMobileSheetAvailability === "function") {
           syncMobileSheetAvailability();
@@ -3443,12 +3738,15 @@ THREEJS_STATE_RUNTIME_JS = r"""
             ovizCancelStateTransitionWithoutSnap("user-interaction", { restorePresentation: true });
           }
         }, { capture: true });
-        const draft = await ovizReadDraft();
-        if (draft && Number(draft.revision) > Number(ovizStatesProject.revision)) {
-          ovizShowDraftRecovery(draft);
+        const draft = ovizNormalizeAuthoringDraft(await ovizReadDraft());
+        let recoveredDraft = null;
+        if (draft && draft.file_handle) ovizAuthoringFileHandle = draft.file_handle;
+        if (draft && ovizAuthoringDraftIsNewer(draft) && ovizRestoreAuthoringDraft(draft)) {
+          recoveredDraft = draft;
         }
         ovizStateControllerReady = true;
         ovizRenderStatesDrawer();
+        if (recoveredDraft) ovizShowDraftRecovery(recoveredDraft);
         ovizStateEvent("states-ready", {
           mode: ovizStatesMode,
           states: ovizStatesList(),

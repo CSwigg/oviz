@@ -160,3 +160,19 @@ def test_keynote_lite_runtime_exposes_object_tools_and_snap_modifiers():
     assert "addShape: ovizDeckAddShape" in runtime
     assert "deck-selection-changed" in runtime
     assert "deck-object-changed" in runtime
+
+
+def test_deck_changes_share_the_authoring_draft_and_saved_status():
+    runtime = THREEJS_DECK_RUNTIME_JS
+    changed_body = runtime.split("function ovizDeckChanged(reason", 1)[1].split(
+        "function ovizDeckList", 1
+    )[0]
+    history_body = runtime.split("function ovizDeckApplyHistorySnapshot", 1)[1].split(
+        "function ovizDeckUndo", 1
+    )[0]
+
+    assert "ovizMarkAuthoringChanged(`deck:${reason}`)" in changed_body
+    assert "ovizMarkAuthoringChanged(`deck:${reason}`)" in history_body
+    assert "Unsaved document · draft autosaved" in runtime
+    assert "Saving HTML…" in runtime
+    assert "Save failed:" in runtime
