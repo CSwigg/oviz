@@ -712,6 +712,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
         ovizStateTransition = null;
         ovizStateTransitionTraceOpacity = null;
         ovizStateSelectionTransition = null;
+        if (typeof ovizDiscardSkyMemberAppearanceScene === "function") {
+          ovizDiscardSkyMemberAppearanceScene();
+        }
         ovizStateTimelineMotionActive = false;
         if (typeof cancelSkyViewTransitionAnimations === "function") {
           cancelSkyViewTransitionAnimations({
@@ -896,6 +899,60 @@ THREEJS_STATE_RUNTIME_JS = r"""
           renderedSelectionWeights: state.__oviz_rendered_selection_weights || null,
           renderedVolumeMaskBlend: state.__oviz_rendered_volume_mask_blend || null,
         });
+      }
+
+      function ovizSkyMemberAppearanceInvariantSignature(snapshot) {
+        const state = snapshot || {};
+        const controlsState = ovizStatesClone(state.global_controls || {}, {});
+        [
+          "camera_view_mode",
+          "camera_fov",
+          "camera_auto_orbit_enabled",
+          "camera_auto_orbit_direction",
+          "camera_auto_orbit_speed_multiplier",
+          "point_size_scale",
+          "point_opacity_scale",
+          "point_glow_strength",
+          "sky_dome_opacity",
+          "sky_dome_hips_brightness",
+          "sky_dome_hips_contrast",
+          "sky_dome_hips_gamma",
+          "sky_dome_source_key",
+          "sky_background_hidden",
+          "sky_member_display_mode",
+        ].forEach((key) => delete controlsState[key]);
+        return JSON.stringify({
+          frame: ovizStateFrameValue(state),
+          volumes: state.volume_state_by_key || {},
+          selections: {
+            current: state.current_selection || null,
+            currentMany: state.current_selections || [],
+            mode: state.current_selection_mode || "none",
+            selectedKeys: state.selected_cluster_keys || [],
+            lassoMask: state.lasso_selection_mask || null,
+            lassoFilter: state.lasso_selection_filter_enabled !== false,
+          },
+          controls: controlsState,
+          labels: state.manual_labels || [],
+          widgets: state.widgets || {},
+          legendPanel: state.legend_panel_state || null,
+          scaleBar: state.scale_bar_state || null,
+          selectionBox: state.selection_box_state || null,
+          clusterFilter: state.cluster_filter_state || null,
+          zen: Boolean(state.zen_mode_enabled),
+        });
+      }
+
+      function ovizCanUseSkyMemberAppearanceFastPath(from, to) {
+        const fromMode = String((from && from.global_controls || {}).camera_view_mode || "free");
+        const toMode = String((to && to.global_controls || {}).camera_view_mode || "free");
+        return Boolean(
+          fromMode === "earth"
+          && toMode === "earth"
+          && Math.abs(ovizStateFrameValue(from) - ovizStateFrameValue(to)) <= 1e-9
+          && ovizSkyMemberAppearanceInvariantSignature(from)
+            === ovizSkyMemberAppearanceInvariantSignature(to)
+        );
       }
 
       function ovizBuildTransitionPhases(from, to, transitionSpec) {
@@ -1244,6 +1301,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
         ) {
           return false;
         }
+        // Both the creation-time early start and the appearance-phase
+        // fallback may reach here; the second post would cancel the first
+        // preparation inside the Aladin frame and restart tile loading.
+        if (transition.skyLayerPrepareSent) {
+          return true;
+        }
         const fromLayers = ovizResidentSkyLayers(sourceLayers || []);
         const toLayers = ovizResidentSkyLayers(
           Array.isArray(transition.targetSnapshot && transition.targetSnapshot.sky_layers)
@@ -1264,6 +1327,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const phaseDurationMs = appearancePhase
             ? Math.max(appearancePhase.endMs - appearancePhase.startMs, 0.0)
             : 0.0;
+          transition.skyLayerPrepareSent = true;
           transition.skyLayerReady = false;
           transition.skyLayerFadeStarted = false;
           transition.skyLayerStartPayload = {
@@ -1301,17 +1365,22 @@ THREEJS_STATE_RUNTIME_JS = r"""
           return false;
         }
         const payload = transition.skyLayerStartPayload || {};
+        const appearancePhase = transition.phasePlan
+          && Array.isArray(transition.phasePlan.phases)
+          ? transition.phasePlan.phases.find((phase) => phase.name === "appearance")
+          : null;
+        const phaseStartedAt = Number(transition.startedAt)
+          + Math.max(Number(appearancePhase && appearancePhase.startMs) || 0.0, 0.0);
         transition.skyLayerFadeStarted = true;
         skyDomeFrameEl.contentWindow.postMessage({
           type: "oviz-sky-layer-transition-start",
           transitionId: transition.transitionId,
           durationMs: Math.max(Number(payload.durationMs) || 0.0, 0.0),
           easing: String(payload.easing || transition.transitionSpec.easing || "easeInOutCubic"),
-          startedAtEpochMs: ovizTransitionEpochMs(
-            (typeof performance !== "undefined" && performance.now)
-              ? performance.now()
-              : Date.now()
-          ),
+          // Share the parent's exact appearance-phase clock. If Aladin's
+          // prepare acknowledgement arrives a frame late, both renderers
+          // resume at the same progress instead of starting two nearby fades.
+          startedAtEpochMs: ovizTransitionEpochMs(phaseStartedAt),
         }, "*");
         return true;
       }
@@ -1728,6 +1797,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           skyLayerReady: true,
           skyLayerFadeStarted: false,
           skyLayerStartPayload: null,
+          skyMemberAppearanceFastPath: ovizCanUseSkyMemberAppearanceFastPath(from, destination),
           forceSkyLayerRetarget,
           fromViewMode,
           toViewMode,
@@ -1897,6 +1967,30 @@ THREEJS_STATE_RUNTIME_JS = r"""
             // crossfade only when the appearance phase starts.
             ovizStateTransition.sourceSkyLayers = sourceSkyLayers;
           }
+        }
+        // Attach the destination's sky stack and start fetching its tiles
+        // now, so the work overlaps the camera move instead of beginning
+        // when the appearance phase opens. Preparing is visually inert --
+        // the union stack is applied at the SOURCE opacity and only
+        // -transition-start crossfades it -- so this changes timing, not
+        // appearance. sourceSkyLayers is only assigned for Sky-destination
+        // transitions, and the booted-frame gate keeps the prepare from
+        // being swallowed by a dome iframe that is still loading (its
+        // readiness reply would never arrive and the appearance phase would
+        // wait on it; the deadline below bounds that wait regardless).
+        if (
+          ovizStateTransition
+          && ovizStateTransition.sourceSkyLayers
+          && !ovizStateTransition.skyLayerTransitionStarted
+          && typeof skyDomeBackgroundFrameReady !== "undefined"
+          && skyDomeBackgroundFrameReady === true
+          && skyDomeFrameEl
+          && skyDomeFrameEl.contentWindow
+        ) {
+          ovizStateTransition.skyLayerTransitionStarted = ovizStartSkyLayerTransition(
+            ovizStateTransition,
+            ovizStateTransition.sourceSkyLayers
+          );
         }
         ovizRenderStatesDrawer();
         ovizStateEvent("transition-start", {
@@ -2070,6 +2164,25 @@ THREEJS_STATE_RUNTIME_JS = r"""
           let phaseState = ovizTransitionPhaseState(transition, elapsedMs);
           if (
             phaseState.name === "appearance"
+            && transition.skyLayerTransitionStarted
+            && !transition.skyLayerReady
+          ) {
+            // Bound the wait for the Aladin frame's readiness reply. If it
+            // does not arrive (frame reloading, network stall), continue the
+            // transition; the completion path falls back to the plain layer
+            // repost, which is the pre-semantic behavior.
+            if (!transition.skyLayerWaitStartedAt) {
+              transition.skyLayerWaitStartedAt = now;
+            } else if (now - transition.skyLayerWaitStartedAt > 4000.0) {
+              transition.skyLayerReady = true;
+              transition.skyLayerPreparation = { degraded: true, timedOut: true };
+              if (root && root.dataset) {
+                root.dataset.stateTransitionSkyLayers = "timeout";
+              }
+            }
+          }
+          if (
+            phaseState.name === "appearance"
             && (
               !transition.lassoReady
               || (transition.skyLayerTransitionStarted && !transition.skyLayerReady)
@@ -2096,10 +2209,23 @@ THREEJS_STATE_RUNTIME_JS = r"""
             && !transition.skyLayerTransitionStarted
             && transition.sourceSkyLayers
           ) {
+            // Fallback only: preparation normally starts with the transition.
             transition.skyLayerTransitionStarted = ovizStartSkyLayerTransition(
               transition,
               transition.sourceSkyLayers
             );
+          }
+          // The stack was prepared during the camera move, so the crossfade
+          // can open the instant the appearance phase does. Readiness that
+          // arrives earlier waits here rather than fading the background
+          // while the camera is still flying.
+          if (
+            phaseState.name === "appearance"
+            && transition.skyLayerTransitionStarted
+            && transition.skyLayerReady
+            && !transition.skyLayerFadeStarted
+          ) {
+            ovizBeginPreparedSkyLayerTransition(transition);
           }
           const modeCameraRaw = transition.nativeViewTransition
             ? clampRange((cameraRaw - 0.20) / 0.60, 0, 1)
@@ -2295,10 +2421,22 @@ THREEJS_STATE_RUNTIME_JS = r"""
             transition.lastRenderedTimeProgress = timeRaw;
             transition.lastRenderedAppearanceProgress = appearanceRaw;
           } else if (appearanceSceneDirty) {
-            renderInterpolatedFrameValue(displayedFrameValue, {
-              updateWidgets: false,
-              preserveCamera: true,
-            });
+            const updatedResidentSkyScene = Boolean(
+              transition.skyMemberAppearanceFastPath
+              && typeof ovizUpdateSkyMemberStateAppearanceFastPath === "function"
+              && ovizUpdateSkyMemberStateAppearanceFastPath(
+                transition.transitionId,
+                displayedFrameValue,
+                frameTimeForValue(displayedFrameValue),
+              )
+            );
+            if (!updatedResidentSkyScene) {
+              renderInterpolatedFrameValue(displayedFrameValue, {
+                updateWidgets: false,
+                preserveCamera: true,
+                transitionOwnerToken: transition.transitionId,
+              });
+            }
             transition.sceneRenderCount += 1;
             transition.lastRenderedTimeProgress = timeRaw;
             transition.lastRenderedAppearanceProgress = appearanceRaw;
@@ -2379,9 +2517,23 @@ THREEJS_STATE_RUNTIME_JS = r"""
             ]);
           }
           if (transition.skyLayerPromise) {
+            const appearancePhase = transition.phasePlan
+              && Array.isArray(transition.phasePlan.phases)
+              ? transition.phasePlan.phases.find((phase) => phase.name === "appearance")
+              : null;
+            const appearanceDurationMs = appearancePhase
+              ? Math.max(Number(appearancePhase.endMs) - Number(appearancePhase.startMs), 0.0)
+              : 0.0;
+            const skyLayerCompletionWaitMs = Math.min(
+              Math.max(appearanceDurationMs + 750.0, 1250.0),
+              3000.0,
+            );
             await Promise.race([
               transition.skyLayerPromise,
-              new Promise((resolve) => window.setTimeout(() => resolve({ timedOut: true }), 500.0)),
+              new Promise((resolve) => window.setTimeout(
+                () => resolve({ timedOut: true }),
+                skyLayerCompletionWaitMs,
+              )),
             ]);
           }
           if (transition !== ovizStateTransition) {
@@ -2404,6 +2556,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ovizStateTransitionTraceOpacity = null;
           ovizStateSelectionTransition = null;
           ovizHeldSelectionTransition = null;
+          if (typeof ovizDiscardSkyMemberAppearanceScene === "function") {
+            ovizDiscardSkyMemberAppearanceScene();
+          }
           transition.sceneRenderCount += 1;
           // The animated camera has already delivered the exact target view to
           // Aladin. Do not force the same center/FOV again here: a redundant
@@ -3243,7 +3398,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
       }
 
       async function ovizSaveDraftNow() {
-        if (!ovizStatesProject) return;
+        if (!ovizStatesProject || !ovizAuthoringDraftsEnabled()) return;
         const compact = await ovizCompactProjectForStorage(ovizStatesPublicProject());
         const record = {
           draft_schema_version: OVIZ_AUTHORING_DRAFT_VERSION,
@@ -3284,7 +3439,17 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
       }
 
+      // Local autosave drafts are an authoring convenience. Published
+      // figures disable them (states.autosave_drafts === false) so a stale
+      // draft in a visitor's IndexedDB is never read back and applied over
+      // the exported scene.
+      function ovizAuthoringDraftsEnabled() {
+        const states = sceneSpec && sceneSpec.states;
+        return !(states && typeof states === "object" && states.autosave_drafts === false);
+      }
+
       function ovizScheduleDraftSave() {
+        if (!ovizAuthoringDraftsEnabled()) return;
         if (ovizStatesDraftTimer) window.clearTimeout(ovizStatesDraftTimer);
         ovizStatesDraftTimer = window.setTimeout(() => {
           ovizStatesDraftTimer = null;
@@ -3293,7 +3458,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
       }
 
       function ovizInstallAuthoringLifecycle() {
-        if (ovizAuthoringLifecycleInstalled) return;
+        if (ovizAuthoringLifecycleInstalled || !ovizAuthoringDraftsEnabled()) return;
         ovizAuthoringLifecycleInstalled = true;
         window.addEventListener("beforeunload", (event) => {
           if (ovizStatesDraftTimer) {
@@ -3376,20 +3541,24 @@ THREEJS_STATE_RUNTIME_JS = r"""
           .oviz-states-shell{position:relative;display:flex;align-items:center}
           .oviz-three-topbar:has(.oviz-states-shell[data-open=true]){z-index:90 !important}
           .oviz-states-toggle{white-space:nowrap}
-          .oviz-states-drawer{position:absolute;right:0;top:calc(100% + 8px);width:min(390px,92vw);max-height:min(72vh,680px);overflow:auto;padding:10px;background:var(--oviz-panel-bg,#fff);color:var(--oviz-text,#222);border:1px solid rgba(127,127,127,.35);border-radius:10px;box-shadow:0 12px 35px rgba(0,0,0,.22);z-index:80;display:none}
+          .oviz-states-drawer{position:absolute;right:0;top:calc(100% + 10px);width:min(390px,92vw);max-height:min(72vh,680px);overflow:auto;padding:14px;background:var(--oviz-hud-bg-strong,rgba(10,12,17,.92));color:var(--oviz-hud-text,rgba(238,242,247,.86));border:1px solid var(--oviz-hud-border,rgba(238,242,247,.11));border-radius:13px;box-shadow:var(--oviz-hud-shadow,0 12px 34px rgba(0,0,0,.34));backdrop-filter:blur(20px) saturate(132%);-webkit-backdrop-filter:blur(20px) saturate(132%);z-index:80;display:none;font:500 12px/1.35 var(--oviz-hud-font,-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif)}
           .oviz-states-shell[data-open=true] .oviz-states-drawer{display:block}
-          .oviz-states-head,.oviz-states-nav,.oviz-states-editbar{display:flex;align-items:center;gap:6px;margin-bottom:8px}
-          .oviz-states-head strong{flex:1}.oviz-states-head small{opacity:.7}
+          .oviz-states-head,.oviz-states-nav,.oviz-states-editbar{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+          .oviz-states-head strong{flex:1;font-size:13px;color:var(--oviz-hud-text-strong,rgba(255,255,255,.96))}.oviz-states-head small{opacity:.62}
           .oviz-states-drawer button,.oviz-states-drawer select,.oviz-states-drawer input{font:inherit}
+          .oviz-states-drawer button{min-height:26px;padding:0 10px;border:1px solid rgba(238,242,247,.13);border-radius:999px;background:rgba(255,255,255,.045);color:inherit;cursor:pointer;transition:background 160ms ease,border-color 160ms ease,color 160ms ease}
+          .oviz-states-drawer button:hover{background:rgba(255,255,255,.10);border-color:rgba(238,242,247,.22);color:var(--oviz-hud-text-strong,#fff)}
+          .oviz-states-drawer input[type=text]{padding:4px 8px;border:0;border-bottom:1px solid rgba(238,242,247,.20);border-radius:0;background:transparent;color:inherit}
+          .oviz-states-drawer input[type=text]:focus{outline:none;border-bottom-color:rgba(246,200,95,.6)}
           .oviz-states-nav button{flex:1}.oviz-states-editbar{flex-wrap:wrap}
-          .oviz-states-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:5px 4px;border-radius:6px}
-          .oviz-states-row:hover{background:rgba(127,127,127,.1)}.oviz-states-row[data-active=true]{background:rgba(70,130,255,.16)}
-          .oviz-states-row[data-camera-behavior=follow]:not(:first-child){margin-top:5px;border-top:1px solid rgba(127,127,127,.25);padding-top:7px}
-          .oviz-states-row-name{border:0;background:transparent;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}
-          .oviz-states-row-camera{padding:2px 5px;white-space:nowrap;font-size:10px}
-          .oviz-states-row-camera[aria-pressed=true]{background:rgba(70,130,255,.16);border-color:rgba(70,130,255,.45)}
-          .oviz-states-row-actions{display:flex;gap:3px}.oviz-states-row-actions button{padding:2px 5px}
-          .oviz-states-status{min-height:1.2em;font-size:11px;opacity:.75}.oviz-states-recovery{padding:7px;margin-bottom:8px;background:rgba(255,174,0,.18);border-radius:6px}
+          .oviz-states-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:6px 6px;border-radius:9px}
+          .oviz-states-row:hover{background:rgba(255,255,255,.06)}.oviz-states-row[data-active=true]{background:rgba(246,200,95,.13)}
+          .oviz-states-row[data-camera-behavior=follow]:not(:first-child){margin-top:5px;border-top:1px solid rgba(238,242,247,.12);padding-top:8px}
+          .oviz-states-row-name{border:0 !important;background:transparent !important;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}
+          .oviz-states-row-camera{padding:2px 7px;white-space:nowrap;font-size:10px}
+          .oviz-states-row-camera[aria-pressed=true]{background:rgba(246,200,95,.16);border-color:rgba(246,200,95,.44);color:#ffe9bd}
+          .oviz-states-row-actions{display:flex;gap:3px}.oviz-states-row-actions button{padding:2px 7px}
+          .oviz-states-status{min-height:1.2em;font-size:11px;opacity:.68}.oviz-states-recovery{padding:8px 10px;margin-bottom:10px;background:rgba(246,200,95,.14);border:1px solid rgba(246,200,95,.30);border-radius:9px}
           .oviz-states-mode-edit .oviz-states-present-only{display:none}.oviz-states-mode-present .oviz-states-edit-only{display:none}
           @media(max-width:700px){.oviz-states-drawer{position:fixed;inset:52px 8px 8px auto;width:min(390px,calc(100vw - 16px));max-height:none}}
         `;
@@ -3646,7 +3815,12 @@ THREEJS_STATE_RUNTIME_JS = r"""
             if (root && root.dataset) {
               root.dataset.stateTransitionSkyLayers = data.degraded ? "degraded" : "ready";
             }
-            ovizBeginPreparedSkyLayerTransition(transition);
+            // Readiness now usually lands during the camera phase. Only the
+            // appearance phase may crossfade; otherwise the animation loop
+            // starts it the moment that phase opens.
+            if (transition.currentPhase === "appearance") {
+              ovizBeginPreparedSkyLayerTransition(transition);
+            }
           }
           return;
         }
@@ -3738,7 +3912,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
             ovizCancelStateTransitionWithoutSnap("user-interaction", { restorePresentation: true });
           }
         }, { capture: true });
-        const draft = ovizNormalizeAuthoringDraft(await ovizReadDraft());
+        const draft = ovizAuthoringDraftsEnabled()
+          ? ovizNormalizeAuthoringDraft(await ovizReadDraft())
+          : null;
         let recoveredDraft = null;
         if (draft && draft.file_handle) ovizAuthoringFileHandle = draft.file_handle;
         if (draft && ovizAuthoringDraftIsNewer(draft) && ovizRestoreAuthoringDraft(draft)) {

@@ -22,17 +22,23 @@ THREEJS_SHELL_HTML = """
             </div>
           </div>
           <div class="oviz-three-legend-section oviz-three-legend-trace-section" data-empty="false" data-open="true">
-            <button class="oviz-three-legend-section-toggle oviz-three-legend-trace-section-toggle" type="button" title="Collapse or expand traces">
-              <span class="oviz-three-legend-section-title">Traces</span>
-              <span class="oviz-three-legend-section-chevron" aria-hidden="true">▾</span>
-            </button>
+            <div class="oviz-three-legend-section-head">
+              <button class="oviz-three-legend-section-toggle oviz-three-legend-trace-section-toggle" type="button" title="Collapse or expand traces">
+                <span class="oviz-three-legend-section-title">Traces</span>
+                <span class="oviz-three-legend-section-chevron" aria-hidden="true">▾</span>
+              </button>
+              <button class="oviz-three-legend-section-eye" type="button" data-section="traces" data-active="true" aria-pressed="true" title="Hide all traces" aria-label="Hide all traces"></button>
+            </div>
             <div class="oviz-three-legend oviz-three-legend-trace-list"></div>
           </div>
           <div class="oviz-three-legend-section oviz-three-legend-volume-section" data-empty="false" data-open="true">
-            <button class="oviz-three-legend-section-toggle oviz-three-legend-volume-section-toggle" type="button" title="Collapse or expand volumes">
-              <span class="oviz-three-legend-section-title">Volumes</span>
-              <span class="oviz-three-legend-section-chevron" aria-hidden="true">▾</span>
-            </button>
+            <div class="oviz-three-legend-section-head">
+              <button class="oviz-three-legend-section-toggle oviz-three-legend-volume-section-toggle" type="button" title="Collapse or expand volumes">
+                <span class="oviz-three-legend-section-title">Volumes</span>
+                <span class="oviz-three-legend-section-chevron" aria-hidden="true">▾</span>
+              </button>
+              <button class="oviz-three-legend-section-eye" type="button" data-section="volumes" data-active="true" aria-pressed="true" title="Hide all volumes" aria-label="Hide all volumes"></button>
+            </div>
             <div class="oviz-three-legend oviz-three-legend-volume-list"></div>
           </div>
           <div class="oviz-three-legend-section oviz-three-sky-controls-shell" data-open="false" data-visible="false" data-add-open="false">
@@ -47,6 +53,7 @@ THREEJS_SHELL_HTML = """
                 </div>
                 <select class="oviz-three-group-select oviz-three-sky-group-select" aria-label="Sky background group"></select>
               </div>
+              <button class="oviz-three-legend-section-eye oviz-three-sky-background-eye" type="button" data-section="sky" data-active="true" aria-pressed="true" title="Hide the sky background" aria-label="Hide the sky background"></button>
               <button class="oviz-three-sky-add-toggle" type="button" title="Add a sky background" aria-label="Add a sky background" aria-expanded="false">+</button>
             </div>
             <div class="oviz-three-sky-controls-drawer" aria-hidden="true" inert>
@@ -178,6 +185,23 @@ THREEJS_SHELL_HTML = """
       <div class="oviz-three-scale-bar" data-dragging="false" title="Drag to reposition">
         <div class="oviz-three-scale-label"></div>
         <div class="oviz-three-scale-line"></div>
+      </div>
+      <div class="oviz-three-wavelength-bar" data-open="false" role="group" aria-label="Wavelength blend">
+        <button class="oviz-three-wavelength-toggle" type="button" aria-expanded="false" aria-label="Blend sky backgrounds by wavelength">
+          <span class="oviz-three-wavelength-toggle-glyph" aria-hidden="true">&#955;</span>
+          <span class="oviz-three-wavelength-toggle-text">Wavelength</span>
+          <span class="oviz-three-wavelength-toggle-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="oviz-three-wavelength-panel">
+          <span class="oviz-three-wavelength-readout">
+            <strong class="oviz-three-wavelength-name"></strong>
+            <span class="oviz-three-wavelength-value"></span>
+          </span>
+          <div class="oviz-three-wavelength-track">
+            <div class="oviz-three-wavelength-ticks" aria-hidden="true"></div>
+            <input class="oviz-three-wavelength-slider" type="range" min="0" max="1000" step="1" value="0" aria-label="Blend sky backgrounds by wavelength" />
+          </div>
+        </div>
       </div>
       <div class="oviz-three-footer">
         <button class="oviz-three-play oviz-three-play-backward" type="button" title="Play backward">◀</button>

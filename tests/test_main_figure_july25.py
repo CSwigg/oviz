@@ -55,6 +55,9 @@ def test_build_scene_exposes_empty_slide_authoring_and_display_defaults():
         "P/Mellinger/color",
         "P/DSS2/color",
         "P/PLANCK/R2/HFI/color",
+        "P/Finkbeiner",
+        "P/HI4PI/NHI",
+        "P/Fermi/color",
     ]
     assert [group["label"] for group in scene["sky_dome"]["layer_groups"]] == [
         "All",
@@ -71,6 +74,111 @@ def test_build_scene_exposes_empty_slide_authoring_and_display_defaults():
     assert defaults["galactic_center"] == [8122.0, 0.0, 0.0]
     assert volume_state["lightingMode"] == "standard"
     assert volume_state["galacticExtinction"] == 2.4
+
+
+def test_build_scene_clears_states_and_drops_the_full_catalog_trace():
+    module = _load_module()
+    source = {
+        "frames": [
+            {
+                "traces": [
+                    {"key": "trace-0", "name": "Sun"},
+                    {"key": "trace-1", "name": "Full Cluster Catalog"},
+                    {"key": "trace-2", "name": "Clusters (< 60 Myr)"},
+                ],
+            },
+        ],
+        "legend": {
+            "items": [
+                {"key": "trace-0", "name": "Sun"},
+                {"key": "trace-1", "name": "Full Cluster Catalog"},
+                {"key": "trace-2", "name": "Clusters (< 60 Myr)"},
+            ],
+        },
+        "group_visibility": {
+            "All": {"trace-0": True, "trace-1": True, "trace-2": True},
+            "Clusters": {"trace-0": True, "trace-1": False, "trace-2": True},
+        },
+        "states": {
+            "items": [{"id": "state-1", "name": "Saved view"}],
+            "assets": {"state-1": "data:image/png;base64,AAAA"},
+            "revision": 7,
+            "synchronized_revision": 7,
+        },
+        "initial_state": {},
+    }
+
+    scene = module.build_state_only_scene(source)
+
+    # Volumes are NOT deferred on phones: the Edenhofer map stays visible
+    # and the runtime downsamples large cubes before GPU upload instead.
+    assert "mobile_defer_volumes" not in scene["initial_state"]
+    # The saved States are cleared for the published figure, and local
+    # autosave drafts are off so a stale IndexedDB draft is never applied.
+    assert scene["states"]["items"] == []
+    assert scene["states"]["assets"] == {}
+    assert scene["states"]["revision"] == 0
+    assert scene["states"]["autosave_drafts"] is False
+    # The full catalog underlay is gone everywhere it was referenced, and
+    # the other traces keep their keys.
+    frame_traces = scene["frames"][0]["traces"]
+    assert [trace["name"] for trace in frame_traces] == ["Sun", "Clusters (< 60 Myr)"]
+    assert [trace["key"] for trace in frame_traces] == ["trace-0", "trace-2"]
+    assert [item["name"] for item in scene["legend"]["items"]] == [
+        "Sun",
+        "Clusters (< 60 Myr)",
+    ]
+    for visibility in scene["group_visibility"].values():
+        assert "trace-1" not in visibility
+    assert source["frames"][0]["traces"][1]["name"] == "Full Cluster Catalog"
+
+
+def test_build_scene_enforces_default_sky_background_stack():
+    module = _load_module()
+    source = {
+        "initial_state": {
+            "sky_layers": [
+                {
+                    "key": "P/Mellinger/color",
+                    "survey": "P/Mellinger/color",
+                    "label": "Mellinger Color",
+                    "visible": True,
+                    "opacity": 1.0,
+                },
+                {
+                    "key": "P/DSS2/color",
+                    "survey": "P/DSS2/color",
+                    "label": "DSS2 Color",
+                    "visible": False,
+                    "opacity": 1.0,
+                },
+                {
+                    "key": "P/PLANCK/R2/HFI/color",
+                    "survey": "P/PLANCK/R2/HFI/color",
+                    "label": "Planck Dust Emission Color",
+                    "visible": True,
+                    "opacity": 1.0,
+                },
+            ],
+        },
+    }
+
+    scene = module.build_state_only_scene(source)
+
+    layers = scene["initial_state"]["sky_layers"]
+    surveys = [layer["survey"] for layer in layers]
+    assert surveys[:3] == [
+        "P/PLANCK/R2/HFI/color",
+        "P/Mellinger/color",
+        "P/DSS2/color",
+    ]
+    by_survey = {layer["survey"]: layer for layer in layers}
+    assert by_survey["P/PLANCK/R2/HFI/color"]["visible"] is False
+    assert by_survey["P/PLANCK/R2/HFI/color"]["opacity"] == 0.27
+    assert by_survey["P/Mellinger/color"]["visible"] is True
+    assert by_survey["P/Mellinger/color"]["opacity"] == 0.23
+    assert by_survey["P/DSS2/color"]["visible"] is True
+    assert by_survey["P/DSS2/color"]["opacity"] == 1.0
 
 
 def test_default_velocity_catalog_is_the_audited_sdssv_release():
@@ -260,7 +368,8 @@ def test_july25_artifact_keeps_presentation_and_adds_runtime_upgrades(tmp_path):
     assert scene["initial_state"]["global_controls"]["size_points_by_stars_enabled"] is True
     assert scene["initial_state"]["global_controls"]["fade_opacity_by_birth_time_enabled"] is True
     sky_layers = scene["initial_state"]["sky_layers"]
-    assert [layer["survey"] for layer in sky_layers[:2]] == [
+    assert [layer["survey"] for layer in sky_layers[:3]] == [
+        "P/PLANCK/R2/HFI/color",
         "P/Mellinger/color",
         "P/DSS2/color",
     ]
@@ -270,8 +379,24 @@ def test_july25_artifact_keeps_presentation_and_adds_runtime_upgrades(tmp_path):
     }
     assert [layer["survey"] for layer in sky_layers if layer["visible"]] == [
         "P/Mellinger/color",
-        "P/PLANCK/R2/HFI/color",
+        "P/DSS2/color",
     ]
+    layers_by_survey = {layer["survey"]: layer for layer in sky_layers}
+    assert layers_by_survey["P/PLANCK/R2/HFI/color"]["opacity"] == 0.27
+    assert layers_by_survey["P/Mellinger/color"]["opacity"] == 0.23
+    # The desktop volume stays on the synchronous raw-uint8 path (the slab
+    # atlas encoding was reverted), while phones keep the small low-res cube.
+    edenhofer = next(
+        layer
+        for layer in scene["volumes"]["layers"]
+        if "edenhofer" in str(layer.get("name") or "").lower()
+    )
+    assert edenhofer["data_encoding"] == "uint8"
+    assert edenhofer["data_b64"]
+    assert not edenhofer.get("data_b64_slabs")
+    assert edenhofer["data_lowres_b64"]
+    lowres = edenhofer["lowres_shape"]
+    assert max(lowres["x"], lowres["y"], lowres["z"]) <= module.MOBILE_LOWRES_MAX_DIM
     assert scene["sky_dome"]["layer_groups"] == module.SKY_BACKGROUND_GROUPS
     assert 'data-startup-ready="false"' in html
     assert 'type: "oviz-aladin-sky-layers-ready"' in html
@@ -290,7 +415,12 @@ def test_july25_artifact_keeps_presentation_and_adds_runtime_upgrades(tmp_path):
         trace["name"]: trace
         for trace in scene["frames"][-1]["traces"]
     }
-    assert len(present_day_traces["Full Cluster Catalog"]["points"]) == 3944
+    # The full catalog underlay is dropped from this presentation figure.
+    assert "Full Cluster Catalog" not in present_day_traces
+    assert all(
+        item["name"] != "Full Cluster Catalog"
+        for item in scene["legend"]["items"]
+    )
     assert "Clusters (0-150 Myr)" not in present_day_traces
     assert len(present_day_traces["Clusters (< 60 Myr)"]["points"]) == 1163
     assert len(present_day_traces["Clusters (< 15 Myr)"]["points"]) == 540

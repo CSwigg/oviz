@@ -184,64 +184,187 @@ THREEJS_SCENE_RUNTIME_JS = """
         return 0.0;
       }
 
+      // On phones, large volume cubes are re-shaped BEFORE any decode or
+      // GPU work: layer.shape shrinks to the stride-sampled grid and the
+      // original dims move to __ovizVolumeSourceShape. Every consumer
+      // (placeholder, decode, texture, occupancy, scalar sampling) then
+      // agrees on the small grid, and the full-resolution voxel array is
+      // never materialized on mobile.
+      // True when this layer will render from the synchronous low-res cube
+      // instead of the async atlas decode (phones only).
+      function ovizUsesMobileLowResVolume(layer) {
+        return Boolean(
+          mobileModeEnabled
+          && layer
+          && layer.data_lowres_b64
+          && layer.lowres_shape
+        );
+      }
+
+      function ovizPrepareMobileVolumeLayer(layer) {
+        if (!layer || layer.__ovizMobilePrepared) {
+          return;
+        }
+        layer.__ovizMobilePrepared = true;
+        if (!mobileModeEnabled) {
+          return;
+        }
+        if (ovizUsesMobileLowResVolume(layer)) {
+          // The low-res cube IS the mobile volume: decoding is a plain
+          // base64 read with no canvas, no async step, and no chance of
+          // an iOS Safari decode failure leaving the dust invisible.
+          const lowres = layer.lowres_shape || {};
+          layer.shape = {
+            x: Math.max(1, Math.round(Number(lowres.x) || 1)),
+            y: Math.max(1, Math.round(Number(lowres.y) || 1)),
+            z: Math.max(1, Math.round(Number(lowres.z) || 1)),
+          };
+          return;
+        }
+        const shape = layer.shape || {};
+        const nx = Math.max(1, Math.round(Number(shape.x) || 1));
+        const ny = Math.max(1, Math.round(Number(shape.y) || 1));
+        const nz = Math.max(1, Math.round(Number(shape.z) || 1));
+        const maxDim = Math.max(nx, ny, nz);
+        if (maxDim <= OVIZ_MOBILE_MAX_VOLUME_DIM) {
+          return;
+        }
+        const stride = Math.ceil(maxDim / OVIZ_MOBILE_MAX_VOLUME_DIM);
+        layer.__ovizVolumeSourceShape = { x: nx, y: ny, z: nz };
+        layer.__ovizVolumeStride = stride;
+        layer.shape = {
+          x: Math.max(1, Math.ceil(nx / stride)),
+          y: Math.max(1, Math.ceil(ny / stride)),
+          z: Math.max(1, Math.ceil(nz / stride)),
+        };
+      }
+
+      function ovizStrideSampleVolume(data, snx, sny, snz, tnx, tny, tnz, stride) {
+        if (!data || stride <= 1 || data.length !== snx * sny * snz) {
+          return data;
+        }
+        const out = new data.constructor(tnx * tny * tnz);
+        let write = 0;
+        for (let z = 0; z < tnz; z += 1) {
+          const sourceZ = Math.min(z * stride, snz - 1) * snx * sny;
+          for (let y = 0; y < tny; y += 1) {
+            const sourceY = sourceZ + Math.min(y * stride, sny - 1) * snx;
+            for (let x = 0; x < tnx; x += 1) {
+              out[write] = data[sourceY + Math.min(x * stride, snx - 1)];
+              write += 1;
+            }
+          }
+        }
+        return out;
+      }
+
       function startPngAtlasVolumeDecode(layer, cacheKey, onDecoded) {
         if (volumeScalarDataPendingCache.has(cacheKey)) {
           return;
         }
-        const shape = layer.shape || {};
-        const nx = Math.max(1, Math.round(Number(shape.x) || 0));
-        const ny = Math.max(1, Math.round(Number(shape.y) || 0));
-        const nz = Math.max(1, Math.round(Number(shape.z) || 0));
+        ovizPrepareMobileVolumeLayer(layer);
+        const sourceShape = layer.__ovizVolumeSourceShape || layer.shape || {};
+        const snx = Math.max(1, Math.round(Number(sourceShape.x) || 0));
+        const sny = Math.max(1, Math.round(Number(sourceShape.y) || 0));
+        const snz = Math.max(1, Math.round(Number(sourceShape.z) || 0));
+        const targetShape = layer.shape || {};
+        const tnx = Math.max(1, Math.round(Number(targetShape.x) || 0));
+        const tny = Math.max(1, Math.round(Number(targetShape.y) || 0));
+        const tnz = Math.max(1, Math.round(Number(targetShape.z) || 0));
+        const stride = Math.max(1, Math.round(Number(layer.__ovizVolumeStride) || 1));
         const tiles = layer.data_atlas_tiles || {};
-        const tileCols = Math.max(1, Math.round(Number(tiles.x) || Math.ceil(Math.sqrt(nz))));
-        const tileRows = Math.max(1, Math.round(Number(tiles.y) || Math.ceil(nz / tileCols)));
-        const pending = new Promise((resolve) => {
-          const image = new Image();
-          image.onload = () => {
-            const atlasWidth = Math.max(1, Number(image.naturalWidth || image.width || 0));
-            const atlasHeight = Math.max(1, Number(image.naturalHeight || image.height || 0));
-            const canvasEl = document.createElement("canvas");
-            canvasEl.width = atlasWidth;
-            canvasEl.height = atlasHeight;
-            const ctx = canvasEl.getContext("2d");
-            if (!ctx) {
-              volumeScalarDataPendingCache.delete(cacheKey);
-              resolve(null);
-              return;
+        const tileCols = Math.max(1, Math.round(Number(tiles.x) || Math.ceil(Math.sqrt(snz))));
+        const slabs = Array.isArray(layer.data_b64_slabs) && layer.data_b64_slabs.length
+          ? layer.data_b64_slabs
+          : null;
+        const slicesPerSlab = slabs
+          ? Math.max(1, Math.round(
+            Number(tiles.slices_per_slab)
+            || tileCols * Math.max(1, Math.round(Number(tiles.y) || 1))
+          ))
+          : snz;
+        const values = new Uint8Array(tnx * tny * tnz);
+
+        function copySlice(rgba, atlasWidth, xOffset, yOffset, zSource) {
+          if (zSource % stride !== 0) {
+            return;
+          }
+          const zTarget = zSource / stride;
+          if (zTarget >= tnz) {
+            return;
+          }
+          const base = zTarget * tny * tnx;
+          for (let yTarget = 0; yTarget < tny; yTarget += 1) {
+            const ySource = Math.min(yTarget * stride, sny - 1);
+            const rowIndex = (((yOffset + ySource) * atlasWidth) + xOffset) * 4;
+            const writeRow = base + (yTarget * tnx);
+            for (let xTarget = 0; xTarget < tnx; xTarget += 1) {
+              const xSource = Math.min(xTarget * stride, snx - 1);
+              values[writeRow + xTarget] = Number(rgba[rowIndex + (xSource * 4)] || 0);
             }
-            ctx.drawImage(image, 0, 0, atlasWidth, atlasHeight);
-            const imageData = ctx.getImageData(0, 0, atlasWidth, atlasHeight);
-            const rgba = imageData.data || [];
-            const values = new Uint8Array(nx * ny * nz);
-            for (let zIndex = 0; zIndex < nz; zIndex += 1) {
-              const tileRow = Math.floor(zIndex / tileCols);
-              const tileCol = zIndex % tileCols;
-              if (tileRow >= tileRows) {
-                break;
+          }
+        }
+
+        // One slab in flight at a time keeps the transient decode memory
+        // (image bitmap + RGBA read-back) bounded on iOS Safari.
+        function decodeAtlasImage(imageB64, firstSliceIndex, sliceCount) {
+          return new Promise((resolve) => {
+            const image = new Image();
+            image.onload = () => {
+              const atlasWidth = Math.max(1, Number(image.naturalWidth || image.width || 0));
+              const atlasHeight = Math.max(1, Number(image.naturalHeight || image.height || 0));
+              const canvasEl = document.createElement("canvas");
+              canvasEl.width = atlasWidth;
+              canvasEl.height = atlasHeight;
+              const ctx = canvasEl.getContext("2d", { willReadFrequently: true });
+              if (!ctx) {
+                resolve(false);
+                return;
               }
-              const xOffset = tileCol * nx;
-              const yOffset = tileRow * ny;
-              for (let yIndex = 0; yIndex < ny; yIndex += 1) {
-                for (let xIndex = 0; xIndex < nx; xIndex += 1) {
-                  const atlasIndex = (((yOffset + yIndex) * atlasWidth) + (xOffset + xIndex)) * 4;
-                  const voxelIndex = (zIndex * ny * nx) + (yIndex * nx) + xIndex;
-                  values[voxelIndex] = Number(rgba[atlasIndex] || 0);
+              ctx.drawImage(image, 0, 0, atlasWidth, atlasHeight);
+              const rgba = ctx.getImageData(0, 0, atlasWidth, atlasHeight).data || [];
+              for (let offset = 0; offset < sliceCount; offset += 1) {
+                const zSource = firstSliceIndex + offset;
+                if (zSource >= snz) {
+                  break;
                 }
+                const tileRow = Math.floor(offset / tileCols);
+                const tileCol = offset % tileCols;
+                copySlice(rgba, atlasWidth, tileCol * snx, tileRow * sny, zSource);
               }
+              canvasEl.width = 1;
+              canvasEl.height = 1;
+              resolve(true);
+            };
+            image.onerror = () => resolve(false);
+            image.src = `data:image/png;base64,${String(imageB64 || "")}`;
+          });
+        }
+
+        const pending = (async () => {
+          let decodedAny = false;
+          if (slabs) {
+            for (let slabIndex = 0; slabIndex < slabs.length; slabIndex += 1) {
+              const ok = await decodeAtlasImage(
+                slabs[slabIndex],
+                slabIndex * slicesPerSlab,
+                slicesPerSlab
+              );
+              decodedAny = decodedAny || ok;
             }
-            volumeScalarDataCache.set(cacheKey, values);
-            volumeScalarDataPendingCache.delete(cacheKey);
-            if (typeof onDecoded === "function") {
-              onDecoded(values);
-            }
-            resolve(values);
-          };
-          image.onerror = () => {
-            volumeScalarDataPendingCache.delete(cacheKey);
-            resolve(null);
-          };
-          image.src = `data:image/png;base64,${String(layer.data_b64 || "")}`;
-        });
+          } else {
+            decodedAny = await decodeAtlasImage(layer.data_b64, 0, snz);
+          }
+          volumeScalarDataPendingCache.delete(cacheKey);
+          if (!decodedAny) {
+            return null;
+          }
+          volumeScalarDataCache.set(cacheKey, values);
+          if (typeof onDecoded === "function") {
+            onDecoded(values);
+          }
+          return values;
+        })();
         volumeScalarDataPendingCache.set(cacheKey, pending);
       }
 
@@ -250,43 +373,63 @@ THREEJS_SCENE_RUNTIME_JS = """
         if (volumeScalarDataCache.has(layerKey)) {
           return volumeScalarDataCache.get(layerKey);
         }
+        ovizPrepareMobileVolumeLayer(layer);
+        if (ovizUsesMobileLowResVolume(layer)) {
+          const lowResData = base64ToUint8Array(layer.data_lowres_b64 || "");
+          volumeScalarDataCache.set(layerKey, lowResData);
+          return lowResData;
+        }
         const encoding = String(layer.data_encoding || "uint16_le");
         if (encoding === "png_atlas_uint8") {
           const shape = layer.shape || {};
           const nx = Math.max(1, Math.round(Number(shape.x) || 0));
           const ny = Math.max(1, Math.round(Number(shape.y) || 0));
           const nz = Math.max(1, Math.round(Number(shape.z) || 0));
-          const placeholder = new Uint8Array(nx * ny * nz);
+          // Keep the scene renderable while the atlas decodes without
+          // allocating and uploading a second full-resolution volume. The
+          // decoded array replaces this single transparent voxel below.
+          const placeholder = new Uint8Array([0]);
           volumeScalarDataCache.set(layerKey, placeholder);
           startPngAtlasVolumeDecode(layer, layerKey, (values) => {
-            const volumeTexture = volumeTextureCache.get(layerKey);
-            if (volumeTexture && volumeTexture.texture && values) {
-              const image = volumeTexture.texture.image || {};
-              image.data = values;
-              image.width = volumeTexture.nx;
-              image.height = volumeTexture.ny;
-              image.depth = volumeTexture.nz;
-              volumeTexture.texture.image = image;
-              volumeTexture.texture.needsUpdate = true;
-              volumeTexture.occupancy = volumeOccupancyFor(
-                values,
-                volumeTexture.nx,
-                volumeTexture.ny,
-                volumeTexture.nz
-              );
-              volumeRuntimeByKey.forEach((runtime) => {
-                if (
-                  runtime
-                  && runtime.layer
-                  && String(runtime.layer.key) === layerKey
-                  && runtime.material
-                ) {
-                  applyVolumeOccupancyUniforms(runtime.material.uniforms, volumeTexture);
-                }
-              });
-              if (typeof ovizInvalidateRender === "function") {
-                ovizInvalidateRender();
+            if (!values) {
+              return;
+            }
+            // Swapping data into a live Data3DTexture is unreliable, so the
+            // decoded voxels get a fresh texture and every material bound
+            // to this layer is re-pointed at it.
+            const staleTexture = volumeTextureCache.get(layerKey);
+            volumeTextureCache.delete(layerKey);
+            if (staleTexture && staleTexture.texture && staleTexture.texture.dispose) {
+              staleTexture.texture.dispose();
+              if (staleTexture.texture.image) {
+                staleTexture.texture.image.data = null;
               }
+            }
+            if (
+              staleTexture
+              && staleTexture.occupancy
+              && staleTexture.occupancy.texture
+              && staleTexture.occupancy.texture.dispose
+            ) {
+              staleTexture.occupancy.texture.dispose();
+            }
+            const freshTexture = volumeTextureFor(layer);
+            volumeRuntimeByKey.forEach((runtime) => {
+              if (
+                runtime
+                && runtime.layer
+                && String(runtime.layer.key) === layerKey
+                && runtime.material
+                && runtime.material.uniforms
+              ) {
+                if (runtime.material.uniforms.volumeTexture) {
+                  runtime.material.uniforms.volumeTexture.value = freshTexture.texture;
+                }
+                applyVolumeOccupancyUniforms(runtime.material.uniforms, freshTexture);
+              }
+            });
+            if (typeof ovizInvalidateRender === "function") {
+              ovizInvalidateRender();
             }
           });
           return placeholder;
@@ -296,6 +439,20 @@ THREEJS_SCENE_RUNTIME_JS = """
           data = base64ToUint16Array(layer.data_b64 || "");
         } else {
           data = base64ToUint8Array(layer.data_b64 || "");
+        }
+        if (layer.__ovizVolumeSourceShape && layer.__ovizVolumeStride > 1) {
+          const source = layer.__ovizVolumeSourceShape;
+          const target = layer.shape || {};
+          data = ovizStrideSampleVolume(
+            data,
+            Math.max(1, Number(source.x) || 1),
+            Math.max(1, Number(source.y) || 1),
+            Math.max(1, Number(source.z) || 1),
+            Math.max(1, Number(target.x) || 1),
+            Math.max(1, Number(target.y) || 1),
+            Math.max(1, Number(target.z) || 1),
+            layer.__ovizVolumeStride
+          );
         }
         volumeScalarDataCache.set(layerKey, data);
         return data;
@@ -416,16 +573,65 @@ THREEJS_SCENE_RUNTIME_JS = """
         return bytes;
       }
 
+      // Phones cap volume textures well below desktop resolution: the GPU
+      // upload for a 512-class cube is a leading cause of iOS Safari
+      // memory kills. Stride sampling keeps the map on screen at roughly
+      // one-eighth of the memory; the raymarcher samples in normalized
+      // coordinates, so nothing else changes.
+      const OVIZ_MOBILE_MAX_VOLUME_DIM = 256;
+
+      function ovizDownsampleVolumeForMobile(data, nx, ny, nz) {
+        const maxDim = Math.max(nx, ny, nz);
+        if (
+          !mobileModeEnabled
+          || !data
+          || data.length !== nx * ny * nz
+          || maxDim <= OVIZ_MOBILE_MAX_VOLUME_DIM
+        ) {
+          return { data, nx, ny, nz };
+        }
+        const step = Math.ceil(maxDim / OVIZ_MOBILE_MAX_VOLUME_DIM);
+        const dnx = Math.max(1, Math.ceil(nx / step));
+        const dny = Math.max(1, Math.ceil(ny / step));
+        const dnz = Math.max(1, Math.ceil(nz / step));
+        const out = new data.constructor(dnx * dny * dnz);
+        let write = 0;
+        for (let z = 0; z < dnz; z += 1) {
+          const sourceZ = Math.min(z * step, nz - 1) * nx * ny;
+          for (let y = 0; y < dny; y += 1) {
+            const sourceY = sourceZ + Math.min(y * step, ny - 1) * nx;
+            for (let x = 0; x < dnx; x += 1) {
+              out[write] = data[sourceY + Math.min(x * step, nx - 1)];
+              write += 1;
+            }
+          }
+        }
+        return { data: out, nx: dnx, ny: dny, nz: dnz };
+      }
+
       function volumeTextureFor(layer) {
         const layerKey = String(layer.key);
         if (volumeTextureCache.has(layerKey)) {
           return volumeTextureCache.get(layerKey);
         }
-        const data = volumeScalarArrayFor(layer);
+        ovizPrepareMobileVolumeLayer(layer);
         const shape = layer.shape || {};
-        const nx = Math.max(1, Number(shape.x || 1));
-        const ny = Math.max(1, Number(shape.y || 1));
-        const nz = Math.max(1, Number(shape.z || 1));
+        const nxFull = Math.max(1, Number(shape.x || 1));
+        const nyFull = Math.max(1, Number(shape.y || 1));
+        const nzFull = Math.max(1, Number(shape.z || 1));
+        const sourceData = volumeScalarArrayFor(layer);
+        const pendingPngAtlasDecode = (
+          String(layer.data_encoding || "") === "png_atlas_uint8"
+          && volumeScalarDataPendingCache.has(layerKey)
+          && sourceData.length !== nxFull * nyFull * nzFull
+        );
+        const downsampled = pendingPngAtlasDecode
+          ? { data: sourceData, nx: 1, ny: 1, nz: 1 }
+          : ovizDownsampleVolumeForMobile(sourceData, nxFull, nyFull, nzFull);
+        const data = downsampled.data;
+        const nx = downsampled.nx;
+        const ny = downsampled.ny;
+        const nz = downsampled.nz;
         const VolumeTextureCtor = THREE.Data3DTexture || THREE.DataTexture3D;
         if (!VolumeTextureCtor) {
           throw new Error("Three.js volume textures are unavailable in this browser build.");
@@ -3285,6 +3491,29 @@ THREEJS_SCENE_RUNTIME_JS = """
       function ovizRenderedSceneFidelityDifferences(snapshot = {}) {
         const actualOpacityByTrace = new Map();
         const actualOpacityByPoint = new Map();
+        const actualSkyMemberOpacityByTrace = new Map();
+        const actualSkyMemberOpacityByParent = new WeakMap();
+        if (
+          cameraViewMode === "earth"
+          && skyMemberBatchesEnabled
+          && skyMemberRevealProgress > 1.0 - 1e-6
+        ) {
+          skyMemberBatchOpacityEntries.forEach((entry) => {
+            if (!entry || !entry.parentPoint || !entry.parentTrace) return;
+            const traceKey = String(entry.parentTrace.key || "");
+            const opacity = Math.max(Number(entry.batchAppliedOpacity) || 0.0, 0.0);
+            if (traceKey) {
+              actualSkyMemberOpacityByTrace.set(
+                traceKey,
+                Math.max(Number(actualSkyMemberOpacityByTrace.get(traceKey)) || 0.0, opacity),
+              );
+            }
+            actualSkyMemberOpacityByParent.set(
+              entry.parentPoint,
+              Math.max(Number(actualSkyMemberOpacityByParent.get(entry.parentPoint)) || 0.0, opacity),
+            );
+          });
+        }
         let renderedManualLabelCount = 0;
         plotGroup.traverse((object) => {
           if (!object || !object.material || object.visible === false) return;
@@ -3346,26 +3575,36 @@ THREEJS_SCENE_RUNTIME_JS = """
         const renderedFrame = interpolatedFrameSpecForValue(displayedFrameValue, displayedTimeMyr);
         const expectedOpacityByTrace = {};
         const expectedOpacityByPoint = {};
+        const fidelityOpacityByPoint = new Map(actualOpacityByPoint);
         const differences = [];
         (renderedFrame && Array.isArray(renderedFrame.traces) ? renderedFrame.traces : []).forEach((trace) => {
+          const traceKey = String(trace.key || "");
           const expectedOpacity = ovizExpectedTraceOpacity(trace, displayedTimeMyr);
-          expectedOpacityByTrace[String(trace.key || "")] = expectedOpacity;
+          expectedOpacityByTrace[traceKey] = expectedOpacity;
+          const actualTraceOpacity = Math.max(
+            Number(actualOpacityByTrace.get(traceKey)) || 0.0,
+            Number(actualSkyMemberOpacityByTrace.get(traceKey)) || 0.0,
+          );
           const requiredTraceOpacity = Math.min(0.0001, expectedOpacity * 0.01);
           if (
             expectedOpacity > 0.0001
-            && (Number(actualOpacityByTrace.get(String(trace.key || ""))) || 0.0) <= requiredTraceOpacity
+            && actualTraceOpacity <= requiredTraceOpacity
           ) {
             differences.push(`rendered_trace:${String(trace.key || trace.name || "unknown")}`);
           } else if (
             expectedOpacity > 0.0001
-            && (Number(actualOpacityByTrace.get(String(trace.key || ""))) || 0.0) < expectedOpacity * 0.02
+            && actualTraceOpacity < expectedOpacity * 0.02
           ) {
             differences.push(`rendered_trace_opacity:${String(trace.key || trace.name || "unknown")}`);
           }
           (Array.isArray(trace.points) ? trace.points : []).forEach((point, pointIndex) => {
-            const pointKey = `${String(trace.key || "")}:${pointIndex}`;
+            const pointKey = `${traceKey}:${pointIndex}`;
             const expectedPointOpacity = ovizExpectedPointOpacity(trace, point, displayedTimeMyr);
-            const actualPointOpacity = Number(actualOpacityByPoint.get(pointKey)) || 0.0;
+            const memberOpacity = Number(actualSkyMemberOpacityByParent.get(point));
+            const actualPointOpacity = Number.isFinite(memberOpacity)
+              ? Math.max(memberOpacity, Number(actualOpacityByPoint.get(pointKey)) || 0.0)
+              : (Number(actualOpacityByPoint.get(pointKey)) || 0.0);
+            fidelityOpacityByPoint.set(pointKey, actualPointOpacity);
             expectedOpacityByPoint[pointKey] = expectedPointOpacity;
             const requiredPointOpacity = Math.min(0.001, expectedPointOpacity * 0.01);
             if (expectedPointOpacity > 0.001 && actualPointOpacity <= requiredPointOpacity) {
@@ -3408,8 +3647,9 @@ THREEJS_SCENE_RUNTIME_JS = """
             differences,
             expectedOpacityByTrace,
             actualOpacityByTrace: Object.fromEntries(actualOpacityByTrace),
+            actualSkyMemberOpacityByTrace: Object.fromEntries(actualSkyMemberOpacityByTrace),
             expectedVisiblePointCount: Object.values(expectedOpacityByPoint).filter((value) => value > 0.001).length,
-            actualVisiblePointCount: Array.from(actualOpacityByPoint.values()).filter((value) => value > 0.001).length,
+            actualVisiblePointCount: Array.from(fidelityOpacityByPoint.values()).filter((value) => value > 0.001).length,
             renderedManualLabelCount,
             expectedManualLabelCount,
           });
@@ -3552,6 +3792,111 @@ THREEJS_SCENE_RUNTIME_JS = """
         ovizRetainedTransitionScene = null;
         const frame = interpolatedFrameSpecForValue(displayedFrameValue, displayedTimeMyr);
         renderFrameScene(frame, displayedTimeMyr, options);
+      }
+
+      let ovizSkyMemberAppearanceScene = null;
+      let ovizSkyMemberAppearanceSceneBuildCount = 0;
+      let ovizSkyMemberAppearanceSceneUpdateCount = 0;
+
+      function ovizDiscardSkyMemberAppearanceScene() {
+        ovizSkyMemberAppearanceScene = null;
+      }
+
+      function ovizPrepareSkyMemberAppearanceScene(ownerToken, frameValue, displayedTimeMyr) {
+        const frame = interpolatedFrameSpecForValue(frameValue, displayedTimeMyr);
+        if (!frame) return null;
+        renderFrameScene(frame, displayedTimeMyr, {
+          updateWidgets: false,
+          preserveCamera: true,
+          forceResident: true,
+        });
+        const endpoint = ovizPrepareRetainedEndpoint(
+          plotGroup,
+          frame,
+          clampFrameIndex(frameValue),
+        );
+        const memberBulkEntryByMaterial = new Map();
+        skyMemberBulkOpacityEntries.forEach((entry) => {
+          if (entry && entry.material) memberBulkEntryByMaterial.set(entry.material, entry);
+        });
+        ovizSkyMemberAppearanceSceneBuildCount += 1;
+        ovizSkyMemberAppearanceScene = {
+          ownerToken: String(ownerToken || ""),
+          frameValue: clampFrameValue(frameValue),
+          endpoint,
+          memberBulkEntryByMaterial,
+        };
+        return ovizSkyMemberAppearanceScene;
+      }
+
+      function ovizUpdateSkyMemberStateAppearanceFastPath(
+        ownerToken,
+        frameValue,
+        displayedTimeMyr
+      ) {
+        if (
+          cameraViewMode !== "earth"
+          || !skyMemberBatchesEnabled
+          || skyMemberRevealProgress < 1.0 - 1e-6
+        ) {
+          return false;
+        }
+        const safeOwner = String(ownerToken || "");
+        let runtime = ovizSkyMemberAppearanceScene;
+        if (
+          !runtime
+          || runtime.ownerToken !== safeOwner
+          || Math.abs(Number(runtime.frameValue) - Number(frameValue)) > 1e-9
+        ) {
+          runtime = ovizPrepareSkyMemberAppearanceScene(
+            safeOwner,
+            frameValue,
+            displayedTimeMyr,
+          );
+        }
+        if (!runtime || !runtime.endpoint) return false;
+        const parentVisualByKey = new Map();
+        runtime.endpoint.pointEntries.forEach((entry) => {
+          if (!entry || !entry.metadata) return;
+          const point = entry.metadata.point || {};
+          const common = ovizRetainedCommonPointVisual(
+            entry,
+            point,
+            displayedTimeMyr,
+          );
+          const visual = ovizRetainedPointVisual(
+            entry,
+            point,
+            displayedTimeMyr,
+            common,
+          );
+          const bulkEntry = runtime.memberBulkEntryByMaterial.get(entry.object.material);
+          if (bulkEntry) {
+            bulkEntry.baseOpacity = visual.opacity;
+            visual.opacity *= 1.0 - skyMemberRevealProgress;
+          }
+          ovizApplyRetainedPointEntry(entry, visual, 1.0, point);
+        });
+        ovizApplyRetainedEndpointWeight(runtime.endpoint, 1.0, displayedTimeMyr);
+        const updatedMembers = typeof ovizUpdateSkyMemberTimelineFastPath === "function"
+          ? ovizUpdateSkyMemberTimelineFastPath(frameValue, displayedTimeMyr, {
+            transitionOwnerToken: safeOwner,
+            allowSkyMemberStateAppearance: true,
+            parentVisualByKey,
+          })
+          : false;
+        if (!updatedMembers) return false;
+        updateCameraResponsivePointSprites();
+        ovizSkyMemberAppearanceSceneUpdateCount += 1;
+        if (root && root.dataset) {
+          root.dataset.skyMemberStateAppearanceFastPathCount = String(
+            ovizSkyMemberAppearanceSceneUpdateCount
+          );
+          root.dataset.skyMemberStateAppearanceSceneBuilds = String(
+            ovizSkyMemberAppearanceSceneBuildCount
+          );
+        }
+        return true;
       }
 
       function renderFrame(index) {

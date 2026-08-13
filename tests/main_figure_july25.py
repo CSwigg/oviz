@@ -82,6 +82,9 @@ SKY_BACKGROUND_GROUPS = [
             "P/Mellinger/color",
             "P/DSS2/color",
             "P/PLANCK/R2/HFI/color",
+            "P/Finkbeiner",
+            "P/HI4PI/NHI",
+            "P/Fermi/color",
         ],
     },
     {
@@ -185,11 +188,142 @@ SKY_BACKGROUND_LAYERS = [
         "opacity": 1.0,
         "visible": False,
     },
+    {
+        "key": "P/Finkbeiner",
+        "label": "Finkbeiner Hα",
+        "survey": "P/Finkbeiner",
+        "opacity": 1.0,
+        "visible": False,
+    },
+    {
+        "key": "P/HI4PI/NHI",
+        "label": "HI4PI HI 21 cm",
+        "survey": "P/HI4PI/NHI",
+        "opacity": 1.0,
+        "visible": False,
+    },
+    {
+        "key": "P/Fermi/color",
+        "label": "Fermi Gamma-ray",
+        "survey": "P/Fermi/color",
+        "opacity": 1.0,
+        "visible": False,
+    },
 ]
 SKY_BACKGROUND_SURVEY_ALIASES = {
     "P/SDSS9/color": "CDS/P/SDSS9/color",
 }
+# Presentation defaults for the July 25 figure: Planck dust sits on top of
+# the stack but starts hidden (opacity preset for when it is toggled on),
+# Mellinger renders dimmed, and DSS2 is enabled as the second visible layer.
+SKY_BACKGROUND_STACK_TOP_ORDER = [
+    "P/PLANCK/R2/HFI/color",
+    "P/Mellinger/color",
+    "P/DSS2/color",
+]
+SKY_BACKGROUND_STACK_DEFAULTS = {
+    "P/PLANCK/R2/HFI/color": {"visible": False, "opacity": 0.27},
+    "P/Mellinger/color": {"visible": True, "opacity": 0.23},
+    "P/DSS2/color": {"visible": True, "opacity": 1.0},
+}
+# The full catalog underlay is dropped from the July 25 presentation so the
+# figure shows only the curated cluster samples.
+FULL_CLUSTER_CATALOG_TRACE_NAME = "Full Cluster Catalog"
+# Single-PNG volume atlases larger than this per side exceed iOS Safari's
+# canvas limits (the decode silently fails, so the dust never appears on
+# phones) and spike hundreds of MB of RGBA during read-back.
+PNG_ATLAS_MAX_SIDE_PX = 2048
+# Phones render this synchronous low-resolution cube instead of decoding
+# the atlas, which avoids iOS Safari's canvas/async decode failure modes.
+MOBILE_LOWRES_MAX_DIM = 128
 
+
+def restore_raw_volume_payloads(scene: dict) -> int:
+    """Put large volume payloads back on the synchronous raw-uint8 path.
+
+    Reverts the PNG-slab encoding: the browser decodes ``data_b64`` with a
+    plain base64 read at startup instead of pulling 26 atlas images through
+    a canvas, which is what the desktop viewer used before the slab change.
+    The small mobile low-res cube is kept, since phones decode that (also
+    synchronously) rather than the full-resolution payload.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return 0
+    import io
+
+    def _attach_mobile_lowres(layer, volume, nx, ny, nz):
+        max_dim = max(nx, ny, nz)
+        if max_dim <= MOBILE_LOWRES_MAX_DIM:
+            return
+        stride = int(np.ceil(max_dim / MOBILE_LOWRES_MAX_DIM))
+        small = volume[::stride, ::stride, ::stride]
+        layer["data_lowres_b64"] = base64.b64encode(
+            np.ascontiguousarray(small, dtype=np.uint8).tobytes()
+        ).decode("ascii")
+        layer["lowres_shape"] = {
+            "x": int(small.shape[2]),
+            "y": int(small.shape[1]),
+            "z": int(small.shape[0]),
+        }
+
+    restored = 0
+    for layer in (scene.get("volumes") or {}).get("layers") or []:
+        shape = layer.get("shape") or {}
+        nx = max(1, int(shape.get("x") or 1))
+        ny = max(1, int(shape.get("y") or 1))
+        nz = max(1, int(shape.get("z") or 1))
+        slabs = layer.get("data_b64_slabs") or None
+        if not slabs:
+            raw_payload = layer.get("data_b64") or ""
+            if (
+                raw_payload
+                and str(layer.get("data_encoding") or "uint8") == "uint8"
+                and not layer.get("data_lowres_b64")
+            ):
+                raw = np.frombuffer(base64.b64decode(raw_payload), dtype=np.uint8)
+                expected = nx * ny * nz
+                if raw.size == expected:
+                    _attach_mobile_lowres(
+                        layer,
+                        raw.reshape((nz, ny, nx)),
+                        nx,
+                        ny,
+                        nz,
+                    )
+            continue
+        tiles = layer.get("data_atlas_tiles") or {}
+        slab_cols = max(1, int(tiles.get("x") or 1))
+        per_slab = max(
+            1,
+            int(tiles.get("slices_per_slab") or (slab_cols * max(1, int(tiles.get("y") or 1)))),
+        )
+        volume = np.zeros((nz, ny, nx), dtype=np.uint8)
+        for slab_index, slab_b64 in enumerate(slabs):
+            slab = np.asarray(
+                Image.open(io.BytesIO(base64.b64decode(slab_b64))).convert("L"),
+                dtype=np.uint8,
+            )
+            for offset in range(per_slab):
+                z_index = (slab_index * per_slab) + offset
+                if z_index >= nz:
+                    break
+                row, col = divmod(offset, slab_cols)
+                volume[z_index] = slab[
+                    row * ny:(row + 1) * ny,
+                    col * nx:(col + 1) * nx,
+                ]
+        if not layer.get("data_lowres_b64"):
+            _attach_mobile_lowres(layer, volume, nx, ny, nz)
+        layer["data_b64"] = base64.b64encode(
+            np.ascontiguousarray(volume, dtype=np.uint8).tobytes()
+        ).decode("ascii")
+        layer["data_b64_slabs"] = None
+        layer["data_atlas_tiles"] = None
+        layer["data_encoding"] = "uint8"
+        restored += 1
+    return restored
 
 def read_embedded_scene_spec(path: Path) -> dict:
     html = Path(path).read_text(encoding="utf-8")
@@ -310,6 +444,45 @@ def load_ratzenboeck_scocen_sky_members(
     return grouped
 
 
+def drop_trace_by_name(scene: dict, trace_name: str) -> set[str]:
+    """Remove a trace from frames, legend, and group visibility maps.
+
+    Trace keys are explicit (``trace-N``) rather than positional, so dropping
+    one leaves the remaining keys and their visibility entries intact.
+    """
+    removed_keys: set[str] = set()
+    for frame in scene.get("frames") or []:
+        kept_traces = []
+        for trace in frame.get("traces") or []:
+            if str(trace.get("name") or "") == trace_name:
+                key = str(trace.get("key") or "")
+                if key:
+                    removed_keys.add(key)
+                continue
+            kept_traces.append(trace)
+        frame["traces"] = kept_traces
+    legend = scene.get("legend")
+    if isinstance(legend, dict) and isinstance(legend.get("items"), list):
+        for item in legend["items"]:
+            if str(item.get("name") or "") == trace_name:
+                key = str(item.get("key") or "")
+                if key:
+                    removed_keys.add(key)
+        legend["items"] = [
+            item for item in legend["items"]
+            if str(item.get("name") or "") != trace_name
+        ]
+    for visibility in (scene.get("group_visibility") or {}).values():
+        if isinstance(visibility, dict):
+            for key in removed_keys:
+                visibility.pop(key, None)
+    legend_state = (scene.get("initial_state") or {}).get("legend_state")
+    if isinstance(legend_state, dict):
+        for key in removed_keys:
+            legend_state.pop(key, None)
+    return removed_keys
+
+
 def build_state_only_scene(
     scene_spec: dict,
     cluster_velocities_path: Path | None = None,
@@ -319,6 +492,19 @@ def build_state_only_scene(
 ) -> dict:
     scene = deepcopy(scene_spec)
     scene["title"] = ""
+    drop_trace_by_name(scene, FULL_CLUSTER_CATALOG_TRACE_NAME)
+    states = scene.get("states")
+    if isinstance(states, dict):
+        states["items"] = []
+        states["assets"] = {}
+        states["revision"] = 0
+        states["synchronized_revision"] = 0
+        # This figure is published read-only: never read back or write a
+        # local IndexedDB authoring draft. A stale draft from an earlier
+        # build was being auto-applied over the exported scene (hiding
+        # volumes and spiking memory), which is not something a visitor to
+        # a public URL should ever hit.
+        states["autosave_drafts"] = False
     scene["deck"] = {
         "schema_version": 2,
         "available": True,
@@ -336,6 +522,11 @@ def build_state_only_scene(
         "size_points_by_stars_enabled": True,
         "fade_opacity_by_birth_time_enabled": True,
     })
+    # Volumes stay visible on phones; the runtime stride-downsamples large
+    # cubes before the GPU upload (OVIZ_MOBILE_MAX_VOLUME_DIM), which keeps
+    # the Edenhofer map on screen without tripping iOS Safari memory kills.
+    scene["initial_state"].pop("mobile_defer_volumes", None)
+    restore_raw_volume_payloads(scene)
     existing_sky_layers = scene["initial_state"].get("sky_layers") or []
     existing_sky_by_survey = {}
     for layer in existing_sky_layers:
@@ -365,6 +556,23 @@ def build_state_only_scene(
             str(layer.get("survey") or layer.get("key") or ""),
         ) not in configured_sky_surveys
     )
+    def _layer_survey(layer: dict) -> str:
+        return str(layer.get("survey") or layer.get("key") or "")
+
+    for layer in configured_sky_layers:
+        overrides = SKY_BACKGROUND_STACK_DEFAULTS.get(_layer_survey(layer))
+        if overrides:
+            layer.update(deepcopy(overrides))
+    configured_sky_layers = [
+        layer
+        for survey in SKY_BACKGROUND_STACK_TOP_ORDER
+        for layer in configured_sky_layers
+        if _layer_survey(layer) == survey
+    ] + [
+        layer
+        for layer in configured_sky_layers
+        if _layer_survey(layer) not in SKY_BACKGROUND_STACK_TOP_ORDER
+    ]
     scene["initial_state"]["sky_layers"] = configured_sky_layers
     scene["initial_state"].setdefault("active_sky_layer_key", "P/Mellinger/color")
     scene.setdefault("sky_dome", {})["layer_groups"] = deepcopy(SKY_BACKGROUND_GROUPS)

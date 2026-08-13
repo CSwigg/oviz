@@ -3723,7 +3723,7 @@ THREEJS_SKY_RUNTIME_JS = """
           skyApertureToggleEl.disabled = !available || atLimit;
           skyApertureToggleEl.setAttribute("aria-pressed", pressed ? "true" : "false");
           skyApertureToggleEl.dataset.prewarming = prewarming ? "true" : "false";
-          skyApertureToggleEl.title = title;
+          skyApertureToggleEl.setAttribute("aria-label", title);
           if (typeof ovizDebugUpdateAperture === "function") {
             ovizDebugUpdateAperture({
               open: Boolean(skyApertureState.open),
@@ -6181,5 +6181,611 @@ THREEJS_SKY_RUNTIME_JS = """
         if (skyDomeUsesNativeHips() && opacity > 0.002) {
           updateNativeHipsTiles(timestampMs);
         }
+      }
+
+      // ---- Sky identify: right-click a spot in Sky view to list the
+      // cataloged objects there (SIMBAD cone search around the clicked
+      // direction, radius scaled to the current field of view). ----
+      const ovizSkyIdentifyState = { el: null, abort: null };
+
+      function ovizSkyIdentifyClose() {
+        if (ovizSkyIdentifyState.abort) {
+          ovizSkyIdentifyState.abort.abort();
+          ovizSkyIdentifyState.abort = null;
+        }
+        if (ovizSkyIdentifyState.el) {
+          ovizSkyIdentifyState.el.remove();
+          ovizSkyIdentifyState.el = null;
+        }
+      }
+
+      function ovizSkyIdentifyFormatSeparation(separationDeg) {
+        const arcmin = Number(separationDeg) * 60.0;
+        if (!Number.isFinite(arcmin)) {
+          return "";
+        }
+        if (arcmin >= 60.0) {
+          return (arcmin / 60.0).toFixed(1) + "\\u00b0";
+        }
+        if (arcmin >= 1.0) {
+          return arcmin.toFixed(1) + "\\u2032";
+        }
+        return (arcmin * 60.0).toFixed(0) + "\\u2033";
+      }
+
+      function ovizSkyIdentifyBuildPopover(clientX, clientY, galactic) {
+        ovizSkyIdentifyClose();
+        const popover = document.createElement("div");
+        popover.className = "oviz-three-sky-identify";
+        popover.setAttribute("role", "dialog");
+        popover.setAttribute("aria-label", "Sky objects");
+        const head = document.createElement("div");
+        head.className = "oviz-three-sky-identify-head";
+        const heading = document.createElement("strong");
+        heading.textContent = "Sky objects";
+        const coords = document.createElement("span");
+        coords.textContent = (
+          "\\u2113 " + Number(galactic.lon).toFixed(2) + "\\u00b0, b "
+          + Number(galactic.lat).toFixed(2) + "\\u00b0"
+        );
+        const closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.className = "oviz-three-sky-identify-close";
+        closeButton.setAttribute("aria-label", "Close sky object list");
+        closeButton.textContent = "\\u00d7";
+        closeButton.addEventListener("click", ovizSkyIdentifyClose);
+        head.appendChild(heading);
+        head.appendChild(coords);
+        head.appendChild(closeButton);
+        const list = document.createElement("div");
+        list.className = "oviz-three-sky-identify-list";
+        const status = document.createElement("div");
+        status.className = "oviz-three-sky-identify-status";
+        status.textContent = "Searching SIMBAD\\u2026";
+        popover.appendChild(head);
+        popover.appendChild(list);
+        popover.appendChild(status);
+        root.appendChild(popover);
+        const rootRect = root.getBoundingClientRect();
+        const width = popover.offsetWidth || 240;
+        const height = popover.offsetHeight || 120;
+        const left = Math.min(Math.max(clientX - rootRect.left + 12, 8), rootRect.width - width - 8);
+        const top = Math.min(Math.max(clientY - rootRect.top + 12, 8), rootRect.height - height - 8);
+        popover.style.left = left + "px";
+        popover.style.top = top + "px";
+        ovizSkyIdentifyState.el = popover;
+        return { popover, list, status };
+      }
+
+      const OVIZ_SKY_IDENTIFY_TAP_URL = "https://simbad.cds.unistra.fr/simbad/sim-tap/sync";
+
+      // Rank catalog matches by scientific prominence rather than raw
+      // angular proximity: clusters and associations first, then nebulae,
+      // ISM structures, and galaxies, then stars — weighted by how heavily
+      // each object is cited in the literature (SIMBAD nbref).
+      const OVIZ_SKY_IDENTIFY_TYPE_TIERS = [
+        { tier: 5, types: ["Cl*", "OpC", "GlC", "As*", "St*", "MGr", "Cl?", "OB?"] },
+        { tier: 4, types: ["HII", "SNR", "PN", "RNe", "GNe", "DNe", "MoC", "Cld", "glb", "sh", "SFR", "HH", "bub", "flt", "ISM", "Neb"] },
+        { tier: 3, types: ["G", "AGN", "SyG", "Sy1", "Sy2", "LIN", "SBG", "bCG", "GiC", "GiG", "GiP", "IG", "PaG", "GrG", "ClG", "QSO", "Bla", "BLL", "rG"] },
+      ];
+
+      function ovizSkyIdentifyTier(otype) {
+        const code = String(otype == null ? "" : otype).trim();
+        for (const group of OVIZ_SKY_IDENTIFY_TYPE_TIERS) {
+          if (group.types.indexOf(code) !== -1) {
+            return group.tier;
+          }
+        }
+        return 1;
+      }
+
+      function ovizSkyIdentifyFetch(adql, signal) {
+        const url = (
+          OVIZ_SKY_IDENTIFY_TAP_URL
+          + "?request=doQuery&lang=adql&format=json&query=" + encodeURIComponent(adql)
+        );
+        return fetch(url, { signal }).then((response) => {
+          if (!response.ok) {
+            throw new Error("SIMBAD response " + response.status);
+          }
+          return response.json();
+        });
+      }
+
+      function ovizSkyIdentifyNumber(value, digits) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number.toFixed(digits) : null;
+      }
+
+      async function ovizSkyIdentifyExpandRow(item, entry) {
+        const alreadyOpen = item.dataset.open === "true";
+        const list = item.parentElement;
+        if (list) {
+          list.querySelectorAll(".oviz-three-sky-identify-row[data-open='true']").forEach((other) => {
+            other.dataset.open = "false";
+            const detail = other.querySelector(".oviz-three-sky-identify-detail");
+            if (detail) detail.remove();
+          });
+        }
+        if (alreadyOpen) {
+          return;
+        }
+        item.dataset.open = "true";
+        const detail = document.createElement("div");
+        detail.className = "oviz-three-sky-identify-detail";
+        detail.textContent = "Loading details\\u2026";
+        item.appendChild(detail);
+        const adql = (
+          "SELECT b.otype, b.sp_type, b.plx_value, b.rvz_radvel, b.pmra, b.pmdec, "
+          + "b.nbref, f.V, f.B, f.G FROM basic b LEFT JOIN allfluxes f ON f.oidref = b.oid "
+          + "WHERE b.oid = " + Number(entry.oid)
+        );
+        try {
+          const payload = await ovizSkyIdentifyFetch(adql, null);
+          if (!item.isConnected || item.dataset.open !== "true") {
+            return;
+          }
+          const row = (payload && payload.data && payload.data[0]) || [];
+          detail.textContent = "";
+          const facts = [];
+          const vMag = ovizSkyIdentifyNumber(row[7], 1);
+          const gMag = ovizSkyIdentifyNumber(row[9], 1);
+          const plx = Number(row[2]);
+          const rv = ovizSkyIdentifyNumber(row[3], 1);
+          const pmRa = Number(row[4]);
+          const pmDec = Number(row[5]);
+          const refs = Number(row[6]);
+          facts.push(["Type", String(row[0] || entry.otype || "?")]);
+          if (entry.spType || row[1]) facts.push(["Spectral", String(row[1] || entry.spType)]);
+          if (vMag != null) facts.push(["V mag", vMag]);
+          else if (gMag != null) facts.push(["G mag", gMag]);
+          if (Number.isFinite(plx) && plx > 0.01) {
+            const distancePc = 1000.0 / plx;
+            facts.push(["Distance", distancePc >= 1000
+              ? (distancePc / 1000).toFixed(2) + " kpc"
+              : distancePc.toFixed(0) + " pc"]);
+          }
+          if (Number.isFinite(pmRa) && Number.isFinite(pmDec)) {
+            facts.push(["Proper motion", Math.hypot(pmRa, pmDec).toFixed(1) + " mas/yr"]);
+          }
+          if (rv != null) facts.push(["Radial velocity", rv + " km/s"]);
+          facts.push(["ICRS", (
+            ovizSkyIdentifyNumber(entry.ra, 4) + "\\u00b0, " + ovizSkyIdentifyNumber(entry.dec, 4) + "\\u00b0"
+          )]);
+          if (Number.isFinite(refs) && refs > 0) facts.push(["References", String(refs)]);
+          facts.forEach(([label, value]) => {
+            const factLabel = document.createElement("span");
+            factLabel.className = "oviz-three-sky-identify-fact-label";
+            factLabel.textContent = label;
+            const factValue = document.createElement("span");
+            factValue.className = "oviz-three-sky-identify-fact-value";
+            factValue.textContent = String(value);
+            detail.appendChild(factLabel);
+            detail.appendChild(factValue);
+          });
+          const link = document.createElement("a");
+          link.className = "oviz-three-sky-identify-link";
+          link.href = (
+            "https://simbad.cds.unistra.fr/simbad/sim-id?Ident=" + encodeURIComponent(entry.name)
+          );
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = "Open in SIMBAD \\u2197";
+          detail.appendChild(link);
+        } catch (error) {
+          if (item.isConnected && item.dataset.open === "true") {
+            detail.textContent = "Detail lookup failed.";
+          }
+        }
+      }
+
+      async function ovizSkyIdentifyQuery(icrs, radiusDeg, ui) {
+        const controller = new AbortController();
+        ovizSkyIdentifyState.abort = controller;
+        const timeout = window.setTimeout(() => controller.abort(), 9000);
+        const adql = (
+          "SELECT TOP 40 b.main_id, b.otype, b.ra, b.dec, b.oid, b.sp_type, "
+          + "b.nbref AS refs, "
+          + "DISTANCE(POINT('ICRS', b.ra, b.dec), POINT('ICRS', " + icrs.ra + ", " + icrs.dec + ")) AS sep "
+          + "FROM basic b WHERE CONTAINS(POINT('ICRS', b.ra, b.dec), "
+          + "CIRCLE('ICRS', " + icrs.ra + ", " + icrs.dec + ", " + radiusDeg + ")) = 1 "
+          + "AND b.nbref >= 1 ORDER BY refs DESC"
+        );
+        try {
+          const payload = await ovizSkyIdentifyFetch(adql, controller.signal);
+          const rows = Array.isArray(payload && payload.data) ? payload.data : [];
+          if (ovizSkyIdentifyState.el !== ui.popover) {
+            return;
+          }
+          if (!rows.length) {
+            ui.status.textContent = (
+              "No cataloged objects within " + ovizSkyIdentifyFormatSeparation(radiusDeg) + "."
+            );
+            return;
+          }
+          const entries = rows.map((row) => ({
+            name: String(row[0] == null ? "" : row[0]).replace(/\\s+/g, " ").trim(),
+            otype: String(row[1] == null ? "" : row[1]).trim(),
+            ra: Number(row[2]),
+            dec: Number(row[3]),
+            oid: Number(row[4]),
+            spType: String(row[5] == null ? "" : row[5]).trim(),
+            refs: Number(row[6]) || 0,
+            sep: Number(row[7]),
+            tier: ovizSkyIdentifyTier(row[1]),
+          })).filter((entry) => entry.name);
+          entries.sort((a, b) => (
+            (b.tier - a.tier)
+            || (b.refs - a.refs)
+            || (a.sep - b.sep)
+          ));
+          const shown = entries.slice(0, 8);
+          ui.status.textContent = (
+            "SIMBAD via CDS \\u00b7 " + ovizSkyIdentifyFormatSeparation(radiusDeg)
+            + " radius \\u00b7 click a row for details"
+          );
+          shown.forEach((entry) => {
+            const item = document.createElement("div");
+            item.className = "oviz-three-sky-identify-row";
+            item.dataset.open = "false";
+            item.dataset.tier = String(entry.tier);
+            const summary = document.createElement("div");
+            summary.className = "oviz-three-sky-identify-summary";
+            const name = document.createElement("span");
+            name.className = "oviz-three-sky-identify-name";
+            name.textContent = entry.name;
+            const meta = document.createElement("span");
+            meta.className = "oviz-three-sky-identify-meta";
+            const separation = ovizSkyIdentifyFormatSeparation(entry.sep);
+            meta.textContent = entry.otype && separation
+              ? entry.otype + " \\u00b7 " + separation
+              : (entry.otype || separation);
+            summary.appendChild(name);
+            summary.appendChild(meta);
+            item.appendChild(summary);
+            summary.addEventListener("click", () => {
+              ovizSkyIdentifyExpandRow(item, entry);
+            });
+            ui.list.appendChild(item);
+          });
+        } catch (error) {
+          if (controller.signal.aborted || ovizSkyIdentifyState.el !== ui.popover) {
+            return;
+          }
+          ui.status.textContent = "SIMBAD lookup failed. Check the network connection.";
+        } finally {
+          window.clearTimeout(timeout);
+          if (ovizSkyIdentifyState.abort === controller) {
+            ovizSkyIdentifyState.abort = null;
+          }
+        }
+      }
+
+      function onOvizSkyIdentifyContextMenu(event) {
+        if (cameraViewMode !== "earth" || !camera || !canvas) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = canvas.getBoundingClientRect();
+        if (!(rect.width > 1) || !(rect.height > 1)) {
+          return;
+        }
+        const xNorm = (event.clientX - rect.left) / rect.width;
+        const yNorm = (event.clientY - rect.top) / rect.height;
+        camera.updateMatrixWorld(true);
+        camera.updateProjectionMatrix();
+        const direction = new THREE.Vector3(xNorm * 2.0 - 1.0, 1.0 - yNorm * 2.0, 0.5)
+          .unproject(camera)
+          .sub(camera.position);
+        if (direction.lengthSq() <= 1e-12) {
+          return;
+        }
+        const galacticRaw = skyApertureSkyCenterForDirection(direction.normalize());
+        if (!galacticRaw) {
+          return;
+        }
+        const galactic = {
+          lon: Number(galacticRaw.lon != null ? galacticRaw.lon : galacticRaw.l),
+          lat: Number(galacticRaw.lat != null ? galacticRaw.lat : galacticRaw.b),
+        };
+        if (!Number.isFinite(galactic.lon) || !Number.isFinite(galactic.lat)) {
+          return;
+        }
+        const icrs = icrsDegFromGalacticDeg(galactic.lon, galactic.lat);
+        if (!icrs) {
+          return;
+        }
+        const radiusDeg = Math.min(1.2, Math.max(0.05, (Number(camera.fov) || 60.0) * 0.02));
+        const ui = ovizSkyIdentifyBuildPopover(event.clientX, event.clientY, galactic);
+        ovizSkyIdentifyQuery(icrs, radiusDeg, ui);
+      }
+
+      // ---- Wavelength blend slider ------------------------------------
+      // Sorts the current sky group's backgrounds by wavelength and lets a
+      // single slider crossfade between adjacent surveys. Toggled from the
+      // time transport; turning it off restores the manual layer mix.
+      const OVIZ_SKY_WAVELENGTH_METERS = {
+        "P/Fermi/color": 1.2e-12,
+        "P/GALEXGR6/AIS/color": 1.5e-7,
+        "CDS/P/SDSS9/color": 4.8e-7,
+        "P/Mellinger/color": 5.4e-7,
+        "P/PanSTARRS/DR1/color-z-zg-g": 5.5e-7,
+        "P/DECaLS/DR5/color": 5.6e-7,
+        "P/DSS2/color": 6.0e-7,
+        "P/Finkbeiner": 6.563e-7,
+        "P/2MASS/color": 1.65e-6,
+        "P/allWISE/color": 1.2e-5,
+        "CDS/P/IRIS/color": 1.0e-4,
+        "CDS/P/AKARI/FIS/Color": 1.4e-4,
+        "P/PLANCK/R2/HFI/color": 5.5e-4,
+        "P/HI4PI/NHI": 0.21,
+      };
+      const ovizWavelengthBarEl = root.querySelector(".oviz-three-wavelength-bar");
+      const ovizWavelengthSliderEl = root.querySelector(".oviz-three-wavelength-slider");
+      const ovizWavelengthTicksEl = root.querySelector(".oviz-three-wavelength-ticks");
+      const ovizWavelengthNameEl = root.querySelector(".oviz-three-wavelength-name");
+      const ovizWavelengthValueEl = root.querySelector(".oviz-three-wavelength-value");
+      const ovizWavelengthToggleEl = root.querySelector(".oviz-three-wavelength-toggle");
+      let ovizWavelengthOpen = false;
+      let ovizWavelengthSnapshot = null;
+      let ovizWavelengthApplyFrame = 0;
+
+      function ovizSkyLayerWavelengthMeters(layer) {
+        const survey = String((layer && (layer.survey || layer.key)) || "").trim();
+        const value = OVIZ_SKY_WAVELENGTH_METERS[survey];
+        return Number.isFinite(value) ? value : NaN;
+      }
+
+      function ovizWavelengthSortedLayers() {
+        return skyLayersForCurrentGroup()
+          .filter((layer) => Number.isFinite(ovizSkyLayerWavelengthMeters(layer)))
+          .sort((a, b) => ovizSkyLayerWavelengthMeters(a) - ovizSkyLayerWavelengthMeters(b));
+      }
+
+      function ovizFormatWavelength(meters) {
+        if (!Number.isFinite(meters)) {
+          return "";
+        }
+        if (meters < 1e-9) {
+          return (meters * 1e12).toFixed(1).replace(/\\.0$/, "") + " pm";
+        }
+        if (meters < 1e-6) {
+          return (meters * 1e9).toFixed(0) + " nm";
+        }
+        if (meters < 1e-3) {
+          const microns = meters * 1e6;
+          return (microns < 10 ? microns.toFixed(2) : microns.toFixed(0)).replace(/\\.00$/, "") + " \\u00b5m";
+        }
+        if (meters < 1) {
+          return (meters * 1e2).toFixed(0) + " cm";
+        }
+        return meters.toFixed(2) + " m";
+      }
+
+      // Post a blend frame: options apply immediately in the Aladin frame
+      // (no deferred retry cascade) and nothing rebuilds the layer stack.
+      function ovizPostSkyLayerBlend(options = {}) {
+        ovizSkyLayerImmediateOptionApply = true;
+        try {
+          applySkyLayerState(Object.assign(
+            { forceTiles: false, renderLegend: false, syncControls: false },
+            options
+          ));
+        } finally {
+          ovizSkyLayerImmediateOptionApply = false;
+        }
+      }
+
+      // Fade a layer's reveal/hide over a short ramp instead of snapping,
+      // so toggles never flash. The layer's configured opacity survives a
+      // hide so re-showing restores the same mix.
+      function ovizAnimateSkyLayerFade(layer, showing) {
+        if (!layer) {
+          return;
+        }
+        const targetOpacity = Math.min(Math.max(Number(layer.opacity) || 1.0, 0.02), 1.0);
+        const durationMs = 240;
+        const start = performance.now();
+        if (layer.__ovizFadeFrame) {
+          window.cancelAnimationFrame(layer.__ovizFadeFrame);
+          layer.__ovizFadeFrame = 0;
+        }
+        if (showing) {
+          layer.visible = true;
+        }
+        const step = (now) => {
+          const linear = Math.min((now - start) / durationMs, 1.0);
+          const eased = linear * linear * (3.0 - 2.0 * linear);
+          const ramp = showing ? eased : (1.0 - eased);
+          layer.opacity = Math.max(targetOpacity * ramp, 0.001);
+          layer.visible = showing || linear < 1.0;
+          if (linear < 1.0) {
+            ovizPostSkyLayerBlend();
+            layer.__ovizFadeFrame = window.requestAnimationFrame(step);
+          } else {
+            layer.__ovizFadeFrame = 0;
+            layer.opacity = targetOpacity;
+            layer.visible = Boolean(showing);
+            ovizPostSkyLayerBlend({ renderLegend: true, syncControls: true });
+          }
+        };
+        layer.__ovizFadeFrame = window.requestAnimationFrame(step);
+      }
+
+      function ovizWavelengthRenderTicks(layers) {
+        if (!ovizWavelengthTicksEl) {
+          return;
+        }
+        ovizWavelengthTicksEl.innerHTML = "";
+        if (layers.length < 2) {
+          return;
+        }
+        layers.forEach((layer, index) => {
+          const tick = document.createElement("span");
+          tick.className = "oviz-three-wavelength-tick";
+          tick.style.left = ((index / (layers.length - 1)) * 100).toFixed(3) + "%";
+          tick.title = String(layer.label || layer.survey || "");
+          ovizWavelengthTicksEl.appendChild(tick);
+        });
+      }
+
+      function ovizWavelengthApplyPosition(normalized, options = {}) {
+        const layers = ovizWavelengthSortedLayers();
+        if (layers.length < 2) {
+          return;
+        }
+        const position = Math.min(Math.max(Number(normalized) || 0.0, 0.0), 1.0) * (layers.length - 1);
+        const lower = Math.min(Math.floor(position), layers.length - 2);
+        const frac = position - lower;
+        layers.forEach((layer, index) => {
+          let weight = 0.0;
+          if (index === lower) {
+            weight = 1.0 - frac;
+          } else if (index === lower + 1) {
+            weight = frac;
+          }
+          layer.opacity = Math.round(weight * 1000) / 1000;
+          layer.visible = weight > 0.004;
+        });
+        const dominant = frac < 0.5 ? layers[lower] : layers[lower + 1];
+        if (ovizWavelengthNameEl) {
+          ovizWavelengthNameEl.textContent = String(dominant.label || dominant.survey || "");
+        }
+        if (ovizWavelengthValueEl) {
+          ovizWavelengthValueEl.textContent = ovizFormatWavelength(ovizSkyLayerWavelengthMeters(dominant));
+        }
+        if (options.post !== false && !ovizWavelengthApplyFrame) {
+          ovizWavelengthApplyFrame = window.requestAnimationFrame(() => {
+            ovizWavelengthApplyFrame = 0;
+            ovizPostSkyLayerBlend();
+          });
+        }
+      }
+
+      function ovizWavelengthInitialPosition(layers) {
+        let bestIndex = 0;
+        let bestScore = -1;
+        layers.forEach((layer, index) => {
+          const score = layer.visible === false ? 0.0 : Math.max(Number(layer.opacity) || 0.0, 0.0);
+          if (score > bestScore) {
+            bestScore = score;
+            bestIndex = index;
+          }
+        });
+        return layers.length > 1 ? bestIndex / (layers.length - 1) : 0.0;
+      }
+
+      function syncWavelengthToggleState() {
+        if (!ovizWavelengthToggleEl) {
+          return;
+        }
+        const available = ovizWavelengthSortedLayers().length >= 2;
+        ovizWavelengthToggleEl.dataset.active = ovizWavelengthOpen ? "true" : "false";
+        ovizWavelengthToggleEl.setAttribute("aria-expanded", ovizWavelengthOpen ? "true" : "false");
+        ovizWavelengthToggleEl.title = ovizWavelengthOpen
+          ? "Hide the wavelength blend slider"
+          : "Blend sky backgrounds by wavelength";
+        if (ovizWavelengthBarEl) {
+          ovizWavelengthBarEl.dataset.available = available ? "true" : "false";
+        }
+        if (root && root.dataset) {
+          root.dataset.wavelengthOpen = ovizWavelengthOpen ? "true" : "false";
+        }
+      }
+
+      function setWavelengthSliderOpen(open) {
+        const layers = ovizWavelengthSortedLayers();
+        const enable = Boolean(open) && layers.length >= 2;
+        if (enable === ovizWavelengthOpen) {
+          syncWavelengthToggleState();
+          return;
+        }
+        ovizWavelengthOpen = enable;
+        if (ovizWavelengthBarEl) {
+          ovizWavelengthBarEl.dataset.open = enable ? "true" : "false";
+        }
+        syncWavelengthToggleState();
+        if (enable) {
+          ovizWavelengthSnapshot = skyLayersForCurrentGroup().map((layer) => ({
+            key: layer.key,
+            opacity: layer.opacity,
+            visible: layer.visible !== false,
+          }));
+          ovizWavelengthRenderTicks(layers);
+          const initial = ovizWavelengthInitialPosition(layers);
+          if (ovizWavelengthSliderEl) {
+            ovizWavelengthSliderEl.value = String(Math.round(initial * 1000));
+          }
+          ovizWavelengthApplyPosition(initial);
+        } else {
+          if (Array.isArray(ovizWavelengthSnapshot)) {
+            const savedByKey = new Map(ovizWavelengthSnapshot.map((item) => [item.key, item]));
+            skyLayersForCurrentGroup().forEach((layer) => {
+              const saved = savedByKey.get(layer.key);
+              if (saved) {
+                layer.opacity = saved.opacity;
+                layer.visible = saved.visible;
+              }
+            });
+          }
+          ovizWavelengthSnapshot = null;
+          applySkyLayerState({ forceTiles: false });
+        }
+      }
+
+      if (ovizWavelengthToggleEl) {
+        ovizWavelengthToggleEl.addEventListener("click", () => {
+          setWavelengthSliderOpen(!ovizWavelengthOpen);
+        });
+      }
+      if (ovizWavelengthSliderEl) {
+        ovizWavelengthSliderEl.addEventListener("input", () => {
+          if (!ovizWavelengthOpen) {
+            return;
+          }
+          ovizWavelengthApplyPosition(Number(ovizWavelengthSliderEl.value) / 1000.0);
+        });
+        ovizWavelengthSliderEl.addEventListener("change", () => {
+          if (ovizWavelengthOpen) {
+            applySkyLayerState({ forceTiles: false });
+          }
+        });
+      }
+      new MutationObserver(() => {
+        if (root.dataset.cameraViewMode !== "earth") {
+          setWavelengthSliderOpen(false);
+        } else {
+          syncWavelengthToggleState();
+        }
+      }).observe(root, { attributes: true, attributeFilter: ["data-camera-view-mode"] });
+      window.requestAnimationFrame(() => {
+        try {
+          syncWavelengthToggleState();
+        } catch (_err) {
+        }
+      });
+
+      if (canvas) {
+        canvas.addEventListener("contextmenu", onOvizSkyIdentifyContextMenu);
+        window.addEventListener("pointerdown", (event) => {
+          if (event.button === 2) {
+            return;
+          }
+          if (ovizSkyIdentifyState.el && !ovizSkyIdentifyState.el.contains(event.target)) {
+            ovizSkyIdentifyClose();
+          }
+        }, true);
+        window.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && ovizSkyIdentifyState.el) {
+            ovizSkyIdentifyClose();
+            event.stopPropagation();
+          }
+        }, true);
+        new MutationObserver(() => {
+          if (root.dataset.cameraViewMode !== "earth") {
+            ovizSkyIdentifyClose();
+          }
+        }).observe(root, { attributes: true, attributeFilter: ["data-camera-view-mode"] });
       }
 """.strip()

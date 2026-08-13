@@ -525,6 +525,120 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("ovizBatchedLogicalPointCount", html)
         self.assertIn("ovizRetainedPointComponentCount", html)
 
+    def test_sky_identify_contextmenu_runtime_is_embedded(self):
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+            }
+        ).to_html(compress_scene_spec=False)
+
+        self.assertIn("function onOvizSkyIdentifyContextMenu(event)", html)
+        self.assertIn(
+            'canvas.addEventListener("contextmenu", onOvizSkyIdentifyContextMenu)', html
+        )
+        self.assertIn('if (cameraViewMode !== "earth" || !camera || !canvas)', html)
+        self.assertIn("simbad.cds.unistra.fr/simbad/sim-tap/sync", html)
+        self.assertIn("oviz-three-sky-identify", html)
+        self.assertIn(
+            "skyApertureSkyCenterForDirection(direction.normalize())", html
+        )
+        # The popover closes when the viewer leaves Sky mode.
+        self.assertIn('attributeFilter: ["data-camera-view-mode"]', html)
+        # Matches are ranked by prominence (type tier + citation count),
+        # not raw proximity, and each row expands into a detail view.
+        self.assertIn("OVIZ_SKY_IDENTIFY_TYPE_TIERS", html)
+        self.assertIn('"AND b.nbref >= 1 ORDER BY refs DESC"', html)
+        self.assertIn("ovizSkyIdentifyExpandRow", html)
+        self.assertIn("oviz-three-sky-identify-detail", html)
+        self.assertIn("simbad.cds.unistra.fr/simbad/sim-id?Ident=", html)
+
+    def test_legend_section_show_hide_all_buttons_are_embedded(self):
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+            }
+        ).to_html(compress_scene_spec=False)
+
+        # Each legend section header carries a show/hide-all eye, on both
+        # desktop and mobile.
+        self.assertIn('data-section="traces"', html)
+        self.assertIn('data-section="volumes"', html)
+        self.assertIn('data-section="sky"', html)
+        self.assertIn("oviz-three-legend-section-eye", html)
+        self.assertIn("oviz-three-sky-background-eye", html)
+        self.assertIn("function ovizToggleLegendSection(section)", html)
+        self.assertIn("function syncLegendSectionEyes()", html)
+        self.assertIn("initLegendSectionEyes();", html)
+        # Hiding a section remembers what was visible so re-showing does
+        # not turn every layer on.
+        self.assertIn("ovizLegendSectionSnapshots", html)
+        # The sky eye reuses the Sky-view background toggle.
+        self.assertIn("setSkyBackgroundHidden(!skyBackgroundHidden);", html)
+
+    def test_wavelength_blend_slider_runtime_is_embedded(self):
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+            }
+        ).to_html(compress_scene_spec=False)
+
+        # The blend slider sorts the current sky group by wavelength and
+        # crossfades adjacent surveys without rebuilding the Aladin stack.
+        self.assertIn("OVIZ_SKY_WAVELENGTH_METERS", html)
+        self.assertIn("function ovizWavelengthApplyPosition", html)
+        self.assertIn("function setWavelengthSliderOpen", html)
+        self.assertIn("oviz-three-wavelength-bar", html)
+        self.assertIn("oviz-three-wavelength-toggle", html)
+        self.assertIn('{ forceTiles: false, renderLegend: false, syncControls: false }', html)
+        # Reveal/hide ramps and immediate option application keep layer
+        # toggles from flashing.
+        self.assertIn("function ovizAnimateSkyLayerFade", html)
+        self.assertIn("ovizSkyLayerImmediateOptionApply", html)
+        self.assertIn("deferOptionRetries: ovizSkyLayerImmediateOptionApply ? false : undefined", html)
+
+    def test_mobile_stability_tradeoffs_are_embedded(self):
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+            }
+        ).to_html(compress_scene_spec=False)
+
+        # Phones skip MSAA and drop backdrop blur so iOS Safari stays under
+        # its compositor memory limits.
+        self.assertIn(
+            "antialias: !mobileModeEnabled && !safariModeEnabled",
+            html,
+        )
+        # Large volume cubes are stride-downsampled before the GPU upload
+        # on phones instead of being hidden.
+        self.assertIn("const OVIZ_MOBILE_MAX_VOLUME_DIM = 256;", html)
+        self.assertIn("function ovizDownsampleVolumeForMobile(data, nx, ny, nz)", html)
+        # Mobile volume layers are re-shaped before any decode so every
+        # consumer agrees on the small grid, and slab atlases decode one
+        # bounded image at a time.
+        self.assertIn("function ovizPrepareMobileVolumeLayer(layer)", html)
+        # Phones render a synchronous low-res cube (no canvas, no async
+        # decode) so an iOS Safari decode failure can never blank the dust.
+        self.assertIn("function ovizUsesMobileLowResVolume(layer)", html)
+        self.assertIn("base64ToUint8Array(layer.data_lowres_b64", html)
+        self.assertIn("function ovizStrideSampleVolume(data, snx, sny, snz, tnx, tny, tnz, stride)", html)
+        self.assertIn("data_b64_slabs", html)
+        self.assertIn("function decodeAtlasImage(imageB64, firstSliceIndex, sliceCount)", html)
+        self.assertIn('#oviz-three-__UNIQ__[data-mobile="true"] {'.replace("#oviz-three-__UNIQ__", "#" + html.split('<div id="', 1)[1].split('"', 1)[0]), html)
+        self.assertIn("--oviz-hud-blur: none;", html)
+
     def test_idle_rendering_and_ancillary_widgets_are_dirty_driven(self):
         html = ThreeJSFigure(
             {
@@ -1083,6 +1197,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("const mobileModeEnabled = mobileModeOverride === null", html)
         self.assertIn("? Boolean(sceneMobileModeEnabled || ovizRuntimeLooksMobile())", html)
         self.assertIn("root.dataset.mobile = mobileModeEnabled ? \"true\" : \"false\";", html)
+        self.assertIn("function ovizRuntimeIsSafari()", html)
+        self.assertIn("const safariModeEnabled = ovizRuntimeIsSafari();", html)
+        self.assertIn("root.dataset.safari = safariModeEnabled ? \"true\" : \"false\";", html)
 
     def test_threejs_renderer_compact_widget_payload_keeps_aladin_sky_panel(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
@@ -3178,7 +3295,16 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertTrue(layer["data_b64"])
         self.assertEqual(layer["data_atlas_tiles"], {"x": 2, "y": 2})
         self.assertIn("startPngAtlasVolumeDecode", html)
-        self.assertIn("volumeTexture.texture.needsUpdate = true", html)
+        self.assertIn("const placeholder = new Uint8Array([0]);", html)
+        self.assertIn("const pendingPngAtlasDecode = (", html)
+        self.assertIn("? { data: sourceData, nx: 1, ny: 1, nz: 1 }", html)
+        self.assertNotIn("const placeholder = new Uint8Array(nx * ny * nz);", html)
+        # Decoded voxels rebuild the volume texture outright (swapping data
+        # into a live Data3DTexture is unreliable) and re-point materials.
+        self.assertIn("const freshTexture = volumeTextureFor(layer);", html)
+        self.assertIn(
+            "runtime.material.uniforms.volumeTexture.value = freshTexture.texture;", html
+        )
 
     def test_threejs_scene_float_precision_rounds_exported_coordinates(self):
         collection = _FakeCollection()

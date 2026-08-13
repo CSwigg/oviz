@@ -4300,33 +4300,64 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         quantized = _quantize_sampled_uint8(sampled_data)
         return base64.b64encode(quantized.tobytes(order='C')).decode('ascii')
 
+    PNG_ATLAS_MAX_SIDE_PX = 2048
+
     def _encode_sampled_uint8_png_atlas(sampled_data):
         try:
             from PIL import Image
         except ImportError:
-            return _encode_sampled_uint8(sampled_data), 'uint8', None
+            return _encode_sampled_uint8(sampled_data), 'uint8', None, None
+
+        def _png_b64(array_2d):
+            buffer = io.BytesIO()
+            Image.fromarray(array_2d, mode='L').save(
+                buffer,
+                format='PNG',
+                optimize=True,
+                compress_level=9,
+            )
+            return base64.b64encode(buffer.getvalue()).decode('ascii')
 
         quantized = _quantize_sampled_uint8(sampled_data)
         nz, ny, nx = (int(quantized.shape[0]), int(quantized.shape[1]), int(quantized.shape[2]))
         tile_cols = int(np.ceil(np.sqrt(max(nz, 1))))
         tile_rows = int(np.ceil(nz / tile_cols))
-        atlas = np.zeros((tile_rows * ny, tile_cols * nx), dtype=np.uint8)
-        for z_index in range(nz):
-            row = z_index // tile_cols
-            col = z_index % tile_cols
-            atlas[row * ny:(row + 1) * ny, col * nx:(col + 1) * nx] = quantized[z_index]
+        # iOS Safari fails (silently, via canvas limits) on very large
+        # decode surfaces and spikes hundreds of MB of RGBA on getImageData.
+        # Large cubes therefore ship as a series of small slab atlases that
+        # every browser can decode with a bounded canvas.
+        max_atlas_side_px = PNG_ATLAS_MAX_SIDE_PX
+        if tile_cols * nx <= max_atlas_side_px and tile_rows * ny <= max_atlas_side_px:
+            atlas = np.zeros((tile_rows * ny, tile_cols * nx), dtype=np.uint8)
+            for z_index in range(nz):
+                row = z_index // tile_cols
+                col = z_index % tile_cols
+                atlas[row * ny:(row + 1) * ny, col * nx:(col + 1) * nx] = quantized[z_index]
+            return (
+                _png_b64(atlas),
+                'png_atlas_uint8',
+                {'x': tile_cols, 'y': tile_rows},
+                None,
+            )
 
-        buffer = io.BytesIO()
-        Image.fromarray(atlas, mode='L').save(
-            buffer,
-            format='PNG',
-            optimize=True,
-            compress_level=9,
-        )
+        slab_cols = max(1, min(nz, max_atlas_side_px // max(nx, 1)))
+        slab_rows = max(1, min(int(np.ceil(nz / slab_cols)), max_atlas_side_px // max(ny, 1)))
+        slices_per_slab = max(1, slab_cols * slab_rows)
+        slabs = []
+        for start in range(0, nz, slices_per_slab):
+            chunk = quantized[start:start + slices_per_slab]
+            rows_needed = int(np.ceil(chunk.shape[0] / slab_cols))
+            atlas = np.zeros((rows_needed * ny, slab_cols * nx), dtype=np.uint8)
+            for offset in range(chunk.shape[0]):
+                row = offset // slab_cols
+                col = offset % slab_cols
+                atlas[row * ny:(row + 1) * ny, col * nx:(col + 1) * nx] = chunk[offset]
+            slabs.append(_png_b64(atlas))
         return (
-            base64.b64encode(buffer.getvalue()).decode('ascii'),
+            '',
             'png_atlas_uint8',
-            {'x': tile_cols, 'y': tile_rows},
+            {'x': slab_cols, 'y': slab_rows, 'slices_per_slab': slices_per_slab},
+            slabs,
         )
 
     data_encoding_request = str(volume_cfg.get('data_encoding') or '').strip().lower()
@@ -4336,8 +4367,11 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         or volume_cfg.get('use_png_atlas')
     )
     data_atlas_tiles = None
+    data_b64_slabs = None
     if use_png_atlas:
-        data_b64, data_encoding, data_atlas_tiles = _encode_sampled_uint8_png_atlas(sampled)
+        data_b64, data_encoding, data_atlas_tiles, data_b64_slabs = (
+            _encode_sampled_uint8_png_atlas(sampled)
+        )
     else:
         data_b64 = _encode_sampled_uint8(sampled)
         data_encoding = 'uint8'
@@ -4345,7 +4379,9 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
     sky_overlay_encoding = None
     sky_overlay_tiles = None
     if sky_overlay_sampled is not None:
-        sky_overlay_b64, sky_overlay_encoding, sky_overlay_tiles = _encode_sampled_uint8_png_atlas(sky_overlay_sampled)
+        sky_overlay_b64, sky_overlay_encoding, sky_overlay_tiles, _sky_overlay_slabs = (
+            _encode_sampled_uint8_png_atlas(sky_overlay_sampled)
+        )
 
     opacity_function = _normalize_threejs_volume_opacity_function(volume_cfg.get('opacity_function'))
     colormap_options = _build_threejs_volume_colormap_options(
@@ -4371,6 +4407,7 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
         'path': str(path),
         'hdu': str(resolved_hdu_label),
         'data_b64': data_b64,
+        'data_b64_slabs': data_b64_slabs,
         'data_encoding': data_encoding,
         'data_atlas_tiles': data_atlas_tiles,
         'ar_proxy': ar_proxy,

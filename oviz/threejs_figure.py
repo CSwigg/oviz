@@ -40,12 +40,12 @@ _THREEJS_AR_BUTTON_HTML = (
 
 _THREEJS_DECK_BUTTON_HTML = (
     '<button class="oviz-three-deck-editor oviz-three-deck-toggle" type="button" '
-    'title="Open slide editor" aria-expanded="false" aria-pressed="false">Slides ▸</button>'
+    'aria-label="Slides" aria-expanded="false" aria-pressed="false">Slides ▸</button>'
 )
 
 _THREEJS_PAPER_BUTTON_HTML = (
     '<button class="oviz-three-paper-toggle" type="button" '
-    'title="Open the paper reader" aria-pressed="false">Paper ▸</button>'
+    'aria-label="Paper" aria-pressed="false">Paper ▸</button>'
 )
 
 _THREEJS_TOPBAR_HTML = """
@@ -57,7 +57,7 @@ _THREEJS_TOPBAR_HTML = """
         <div class="oviz-three-title"></div>
         <div class="oviz-three-widget-menu">
           <div class="oviz-three-text-shell" data-open="false">
-            <button class="oviz-three-text-toggle" type="button" title="Add and edit text anchored in the 3D scene" aria-expanded="false" aria-haspopup="true">Text ▸</button>
+            <button class="oviz-three-text-toggle" type="button" aria-expanded="false" aria-haspopup="true">Text ▸</button>
             <div class="oviz-three-text-drawer" aria-hidden="true" inert>
               <div class="oviz-three-text-head">
                 <strong>3D Text</strong>
@@ -100,7 +100,7 @@ _THREEJS_TOPBAR_HTML = """
           __DECK_BUTTON_HTML__
           __PAPER_BUTTON_HTML__
           <div class="oviz-three-search-shell" data-open="false" data-results-open="false">
-            <button class="oviz-three-search-toggle" type="button" title="Search clusters" aria-label="Search clusters" aria-expanded="false">
+            <button class="oviz-three-search-toggle" type="button" aria-label="Search clusters" aria-expanded="false">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="10.7" cy="10.7" r="5.7"></circle>
                 <path d="m15 15 4.4 4.4"></path>
@@ -116,10 +116,11 @@ _THREEJS_TOPBAR_HTML = """
             </div>
           </div>
           <div class="oviz-three-controls-shell" data-open="false">
-            <button class="oviz-three-controls-toggle" type="button" title="Show or hide the global scene controls" aria-expanded="false" aria-haspopup="true">Controls ▸</button>
+            <button class="oviz-three-controls-toggle" type="button" aria-expanded="false" aria-haspopup="true">Controls ▸</button>
             <div class="oviz-three-controls-drawer" aria-hidden="true" inert>
                 <div class="oviz-three-controls">
                   <div class="oviz-three-controls-title">Controls</div>
+                <div class="oviz-three-controls-section-label">Selection</div>
                 <div class="oviz-three-selection">
                   <div class="oviz-three-selection-row">
                     <button class="oviz-three-selection-clear" type="button" title="Clear current cluster selection">Clear selection</button>
@@ -129,6 +130,7 @@ _THREEJS_TOPBAR_HTML = """
                     <span>Lasso volumetric data</span>
                   </label>
                 </div>
+                <div class="oviz-three-controls-section-label">Appearance</div>
                   <label class="oviz-three-controls-field">
                     <span>Theme</span>
                   <select class="oviz-three-theme-select">
@@ -143,6 +145,7 @@ _THREEJS_TOPBAR_HTML = """
                     <option value="paper">Paper</option>
                   </select>
                 </label>
+                <div class="oviz-three-controls-section-label">Camera</div>
                 <div class="oviz-three-controls-row">
                   <label class="oviz-three-controls-field">
                     <span class="oviz-three-scroll-speed-label">Scroll speed</span>
@@ -153,6 +156,7 @@ _THREEJS_TOPBAR_HTML = """
                     <input class="oviz-three-camera-fov" type="range" min="0.05" max="120" step="0.05" />
                   </label>
                 </div>
+                <div class="oviz-three-controls-section-label">Points</div>
                 <div class="oviz-three-controls-row">
                   <label class="oviz-three-controls-field">
                     <span class="oviz-three-global-point-size-label">Point size</span>
@@ -167,6 +171,7 @@ _THREEJS_TOPBAR_HTML = """
                   <span class="oviz-three-global-point-glow-label">Star glow</span>
                   <input class="oviz-three-global-point-glow" type="range" min="0" max="4" step="0.02" />
                 </label>
+                <div class="oviz-three-controls-section-label">Animation</div>
                 <div class="oviz-three-controls-row">
                   <label class="oviz-three-controls-field">
                     <span>Focus group</span>
@@ -189,6 +194,7 @@ _THREEJS_TOPBAR_HTML = """
                   <input class="oviz-three-size-by-stars-toggle" type="checkbox" />
                   <span>Size points by n_stars</span>
                 </label>
+                <div class="oviz-three-controls-section-label">Scene</div>
                 <label class="oviz-three-controls-toggle-row">
                   <input class="oviz-three-axes-visible-toggle" type="checkbox" checked />
                   <span>Show axes</span>
@@ -201,6 +207,7 @@ _THREEJS_TOPBAR_HTML = """
                   <input class="oviz-three-region-labels-toggle" type="checkbox" checked />
                   <span>Show region labels</span>
                 </label>
+                <div class="oviz-three-controls-section-label">Actions</div>
                 <div class="oviz-three-controls-actions">
                   <button class="oviz-three-key-help-button" type="button" title="Show keyboard controls">Keyboard help</button>
                   <button class="oviz-three-view-from-earth" type="button" title="Current view: 3D. Click or press V to enter Sky view." aria-pressed="false">View: 3D</button>
@@ -213,7 +220,7 @@ _THREEJS_TOPBAR_HTML = """
               </div>
             </div>
           </div>
-          <button class="oviz-three-sky-aperture-toggle" type="button" title="Add sky aperture" aria-label="Add sky aperture" aria-pressed="false">
+          <button class="oviz-three-sky-aperture-toggle" type="button" aria-label="Add sky aperture" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="5.2" y="5.2" width="10.6" height="10.6" rx="1.3"></rect>
               <path d="M15.2 15.2 20 20"></path>
@@ -222,7 +229,7 @@ _THREEJS_TOPBAR_HTML = """
             </svg>
             <span class="oviz-three-sky-aperture-toggle-plus" aria-hidden="true">+</span>
           </button>
-          <button class="oviz-three-zen-mode" type="button" title="Hide interface panels and keep only the time slider visible">Zen</button>
+          <button class="oviz-three-zen-mode" type="button" aria-label="Zen mode">Zen</button>
           <button class="oviz-three-mobile-sky-view" type="button" title="Switch between 3D and Sky view" aria-pressed="false">Sky</button>
           <button class="oviz-three-mobile-lasso" type="button" title="Arm lasso selection for touch input" aria-label="Lasso selection" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.2 5.9c-2.7 2.1-3.6 5.9-1.8 8.8 2 3.2 6.4 4.5 10.2 3.1 3.6-1.3 5.9-4.9 4.7-8.1-1.2-3.1-5.3-4.8-9-3.6"></path><path d="m7.1 4.3 3.3 1.8-2.9 2.4"></path></svg>
@@ -235,10 +242,10 @@ _THREEJS_TOPBAR_HTML = """
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7h9M10 12h9M10 17h9"></path><path d="M5 7h1M5 12h1M5 17h1"></path></svg>
           </button>
           <button class="oviz-three-mobile-more" type="button" title="More viewer controls" aria-label="More viewer controls" aria-haspopup="dialog" aria-expanded="false">⋯</button>
-          <button class="oviz-three-reset-camera-view" type="button" title="Reset the camera to the initial 3D view">Reset Camera</button>
-          <button class="oviz-three-reset-selection" type="button" title="Clear the current lasso and cluster selection">Reset Selection</button>
-          <button class="oviz-three-save-state" type="button" title="Export an HTML copy of the figure with the current state">Save State</button>
-          <select class="oviz-three-widget-select">
+          <button class="oviz-three-reset-camera-view" type="button" aria-label="Reset camera">Reset Camera</button>
+          <button class="oviz-three-reset-selection" type="button" aria-label="Reset selection">Reset Selection</button>
+          <button class="oviz-three-save-state" type="button" aria-label="Save state">Save State</button>
+          <select class="oviz-three-widget-select" title="Widgets">
             <option value="">Widgets</option>
           </select>
         </div>
@@ -7868,6 +7875,1913 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         cursor: pointer;
         touch-action: manipulation;
       }
+
+      /* ==================================================================
+         Oviz UI v2 — unified HUD layer.
+         One visual system for every floating control surface: translucent
+         glass capsules over the scene, a single gold accent, one type
+         scale, and consistent radii. Desktop only: every rule is scoped
+         :not([data-mobile="true"]) so the mobile shell keeps its own
+         layout untouched.
+         ================================================================== */
+      #__ROOT_ID__ {
+        --oviz-hud-bg: rgba(28, 28, 30, 0.24);
+        --oviz-hud-bg-strong: rgba(24, 24, 26, 0.70);
+        --oviz-hud-border: rgba(255, 255, 255, 0.17);
+        --oviz-hud-border-soft: rgba(255, 255, 255, 0.12);
+        --oviz-hud-blur: blur(30px) saturate(180%) brightness(1.04);
+        --oviz-hud-shadow: 0 10px 30px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.045), inset 0 0 20px rgba(255, 255, 255, 0.03);
+        --oviz-hud-text: rgba(245, 245, 247, 0.88);
+        --oviz-hud-text-strong: rgba(255, 255, 255, 0.97);
+        --oviz-hud-muted: rgba(245, 245, 247, 0.60);
+        --oviz-hud-accent: #f6c85f;
+        --oviz-hud-accent-soft: rgba(246, 200, 95, 0.16);
+        --oviz-hud-accent-border: rgba(246, 200, 95, 0.38);
+        --oviz-hud-accent-text: #ffe9bd;
+        --oviz-hud-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      }
+
+      /* --- Top command bar ------------------------------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu {
+        gap: 5px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-mobile-sky-view,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-mobile-lasso,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-mobile-controls,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-mobile-ar,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-mobile-legend,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-mobile-more {
+        display: none !important;
+      }
+      /* Generic pill styling for every control in the command bar region,
+         including buttons inside its drop-down drawers. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-toggle {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-height: 26px !important;
+        padding: 0 10px !important;
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        border-radius: 999px !important;
+        background: rgba(255, 255, 255, 0.045) !important;
+        color: var(--oviz-hud-text) !important;
+        font: 640 11px/1.1 var(--oviz-hud-font) !important;
+        letter-spacing: 0.005em !important;
+        text-shadow: none !important;
+        transition: color 150ms ease, background 170ms ease, border-color 170ms ease !important;
+      }
+      /* Toolbar-level commands are uniform circular icon buttons. Their
+         text labels stay in the DOM (font-size 0) for tests and a11y. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > button,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu .oviz-states-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-text-shell > .oviz-three-text-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-controls-shell > .oviz-three-controls-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-search-shell > .oviz-three-search-toggle {
+        position: relative !important;
+        width: 32px !important;
+        min-width: 32px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 0 !important;
+        background: var(--oviz-hud-bg) !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+        backdrop-filter: var(--oviz-hud-blur) !important;
+        -webkit-backdrop-filter: var(--oviz-hud-blur) !important;
+      }
+      /* Icon glyphs: every toolbar command is a mask icon of one size. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > button::before,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu .oviz-states-toggle::before,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-text-shell > .oviz-three-text-toggle::before,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-controls-shell > .oviz-three-controls-toggle::before {
+        content: "";
+        flex: none;
+        width: 15px;
+        height: 15px;
+        margin: 0 !important;
+        background: currentColor;
+        -webkit-mask: var(--oviz-hud-icon) center / contain no-repeat;
+        mask: var(--oviz-hud-icon) center / contain no-repeat;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-sky-aperture-toggle::before {
+        display: none;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-states-toggle {
+        --oviz-hud-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 3.5h11V21l-5.5-3.6L6.5 21z'/%3E%3C/svg%3E");
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-toggle {
+        --oviz-hud-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 7V4h14v3'/%3E%3Cpath d='M12 4v16'/%3E%3Cpath d='M9 20h6'/%3E%3C/svg%3E");
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-deck-toggle {
+        --oviz-hud-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='12' rx='2'/%3E%3Cpath d='M12 16v4'/%3E%3Cpath d='M8 20h8'/%3E%3C/svg%3E");
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-paper-toggle {
+        --oviz-hud-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2.5h8L19 7.5V21.5H6z'/%3E%3Cpath d='M14 2.5v5h5'/%3E%3Cpath d='M9 13h6M9 17h6'/%3E%3C/svg%3E");
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-toggle {
+        --oviz-hud-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h8'/%3E%3Cpath d='M18 7h2'/%3E%3Cpath d='M4 17h2'/%3E%3Cpath d='M12 17h8'/%3E%3Ccircle cx='15' cy='7' r='2.6'/%3E%3Ccircle cx='9' cy='17' r='2.6'/%3E%3C/svg%3E");
+      }
+      /* Instant name tooltips (native title still gives the long form). */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-states-toggle::after { content: "States"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-toggle::after { content: "3D text"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-deck-toggle::after { content: "Slides"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-paper-toggle::after { content: "Paper"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-toggle::after { content: "Controls"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-aperture-toggle::after { content: "Sky aperture"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-zen-mode::after { content: "Zen"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-reset-camera-view::after { content: "Reset camera"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-reset-selection::after { content: "Reset selection"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-save-state::after { content: "Save state"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-search-toggle::after { content: "Search"; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button::after {
+        position: absolute;
+        top: calc(100% + 9px);
+        left: 50%;
+        transform: translateX(-50%) translateY(-2px);
+        padding: 4px 9px;
+        border: 1px solid var(--oviz-hud-border-soft);
+        border-radius: 7px;
+        background: var(--oviz-hud-bg-strong);
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+        color: var(--oviz-hud-text-strong);
+        font: 620 10.5px/1.2 var(--oviz-hud-font);
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 140ms ease 40ms, transform 140ms ease 40ms;
+        z-index: 95;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button:hover::after,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button:focus-visible::after {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      /* The Widgets select shows only its grid glyph; the popup list keeps
+         normal text. */
+      #__ROOT_ID__:not([data-mobile="true"]) select.oviz-three-widget-select {
+        color: transparent !important;
+        background:
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(240,243,248,0.86)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='3.5' width='7' height='7' rx='1.4'/%3E%3Crect x='13.5' y='3.5' width='7' height='7' rx='1.4'/%3E%3Crect x='3.5' y='13.5' width='7' height='7' rx='1.4'/%3E%3Crect x='13.5' y='13.5' width='7' height='7' rx='1.4'/%3E%3C/svg%3E") center / 15px 15px no-repeat,
+          var(--oviz-hud-bg) !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-select option {
+        color: rgba(245, 245, 247, 0.9);
+        background: #1c1c1e;
+        font-size: 12px;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button:hover,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu select:hover,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-toggle:hover {
+        background: rgba(255, 255, 255, 0.14) !important;
+        border-color: var(--oviz-hud-border) !important;
+        color: var(--oviz-hud-text-strong) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button:focus-visible,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu select:focus-visible,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-toggle:focus-visible,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu .oviz-three-controls-shell[data-open="true"] > .oviz-three-controls-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu .oviz-three-text-shell[data-open="true"] > .oviz-three-text-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu .oviz-states-shell[data-open="true"] > .oviz-states-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button[data-active="true"],
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button[aria-pressed="true"] {
+        outline: none !important;
+        color: var(--oviz-hud-accent-text) !important;
+        background: var(--oviz-hud-accent-soft) !important;
+        border-color: var(--oviz-hud-accent-border) !important;
+        box-shadow: none !important;
+      }
+
+      /* The States/Text/Slides group sits at the left end of the command
+         bar, so their drop-downs anchor left instead of right. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-states-shell .oviz-states-drawer {
+        left: 0 !important;
+        right: auto !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-shell .oviz-three-text-drawer {
+        left: 0 !important;
+        right: auto !important;
+      }
+
+      /* Keep open drawers above the legend and other HUD layers. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-topbar:has(.oviz-three-controls-shell[data-open="true"]),
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-topbar:has(.oviz-three-text-shell[data-open="true"]),
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-topbar:has(.oviz-three-search-shell[data-open="true"]) {
+        z-index: 90 !important;
+      }
+
+      /* One evenly-spaced row, ordered by task: authoring (States, Slides,
+         3D text), scene tools (Controls, Widgets, aperture), view actions
+         (reset camera/selection, Zen), export, then search at the edge. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-states-shell { order: 10; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-deck-toggle { order: 20; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-text-shell { order: 30; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-paper-toggle { order: 35; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-controls-shell { order: 40; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-widget-select { order: 41; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-sky-aperture-toggle { order: 42; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-reset-camera-view { order: 50; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-reset-selection { order: 51; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-zen-mode { order: 52; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-save-state { order: 53; }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-search-shell { order: 100; }
+
+      /* --- Sky identify popover ---------------------------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify {
+        position: absolute;
+        z-index: 60;
+        box-sizing: border-box;
+        min-width: 208px;
+        max-width: 264px;
+        padding: 8px;
+        border: 1px solid var(--oviz-hud-border);
+        border-radius: 12px;
+        background: var(--oviz-hud-bg-strong);
+        box-shadow: var(--oviz-hud-shadow);
+        backdrop-filter: var(--oviz-hud-blur);
+        -webkit-backdrop-filter: var(--oviz-hud-blur);
+        color: var(--oviz-hud-text);
+        font: 500 11.5px/1.3 var(--oviz-hud-font);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-head {
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+        padding: 2px 4px 7px;
+        border-bottom: 1px solid var(--oviz-hud-border-soft);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-head strong {
+        color: var(--oviz-hud-text-strong);
+        font: 700 11.5px/1.2 var(--oviz-hud-font);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-head span {
+        flex: 1;
+        color: var(--oviz-hud-muted);
+        font: 550 10px/1.2 var(--oviz-hud-font);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-close {
+        flex: none;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--oviz-hud-text);
+        font: 600 12px/1 var(--oviz-hud-font);
+        cursor: pointer;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-close:hover {
+        background: rgba(255, 255, 255, 0.16);
+        color: var(--oviz-hud-text-strong);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-list {
+        max-height: 218px;
+        overflow-y: auto;
+        margin-top: 3px;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-row {
+        border-radius: 7px;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-row[data-open="true"] {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-summary {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 5px 6px;
+        border-radius: 7px;
+        cursor: pointer;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-summary:hover {
+        background: rgba(255, 255, 255, 0.07);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-detail {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px 10px;
+        margin: 0 6px 6px 6px;
+        padding: 7px 0 2px 9px;
+        border-left: 2px solid rgba(246, 200, 95, 0.30);
+        font-size: 10.5px;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-fact-label {
+        color: var(--oviz-hud-muted);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-fact-value {
+        color: rgba(255, 255, 255, 0.90);
+        font-variant-numeric: tabular-nums;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-link {
+        grid-column: 1 / -1;
+        justify-self: start;
+        margin-top: 5px;
+        padding: 3px 9px;
+        border: 1px solid var(--oviz-hud-accent-border);
+        border-radius: 999px;
+        background: var(--oviz-hud-accent-soft);
+        color: var(--oviz-hud-accent-text);
+        font: 640 10px/1.2 var(--oviz-hud-font);
+        text-decoration: none;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-link:hover {
+        background: rgba(246, 200, 95, 0.24);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-name {
+        color: rgba(255, 255, 255, 0.93);
+        font-weight: 650;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-meta {
+        flex: none;
+        color: var(--oviz-hud-muted);
+        font-size: 10.5px;
+        font-variant-numeric: tabular-nums;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-identify-status {
+        padding: 6px 6px 2px;
+        color: var(--oviz-hud-muted);
+        font-size: 10px;
+      }
+
+      /* Icon assignments for the view-action buttons. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-zen-mode {
+        --oviz-hud-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z'/%3E%3Ccircle cx='12' cy='12' r='2.8'/%3E%3C/svg%3E");
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-reset-camera-view {
+        --oviz-hud-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 2.64-6.36L3 8'/%3E%3Cpath d='M3 3v5h5'/%3E%3C/svg%3E");
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-reset-selection {
+        --oviz-hud-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.6'/%3E%3Cpath d='m15 9-6 6'/%3E%3Cpath d='m9 9 6 6'/%3E%3C/svg%3E");
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-save-state {
+        --oviz-hud-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4v11'/%3E%3Cpath d='m7 11 5 5 5-5'/%3E%3Cpath d='M5 20h14'/%3E%3C/svg%3E");
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-title {
+        padding: 6px 14px;
+        border: 1px solid var(--oviz-hud-border-soft);
+        border-radius: 999px;
+        background: var(--oviz-hud-bg);
+        box-shadow: var(--oviz-hud-shadow);
+        backdrop-filter: var(--oviz-hud-blur);
+        -webkit-backdrop-filter: var(--oviz-hud-blur);
+        font: 650 12.5px/1.15 var(--oviz-hud-font);
+        color: var(--oviz-hud-text-strong);
+      }
+
+      /* --- Time transport --------------------------------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-footer {
+        gap: 6px !important;
+        width: auto !important;
+        max-width: calc(100vw - 28px) !important;
+        padding: 5px 18px 5px 8px !important;
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        border-radius: 999px !important;
+        background: var(--oviz-hud-bg) !important;
+        box-shadow: var(--oviz-hud-shadow) !important;
+        backdrop-filter: var(--oviz-hud-blur) !important;
+        -webkit-backdrop-filter: var(--oviz-hud-blur) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-footer button {
+        width: 30px !important;
+        height: 30px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: transparent !important;
+        color: var(--oviz-hud-text) !important;
+        font-size: 13px !important;
+        transition: color 150ms ease, background 170ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-footer button:hover {
+        color: var(--oviz-hud-text-strong) !important;
+        border-color: transparent !important;
+        background: rgba(255, 255, 255, 0.07) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-footer button[data-active="true"] {
+        color: var(--oviz-hud-accent-text) !important;
+        border-color: transparent !important;
+        background: var(--oviz-hud-accent-soft) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-time-label {
+        min-width: 128px !important;
+        color: var(--oviz-hud-text-strong) !important;
+        font: 700 13px/1.15 var(--oviz-hud-font) !important;
+        font-variant-numeric: tabular-nums !important;
+        text-shadow: none !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-slider::-webkit-slider-runnable-track {
+        height: 3px !important;
+        background: rgba(238, 242, 247, 0.24) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-slider::-moz-range-track {
+        height: 3px !important;
+        background: rgba(238, 242, 247, 0.24) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-slider::-webkit-slider-thumb {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        width: 13px !important;
+        height: 13px !important;
+        margin-top: -5px !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        background: var(--oviz-hud-accent) !important;
+        box-shadow: 0 0 0 3.5px rgba(246, 200, 95, 0.16), 0 1px 5px rgba(0, 0, 0, 0.5) !important;
+        transition: box-shadow 160ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-slider::-moz-range-thumb {
+        width: 13px !important;
+        height: 13px !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        background: var(--oviz-hud-accent) !important;
+        box-shadow: 0 0 0 3.5px rgba(246, 200, 95, 0.16), 0 1px 5px rgba(0, 0, 0, 0.5) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-slider:hover::-webkit-slider-thumb {
+        box-shadow: 0 0 0 5px rgba(246, 200, 95, 0.22), 0 1px 5px rgba(0, 0, 0, 0.5) !important;
+      }
+
+      /* --- Bottom-right switches + fullscreen -------------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-display-switch {
+        height: 32px;
+        border: 1px solid var(--oviz-hud-border-soft);
+        border-radius: 999px;
+        background: var(--oviz-hud-bg);
+        box-shadow: var(--oviz-hud-shadow);
+        backdrop-filter: var(--oviz-hud-blur);
+        -webkit-backdrop-filter: var(--oviz-hud-blur);
+        font: 640 11px/1 var(--oviz-hud-font);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-display-switch:hover {
+        transform: none;
+        border-color: var(--oviz-hud-border);
+        background: rgba(255, 255, 255, 0.12);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-view-segmented {
+        padding: 3px;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-view-segmented .oviz-three-display-switch-choice {
+        min-width: 46px;
+        height: 24px;
+        border-radius: 999px;
+        color: var(--oviz-hud-muted);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-view-segmented .oviz-three-display-switch-choice[data-selected="true"] {
+        border-color: var(--oviz-hud-accent-border);
+        background: var(--oviz-hud-accent-soft);
+        color: var(--oviz-hud-accent-text);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-fullscreen {
+        border: 1px solid var(--oviz-hud-border-soft);
+        border-radius: 999px;
+        background: var(--oviz-hud-bg);
+        box-shadow: var(--oviz-hud-shadow);
+        backdrop-filter: var(--oviz-hud-blur);
+        -webkit-backdrop-filter: var(--oviz-hud-blur);
+        width: 40px;
+        height: 40px;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-fullscreen svg {
+        width: 19px;
+        height: 19px;
+      }
+
+      /* --- Scale bar + tooltip ----------------------------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-scale-bar {
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        border-radius: 10px !important;
+        background: var(--oviz-hud-bg) !important;
+        backdrop-filter: var(--oviz-hud-blur) !important;
+        -webkit-backdrop-filter: var(--oviz-hud-blur) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-tooltip {
+        padding: 9px 11px;
+        border: 1px solid var(--oviz-hud-border);
+        border-radius: 9px;
+        background: var(--oviz-hud-bg-strong);
+        box-shadow: var(--oviz-hud-shadow);
+        backdrop-filter: var(--oviz-hud-blur);
+        -webkit-backdrop-filter: var(--oviz-hud-blur);
+        font: 500 12.5px/1.4 var(--oviz-hud-font);
+      }
+
+      /* --- Drawers, popovers, and floating panels ---------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-drawer,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-drawer,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-search-popover {
+        border: 1px solid var(--oviz-hud-border) !important;
+        border-radius: 13px !important;
+        background: var(--oviz-hud-bg-strong) !important;
+        box-shadow: var(--oviz-hud-shadow) !important;
+        backdrop-filter: blur(20px) saturate(132%) !important;
+        -webkit-backdrop-filter: blur(20px) saturate(132%) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-panel {
+        border: 1px solid var(--oviz-hud-border);
+        border-radius: 14px;
+        background: var(--oviz-hud-bg-strong);
+        box-shadow: var(--oviz-hud-shadow);
+        backdrop-filter: blur(20px) saturate(132%);
+        -webkit-backdrop-filter: blur(20px) saturate(132%);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-drag {
+        height: 34px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--oviz-hud-border-soft);
+        background: rgba(255, 255, 255, 0.025);
+        color: var(--oviz-hud-muted);
+        font: 700 10px/1 var(--oviz-hud-font);
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-key-help {
+        border: 1px solid var(--oviz-hud-border);
+        border-radius: 14px;
+        background: var(--oviz-hud-bg-strong);
+        box-shadow: var(--oviz-hud-shadow);
+        backdrop-filter: blur(20px) saturate(132%);
+        -webkit-backdrop-filter: blur(20px) saturate(132%);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-key-help-keys {
+        padding: 2px 7px;
+        border: 1px solid var(--oviz-hud-border);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--oviz-hud-text);
+        font: 600 10.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        justify-self: start;
+        align-self: start;
+      }
+
+      /* --- Controls drawer sections ------------------------------------ */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-section-label {
+        margin: 12px 0 1px;
+        padding-top: 11px;
+        border-top: 1px solid var(--oviz-hud-border-soft);
+        color: rgba(238, 242, 247, 0.44);
+        font: 720 9.5px/1 var(--oviz-hud-font);
+        letter-spacing: 0.10em;
+        text-transform: uppercase;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-section-label:first-child {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: 0;
+      }
+
+      /* --- Legend: full redesign ----------------------------------------
+         A "layers card": group title header, uppercase collapsible section
+         labels, rows of [color dot · neutral name · visibility eye] with a
+         trailing chevron that expands per-item styling controls. All of it
+         reuses the DOM the legend runtime already builds. */
+      #__ROOT_ID__ {
+        --oviz-icon-eye: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z'/%3E%3Ccircle cx='12' cy='12' r='2.8'/%3E%3C/svg%3E");
+        --oviz-icon-eye-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 4l16 16'/%3E%3Cpath d='M9.9 5.8A10.8 10.8 0 0 1 12 5.5c6.4 0 10 6.5 10 6.5a17.4 17.4 0 0 1-3.2 3.8M6.1 6.9A16.8 16.8 0 0 0 2 12s3.6 6.5 10 6.5c1.5 0 2.9-.3 4.1-.9'/%3E%3C/svg%3E");
+        --oviz-icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E");
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-panel {
+        width: max-content !important;
+        min-width: 218px !important;
+        max-width: min(352px, calc(100vw - 28px)) !important;
+        height: auto !important;
+        max-height: min(74vh, 700px) !important;
+        overflow-y: auto !important;
+        padding: 10px 10px 12px !important;
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        border-radius: 14px !important;
+        background: var(--oviz-hud-bg) !important;
+        box-shadow: var(--oviz-hud-shadow) !important;
+        backdrop-filter: var(--oviz-hud-blur) !important;
+        -webkit-backdrop-filter: var(--oviz-hud-blur) !important;
+      }
+
+      /* Card header: the legend group chooser. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-panel .oviz-three-group-trigger {
+        display: flex !important;
+        align-items: center !important;
+        gap: 7px !important;
+        padding: 4px 8px !important;
+        border: 0 !important;
+        border-radius: 8px !important;
+        background: transparent !important;
+        color: var(--oviz-hud-text-strong) !important;
+        font: 700 13.5px/1.2 var(--oviz-hud-font) !important;
+        letter-spacing: 0 !important;
+        cursor: pointer !important;
+        transition: background 150ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-panel .oviz-three-group-trigger:hover {
+        background: rgba(255, 255, 255, 0.07) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-panel .oviz-three-group-trigger .oviz-three-group-current {
+        order: 1;
+        position: static !important;
+        display: inline-block !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-panel .oviz-three-group-chevron {
+        order: 2 !important;
+        position: static !important;
+        display: inline-block !important;
+        margin: 2px 0 0 !important;
+        color: var(--oviz-hud-muted) !important;
+        font-size: 11px !important;
+        line-height: 1 !important;
+      }
+      /* Native color inputs render as clean rounded swatches. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls input[type="color"],
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-drawer input[type="color"] {
+        width: 30px !important;
+        height: 19px !important;
+        padding: 0 !important;
+        border: 1px solid var(--oviz-hud-border) !important;
+        border-radius: 6px !important;
+        background: transparent !important;
+        cursor: pointer !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls input[type="color"]::-webkit-color-swatch-wrapper,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-drawer input[type="color"]::-webkit-color-swatch-wrapper {
+        padding: 1px !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls input[type="color"]::-webkit-color-swatch,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-drawer input[type="color"]::-webkit-color-swatch {
+        border: 0 !important;
+        border-radius: 4px !important;
+      }
+
+      /* Uppercase collapsible section labels (Traces / Volumes). */
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-section-head {
+        margin: 9px 0 2px !important;
+        padding: 7px 2px 2px 0 !important;
+        border-top: 1px solid var(--oviz-hud-border-soft) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-trace-section > .oviz-three-legend-section-head {
+        margin-top: 3px !important;
+        padding-top: 3px !important;
+        border-top: 0 !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-section-toggle {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        margin: 0 !important;
+        padding: 3px 6px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        cursor: pointer !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-section-title {
+        color: rgba(245, 245, 247, 0.44) !important;
+        font: 720 9.5px/1 var(--oviz-hud-font) !important;
+        font-size: 9.5px !important;
+        letter-spacing: 0.11em !important;
+        text-transform: uppercase !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-section-chevron {
+        display: inline-block !important;
+        width: 8px !important;
+        height: 8px !important;
+        font-size: 0 !important;
+        color: transparent !important;
+        background: rgba(245, 245, 247, 0.36) !important;
+        -webkit-mask: var(--oviz-icon-chevron) center / contain no-repeat !important;
+        mask: var(--oviz-icon-chevron) center / contain no-repeat !important;
+        transform: rotate(90deg) !important;
+        transition: transform 180ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-section[data-open="false"] .oviz-three-legend-section-chevron {
+        transform: rotate(0deg) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-section[data-empty="true"] {
+        display: none !important;
+      }
+
+      /* Section header row: collapse toggle on the left, show/hide-all eye
+         pinned right. */
+      #__ROOT_ID__ .oviz-three-legend-section-head {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        width: 100%;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-head > .oviz-three-legend-section-toggle {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-eye {
+        position: relative;
+        flex: none;
+        width: 26px;
+        height: 26px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: rgba(245, 245, 247, 0.42);
+        font-size: 0;
+        cursor: pointer;
+        transition: color 150ms ease, background 150ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-eye::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 15px;
+        height: 15px;
+        background: currentColor;
+        -webkit-mask: var(--oviz-icon-eye) center / contain no-repeat;
+        mask: var(--oviz-icon-eye) center / contain no-repeat;
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-eye[data-active="false"]::before {
+        -webkit-mask-image: var(--oviz-icon-eye-off);
+        mask-image: var(--oviz-icon-eye-off);
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-eye[data-active="false"] {
+        color: var(--oviz-hud-accent-text);
+      }
+      #__ROOT_ID__ .oviz-three-legend-section-eye:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.92);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-section-eye {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-section-eye::before {
+        width: 19px;
+        height: 19px;
+      }
+      /* The sky eye only makes sense while a sky background can show. */
+      #__ROOT_ID__:not([data-camera-view-mode="earth"]) .oviz-three-sky-background-eye {
+        display: none;
+      }
+
+      /* Rows. */
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-row {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0 !important;
+        width: 100% !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-entry {
+        display: block !important;
+        border-radius: 9px !important;
+        transition: background 160ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-entry[data-editor-open="true"] {
+        background: rgba(255, 255, 255, 0.04) !important;
+        padding-bottom: 4px !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-item {
+        order: 1;
+        display: flex !important;
+        flex: 1 1 auto !important;
+        align-items: center !important;
+        gap: 9px !important;
+        min-width: 0 !important;
+        min-height: 29px !important;
+        padding: 3px 7px !important;
+        border: 0 !important;
+        border-radius: 8px !important;
+        background: transparent !important;
+        cursor: pointer !important;
+        text-align: left !important;
+        transition: background 150ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-item:hover {
+        background: rgba(255, 255, 255, 0.06) !important;
+      }
+      /* Color dot: filled when visible, hollow when hidden. */
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-swatch {
+        display: inline-block !important;
+        flex: none !important;
+        width: 9px !important;
+        height: 9px !important;
+        margin: 0 !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        box-shadow: 0 0 7px -1px currentColor !important;
+        transition: box-shadow 160ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-swatch {
+        background: transparent !important;
+        box-shadow: inset 0 0 0 1.5px currentColor !important;
+        opacity: 0.55;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-meta {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+      }
+      /* Neutral, single-line names; the trace color lives in the dot. */
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-name {
+        display: block !important;
+        max-inline-size: none !important;
+        overflow: hidden !important;
+        color: rgba(255, 255, 255, 0.92) !important;
+        font: 620 12.5px/1.3 var(--oviz-hud-font) !important;
+        font-size: 12.5px !important;
+        white-space: nowrap !important;
+        text-overflow: ellipsis !important;
+        text-shadow: none !important;
+        transition: color 160ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-item[data-active="false"],
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-name {
+        text-decoration: none !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-name {
+        color: rgba(255, 255, 255, 0.40) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-kind {
+        color: var(--oviz-hud-muted) !important;
+        font-size: 9.5px !important;
+      }
+      /* Visibility eye: appears on hover, stays visible while hidden. */
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-item::after {
+        content: "";
+        flex: none;
+        width: 13px;
+        height: 13px;
+        margin-left: 2px;
+        background: rgba(245, 245, 247, 0.55);
+        -webkit-mask: var(--oviz-icon-eye) center / contain no-repeat;
+        mask: var(--oviz-icon-eye) center / contain no-repeat;
+        opacity: 0;
+        transition: opacity 150ms ease;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-item:hover::after {
+        opacity: 1;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-item::after {
+        opacity: 0.8;
+        background: rgba(245, 245, 247, 0.38);
+        -webkit-mask-image: var(--oviz-icon-eye-off);
+        mask-image: var(--oviz-icon-eye-off);
+      }
+      /* Trailing chevron opens the per-item styling controls. */
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-edit {
+        order: 2;
+        position: relative !important;
+        width: 22px !important;
+        height: 22px !important;
+        min-width: 22px !important;
+        min-height: 22px !important;
+        margin: 0 2px 0 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 6px !important;
+        background: transparent !important;
+        color: rgba(245, 245, 247, 0.42) !important;
+        font-size: 0 !important;
+        cursor: pointer !important;
+        transition: color 150ms ease, background 150ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-edit::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 10px;
+        height: 10px;
+        background: currentColor;
+        -webkit-mask: var(--oviz-icon-chevron) center / contain no-repeat;
+        mask: var(--oviz-icon-chevron) center / contain no-repeat;
+        transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-edit[data-open="true"]::before {
+        transform: rotate(90deg);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-edit:hover,
+      #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-edit[data-open="true"] {
+        color: var(--oviz-hud-accent-text) !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        box-shadow: none !important;
+        outline: none !important;
+      }
+      /* Expanded styling controls: a compact, column-aligned form card.
+         Every label sits in a fixed 84px column so sliders, selects, and
+         swatches all start at the same x. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls[data-visible="true"] {
+        border-left: 2px solid rgba(246, 200, 95, 0.42) !important;
+        border-radius: 0 !important;
+        margin: 3px 0 8px 10px !important;
+        padding: 4px 8px 6px 12px !important;
+        gap: 1px !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-legend-control-row {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 1px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-legend-field,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-volume-field {
+        display: grid !important;
+        grid-template-columns: 97px minmax(0, 1fr) !important;
+        align-items: center !important;
+        column-gap: 10px !important;
+        min-height: 30px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-legend-field > span,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-volume-field > span {
+        color: rgba(245, 245, 247, 0.58) !important;
+        font: 620 10.5px/1.25 var(--oviz-hud-font) !important;
+        letter-spacing: 0.01em !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-legend-field select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-legend-field input[type="number"],
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-volume-field select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-volume-field input[type="number"] {
+        color: rgba(255, 255, 255, 0.92) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-legend-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-volume-toggle {
+        min-height: 26px !important;
+        margin: 0 !important;
+        color: rgba(245, 245, 247, 0.72) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-legend-controls .oviz-three-legend-summary {
+        margin-top: 3px !important;
+        color: var(--oviz-hud-muted) !important;
+        font-size: 10px !important;
+      }
+
+      /* Sky backgrounds dock: header styled as a section, layer rows
+         styled like trace rows. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-dock-head {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        margin: 9px 0 2px !important;
+        padding: 8px 6px 3px !important;
+        border-top: 1px solid var(--oviz-hud-border-soft) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-group-trigger {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        color: rgba(245, 245, 247, 0.44) !important;
+        font: 720 9.5px/1 var(--oviz-hud-font) !important;
+        font-size: 9.5px !important;
+        line-height: 1.05 !important;
+        letter-spacing: 0.11em !important;
+        text-transform: uppercase !important;
+        cursor: pointer !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-group-trigger:hover {
+        color: rgba(245, 245, 247, 0.75) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-group-trigger .oviz-three-group-current,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-group-trigger .oviz-three-group-chevron {
+        color: inherit !important;
+        font-size: 9.5px !important;
+        line-height: 1.05 !important;
+        letter-spacing: 0.11em !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-copy,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-row[data-visible="false"] .oviz-three-sky-layer-name {
+        text-decoration: none !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-add-toggle {
+        width: 20px !important;
+        height: 20px !important;
+        margin-left: auto !important;
+        padding: 0 !important;
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        border-radius: 999px !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        color: var(--oviz-hud-text) !important;
+        font: 600 13px/1 var(--oviz-hud-font) !important;
+        cursor: pointer !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-add-toggle:hover {
+        background: rgba(255, 255, 255, 0.12) !important;
+        color: var(--oviz-hud-text-strong) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-summary {
+        border-radius: 8px !important;
+        min-height: 29px !important;
+        align-items: center !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-summary:hover {
+        background: rgba(255, 255, 255, 0.06) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-name {
+        color: rgba(255, 255, 255, 0.92) !important;
+        font: 620 12.5px/1.3 var(--oviz-hud-font) !important;
+        font-size: 12.5px !important;
+        text-shadow: none !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-row[data-visible="false"] .oviz-three-sky-layer-name {
+        color: rgba(255, 255, 255, 0.40) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-order {
+        padding: 1px 6px !important;
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        border-radius: 999px !important;
+        background: rgba(255, 255, 255, 0.045) !important;
+        color: var(--oviz-hud-muted) !important;
+        font: 700 8.5px/1.3 var(--oviz-hud-font) !important;
+        letter-spacing: 0.07em !important;
+        text-transform: uppercase !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-copy::after {
+        content: "";
+        flex: none;
+        width: 13px;
+        height: 13px;
+        margin-left: 4px;
+        background: rgba(245, 245, 247, 0.55);
+        -webkit-mask: var(--oviz-icon-eye) center / contain no-repeat;
+        mask: var(--oviz-icon-eye) center / contain no-repeat;
+        opacity: 0;
+        transition: opacity 150ms ease;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-summary:hover .oviz-three-sky-layer-copy::after {
+        opacity: 1;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-row[data-visible="false"] .oviz-three-sky-layer-copy::after {
+        opacity: 0.8;
+        background: rgba(245, 245, 247, 0.38);
+        -webkit-mask-image: var(--oviz-icon-eye-off);
+        mask-image: var(--oviz-icon-eye-off);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-grip {
+        opacity: 0 !important;
+        transition: opacity 150ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-summary:hover .oviz-three-sky-layer-grip,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-row[data-dragging="true"] .oviz-three-sky-layer-grip {
+        opacity: 0.55 !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-row[open] .oviz-three-sky-layer-body {
+        border-left: 2px solid rgba(246, 200, 95, 0.42) !important;
+        padding-left: 12px !important;
+        margin-left: 10px !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-body,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-body label,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-body span,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-body select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-body input,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-body button {
+        color: rgba(238, 242, 247, 0.80) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-body input::placeholder {
+        color: rgba(238, 242, 247, 0.44) !important;
+      }
+
+      /* --- Group dropdown menus (legend group + sky background group) -- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-menu {
+        min-width: 172px !important;
+        padding: 5px !important;
+        border: 1px solid var(--oviz-hud-border) !important;
+        border-radius: 11px !important;
+        background: var(--oviz-hud-bg-strong) !important;
+        box-shadow: var(--oviz-hud-shadow) !important;
+        backdrop-filter: blur(20px) saturate(132%) !important;
+        -webkit-backdrop-filter: blur(20px) saturate(132%) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-option {
+        display: block !important;
+        width: 100% !important;
+        padding: 6px 10px !important;
+        border: 0 !important;
+        border-radius: 7px !important;
+        background: transparent !important;
+        color: var(--oviz-hud-text) !important;
+        font: 600 11.5px/1.2 var(--oviz-hud-font) !important;
+        text-align: left !important;
+        text-shadow: none !important;
+        cursor: pointer !important;
+        transition: background 150ms ease, color 150ms ease !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-option:hover,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-option:focus-visible {
+        outline: none !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: var(--oviz-hud-text-strong) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-option[data-active="true"],
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-group-option[aria-selected="true"] {
+        background: var(--oviz-hud-accent-soft) !important;
+        color: var(--oviz-hud-accent-text) !important;
+      }
+
+      /* --- Sky "Add Background" popover -------------------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-add-popover {
+        padding: 12px !important;
+        border: 1px solid var(--oviz-hud-border) !important;
+        border-radius: 12px !important;
+        background: var(--oviz-hud-bg-strong) !important;
+        box-shadow: var(--oviz-hud-shadow) !important;
+        backdrop-filter: blur(20px) saturate(132%) !important;
+        -webkit-backdrop-filter: blur(20px) saturate(132%) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-add-title {
+        color: var(--oviz-hud-text-strong) !important;
+        font: 700 12px/1.2 var(--oviz-hud-font) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-add-popover .oviz-three-controls-field,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-add-popover span {
+        color: rgba(238, 242, 247, 0.78) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-add {
+        min-height: 27px !important;
+        padding: 0 12px !important;
+        border: 1px solid var(--oviz-hud-accent-border) !important;
+        border-radius: 999px !important;
+        background: var(--oviz-hud-accent-soft) !important;
+        color: var(--oviz-hud-accent-text) !important;
+        font: 650 11px/1 var(--oviz-hud-font) !important;
+        cursor: pointer !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-sky-layer-add:hover {
+        background: rgba(246, 200, 95, 0.24) !important;
+      }
+
+      /* --- Dendrogram + box panel form fields --------------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-dendrogram-field select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-dendrogram-field input,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-box-field select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-box-field input[type="number"] {
+        min-height: 26px !important;
+        padding: 2px 0 3px !important;
+        border: 0 !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.16) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.84) !important;
+        font: 650 11.5px/1.16 var(--oviz-hud-font) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-dendrogram-field select:focus,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-dendrogram-field input:focus,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-box-field select:focus,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-box-field input[type="number"]:focus {
+        outline: none !important;
+        border-bottom-color: rgba(246, 200, 95, 0.58) !important;
+        color: rgba(255, 255, 255, 0.95) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-dendrogram-field span,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-box-field span {
+        color: var(--oviz-hud-muted) !important;
+      }
+
+      /* --- Text drawer fields ------------------------------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-field input[type="range"] {
+        accent-color: var(--oviz-hud-accent) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-field input[type="range"]::-webkit-slider-runnable-track {
+        height: 2px !important;
+        border-radius: 999px !important;
+        background: rgba(238, 242, 247, 0.22) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-field input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        width: 11px !important;
+        height: 11px !important;
+        margin-top: -4.5px !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        background: var(--oviz-hud-accent) !important;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-field input[type="text"],
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-field input[type="number"] {
+        border: 0 !important;
+        border-bottom: 1px solid rgba(238, 242, 247, 0.16) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: rgba(238, 242, 247, 0.84) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-field input[type="text"]:focus,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-text-field input[type="number"]:focus {
+        outline: none !important;
+        border-bottom-color: rgba(246, 200, 95, 0.58) !important;
+        color: rgba(255, 255, 255, 0.95) !important;
+      }
+
+      /* --- Wavelength blend: a tab that pulls out of the time bar --------
+         In Sky view a compact "λ Wavelength" tab sits directly above the
+         time transport. Clicking it expands the same glass capsule into
+         the full spectrum slider; clicking again collapses it. */
+      #__ROOT_ID__ .oviz-three-wavelength-bar {
+        display: none;
+        position: absolute;
+        left: 50%;
+        bottom: 68px;
+        transform: translateX(-50%);
+        z-index: 6;
+        align-items: center;
+        gap: 0;
+        max-width: calc(100vw - 28px);
+        padding: 0;
+        border: 1px solid var(--oviz-hud-border-soft);
+        border-radius: 999px;
+        background: var(--oviz-hud-bg);
+        box-shadow: var(--oviz-hud-shadow);
+        backdrop-filter: var(--oviz-hud-blur);
+        -webkit-backdrop-filter: var(--oviz-hud-blur);
+        transition: gap 220ms var(--oviz-instrument-ease), padding 220ms var(--oviz-instrument-ease);
+      }
+      #__ROOT_ID__[data-camera-view-mode="earth"]:not([data-zen="true"]):not([data-presentation-mode="true"]) .oviz-three-wavelength-bar {
+        display: flex;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-bar[data-available="false"] {
+        display: none !important;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 32px;
+        padding: 0 15px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--oviz-hud-text);
+        font: 640 11.5px/1 var(--oviz-hud-font);
+        white-space: nowrap;
+        cursor: pointer;
+        transition: color 160ms ease, background 170ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-toggle:hover {
+        color: var(--oviz-hud-text-strong);
+        background: rgba(255, 255, 255, 0.07);
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-bar[data-open="true"] .oviz-three-wavelength-toggle {
+        color: var(--oviz-hud-accent-text);
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-toggle-glyph {
+        font: 700 14px/1 "Times New Roman", Georgia, serif;
+        font-style: italic;
+        color: var(--oviz-hud-accent);
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-toggle-chevron {
+        width: 9px;
+        height: 9px;
+        background: currentColor;
+        opacity: 0.7;
+        -webkit-mask: var(--oviz-icon-chevron) center / contain no-repeat;
+        mask: var(--oviz-icon-chevron) center / contain no-repeat;
+        transform: rotate(-90deg);
+        transition: transform 220ms var(--oviz-instrument-ease);
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-bar[data-open="true"] .oviz-three-wavelength-toggle-chevron {
+        transform: rotate(90deg);
+      }
+      /* The panel is the part that "pulls out" of the tab. */
+      #__ROOT_ID__ .oviz-three-wavelength-panel {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: 0;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        transition:
+          max-width 260ms var(--oviz-instrument-ease),
+          opacity 180ms ease,
+          padding 220ms var(--oviz-instrument-ease);
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-bar[data-open="true"] {
+        gap: 4px;
+        padding: 0 16px 0 4px;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-bar[data-open="true"] .oviz-three-wavelength-panel {
+        max-width: min(560px, calc(100vw - 120px));
+        padding: 7px 0 7px 10px;
+        opacity: 1;
+        overflow: visible;
+        pointer-events: auto;
+        border-left: 1px solid var(--oviz-hud-border-soft);
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-readout {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 132px;
+        max-width: 172px;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-name {
+        color: var(--oviz-hud-text-strong);
+        font: 650 11.5px/1.25 var(--oviz-hud-font);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-value {
+        color: var(--oviz-hud-muted);
+        font: 550 10px/1.2 var(--oviz-hud-font);
+        font-variant-numeric: tabular-nums;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-track {
+        position: relative;
+        display: flex;
+        align-items: center;
+        width: clamp(220px, 28vw, 320px);
+        height: 30px;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-ticks {
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        top: 50%;
+        height: 0;
+        pointer-events: none;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-tick {
+        position: absolute;
+        top: -4.5px;
+        width: 2px;
+        height: 9px;
+        border-radius: 2px;
+        background: rgba(245, 245, 247, 0.45);
+        box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+        transform: translateX(-50%);
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-slider {
+        width: 100% !important;
+        height: 30px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        cursor: pointer !important;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-slider::-webkit-slider-runnable-track {
+        height: 4px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: linear-gradient(90deg,
+          rgba(196, 181, 253, 0.80),
+          rgba(96, 165, 250, 0.80),
+          rgba(74, 222, 128, 0.80),
+          rgba(250, 204, 21, 0.80),
+          rgba(251, 146, 60, 0.80),
+          rgba(248, 113, 113, 0.65)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-slider::-moz-range-track {
+        height: 4px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        background: linear-gradient(90deg,
+          rgba(196, 181, 253, 0.80),
+          rgba(96, 165, 250, 0.80),
+          rgba(74, 222, 128, 0.80),
+          rgba(250, 204, 21, 0.80),
+          rgba(251, 146, 60, 0.80),
+          rgba(248, 113, 113, 0.65)) !important;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-slider::-webkit-slider-thumb {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        width: 15px !important;
+        height: 15px !important;
+        margin-top: -5.5px !important;
+        border: 2.5px solid rgba(16, 17, 20, 0.9) !important;
+        border-radius: 50% !important;
+        background: var(--oviz-hud-accent) !important;
+        box-shadow: 0 0 0 3px rgba(246, 200, 95, 0.20), 0 1px 5px rgba(0, 0, 0, 0.5) !important;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-slider::-moz-range-thumb {
+        width: 13px !important;
+        height: 13px !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        background: var(--oviz-hud-accent) !important;
+        box-shadow: 0 0 0 3.5px rgba(246, 200, 95, 0.16), 0 1px 5px rgba(0, 0, 0, 0.5) !important;
+      }
+
+      /* Mobile: the tab clears the two-row time transport, uses 44px touch
+         targets, and drops the panel onto its own row so the slider keeps
+         full width on a phone. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-bar {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+        max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 32px);
+        z-index: 9;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-toggle {
+        height: 44px;
+        padding: 0 18px;
+        font-size: 13px;
+        touch-action: manipulation;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-toggle-glyph {
+        font-size: 16px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-bar[data-open="true"] {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        width: min(410px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 32px));
+        padding: 0 0 4px;
+        border-radius: 22px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-bar[data-open="true"] .oviz-three-wavelength-panel {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 2px;
+        max-width: none;
+        padding: 0 16px 4px;
+        border-left: 0;
+        border-top: 1px solid var(--oviz-hud-border-soft);
+        padding-top: 8px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-readout {
+        flex-direction: row;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+        max-width: none;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-name {
+        font-size: 13px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-value {
+        font-size: 11.5px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-track {
+        width: 100%;
+        height: 40px;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-slider {
+        height: 40px !important;
+        touch-action: pan-y !important;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-slider {
+        outline: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+      #__ROOT_ID__ .oviz-three-wavelength-slider:focus,
+      #__ROOT_ID__ .oviz-three-wavelength-slider:focus-visible {
+        outline: none !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-slider::-webkit-slider-runnable-track,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-slider::-moz-range-track {
+        height: 5px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-slider::-webkit-slider-thumb {
+        width: 22px !important;
+        height: 22px !important;
+        margin-top: -8.5px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-slider::-moz-range-thumb {
+        width: 22px !important;
+        height: 22px !important;
+      }
+      /* Lift the stacked Sky switches so the expanded panel never covers
+         them on a phone. */
+      #__ROOT_ID__[data-mobile="true"][data-wavelength-open="true"] .oviz-three-bottom-switches[data-layout="stacked"] {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 214px);
+      }
+
+      /* ==================================================================
+         Mobile consistency + iOS Safari stability.
+         Phones trade translucency for opaque glass: backdrop-filter blur
+         is one of the biggest compositor memory costs on iOS Safari and a
+         common cause of the "this page was reloaded" jetsam loop. The
+         same HUD tokens apply, just opaque and blur-free, and the legend
+         redesign is ported at touch sizes.
+         ================================================================== */
+      #__ROOT_ID__[data-mobile="true"] {
+        --oviz-hud-bg: rgba(26, 26, 30, 0.94);
+        --oviz-hud-bg-strong: rgba(22, 22, 26, 0.97);
+        --oviz-hud-blur: none;
+        --oviz-hud-shadow: 0 10px 28px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-footer,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-footer button,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-bar,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-wavelength-toggle,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-topbar,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu button,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu select,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-display-switch,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-bottom-switches,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-card,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-backdrop,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu button,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-controls-drawer,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-text-drawer,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-search-popover,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-panel,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-scale-bar,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-tooltip,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-group-menu,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-add-popover,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-controls-drawer,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-startup-status,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-key-help,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-fullscreen,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-fullscreen-notice,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-identify,
+      #__ROOT_ID__[data-mobile="true"] .oviz-states-drawer,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-selection-status,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-note {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+
+      /* Time transport: a proper card instead of bare floating controls. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-footer {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 12px) !important;
+        padding: 8px 14px 10px !important;
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        border-radius: 22px !important;
+        background: var(--oviz-hud-bg) !important;
+        box-shadow: var(--oviz-hud-shadow) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-time-label {
+        text-shadow: none !important;
+      }
+      /* Trim the two-row transport: the 44px touch targets stay, but the
+         rows no longer carry their original standalone padding. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-footer {
+        row-gap: 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-footer button,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-time-label {
+        height: 38px !important;
+        min-height: 38px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-slider-shell {
+        height: 26px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-slider-track-wrap {
+        height: 26px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-slider {
+        height: 26px !important;
+        min-height: 26px !important;
+      }
+
+      /* Top chrome: same opaque material for the view pill and the icon
+         cluster. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-widget-menu,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-bottom-switches .oviz-three-display-switch {
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        background: var(--oviz-hud-bg) !important;
+        box-shadow: var(--oviz-hud-shadow) !important;
+      }
+
+      /* Bottom sheet card. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-card {
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        border-bottom: 0 !important;
+        border-radius: 22px 22px 0 0 !important;
+        background: var(--oviz-hud-bg-strong) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet-menu button {
+        border: 1px solid var(--oviz-hud-border-soft) !important;
+        border-radius: 12px !important;
+        background: rgba(255, 255, 255, 0.045) !important;
+        color: var(--oviz-hud-text) !important;
+      }
+      /* Sheets hug their content instead of holding a fixed height. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-mobile-sheet[data-panel="legend"] .oviz-three-mobile-sheet-card {
+        height: auto !important;
+        max-height: min(84dvh, 720px) !important;
+      }
+
+      /* --- Legend redesign, ported at touch sizes ---------------------- */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-row {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0 !important;
+        width: 100% !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-entry {
+        display: block !important;
+        border-radius: 12px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-entry[data-editor-open="true"] {
+        background: rgba(255, 255, 255, 0.045) !important;
+        padding-bottom: 6px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-item {
+        order: 1;
+        display: flex !important;
+        flex: 1 1 auto !important;
+        align-items: center !important;
+        gap: 11px !important;
+        min-width: 0 !important;
+        min-height: 44px !important;
+        padding: 4px 8px !important;
+        border: 0 !important;
+        border-radius: 10px !important;
+        background: transparent !important;
+        text-align: left !important;
+        touch-action: manipulation;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-swatch {
+        display: inline-block !important;
+        flex: none !important;
+        width: 11px !important;
+        height: 11px !important;
+        margin: 0 !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        box-shadow: 0 0 7px -1px currentColor !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-swatch {
+        background: transparent !important;
+        box-shadow: inset 0 0 0 1.5px currentColor !important;
+        opacity: 0.55;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-meta {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-name {
+        display: block !important;
+        max-inline-size: none !important;
+        overflow: hidden !important;
+        color: rgba(255, 255, 255, 0.92) !important;
+        font: 620 15px/1.3 var(--oviz-hud-font) !important;
+        white-space: nowrap !important;
+        text-overflow: ellipsis !important;
+        text-shadow: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-item[data-active="false"],
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-name {
+        text-decoration: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-name {
+        color: rgba(255, 255, 255, 0.40) !important;
+      }
+      /* Touch has no hover: the eye is always visible as a state indicator. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-item::after {
+        content: "";
+        flex: none;
+        width: 16px;
+        height: 16px;
+        margin-left: 4px;
+        background: rgba(245, 245, 247, 0.30);
+        -webkit-mask: var(--oviz-icon-eye) center / contain no-repeat;
+        mask: var(--oviz-icon-eye) center / contain no-repeat;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-item::after {
+        background: rgba(245, 245, 247, 0.45);
+        -webkit-mask-image: var(--oviz-icon-eye-off);
+        mask-image: var(--oviz-icon-eye-off);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-edit {
+        order: 2;
+        position: relative !important;
+        width: 40px !important;
+        height: 40px !important;
+        min-width: 40px !important;
+        min-height: 40px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 10px !important;
+        background: transparent !important;
+        color: rgba(245, 245, 247, 0.42) !important;
+        font-size: 0 !important;
+        touch-action: manipulation;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-edit::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 13px;
+        height: 13px;
+        background: currentColor;
+        -webkit-mask: var(--oviz-icon-chevron) center / contain no-repeat;
+        mask: var(--oviz-icon-chevron) center / contain no-repeat;
+        transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-edit[data-open="true"]::before {
+        transform: rotate(90deg);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-edit[data-open="true"] {
+        color: var(--oviz-hud-accent-text) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-section-head {
+        margin: 10px 0 2px !important;
+        padding: 8px 2px 2px 0 !important;
+        border-top: 1px solid var(--oviz-hud-border-soft) !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-trace-section > .oviz-three-legend-section-head {
+        margin-top: 2px !important;
+        border-top: 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-section-toggle {
+        display: flex !important;
+        align-items: center !important;
+        gap: 7px !important;
+        margin: 0 !important;
+        padding: 4px 8px !important;
+        border: 0 !important;
+        background: transparent !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-section-title {
+        color: rgba(245, 245, 247, 0.44) !important;
+        font: 720 11px/1 var(--oviz-hud-font) !important;
+        letter-spacing: 0.11em !important;
+        text-transform: uppercase !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-section-chevron {
+        display: inline-block !important;
+        width: 9px !important;
+        height: 9px !important;
+        font-size: 0 !important;
+        color: transparent !important;
+        background: rgba(245, 245, 247, 0.36) !important;
+        -webkit-mask: var(--oviz-icon-chevron) center / contain no-repeat !important;
+        mask: var(--oviz-icon-chevron) center / contain no-repeat !important;
+        transform: rotate(90deg) !important;
+        transition: transform 180ms ease !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-section[data-open="false"] .oviz-three-legend-section-chevron {
+        transform: rotate(0deg) !important;
+      }
+      /* Expanded per-trace controls: the aligned form card, touch-sized. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-controls[data-visible="true"] {
+        border-left: 2px solid rgba(246, 200, 95, 0.42) !important;
+        margin: 2px 0 8px 12px !important;
+        padding: 4px 8px 6px 14px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-controls .oviz-three-legend-control-row {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 1px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-controls .oviz-three-legend-field,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-controls .oviz-three-volume-field {
+        display: grid !important;
+        grid-template-columns: 108px minmax(0, 1fr) !important;
+        align-items: center !important;
+        column-gap: 12px !important;
+        min-height: 40px !important;
+        margin: 0 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-controls .oviz-three-legend-field > span,
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-controls .oviz-three-volume-field > span {
+        color: rgba(245, 245, 247, 0.58) !important;
+        font: 620 12px/1.25 var(--oviz-hud-font) !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+
+      /* Sky dock rows inside the sheet: neutral names, always-on state
+         icons, grips kept visible for touch reordering. */
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-layer-name {
+        color: rgba(255, 255, 255, 0.92) !important;
+        font: 620 15px/1.3 var(--oviz-hud-font) !important;
+        text-shadow: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-layer-row[data-visible="false"] .oviz-three-sky-layer-name {
+        color: rgba(255, 255, 255, 0.40) !important;
+        text-decoration: none !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-layer-summary {
+        min-height: 44px !important;
+        align-items: center !important;
+        border-radius: 10px !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-layer-grip {
+        opacity: 0.4 !important;
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-sky-group-trigger {
+        color: rgba(245, 245, 247, 0.44) !important;
+        font: 720 11px/1 var(--oviz-hud-font) !important;
+        letter-spacing: 0.11em !important;
+        text-transform: uppercase !important;
+      }
+
+      /* ==================================================================
+         Compositor budget.
+         Every backdrop-filter element forces the compositor to re-sample
+         and blur the scene behind it on each frame, and these sit over a
+         continuously rendering WebGL canvas. Blur is therefore reserved
+         for the two large persistent surfaces where it actually reads —
+         the legend card and the time capsule — plus transient drawers and
+         popovers that only exist while the user is interacting. Small
+         always-on chrome (toolbar pills, switches, fullscreen, scale bar)
+         uses an opaque fill that looks nearly identical over the sky at
+         a fraction of the cost.
+         ================================================================== */
+      #__ROOT_ID__ {
+        --oviz-hud-blur: blur(18px) saturate(160%);
+        --oviz-hud-bg-opaque: rgba(26, 26, 29, 0.78);
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-toggle,
+      #__ROOT_ID__ .oviz-three-display-switch,
+      #__ROOT_ID__ .oviz-three-fullscreen,
+      #__ROOT_ID__ .oviz-three-scale-bar,
+      #__ROOT_ID__ .oviz-three-wavelength-bar,
+      #__ROOT_ID__ .oviz-three-title {
+        background: var(--oviz-hud-bg-opaque) !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      /* Hover/active fills stay opaque so nothing turns translucent and
+         re-introduces a blur-free readability problem. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button:hover,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu select:hover,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-controls-toggle:hover,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-display-switch:hover {
+        background: rgba(48, 48, 54, 0.86) !important;
+      }
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button[data-active="true"],
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu button[aria-pressed="true"],
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu .oviz-three-controls-shell[data-open="true"] > .oviz-three-controls-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu .oviz-three-text-shell[data-open="true"] > .oviz-three-text-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu .oviz-states-shell[data-open="true"] > .oviz-states-toggle {
+        background: rgba(246, 200, 95, 0.20) !important;
+      }
+      /* The icon-button and scale-bar rules above are more specific than
+         the generic override, so their blur is cleared by name. */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > button,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > select,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu .oviz-states-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-text-shell > .oviz-three-text-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-controls-shell > .oviz-three-controls-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-search-shell > .oviz-three-search-toggle,
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-scale-bar {
+        background: var(--oviz-hud-bg-opaque) !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+
+      /* Closed drawers stay laid out at opacity 0, so their blur keeps
+         compositing every frame while invisible. Drop it until they open. */
+      #__ROOT_ID__ .oviz-three-search-popover[aria-hidden="true"],
+      #__ROOT_ID__ .oviz-three-controls-drawer[aria-hidden="true"],
+      #__ROOT_ID__ .oviz-three-text-drawer[aria-hidden="true"],
+      #__ROOT_ID__ .oviz-three-group-menu[aria-hidden="true"],
+      #__ROOT_ID__ .oviz-three-sky-controls-drawer[aria-hidden="true"],
+      #__ROOT_ID__ .oviz-three-widget-panel[data-mode="hidden"] {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+
+      /* The Widgets select keeps its glyph over the opaque fill. */
+      #__ROOT_ID__:not([data-mobile="true"]) select.oviz-three-widget-select {
+        background:
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(240,243,248,0.86)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='3.5' width='7' height='7' rx='1.4'/%3E%3Crect x='13.5' y='3.5' width='7' height='7' rx='1.4'/%3E%3Crect x='3.5' y='13.5' width='7' height='7' rx='1.4'/%3E%3Crect x='13.5' y='13.5' width='7' height='7' rx='1.4'/%3E%3C/svg%3E") center / 15px 15px no-repeat,
+          var(--oviz-hud-bg-opaque) !important;
+      }
+
+      /* --- Startup + status ------------------------------------------- */
+      #__ROOT_ID__:not([data-mobile="true"]) .oviz-three-startup-status {
+        border: 1px solid var(--oviz-hud-border-soft);
+        border-radius: 999px;
+        background: var(--oviz-hud-bg-strong);
+        box-shadow: var(--oviz-hud-shadow);
+        font: 640 12px/1 var(--oviz-hud-font);
+        letter-spacing: 0.02em;
+      }
     </style>
   </head>
   <body>
@@ -8288,6 +10202,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return Boolean(isiPhoneLike || isAndroidPhone || (coarsePointer && narrowViewport));
       }
 
+      function ovizRuntimeIsSafari() {
+        const nav = window.navigator || {};
+        const userAgent = String(nav.userAgent || "");
+        const vendor = String(nav.vendor || "");
+        return Boolean(
+          /Safari/i.test(userAgent)
+          && /Apple Computer/i.test(vendor)
+          && !/(Chrome|Chromium|CriOS|FxiOS|EdgiOS|OPR|Android)/i.test(userAgent)
+        );
+      }
+
       const minimalModeEnabled = Boolean(
         initialState.lite_mode_enabled
         || initialState.minimal_mode_enabled
@@ -8304,6 +10229,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const mobileModeEnabled = mobileModeOverride === null
         ? Boolean(sceneMobileModeEnabled || ovizRuntimeLooksMobile())
         : mobileModeOverride;
+      const safariModeEnabled = ovizRuntimeIsSafari();
       const galacticSimpleSpec = sceneSpec.galactic_simple && typeof sceneSpec.galactic_simple === "object"
         ? sceneSpec.galactic_simple
         : {};
@@ -8311,6 +10237,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const galacticSimpleTracksOrbitTargetToSun = Boolean(galacticSimpleSpec.track_orbit_target_to_sun);
       root.dataset.minimal = minimalModeEnabled ? "true" : "false";
       root.dataset.mobile = mobileModeEnabled ? "true" : "false";
+      root.dataset.safari = safariModeEnabled ? "true" : "false";
       root.dataset.galacticSimple = galacticSimpleModeEnabled ? "true" : "false";
       function ovizDebugFlagEnabled() {
         let queryEnabled = false;
@@ -9440,9 +11367,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let selectionBoxMetricsVersion = 0;
       let selectionBoxMetricsPending = false;
 
+      // MSAA framebuffers are a large fixed GPU-memory cost on phones and a
+      // frequent iOS Safari jetsam trigger; points/sprites barely benefit.
       const renderer = new THREE.WebGLRenderer({
         canvas,
-        antialias: true,
+        // Safari's multisampled Retina framebuffer can exhaust its WebGL
+        // context once the full-resolution 3D dust texture is resident.  Keep
+        // the scientific textures and device-pixel canvas unchanged, but let
+        // Safari use its native single-sample framebuffer.
+        antialias: !mobileModeEnabled && !safariModeEnabled,
         alpha: true,
         powerPreference: "high-performance",
       });
@@ -13984,12 +15917,21 @@ __SKY_RUNTIME_JS__
         return true;
       }
 
+      // High-frequency layer updates (wavelength blending, reveal ramps)
+      // set this so the Aladin frame applies opacity changes in a single
+      // immediate pass instead of the deferred retry cascade.
+      let ovizSkyLayerImmediateOptionApply = false;
       function postSkyLayerStateToAladin() {
         if (!skyDomeFrameEl || !skyDomeFrameEl.contentWindow) {
           return;
         }
         try {
           const currentGroupKeys = new Set(skyLayersForCurrentGroup().map((layer) => layer.key));
+          // The layer list posted here must stay stable across ordinary
+          // interactions: the Aladin frame keys its stack signature off it,
+          // and any change tears down and re-attaches every overlay. The
+          // merged resident stack therefore belongs only to the transition
+          // path (ovizPrepareSkyLayerSemanticTransition), never here.
           const layers = serializableSkyLayers()
             .filter((layer) => currentGroupKeys.has(layer.key))
             .map((layer) => Object.assign({}, layer, {
@@ -14000,6 +15942,7 @@ __SKY_RUNTIME_JS__
             layers,
             activeKey: activeSkyLayerKey || "",
             residentStack: skyDomeUsesAladinBackground(),
+            deferOptionRetries: ovizSkyLayerImmediateOptionApply ? false : undefined,
           }, "*");
         } catch (_err) {
         }
@@ -14017,9 +15960,29 @@ __SKY_RUNTIME_JS__
         ovizSkyLayerMetadataPreloadScheduled = true;
         const postPreload = () => {
           try {
+            // Preload the figure's own layers plus every survey referenced
+            // by a saved State, so a State that selects a background the
+            // figure did not ship with still resolves its HiPS metadata
+            // before the user ever navigates to it.
+            const layers = serializableSkyLayers();
+            const seen = new Set(
+              layers.map((layer) => String((layer && (layer.survey || layer.key)) || "").trim())
+            );
+            if (typeof ovizCollectAladinSources === "function") {
+              try {
+                ovizCollectAladinSources().forEach((survey) => {
+                  const key = String(survey || "").trim();
+                  if (key && !seen.has(key)) {
+                    seen.add(key);
+                    layers.push({ key, survey: key, visible: false, opacity: 0.0 });
+                  }
+                });
+              } catch (_stateSourcesErr) {
+              }
+            }
             skyDomeFrameEl.contentWindow.postMessage({
               type: "oviz-sky-layer-preload",
-              layers: serializableSkyLayers(),
+              layers,
             }, "*");
           } catch (_err) {
           }
@@ -14334,7 +16297,11 @@ __SKY_RUNTIME_JS__
             activeSkyLayerKey = layer.key;
             layer.visible = layer.visible === false;
             syncLayerVisibilityControl();
-            applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });
+            if (typeof ovizAnimateSkyLayerFade === "function") {
+              ovizAnimateSkyLayerFade(layer, layer.visible);
+            } else {
+              applySkyLayerState({ forceTiles: false, renderLegend: false, syncControls: false });
+            }
           });
           summaryEl.appendChild(gripEl);
           summaryEl.appendChild(copyEl);
@@ -15299,14 +17266,26 @@ __SKY_RUNTIME_JS__
           }, "*");
         }
         function skyBackgroundAfterPaint(callback) {
-          const scheduleFrame = typeof window.requestAnimationFrame === "function"
-            ? (next) => window.requestAnimationFrame(next)
-            : (next) => window.setTimeout(next, 0);
-          scheduleFrame(() => scheduleFrame(() => {
+          // requestAnimationFrame is suspended while this iframe is hidden
+          // (the dome frame is invisible whenever the viewer shows 3D), so a
+          // pure double-rAF would postpone the callback indefinitely and
+          // stall every readiness chain built on it. A timer backstop keeps
+          // the guarantee "fires soon after paint, always fires".
+          let fired = false;
+          const fire = () => {
+            if (fired) {
+              return;
+            }
+            fired = true;
             if (typeof callback === "function") {
               callback();
             }
-          }));
+          };
+          const scheduleFrame = typeof window.requestAnimationFrame === "function"
+            ? (next) => window.requestAnimationFrame(next)
+            : (next) => window.setTimeout(next, 0);
+          scheduleFrame(() => scheduleFrame(fire));
+          window.setTimeout(fire, 300);
         }
         function normalizeSkyBackgroundView(data, fallback = null) {
           const source = data && typeof data === "object" ? data : {};
@@ -16466,9 +18445,24 @@ __SKY_RUNTIME_JS__
                 skyBackgroundAfterPaint(() => resolve({ ready: false, timedOut: true }));
                 return;
               }
-              window.requestAnimationFrame(check);
+              scheduleIdleCheck();
             };
-            window.requestAnimationFrame(check);
+            // Hidden iframes suspend requestAnimationFrame, so pace the poll
+            // with a timer as well; whichever fires first advances the loop.
+            let scheduled = false;
+            function scheduleIdleCheck() {
+              scheduled = false;
+              const run = (timestampMs) => {
+                if (scheduled) {
+                  return;
+                }
+                scheduled = true;
+                check(timestampMs);
+              };
+              window.requestAnimationFrame(run);
+              window.setTimeout(run, 120);
+            }
+            scheduleIdleCheck();
           });
         }
 
@@ -20522,12 +22516,19 @@ __SKY_RUNTIME_JS__
 
       function ovizUpdateSkyMemberTimelineFastPath(frameValue, displayedTimeMyr, options = {}) {
         const owner = String(options.transitionOwnerToken || "");
+        const timelineOwner = owner === "timeline-scrub" || owner === "timeline-playback";
+        const stateAppearanceOwner = Boolean(
+          options.allowSkyMemberStateAppearance === true
+          && typeof ovizStateTransition !== "undefined"
+          && ovizStateTransition
+          && owner === String(ovizStateTransition.transitionId || "")
+        );
         if (
           cameraViewMode !== "earth"
           || !skyMemberBatchesEnabled
           || skyMemberRevealProgress < 1.0 - 1e-6
           || !skyMemberBatchOpacityEntries.length
-          || (owner !== "timeline-scrub" && owner !== "timeline-playback")
+          || (!timelineOwner && !stateAppearanceOwner)
         ) {
           return false;
         }
@@ -20545,7 +22546,9 @@ __SKY_RUNTIME_JS__
           }
           return bulkTargetByKey.get(key);
         };
-        const parentVisualByKey = new Map();
+        const parentVisualByKey = options.parentVisualByKey instanceof Map
+          ? options.parentVisualByKey
+          : new Map();
         let updatedBatchCount = 0;
         skyMemberBatchOpacityEntries.forEach((entry) => {
           if (!entry || !entry.material) {
@@ -23134,7 +25137,6 @@ __VIEWER_RUNTIME_JS__
         const skyMode = cameraViewMode === "earth";
         const placeholder = skyMode ? "Search clusters or sky" : "Search clusters";
         searchInputEl.placeholder = placeholder;
-        searchToggleEl.title = placeholder;
         searchToggleEl.setAttribute("aria-label", placeholder);
         if (searchShellEl && searchShellEl.dataset.open === "true" && !searchInputEl.value.trim()) {
           renderOvizSearchResults("");
@@ -24894,6 +26896,7 @@ __STATE_RUNTIME_JS__
       applyInitialStateSync();
       buildAxes();
       initControls();
+      initLegendSectionEyes();
       initOvizSearch();
       initSkyPanel();
       updateSkyDomeCaptureFrame();

@@ -18,6 +18,91 @@ def _function_region(source: str, name: str, next_name: str) -> str:
     return source[start:end]
 
 
+class ThreeJSSkyStatePreattachTests(unittest.TestCase):
+    """Sky backgrounds a State needs must be attached before navigating."""
+
+    def test_sky_layer_preparation_starts_with_the_transition_not_the_fade(self):
+        """Tiles must load during the camera move, and fade only on appearance.
+
+        Preparing at the appearance phase made the transition visibly freeze
+        while the destination background loaded; fading as soon as the frame
+        reported ready would instead crossfade mid-camera-move.
+        """
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+                "states": {"items": []},
+                "sky_dome": {"enabled": True, "background_mode": "live_aladin"},
+            }
+        ).to_html(compress_scene_spec=False)
+
+        # Preparation is kicked off where the transition is created, ahead of
+        # the appearance-phase fallback -- not only inside it.
+        early = html.index(
+            "ovizStateTransition.skyLayerTransitionStarted = ovizStartSkyLayerTransition("
+        )
+        # ...gated on the dome frame having booted, so the prepare is not
+        # swallowed by a frame that cannot reply.
+        guard = html.index("&& skyDomeBackgroundFrameReady === true")
+        self.assertLess(guard, early)
+        # A second start call must not repost prepare: that would cancel the
+        # first preparation inside the Aladin frame and restart tile loading.
+        self.assertIn("if (transition.skyLayerPrepareSent) {", html)
+        # The appearance phase must never wait on readiness forever.
+        self.assertIn("transition.skyLayerWaitStartedAt", html)
+        self.assertIn('root.dataset.stateTransitionSkyLayers = "timeout"', html)
+        # The Aladin frame's readiness chain must advance on timers as well
+        # as requestAnimationFrame: rAF is suspended while the dome iframe is
+        # hidden (3D view), which used to stall readiness indefinitely.
+        self.assertIn("window.setTimeout(fire, 300)", html)
+        self.assertIn("window.setTimeout(run, 120)", html)
+        fallback = html.index("Fallback only: preparation normally starts with the transition.")
+        self.assertLess(early, fallback)
+
+        # Readiness arriving early must not crossfade on its own; the ready
+        # handler only begins the fade once the appearance phase is open.
+        ready_at = html.index('data.type === "oviz-aladin-sky-layer-transition-ready"')
+        ready_region = html[ready_at:ready_at + 1800]
+        self.assertIn('transition.currentPhase === "appearance"', ready_region)
+        self.assertLess(
+            ready_region.index('transition.currentPhase === "appearance"'),
+            ready_region.index("ovizBeginPreparedSkyLayerTransition"),
+        )
+
+        # The appearance phase opens the crossfade as soon as it is ready.
+        self.assertIn("&& transition.skyLayerReady\n            && !transition.skyLayerFadeStarted", html)
+
+    def test_state_surveys_are_metadata_preloaded_without_destabilizing_the_stack(self):
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+                "sky_dome": {"enabled": True, "background_mode": "live_aladin"},
+            }
+        ).to_html(compress_scene_spec=False)
+
+        post_region = _function_region(
+            html, "postSkyLayerStateToAladin", "scheduleRemainingSkyLayerMetadataPreload"
+        )
+        # The ordinary post must NOT merge the resident stack: the Aladin
+        # frame keys its stack signature off this list, so widening it on
+        # every interaction re-attached every overlay (slow transitions, and
+        # a hidden base layer could surface).
+        self.assertNotIn("ovizResidentSkyLayers", post_region)
+
+        preload_region = _function_region(
+            html, "scheduleRemainingSkyLayerMetadataPreload", "skyLayerActiveIndex"
+        )
+        # HiPS metadata for every State-referenced survey is warmed too,
+        # including surveys the figure itself never shipped.
+        self.assertIn("ovizCollectAladinSources()", preload_region)
+
+
 class ThreeJSSkyStateRegressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -532,8 +617,69 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         self.assertIn("startedAtEpochMs: ovizTransitionEpochMs(now)", begin_transition)
         self.assertIn("skyBackgroundTransitionStartedAt(data, transitionNow)", child_camera)
         self.assertIn('type: "oviz-sky-layer-transition-start"', parent_layer_start)
-        self.assertIn("startedAtEpochMs: ovizTransitionEpochMs(", parent_layer_start)
+        self.assertIn("phaseStartedAt", parent_layer_start)
+        self.assertIn("startedAtEpochMs: ovizTransitionEpochMs(phaseStartedAt)", parent_layer_start)
         self.assertIn("skyBackgroundTransitionStartedAt(data, transitionNow)", child_layers)
+
+    def test_sky_member_state_appearance_reuses_one_resident_scene(self):
+        update_transition = _function_region(
+            self.html,
+            "updateOvizStateTransition",
+            "ovizFinishStateTransition",
+        )
+        prepare_fast_path = _function_region(
+            self.html,
+            "ovizPrepareSkyMemberAppearanceScene",
+            "ovizUpdateSkyMemberStateAppearanceFastPath",
+        )
+        fast_path = _function_region(
+            self.html,
+            "ovizUpdateSkyMemberStateAppearanceFastPath",
+            "renderFrame",
+        )
+        member_update = _function_region(
+            self.html,
+            "ovizUpdateSkyMemberTimelineFastPath",
+            "skyMemberPropagatedIcrs",
+        )
+
+        self.assertIn("transition.skyMemberAppearanceFastPath", update_transition)
+        self.assertIn("ovizUpdateSkyMemberStateAppearanceFastPath(", update_transition)
+        self.assertIn("forceResident: true", prepare_fast_path)
+        self.assertIn("ovizPrepareRetainedEndpoint(", prepare_fast_path)
+        self.assertIn("ovizPrepareSkyMemberAppearanceScene(", fast_path)
+        self.assertIn("ovizApplyRetainedPointEntry(", fast_path)
+        self.assertIn("ovizApplyRetainedEndpointWeight(", fast_path)
+        self.assertIn("allowSkyMemberStateAppearance: true", fast_path)
+        self.assertIn("stateAppearanceOwner", member_update)
+        self.assertIn("(!timelineOwner && !stateAppearanceOwner)", member_update)
+
+    def test_sky_member_catalogs_satisfy_parent_trace_fidelity(self):
+        fidelity = _function_region(
+            self.html,
+            "ovizRenderedSceneFidelityDifferences",
+            "ovizUpdateRetainedTransitionScene",
+        )
+
+        self.assertIn("actualSkyMemberOpacityByTrace", fidelity)
+        self.assertIn("actualSkyMemberOpacityByParent", fidelity)
+        self.assertIn("entry.batchAppliedOpacity", fidelity)
+        self.assertIn("Math.max(memberOpacity", fidelity)
+        self.assertIn("actualSkyMemberOpacityByTrace: Object.fromEntries", fidelity)
+
+    def test_state_completion_allows_the_painted_sky_layer_fade_to_settle(self):
+        finish_transition = _function_region(
+            self.html,
+            "ovizFinishStateTransition",
+            "ovizFailStateTransition",
+        )
+
+        self.assertIn("appearanceDurationMs + 750.0", finish_transition)
+        self.assertIn("skyLayerCompletionWaitMs", finish_transition)
+        self.assertNotIn(
+            "transition.skyLayerPromise,\n              new Promise((resolve) => window.setTimeout(() => resolve({ timedOut: true }), 500.0))",
+            finish_transition,
+        )
 
     def test_view_offset_is_interpolated_before_exact_state_restoration(self):
         create_track = _function_region(

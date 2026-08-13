@@ -17,6 +17,43 @@ from oviz.threejs_states import (
 from oviz.threejs_scene import _round_scene_floats
 
 
+class ThreeJSStatesAutosaveOptionTests(unittest.TestCase):
+    def test_autosave_drafts_defaults_on_and_can_be_disabled(self):
+        self.assertTrue(normalize_states_spec({})["autosave_drafts"])
+        self.assertTrue(normalize_states_spec({"autosave_drafts": True})["autosave_drafts"])
+        self.assertFalse(normalize_states_spec({"autosave_drafts": False})["autosave_drafts"])
+
+    def test_disabled_autosave_blocks_draft_read_write_in_runtime(self):
+        html = ThreeJSFigure(
+            {
+                "width": 640,
+                "height": 480,
+                "frames": [],
+                "initial_state": {},
+                "states": {"autosave_drafts": False},
+            }
+        ).to_html(compress_scene_spec=False)
+
+        self.assertIn("function ovizAuthoringDraftsEnabled()", html)
+        self.assertIn('states.autosave_drafts === false', html)
+        # Boot must not read a draft, and nothing may write one back.
+        self.assertIn("const draft = ovizAuthoringDraftsEnabled()", html)
+        self.assertIn(
+            "if (!ovizStatesProject || !ovizAuthoringDraftsEnabled()) return;", html
+        )
+        self.assertIn(
+            "if (ovizAuthoringLifecycleInstalled || !ovizAuthoringDraftsEnabled()) return;",
+            html,
+        )
+        self.assertEqual(
+            ThreeJSFigure(
+                {"width": 640, "height": 480, "frames": [], "initial_state": {},
+                 "states": {"autosave_drafts": False}}
+            ).scene_spec["states"]["autosave_drafts"],
+            False,
+        )
+
+
 class ThreeJSStatesSchemaTests(unittest.TestCase):
     def test_sky_member_display_mode_round_trips_through_states(self):
         html = ThreeJSFigure({

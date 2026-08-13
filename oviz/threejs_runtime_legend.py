@@ -504,5 +504,8 @@ THREEJS_LEGEND_RUNTIME_JS = """
         if (legendPanelOpen && legendPanelEl) {
           applyLegendPanelRect(legendPanelRectState || defaultLegendPanelRect());
         }
+        if (typeof syncLegendSectionEyes === "function") {
+          syncLegendSectionEyes();
+        }
       }
 """.strip()

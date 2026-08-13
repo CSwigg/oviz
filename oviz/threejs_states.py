@@ -103,6 +103,10 @@ def normalize_states_spec(
         "synchronized_revision": max(int(source.get("synchronized_revision") or 0), 0),
         "default_mode": "present" if source.get("default_mode") == "present" else "edit",
         "present_only": bool(source.get("present_only", False)),
+        # Local autosave drafts (IndexedDB) are an authoring convenience.
+        # Published figures should set this False so a visitor's stale draft
+        # is never read back and applied over the exported scene.
+        "autosave_drafts": bool(source.get("autosave_drafts", True)),
         "preserve_camera_on_navigation": bool(source.get("preserve_camera_on_navigation", False)),
         "default_transition": normalize_transition(source.get("default_transition")),
         "items": normalized_items,

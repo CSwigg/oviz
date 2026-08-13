@@ -1171,6 +1171,9 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (root && root.dataset) {
           root.dataset.skyBackgroundHidden = skyBackgroundHidden ? "true" : "false";
         }
+        if (typeof syncLegendSectionEyes === "function") {
+          syncLegendSectionEyes();
+        }
         const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
         if (typeof updateSkyDome === "function") {
           updateSkyDome(now);
@@ -2329,9 +2332,9 @@ THREEJS_VIEWER_RUNTIME_JS = """
         if (zenModeButtonEl) {
           zenModeButtonEl.dataset.active = zenModeEnabled ? "true" : "false";
           zenModeButtonEl.textContent = zenModeEnabled ? "Exit Zen" : "Zen";
-          zenModeButtonEl.title = zenModeEnabled
-            ? "Restore the interface panels and controls"
-            : "Hide interface panels and keep only the time slider visible";
+          zenModeButtonEl.setAttribute("aria-label", zenModeEnabled
+            ? "Exit Zen mode"
+            : "Zen mode");
         }
         if (zenModeEnabled) {
           tooltipEl.style.display = "none";
@@ -2703,6 +2706,99 @@ THREEJS_VIEWER_RUNTIME_JS = """
           return;
         }
         legendState[itemKey] = nextVisible;
+      }
+
+      // Section-level show/hide. "traces" and "volumes" scope the keyboard
+      // toggle-all to one legend section; "sky" reuses the Sky-view
+      // background toggle (hiding every layer leaves a black sky). Hidden
+      // sections remember what was visible so re-showing restores the mix
+      // instead of turning everything on.
+      const ovizLegendSectionSnapshots = new Map();
+
+      function ovizLegendSectionItems(section) {
+        if (section === "sky") {
+          return [];
+        }
+        const wantVolumes = section === "volumes";
+        return keyboardLegendItems().filter((item) => {
+          const isVolume = Boolean(volumeLayerForKey(String(item && item.key || "")));
+          return wantVolumes ? isVolume : !isVolume;
+        });
+      }
+
+      function ovizLegendSectionVisible(section) {
+        if (section === "sky") {
+          return !skyBackgroundHidden;
+        }
+        return ovizLegendSectionItems(section).some(
+          (item) => legendItemVisibleForKeyboard(item)
+        );
+      }
+
+      function ovizToggleLegendSection(section) {
+        const sectionKey = String(section || "traces");
+        if (sectionKey === "sky") {
+          setSkyBackgroundHidden(!skyBackgroundHidden);
+          syncLegendSectionEyes();
+          return true;
+        }
+        const items = ovizLegendSectionItems(sectionKey);
+        if (!items.length) {
+          return false;
+        }
+        const snapshotKey = `${String(currentGroup || defaultGroup || "default")}::${sectionKey}`;
+        if (ovizLegendSectionVisible(sectionKey)) {
+          const visibleSnapshot = {};
+          items.forEach((item) => {
+            const itemKey = String(item && item.key || "");
+            if (itemKey && legendItemVisibleForKeyboard(item)) {
+              visibleSnapshot[itemKey] = true;
+            }
+            setLegendItemVisibleForKeyboard(item, false);
+          });
+          ovizLegendSectionSnapshots.set(snapshotKey, visibleSnapshot);
+        } else {
+          const visibleSnapshot = ovizLegendSectionSnapshots.get(snapshotKey);
+          items.forEach((item) => {
+            const itemKey = String(item && item.key || "");
+            const restoreVisible = visibleSnapshot && Object.keys(visibleSnapshot).length
+              ? visibleSnapshot[itemKey] === true
+              : true;
+            setLegendItemVisibleForKeyboard(item, restoreVisible);
+          });
+          ovizLegendSectionSnapshots.delete(snapshotKey);
+        }
+        renderLegend();
+        updateActiveVolumeRuntime();
+        renderFrame(currentFrameIndex);
+        syncLegendSectionEyes();
+        return true;
+      }
+
+      function syncLegendSectionEyes() {
+        root.querySelectorAll(".oviz-three-legend-section-eye").forEach((button) => {
+          const section = String(button.dataset.section || "traces");
+          const visible = ovizLegendSectionVisible(section);
+          const noun = section === "sky"
+            ? "the sky background"
+            : `all ${section}`;
+          button.dataset.active = visible ? "true" : "false";
+          button.setAttribute("aria-pressed", visible ? "true" : "false");
+          const label = `${visible ? "Hide" : "Show"} ${noun}`;
+          button.title = label;
+          button.setAttribute("aria-label", label);
+        });
+      }
+
+      function initLegendSectionEyes() {
+        root.querySelectorAll(".oviz-three-legend-section-eye").forEach((button) => {
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            ovizToggleLegendSection(String(button.dataset.section || "traces"));
+          });
+        });
+        syncLegendSectionEyes();
       }
 
       function toggleAllLegendItems() {
