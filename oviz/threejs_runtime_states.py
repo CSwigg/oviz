@@ -1369,8 +1369,16 @@ THREEJS_STATE_RUNTIME_JS = r"""
           && Array.isArray(transition.phasePlan.phases)
           ? transition.phasePlan.phases.find((phase) => phase.name === "appearance")
           : null;
-        const phaseStartedAt = Number(transition.startedAt)
+        const phasePlannedStartMs = Number(transition.startedAt)
           + Math.max(Number(appearancePhase && appearancePhase.startMs) || 0.0, 0.0);
+        // When the fade start was held back (e.g. waiting for the Sky-view
+        // dome reveal), anchor its clock at "now" instead of the planned
+        // phase start so the crossfade plays in full rather than jumping to
+        // its midpoint.
+        const fadeNowMs = (typeof performance !== "undefined" && performance.now)
+          ? performance.now()
+          : Date.now();
+        const phaseStartedAt = Math.max(phasePlannedStartMs, fadeNowMs);
         transition.skyLayerFadeStarted = true;
         skyDomeFrameEl.contentWindow.postMessage({
           type: "oviz-sky-layer-transition-start",
@@ -2167,13 +2175,16 @@ THREEJS_STATE_RUNTIME_JS = r"""
             && transition.skyLayerTransitionStarted
             && !transition.skyLayerReady
           ) {
-            // Bound the wait for the Aladin frame's readiness reply. If it
-            // does not arrive (frame reloading, network stall), continue the
-            // transition; the completion path falls back to the plain layer
-            // repost, which is the pre-semantic behavior.
+            // Bound the wait for the Aladin frame's readiness reply. The
+            // bound matches the frame's own tile/paint waits (12 s): giving
+            // up sooner starts the crossfade over half-loaded tiles, which
+            // reads as the background flashing in. If the reply never comes
+            // (frame reloading, network stall), continue the transition; the
+            // completion path falls back to the plain layer repost, which is
+            // the pre-semantic behavior.
             if (!transition.skyLayerWaitStartedAt) {
               transition.skyLayerWaitStartedAt = now;
-            } else if (now - transition.skyLayerWaitStartedAt > 4000.0) {
+            } else if (now - transition.skyLayerWaitStartedAt > 8000.0) {
               transition.skyLayerReady = true;
               transition.skyLayerPreparation = { degraded: true, timedOut: true };
               if (root && root.dataset) {

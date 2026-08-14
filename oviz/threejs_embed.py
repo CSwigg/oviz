@@ -51,6 +51,17 @@ def _scene_spec_json(scene_spec: dict[str, Any]) -> str:
     )
 
 
+def scene_spec_jsonable(scene_spec: dict[str, Any]) -> dict[str, Any]:
+    """Return the scene spec exactly as an embedded HTML payload would decode.
+
+    Round-trips through the same strict JSON encoding used by
+    ``render_threejs_html`` so in-process consumers see identical types
+    (tuples become lists, numpy scalars become plain numbers, non-finite
+    floats become null) without writing or parsing any HTML.
+    """
+    return json.loads(_scene_spec_json(scene_spec))
+
+
 def _strict_json_value(value: Any) -> Any:
     if isinstance(value, Real) and not isinstance(value, bool):
         numeric = float(value)

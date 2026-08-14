@@ -16,6 +16,7 @@ HOME_DIR = Path.home()
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+from oviz.threejs_embed import scene_spec_jsonable
 from oviz.threejs_runtime_ar import THREEJS_AR_QUICKLOOK_SERVICE_WORKER_JS
 NOTEBOOK_PATH = HOME_DIR / "Desktop" / "astro_research" / "radcliffe" / "oviz_notebooks" / "main_figure.ipynb"
 SUPERNOVAE_ROOT = HOME_DIR / "Desktop" / "astro_research" / "supernovae_map"
@@ -2150,13 +2151,108 @@ optional_static_legend_state = {
     return source
 
 
-def run_script_source(source: str) -> None:
+def run_script_source(source: str) -> dict:
     sys.path.insert(0, str(REPO_ROOT))
     globals_dict = {
         "__name__": "__main__",
         "__file__": str(NOTEBOOK_PATH.with_suffix(".py")),
     }
     exec(compile(source, str(NOTEBOOK_PATH.with_suffix(".py")), "exec"), globals_dict)
+    return globals_dict
+
+
+def build_patched_main_figure_source(
+    output_html: Path,
+    *,
+    theme_key: str | None = None,
+    minimal_mode: bool = False,
+    mobile_mode: bool = False,
+    galactic_simple: bool = False,
+    mist_ages: bool = False,
+    compact_payload: bool = True,
+    mobile_safe_mode: bool = False,
+    lookback_myr: int = MAIN_FIGURE_LOOKBACK_MYR,
+    chronos_results_path: Path = CHRONOS_CLUSTER_RESULTS_PATH,
+    chronos_model: str = DEFAULT_CHRONOS_CLUSTER_MODEL,
+    include_spiral_arms: bool = False,
+    jun6_catalog: bool = False,
+    cluster_velocities_path: Path = JUN6_CLUSTER_VELOCITIES_PATH,
+    include_background_cluster_trace: bool = True,
+    cluster_members_file: Path | None = None,
+    show_cluster_members_in_sky: bool = False,
+    include_mccallum_halpha_volume: bool = False,
+    include_vergely_dust_volume: bool = False,
+    ratzenboeck_scocen_catalog_path: Path | None = None,
+    ratzenboeck_scocen_metadata_path: Path | None = None,
+) -> str:
+    """Convert and patch the notebook into a runnable main-figure script."""
+    os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl")
+    os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
+    os.environ.setdefault("MPLBACKEND", "Agg")
+
+    if not NOTEBOOK_PATH.exists():
+        raise FileNotFoundError(f"Missing notebook: {NOTEBOOK_PATH}")
+    if not REPO_ROOT.exists():
+        raise FileNotFoundError(f"Missing repo root: {REPO_ROOT}")
+
+    notebook_source = convert_notebook_to_script_source(NOTEBOOK_PATH)
+    return patch_script_source(
+        notebook_source,
+        output_html=output_html,
+        theme_key=theme_key,
+        minimal_mode=minimal_mode,
+        mobile_mode=mobile_mode,
+        galactic_simple=galactic_simple,
+        mist_ages=mist_ages,
+        compact_payload=compact_payload,
+        mobile_safe_mode=mobile_safe_mode,
+        lookback_myr=lookback_myr,
+        chronos_results_path=chronos_results_path,
+        chronos_model=chronos_model,
+        include_spiral_arms=include_spiral_arms,
+        jun6_catalog=jun6_catalog,
+        cluster_velocities_path=cluster_velocities_path,
+        include_background_cluster_trace=include_background_cluster_trace,
+        cluster_members_file=cluster_members_file,
+        show_cluster_members_in_sky=show_cluster_members_in_sky,
+        include_mccallum_halpha_volume=include_mccallum_halpha_volume,
+        include_vergely_dust_volume=include_vergely_dust_volume,
+        ratzenboeck_scocen_catalog_path=ratzenboeck_scocen_catalog_path,
+        ratzenboeck_scocen_metadata_path=ratzenboeck_scocen_metadata_path,
+    )
+
+
+def run_main_figure_scene(**patch_kwargs) -> dict:
+    """Build the main-figure scene and return its spec as a Python dict.
+
+    Unlike ``run_main_figure`` this never writes (or re-parses) an HTML
+    artifact: ``save_name`` is nulled so ``make_plot`` skips its write, and
+    the scene spec is taken straight from the in-memory ``ThreeJSFigure``.
+    Accepts the same keyword arguments as ``run_main_figure`` except
+    ``output_html``/``website_output_html``.
+    """
+    placeholder_html = NOTEBOOK_PATH.with_name("main_figure_scene_unused.html")
+    patched_source = build_patched_main_figure_source(
+        output_html=placeholder_html,
+        **patch_kwargs,
+    )
+    patched_source, nulled_save_name = re.subn(
+        r"(?m)^save_name\s*=\s*['\"][^'\"]+['\"]",
+        "save_name = None",
+        patched_source,
+        count=1,
+    )
+    if nulled_save_name != 1:
+        raise RuntimeError(
+            "Could not null save_name in the converted notebook script."
+        )
+    namespace = run_script_source(patched_source)
+    figure = namespace.get("fig3d")
+    if figure is None or not hasattr(figure, "to_dict"):
+        raise RuntimeError(
+            "The notebook script did not produce a ThreeJSFigure named fig3d."
+        )
+    return scene_spec_jsonable(figure.to_dict())
 
 
 def run_main_figure(
@@ -2185,18 +2281,7 @@ def run_main_figure(
     website_output_html: Path | None = WEBSITE_OUTPUT_HTML,
 ) -> Path:
     output_html.parent.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl")
-    os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
-    os.environ.setdefault("MPLBACKEND", "Agg")
-
-    if not NOTEBOOK_PATH.exists():
-        raise FileNotFoundError(f"Missing notebook: {NOTEBOOK_PATH}")
-    if not REPO_ROOT.exists():
-        raise FileNotFoundError(f"Missing repo root: {REPO_ROOT}")
-
-    notebook_source = convert_notebook_to_script_source(NOTEBOOK_PATH)
-    patched_source = patch_script_source(
-        notebook_source,
+    patched_source = build_patched_main_figure_source(
         output_html=output_html,
         theme_key=theme_key,
         minimal_mode=minimal_mode,

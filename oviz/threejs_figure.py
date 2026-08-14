@@ -18164,6 +18164,7 @@ __SKY_RUNTIME_JS__
           // resident, but their saved order must never override a user reorder
           // or a newly added top layer.
           const aladinEl = document.getElementById("aladin-lite-div");
+          const previousSkyLayerStateByName = new Map(latestSkyLayerStateByName);
           latestSkyLayerStateByName.clear();
           stackLayers.forEach((layer) => {
             latestSkyLayerStateByName.set(skyLayerNameFor(layer), layer);
@@ -18191,16 +18192,69 @@ __SKY_RUNTIME_JS__
           if (stackSignature !== activeSkyLayerStackSignature) {
             const stackGeneration = ++activeSkyLayerStackGeneration;
             activeSkyLayerStackSignature = stackSignature;
-            removeManagedSkyOverlays();
-            const baseLayerAttached = setBaseSkyImageLayer(baseSurvey);
+            // Incremental restack: State transitions keep the figure's fixed
+            // layer order, so stack changes usually only add layers (still
+            // invisible until their fade) or drop layers that have already
+            // faded out. Tearing the whole stack down for those cases blanks
+            // the visible sky for several frames while Aladin re-attaches;
+            // apply just the difference instead and never touch layers that
+            // stay on screen.
+            const requestedOverlayNames = stackLayers
+              .slice(0, -1)
+              .map((layer) => skyLayerNameFor(layer));
+            const requestedOverlayNameSet = new Set(requestedOverlayNames);
+            const attachedOverlayNames = Array.from(managedSkyOverlayLayerNames);
+            const removedOverlayNames = attachedOverlayNames
+              .filter((name) => !requestedOverlayNameSet.has(name));
+            const survivorAttachedOrder = attachedOverlayNames
+              .filter((name) => requestedOverlayNameSet.has(name))
+              .join("|");
+            const survivorRequestedOrder = requestedOverlayNames
+              .slice()
+              .reverse()
+              .filter((name) => attachedOverlayNames.includes(name))
+              .join("|");
+            const removalsInvisible = removedOverlayNames.every((name) => (
+              effectiveSkyLayerOpacity(previousSkyLayerStateByName.get(name) || null) <= 0.02
+            ));
+            const incrementalRestack = Boolean(
+              aladinInstance
+              && baseSurvey
+              && baseSurvey === activeImageSurvey
+              && survivorAttachedOrder === survivorRequestedOrder
+              && removalsInvisible
+            );
             let overlayAttachChain = Promise.resolve();
-            let loadedLayerCount = baseLayerAttached ? 1 : 0;
+            let loadedLayerCount = 0;
             const failedLayerSurveys = [];
-            if (baseSurvey && !baseLayerAttached) {
-              failedLayerSurveys.push(baseSurvey);
+            if (incrementalRestack) {
+              loadedLayerCount = 1;
+              removedOverlayNames.forEach((name) => {
+                try {
+                  if (typeof aladinInstance.removeImageLayer === "function") {
+                    aladinInstance.removeImageLayer(name);
+                  } else if (typeof aladinInstance.removeOverlayImageLayer === "function") {
+                    aladinInstance.removeOverlayImageLayer(name);
+                  }
+                } catch (_err) {
+                }
+                managedSkyOverlayLayerNames.delete(name);
+              });
+            } else {
+              removeManagedSkyOverlays();
+              const baseLayerAttached = setBaseSkyImageLayer(baseSurvey);
+              loadedLayerCount = baseLayerAttached ? 1 : 0;
+              if (baseSurvey && !baseLayerAttached) {
+                failedLayerSurveys.push(baseSurvey);
+              }
             }
             for (let index = stackLayers.length - 2; index >= 0; index -= 1) {
               const layer = stackLayers[index];
+              const layerName = skyLayerNameFor(layer);
+              if (incrementalRestack && managedSkyOverlayLayerNames.has(layerName)) {
+                loadedLayerCount += 1;
+                continue;
+              }
               const layerSurvey = String(layer.survey || layer.key || "").trim();
               overlayAttachChain = overlayAttachChain
                 .then(() => setOverlaySkyImageLayer(

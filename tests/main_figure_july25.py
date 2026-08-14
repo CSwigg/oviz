@@ -16,7 +16,6 @@ import gzip
 import json
 import re
 import sys
-import tempfile
 from copy import deepcopy
 from pathlib import Path
 
@@ -37,6 +36,7 @@ from main_figure_chronos_july4 import (  # noqa: E402
 from main_figure_new_chronos import (  # noqa: E402
     RATZENBOECK_SCOCEN_TRACE_NAME,
     run_main_figure as build_source_main_figure,
+    run_main_figure_scene as build_source_main_figure_scene,
 )
 
 
@@ -489,10 +489,13 @@ def build_state_only_scene(
     ratzenboeck_scocen_catalog_path: Path | None = None,
     ratzenboeck_scocen_metadata_path: Path | None = None,
     ratzenboeck_scocen_members_path: Path | None = None,
+    *,
+    drop_full_cluster_catalog: bool = True,
 ) -> dict:
     scene = deepcopy(scene_spec)
     scene["title"] = ""
-    drop_trace_by_name(scene, FULL_CLUSTER_CATALOG_TRACE_NAME)
+    if drop_full_cluster_catalog:
+        drop_trace_by_name(scene, FULL_CLUSTER_CATALOG_TRACE_NAME)
     states = scene.get("states")
     if isinstance(states, dict):
         states["items"] = []
@@ -739,13 +742,12 @@ def build_figure(
     return output_html
 
 
-def build_velocity_source_figure(
+def resolve_source_input_paths(
     cluster_velocities_path: Path,
-    output_html: Path,
-    ratzenboeck_scocen_catalog_path: Path = DEFAULT_RATZENBOECK_SCOCEN_CATALOG_PATH,
-    ratzenboeck_scocen_metadata_path: Path = DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
-    ratzenboeck_scocen_members_path: Path = DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
-) -> Path:
+    ratzenboeck_scocen_catalog_path: Path,
+    ratzenboeck_scocen_metadata_path: Path,
+    ratzenboeck_scocen_members_path: Path,
+) -> tuple[Path, Path, Path, Path]:
     cluster_velocities_path = Path(cluster_velocities_path).expanduser().resolve()
     if not cluster_velocities_path.exists():
         raise FileNotFoundError(
@@ -767,25 +769,120 @@ def build_velocity_source_figure(
     ]:
         if not path.exists():
             raise FileNotFoundError(f"Missing Ratzenboeck/SigMA {label}: {path}")
+    return (
+        cluster_velocities_path,
+        ratzenboeck_scocen_catalog_path,
+        ratzenboeck_scocen_metadata_path,
+        ratzenboeck_scocen_members_path,
+    )
+
+
+def source_main_figure_kwargs(
+    cluster_velocities_path: Path,
+    ratzenboeck_scocen_catalog_path: Path,
+    ratzenboeck_scocen_metadata_path: Path,
+    *,
+    lookback_myr: int = JULY25_LOOKBACK_MYR,
+) -> dict:
+    """Shared notebook-runner settings for the July source scene."""
+    return {
+        "mobile_mode": False,
+        "compact_payload": True,
+        "mobile_safe_mode": False,
+        "lookback_myr": lookback_myr,
+        "chronos_results_path": JULY4_CHRONOS_RESULTS_PATH,
+        "chronos_model": "parsec",
+        "include_spiral_arms": False,
+        "jun6_catalog": True,
+        "cluster_velocities_path": cluster_velocities_path,
+        "include_background_cluster_trace": False,
+        "cluster_members_file": CLUSTER_MEMBERS_PATH,
+        "show_cluster_members_in_sky": True,
+        "include_mccallum_halpha_volume": True,
+        "include_vergely_dust_volume": True,
+        "ratzenboeck_scocen_catalog_path": ratzenboeck_scocen_catalog_path,
+        "ratzenboeck_scocen_metadata_path": ratzenboeck_scocen_metadata_path,
+    }
+
+
+def build_velocity_source_figure(
+    cluster_velocities_path: Path,
+    output_html: Path,
+    ratzenboeck_scocen_catalog_path: Path = DEFAULT_RATZENBOECK_SCOCEN_CATALOG_PATH,
+    ratzenboeck_scocen_metadata_path: Path = DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
+    ratzenboeck_scocen_members_path: Path = DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
+) -> Path:
+    (
+        cluster_velocities_path,
+        ratzenboeck_scocen_catalog_path,
+        ratzenboeck_scocen_metadata_path,
+        ratzenboeck_scocen_members_path,
+    ) = resolve_source_input_paths(
+        cluster_velocities_path,
+        ratzenboeck_scocen_catalog_path,
+        ratzenboeck_scocen_metadata_path,
+        ratzenboeck_scocen_members_path,
+    )
     return build_source_main_figure(
         output_html=output_html,
-        mobile_mode=False,
-        compact_payload=True,
-        mobile_safe_mode=False,
-        lookback_myr=JULY25_LOOKBACK_MYR,
-        chronos_results_path=JULY4_CHRONOS_RESULTS_PATH,
-        chronos_model="parsec",
-        include_spiral_arms=False,
-        jun6_catalog=True,
-        cluster_velocities_path=cluster_velocities_path,
-        include_background_cluster_trace=False,
-        cluster_members_file=CLUSTER_MEMBERS_PATH,
-        show_cluster_members_in_sky=True,
-        include_mccallum_halpha_volume=True,
-        include_vergely_dust_volume=True,
+        website_output_html=None,
+        **source_main_figure_kwargs(
+            cluster_velocities_path,
+            ratzenboeck_scocen_catalog_path,
+            ratzenboeck_scocen_metadata_path,
+        ),
+    )
+
+
+def build_velocity_source_scene(
+    cluster_velocities_path: Path,
+    ratzenboeck_scocen_catalog_path: Path = DEFAULT_RATZENBOECK_SCOCEN_CATALOG_PATH,
+    ratzenboeck_scocen_metadata_path: Path = DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
+    ratzenboeck_scocen_members_path: Path = DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
+    *,
+    lookback_myr: int = JULY25_LOOKBACK_MYR,
+) -> dict:
+    """Build the shared source scene in-process, no HTML written or parsed."""
+    (
+        cluster_velocities_path,
+        ratzenboeck_scocen_catalog_path,
+        ratzenboeck_scocen_metadata_path,
+        ratzenboeck_scocen_members_path,
+    ) = resolve_source_input_paths(
+        cluster_velocities_path,
+        ratzenboeck_scocen_catalog_path,
+        ratzenboeck_scocen_metadata_path,
+        ratzenboeck_scocen_members_path,
+    )
+    return build_source_main_figure_scene(
+        **source_main_figure_kwargs(
+            cluster_velocities_path,
+            ratzenboeck_scocen_catalog_path,
+            ratzenboeck_scocen_metadata_path,
+            lookback_myr=lookback_myr,
+        ),
+    )
+
+
+def build_scene_from_velocity_catalog(
+    cluster_velocities_path: Path,
+    ratzenboeck_scocen_catalog_path: Path = DEFAULT_RATZENBOECK_SCOCEN_CATALOG_PATH,
+    ratzenboeck_scocen_metadata_path: Path = DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
+    ratzenboeck_scocen_members_path: Path = DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
+) -> dict:
+    """Return the finished July 25 presentation scene as a Python dict."""
+    source_scene = build_velocity_source_scene(
+        cluster_velocities_path,
         ratzenboeck_scocen_catalog_path=ratzenboeck_scocen_catalog_path,
         ratzenboeck_scocen_metadata_path=ratzenboeck_scocen_metadata_path,
-        website_output_html=None,
+        ratzenboeck_scocen_members_path=ratzenboeck_scocen_members_path,
+    )
+    return build_state_only_scene(
+        source_scene,
+        cluster_velocities_path=cluster_velocities_path,
+        ratzenboeck_scocen_catalog_path=ratzenboeck_scocen_catalog_path,
+        ratzenboeck_scocen_metadata_path=ratzenboeck_scocen_metadata_path,
+        ratzenboeck_scocen_members_path=ratzenboeck_scocen_members_path,
     )
 
 
@@ -796,23 +893,19 @@ def build_figure_from_velocity_catalog(
     ratzenboeck_scocen_metadata_path: Path = DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
     ratzenboeck_scocen_members_path: Path = DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
 ) -> Path:
-    with tempfile.TemporaryDirectory(prefix="oviz-july25-source-") as temp_dir:
-        source_html = Path(temp_dir) / "main_figure_july25_source.html"
-        build_velocity_source_figure(
-            cluster_velocities_path,
-            source_html,
-            ratzenboeck_scocen_catalog_path=ratzenboeck_scocen_catalog_path,
-            ratzenboeck_scocen_metadata_path=ratzenboeck_scocen_metadata_path,
-            ratzenboeck_scocen_members_path=ratzenboeck_scocen_members_path,
-        )
-        return build_figure(
-            source_html,
-            output_html,
-            cluster_velocities_path=cluster_velocities_path,
-            ratzenboeck_scocen_catalog_path=ratzenboeck_scocen_catalog_path,
-            ratzenboeck_scocen_metadata_path=ratzenboeck_scocen_metadata_path,
-            ratzenboeck_scocen_members_path=ratzenboeck_scocen_members_path,
-        )
+    output_html = Path(output_html).expanduser().resolve()
+    scene = build_scene_from_velocity_catalog(
+        cluster_velocities_path,
+        ratzenboeck_scocen_catalog_path=ratzenboeck_scocen_catalog_path,
+        ratzenboeck_scocen_metadata_path=ratzenboeck_scocen_metadata_path,
+        ratzenboeck_scocen_members_path=ratzenboeck_scocen_members_path,
+    )
+    html = ThreeJSFigure(scene, compress_scene_spec=True).to_html(
+        compress_scene_spec=True
+    )
+    output_html.parent.mkdir(parents=True, exist_ok=True)
+    output_html.write_text(html, encoding="utf-8")
+    return output_html
 
 
 def parse_args() -> argparse.Namespace:
