@@ -17895,7 +17895,7 @@ __SKY_RUNTIME_JS__
         function applySkyImageLayerOptions(layerName, layer, isBase) {
           const imageLayer = imageLayerForName(layerName, isBase);
           if (!imageLayer) {
-            return;
+            return false;
           }
           const opacity = Math.min(Math.max(Number(layer && layer.opacity), 0.0), 1.0);
           const visibleOpacity = layer && layer.visible === false ? 0.0 : opacity;
@@ -17921,6 +17921,7 @@ __SKY_RUNTIME_JS__
             } catch (_err) {
             }
           }
+          return true;
         }
         function setBaseSkyImageLayer(survey) {
           if (!aladinInstance || !survey) {
@@ -18039,6 +18040,22 @@ __SKY_RUNTIME_JS__
             }
             try {
               const latestLayer = latestSkyLayerStateByName.get(layerName) || layer;
+              // Set the layer's real opacity on the survey object BEFORE it
+              // is attached. Aladin paints a newly attached layer at the
+              // survey's own opacity (1.0 by default) as soon as its first
+              // tiles decode; applying options only after attach leaves a
+              // window where a hidden/dim layer flashes at full strength.
+              const attachOpacity = effectiveSkyLayerOpacity(latestLayer);
+              try {
+                if (typeof overlaySurvey.setOpacity === "function") {
+                  overlaySurvey.setOpacity(attachOpacity);
+                } else if (typeof overlaySurvey.setAlpha === "function") {
+                  overlaySurvey.setAlpha(attachOpacity);
+                } else if ("opacity" in overlaySurvey) {
+                  overlaySurvey.opacity = attachOpacity;
+                }
+              } catch (_err) {
+              }
               if (typeof aladinInstance.addImageLayer === "function") {
                 aladinInstance.addImageLayer(overlaySurvey, layerName);
                 managedSkyOverlayLayerNames.add(layerName);
@@ -18300,19 +18317,41 @@ __SKY_RUNTIME_JS__
               optionsGeneration !== activeSkyLayerStackGeneration
               || optionApplySerial !== skyLayerOptionApplySerial
             ) {
-              return;
+              return true;
             }
-            applySkyImageLayerOptions("base", baseLayer, true);
+            let allApplied = applySkyImageLayerOptions("base", baseLayer, true);
             for (let index = stackLayers.length - 2; index >= 0; index -= 1) {
               const layer = stackLayers[index];
               const layerName = skyLayerNameFor(layer);
-              applySkyImageLayerOptions(layerName, latestSkyLayerStateByName.get(layerName) || layer, false);
+              const applied = applySkyImageLayerOptions(
+                layerName,
+                latestSkyLayerStateByName.get(layerName) || layer,
+                false
+              );
+              allApplied = allApplied && applied;
             }
+            return allApplied;
           };
           if (data.deferOptionRetries === false) {
             applyLatestOptions();
           } else {
-            [0, 32, 120, 360, 1000].forEach((delayMs) => window.setTimeout(applyLatestOptions, delayMs));
+            // Retry until every layer object is retrievable and styled, or
+            // ~4 s pass. The old fixed schedule (last retry at 1 s) could
+            // end before slow attaches finished, leaving a layer at the
+            // survey's default full opacity even though the saved state
+            // had it hidden.
+            let retryDelayMs = 32;
+            let retryTotalMs = 0;
+            const retryApply = () => {
+              if (applyLatestOptions() || retryTotalMs >= 4000) {
+                return;
+              }
+              retryTotalMs += retryDelayMs;
+              window.setTimeout(retryApply, retryDelayMs);
+              retryDelayMs = Math.min(retryDelayMs * 1.6, 400);
+            };
+            applyLatestOptions();
+            window.setTimeout(retryApply, retryDelayMs);
           }
           return stackReadyPromise;
         }
