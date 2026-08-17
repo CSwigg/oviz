@@ -3903,7 +3903,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
         postSkyLayerStateToAladin();
         ovizInstallPublicApi();
         window.addEventListener("message", ovizPostMessageHandler);
-        await ovizApplyPresentOnlyInitialState();
+        // A present-only export must stay navigable even if applying its
+        // first State fails (for example an Aladin sky-layer post that
+        // rejects while offline, or a lasso mask asset that cannot be
+        // hydrated). Rejecting here used to leave ovizStateControllerReady
+        // false forever, so every Previous/Next/row click silently failed
+        // with "controller is not ready".
+        try {
+          await ovizApplyPresentOnlyInitialState();
+        } catch (err) {
+          if (root && root.dataset) root.dataset.presentOnlyInitialState = "error";
+          console.error("Oviz present-only initial State failed to apply", err);
+        }
         root.addEventListener("pointerdown", (event) => {
           const insideStatesShell = ovizStatesShellEl && ovizStatesShellEl.contains(event.target);
           const insidePresentationNav = event.target
@@ -3923,9 +3934,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
             ovizCancelStateTransitionWithoutSnap("user-interaction", { restorePresentation: true });
           }
         }, { capture: true });
-        const draft = ovizAuthoringDraftsEnabled()
-          ? ovizNormalizeAuthoringDraft(await ovizReadDraft())
-          : null;
+        let draft = null;
+        if (ovizAuthoringDraftsEnabled()) {
+          // IndexedDB can be unavailable (file:// in some browsers, private
+          // mode, storage denied). A failed draft read must not block the
+          // controller from becoming ready.
+          try {
+            draft = ovizNormalizeAuthoringDraft(await ovizReadDraft());
+          } catch (err) {
+            draft = null;
+            console.warn("Oviz States draft read failed; continuing without draft", err);
+          }
+        }
         let recoveredDraft = null;
         if (draft && draft.file_handle) ovizAuthoringFileHandle = draft.file_handle;
         if (draft && ovizAuthoringDraftIsNewer(draft) && ovizRestoreAuthoringDraft(draft)) {

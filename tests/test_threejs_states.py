@@ -37,7 +37,10 @@ class ThreeJSStatesAutosaveOptionTests(unittest.TestCase):
         self.assertIn("function ovizAuthoringDraftsEnabled()", html)
         self.assertIn('states.autosave_drafts === false', html)
         # Boot must not read a draft, and nothing may write one back.
-        self.assertIn("const draft = ovizAuthoringDraftsEnabled()", html)
+        self.assertIn("if (ovizAuthoringDraftsEnabled()) {", html)
+        self.assertIn(
+            "draft = ovizNormalizeAuthoringDraft(await ovizReadDraft());", html
+        )
         self.assertIn(
             "if (!ovizStatesProject || !ovizAuthoringDraftsEnabled()) return;", html
         )
@@ -1058,6 +1061,42 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertEqual(payload["dataset"]["presentOnlyInitialState"], "first")
         self.assertEqual(payload["applied"][0]["snapshot"]["marker"], "first-snapshot")
         self.assertTrue(payload["applied"][0]["options"]["forceSkyBackground"])
+
+    def test_present_only_controller_becomes_ready_when_initial_state_apply_fails(self):
+        """A present-only export must stay navigable if its first State
+        fails to apply (offline Aladin, unhydratable asset). Previously any
+        rejection left ovizStateControllerReady false forever, so every
+        Previous/Next click failed with "controller is not ready"."""
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        init_source = (
+            "async function initializeOvizStates()"
+            + html.split("async function initializeOvizStates()", 1)[1].split(
+                "\n      }\n", 1
+            )[0]
+            + "\n      }\n"
+        )
+        # The initialize body must guard both awaited steps.
+        self.assertIn("await ovizApplyPresentOnlyInitialState();", init_source)
+        self.assertIn(
+            'root.dataset.presentOnlyInitialState = "error"',
+            init_source,
+        )
+        self.assertIn(
+            "draft = ovizNormalizeAuthoringDraft(await ovizReadDraft());",
+            init_source,
+        )
+        apply_index = init_source.index("await ovizApplyPresentOnlyInitialState();")
+        ready_index = init_source.index("ovizStateControllerReady = true;")
+        self.assertLess(apply_index, ready_index)
+        # The apply await sits inside a try block that precedes the ready flag.
+        guarded_region = init_source[:ready_index]
+        self.assertIn("try {\n          await ovizApplyPresentOnlyInitialState();", guarded_region)
+        self.assertIn("} catch (err) {", guarded_region)
 
     def test_3d_camera_and_time_share_one_phase_by_default(self):
         html = ThreeJSFigure({
