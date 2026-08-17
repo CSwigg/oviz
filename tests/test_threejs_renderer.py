@@ -371,8 +371,15 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('[data-presentation-mode="true"] .oviz-three-footer', html)
         self.assertIn("oviz-three-presentation-previous", html)
         self.assertIn("oviz-three-presentation-next", html)
-        self.assertIn("const presentationModeLocked = Boolean(", html)
-        self.assertIn("presentationModeLocked ? true : Boolean(enabled)", html)
+        # Present-only exports open in presentation mode but are not locked
+        # there: the bottom-right exit button (and P) return to the full
+        # interface while keeping the current State.
+        self.assertIn("oviz-three-presentation-exit", html)
+        self.assertIn("const presentOnlyExport = Boolean(", html)
+        self.assertIn("let presentationModeEnabled = presentOnlyExport;", html)
+        self.assertIn("const presentationModeLocked = false;", html)
+        self.assertIn("presentationExitButtonEl.addEventListener", html)
+        self.assertIn(".oviz-three-presentation-nav .oviz-three-presentation-exit {", html)
         self.assertIn("async function ovizApplyPresentOnlyInitialState()", html)
         self.assertIn("await ovizApplyPresentOnlyInitialState();", html)
         self.assertIn("border: 0;", html)

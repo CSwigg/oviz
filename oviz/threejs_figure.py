@@ -7719,6 +7719,46 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__ .oviz-three-presentation-next {
         right: 20px;
       }
+      /* Bottom-right exit pill: returns to the full interface while keeping
+         the current State. Overrides the arrow-glyph styling above. */
+      #__ROOT_ID__ .oviz-three-presentation-nav .oviz-three-presentation-exit {
+        top: auto;
+        bottom: 18px;
+        right: 18px;
+        left: auto;
+        width: auto;
+        height: 30px;
+        padding: 0 12px;
+        transform: none;
+        border: 1px solid rgba(238, 242, 247, 0.16);
+        border-radius: 999px;
+        background: rgba(10, 12, 17, 0.72);
+        color: rgba(238, 242, 247, 0.82);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+        text-shadow: none;
+        font: 500 12px/1 var(--oviz-hud-font, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif);
+        letter-spacing: 0.01em;
+        backdrop-filter: blur(14px) saturate(130%);
+        -webkit-backdrop-filter: blur(14px) saturate(130%);
+        opacity: 0.78;
+        transition: opacity 140ms ease, background 140ms ease, border-color 140ms ease, transform 140ms ease;
+      }
+      #__ROOT_ID__ .oviz-three-presentation-nav .oviz-three-presentation-exit:hover,
+      #__ROOT_ID__ .oviz-three-presentation-nav .oviz-three-presentation-exit:focus-visible {
+        opacity: 1;
+        background: rgba(20, 24, 33, 0.9);
+        border-color: rgba(238, 242, 247, 0.3);
+        color: #fff;
+      }
+      #__ROOT_ID__ .oviz-three-presentation-nav .oviz-three-presentation-exit:active {
+        transform: scale(0.97);
+      }
+      #__ROOT_ID__[data-mobile="true"] .oviz-three-presentation-nav .oviz-three-presentation-exit {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+        right: 12px;
+        height: 34px;
+        font-size: 13px;
+      }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-presentation-nav button {
         width: 32px;
         height: 56px;
@@ -7752,7 +7792,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         display: inline-flex !important;
         opacity: 0.72;
       }
-      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"][data-presentation-locked="true"] .oviz-three-mobile-more {
+      #__ROOT_ID__[data-mobile="true"][data-presentation-mode="true"][data-present-only-export="true"] .oviz-three-mobile-more {
         display: none !important;
       }
 
@@ -10574,6 +10614,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const presentationNavEl = root.querySelector(".oviz-three-presentation-nav");
       const presentationPreviousButtonEl = root.querySelector(".oviz-three-presentation-previous");
       const presentationNextButtonEl = root.querySelector(".oviz-three-presentation-next");
+      const presentationExitButtonEl = root.querySelector(".oviz-three-presentation-exit");
       const fullscreenButtonEl = root.querySelector(".oviz-three-fullscreen");
       const fullscreenNoticeEl = root.querySelector(".oviz-three-fullscreen-notice");
       const bottomSwitchesEl = root.querySelector(".oviz-three-bottom-switches");
@@ -11290,11 +11331,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         initialState.global_controls && initialState.global_controls.camera_auto_orbit_enabled
       );
       let zenModeEnabled = Boolean(initialState.zen_mode_enabled);
-      const presentationModeLocked = Boolean(
+      // Present-only exports open in presentation mode. They are "locked" in
+      // the sense that States stay read-only, but the viewer can still exit
+      // presentation to the normal interface (keeping the current State) via
+      // the bottom-right exit button or the P key.
+      const presentOnlyExport = Boolean(
         sceneSpec.states && sceneSpec.states.present_only
       );
-      let presentationModeEnabled = presentationModeLocked;
+      const presentationModeLocked = false;
+      let presentationModeEnabled = presentOnlyExport;
       root.dataset.presentationLocked = presentationModeLocked ? "true" : "false";
+      root.dataset.presentOnlyExport = presentOnlyExport ? "true" : "false";
       let legendPanelOpen = mobileModeEnabled
         ? false
         : (initialState.legend_open === undefined ? true : Boolean(initialState.legend_open));
@@ -14204,7 +14251,8 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             exportSceneSpec.states && exportSceneSpec.states.present_only
           );
           exportRoot.dataset.presentationMode = exportPresentOnly ? "true" : "false";
-          exportRoot.dataset.presentationLocked = exportPresentOnly ? "true" : "false";
+          exportRoot.dataset.presentationLocked = "false";
+          exportRoot.dataset.presentOnlyExport = exportPresentOnly ? "true" : "false";
           exportRoot.dataset.deckPresenting = "false";
           exportRoot.dataset.deckEditing = "false";
         }
@@ -25902,6 +25950,16 @@ __STATE_RUNTIME_JS__
             event.preventDefault();
             event.stopPropagation();
             ovizNavigatePresentation(1).catch(() => {});
+            focusViewer();
+          });
+        }
+        if (presentationExitButtonEl) {
+          presentationExitButtonEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            // Leave presentation but keep the current State on screen: the
+            // full interface returns around whatever is currently displayed.
+            setPresentationMode(false);
             focusViewer();
           });
         }

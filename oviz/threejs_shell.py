@@ -152,6 +152,7 @@ THREEJS_SHELL_HTML = """
       <nav class="oviz-three-presentation-nav" aria-label="State navigation" aria-hidden="true">
         <button class="oviz-three-presentation-previous" type="button" aria-label="Previous State" title="Previous State (Left Arrow)">‹</button>
         <button class="oviz-three-presentation-next" type="button" aria-label="Next State" title="Next State (Right Arrow)">›</button>
+        <button class="oviz-three-presentation-exit" type="button" aria-label="Exit presentation" title="Exit presentation and return to the full interface (P)">Exit presentation</button>
       </nav>
       <div class="oviz-deck-authoring-layer" data-visible="false" aria-hidden="true"></div>
       <aside class="oviz-deck-editor" data-open="false" aria-hidden="true" aria-label="Presentation slide editor"></aside>
