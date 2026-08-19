@@ -24092,9 +24092,30 @@ __SKY_RUNTIME_JS__
           return null;
         }
         const group = new THREE.Group();
+        // An active lasso selection filters text too: labels whose anchor
+        // falls outside the lasso disappear with the rest of the scene, so a
+        // zoomed-in selection is not cluttered by region names far away.
+        const lassoMask = (
+          typeof lassoSelectionFilterActive === "function"
+          && lassoSelectionFilterActive()
+          && typeof hasActiveLassoSelectionMask === "function"
+          && hasActiveLassoSelectionMask()
+          && typeof pointInsideProjectedLassoMask === "function"
+        ) ? currentLassoSelectionMask : null;
+        const plotOffset = (typeof plotGroup !== "undefined" && plotGroup && plotGroup.position)
+          ? plotGroup.position
+          : null;
         labels.forEach((label, index) => {
           if (!label || !label.text || label.visible === false) {
             return;
+          }
+          if (lassoMask) {
+            const worldX = Number(label.x) + (plotOffset ? plotOffset.x : 0.0);
+            const worldY = Number(label.y) + (plotOffset ? plotOffset.y : 0.0);
+            const worldZ = Number(label.z) + (plotOffset ? plotOffset.z : 0.0);
+            if (!pointInsideProjectedLassoMask(worldX, worldY, worldZ, lassoMask)) {
+              return;
+            }
           }
           const sprite = makeTextSprite(label.text, {
             color: sanitizeManualLabelColor(label.color, manualLabelDefaultColor()),
