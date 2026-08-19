@@ -8731,7 +8731,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-swatch {
         background: transparent !important;
         box-shadow: inset 0 0 0 1.5px currentColor !important;
-        opacity: 0.55;
+        opacity: 0.70;
       }
       #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-meta {
         flex: 1 1 auto !important;
@@ -8755,7 +8755,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         text-decoration: none !important;
       }
       #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-name {
-        color: rgba(255, 255, 255, 0.40) !important;
+        color: rgba(255, 255, 255, 0.62) !important;
       }
       #__ROOT_ID__:not([data-mobile="true"]):not([data-minimal="true"]) .oviz-three-legend-panel .oviz-three-legend-kind {
         color: var(--oviz-hud-muted) !important;
@@ -9568,7 +9568,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-swatch {
         background: transparent !important;
         box-shadow: inset 0 0 0 1.5px currentColor !important;
-        opacity: 0.55;
+        opacity: 0.70;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-meta {
         flex: 1 1 auto !important;
@@ -9589,7 +9589,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         text-decoration: none !important;
       }
       #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-entry[data-active="false"] .oviz-three-legend-name {
-        color: rgba(255, 255, 255, 0.40) !important;
+        color: rgba(255, 255, 255, 0.62) !important;
       }
       /* Touch has no hover: the eye is always visible as a state indicator. */
       #__ROOT_ID__[data-mobile="true"] .oviz-three-legend-panel .oviz-three-legend-item::after {
