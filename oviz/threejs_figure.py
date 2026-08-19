@@ -439,6 +439,25 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         border-bottom-color: transparent;
         box-shadow: none;
       }
+      /* Simplified controls: no Widgets menu, Slides editor, sky aperture,
+         or Save State button. Everything else keeps its normal layout. */
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-widget-select,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-deck-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-deck-shell,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-sky-aperture-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-save-state,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-widget-select,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-deck-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-deck-shell,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-sky-aperture-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-save-state,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-select,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-deck-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-deck-shell,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-sky-aperture-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-save-state {
+        display: none !important;
+      }
       #__ROOT_ID__[data-zen="true"] .oviz-three-topbar-brand,
       #__ROOT_ID__[data-zen="true"] .oviz-three-title,
       #__ROOT_ID__[data-zen="true"] .oviz-three-tools-shell,
@@ -9822,6 +9841,20 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         font: 640 12px/1 var(--oviz-hud-font);
         letter-spacing: 0.02em;
       }
+      /* Simplified controls (last so it wins source order against the HUD):
+         hide Widgets, Slides, sky aperture, and Save State. */
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-widget-select,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-deck-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-deck-shell,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-sky-aperture-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"] .oviz-three-widget-menu > .oviz-three-save-state,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-widget-select,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-deck-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-deck-shell,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-sky-aperture-toggle,
+      #__ROOT_ID__[data-simplified-controls="true"]:not([data-mobile="true"]) .oviz-three-widget-menu > .oviz-three-save-state {
+        display: none !important;
+      }
     </style>
   </head>
   <body>
@@ -11342,6 +11375,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let presentationModeEnabled = presentOnlyExport;
       root.dataset.presentationLocked = presentationModeLocked ? "true" : "false";
       root.dataset.presentOnlyExport = presentOnlyExport ? "true" : "false";
+      // Simplified controls: keep the core interface (Controls, Text, legend,
+      // States navigation, Sky) but drop authoring/power-user chrome —
+      // Widgets, Slides, sky aperture, Save State — from the top toolbar.
+      const simplifiedControlsEnabled = Boolean(
+        initialState.simplified_controls
+        || (initialState.global_controls && initialState.global_controls.simplified_controls)
+      );
+      root.dataset.simplifiedControls = simplifiedControlsEnabled ? "true" : "false";
       let legendPanelOpen = mobileModeEnabled
         ? false
         : (initialState.legend_open === undefined ? true : Boolean(initialState.legend_open));
