@@ -1743,6 +1743,13 @@ THREEJS_SCENE_RUNTIME_JS = """
         if (!trace || typeof trace !== "object") {
           return null;
         }
+        // A trace flagged only_at_t0 exists solely in the frame it was
+        // authored in (normally t = 0). It must not fade in or out across
+        // the neighbouring timeline interval, so skip it entirely for any
+        // fractional frame instead of rendering it at partial presence.
+        if (trace.only_at_t0 === true) {
+          return null;
+        }
         const clone = Object.assign({}, trace);
         clone.oviz_presence_opacity = clampRange(Number(presence), 0.0, 1.0);
         if (Array.isArray(trace.points)) clone.points = trace.points.map(cloneTracePoint);
