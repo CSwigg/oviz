@@ -547,7 +547,19 @@ THREEJS_STATE_RUNTIME_JS = r"""
             renderFrame(Number(hydrated.current_frame_index) || 0);
           }
         };
-        renderTargetFrame();
+        // The post-lasso pass below renders the exact target again; when no
+        // lasso mask is involved that second render happens in the same task,
+        // so this first full rebuild would be pure duplicate work (~a whole
+        // dropped frame on large scenes at every State arrival).
+        const lassoRestorePending = Boolean(
+          hydrated.lasso_selection_mask
+          || (Object.prototype.hasOwnProperty.call(options, "runtimeLassoMask")
+            && options.runtimeLassoMask)
+          || (typeof currentLassoSelectionMask !== "undefined" && currentLassoSelectionMask)
+        );
+        if (lassoRestorePending) {
+          renderTargetFrame();
+        }
         ovizApplyCapturedCameraState(hydrated);
         if (Number.isFinite(Number(playback.interval_ms))) {
           playbackIntervalMs = Math.max(80, Number(playback.interval_ms));
@@ -1820,8 +1832,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
           selectionTransition: null,
           currentPhase: usesViewButtonHandoff ? "view-handoff" : phasePlan.phases[0].name,
           currentAppearanceProgress: 0.0,
-          appearanceStylesOnlyKeys: ovizStylesOnlyAppearanceKeys(from, destination),
-          appearanceStylesApplied: null,
+          appearanceFastPlan: ovizAppearanceFastPlan(from, destination),
+          appearanceFastApplied: null,
           lastAppliedAppearanceProgress: null,
           lastRenderedTimeProgress: 0.0,
           lastRenderedAppearanceProgress: 0.0,
@@ -2017,30 +2029,77 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return promise;
       }
 
-      function ovizStylesOnlyAppearanceKeys(from, to) {
-        // Appearance fast path: when two States differ only in point-trace
-        // opacity / size (no visibility, selection, volume, global-control,
-        // color, label, or timeline changes), the transition can animate by
-        // scaling the live GPU buffers instead of rebuilding the scene every
-        // frame. Returns the animated trace keys, or null when any other
-        // appearance-affecting field differs.
+      function ovizAppearanceFastPlan(from, to) {
+        // Appearance fast path: presentations mostly animate point-trace
+        // opacity / size, trace visibility, and the global point size /
+        // opacity sliders between States. All of those can run as live GPU
+        // buffer scaling on the already-built scene instead of a full scene
+        // rebuild every animation frame. Anything else that affects
+        // appearance (colors, labels, segments, volumes, selections, sky
+        // layers, widgets, timeline) falls back to the exact slow path.
         try {
           const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-          if (!same(from.legend_state, to.legend_state)) return null;
           if (!same(from.volume_state_by_key, to.volume_state_by_key)) return null;
-          if (!same(from.global_controls, to.global_controls)) return null;
           if (!same(from.lasso_selection_mask, to.lasso_selection_mask)) return null;
           if (!same(from.current_selection, to.current_selection)) return null;
           if (!same(from.current_selections, to.current_selections)) return null;
           if (!same(from.selected_cluster_keys, to.selected_cluster_keys)) return null;
           if (!same(from.manual_labels, to.manual_labels)) return null;
           if (!same(from.sky_layers, to.sky_layers)) return null;
+          if (!same(from.widgets, to.widgets)) return null;
+          if (!same(from.legend_panel_state, to.legend_panel_state)) return null;
           if (Math.abs(ovizStateFrameValue(from) - ovizStateFrameValue(to)) > 1e-9) return null;
+
+          const fromGlobal = from.global_controls || {};
+          const toGlobal = to.global_controls || {};
+          const globalKeys = new Set([...Object.keys(fromGlobal), ...Object.keys(toGlobal)]);
+          let globalSize = null;
+          let globalOpacity = null;
+          for (const key of globalKeys) {
+            if (same(fromGlobal[key], toGlobal[key])) continue;
+            const a = Number(fromGlobal[key]);
+            const b = Number(toGlobal[key]);
+            if (key === "point_size_scale" && Number.isFinite(a) && Number.isFinite(b)) {
+              globalSize = { from: a, to: b };
+              continue;
+            }
+            if (key === "point_opacity_scale" && Number.isFinite(a) && Number.isFinite(b)) {
+              globalOpacity = { from: a, to: b };
+              continue;
+            }
+            return null;
+          }
+
           const fromStyles = from.trace_style_state || {};
           const toStyles = to.trace_style_state || {};
-          const keys = new Set([...Object.keys(fromStyles), ...Object.keys(toStyles)]);
+          const purePointTrace = (key) => {
+            const style = fromStyles[key] || toStyles[key];
+            return Boolean(
+              style
+              && style.hasPoints
+              && !style.hasSegments
+              && !style.hasLabels
+              && !style.hasVectors
+            );
+          };
+
+          const fromLegend = from.legend_state || {};
+          const toLegend = to.legend_state || {};
+          const legendKeys = new Set([...Object.keys(fromLegend), ...Object.keys(toLegend)]);
+          const fadeKeys = [];
+          for (const key of legendKeys) {
+            const a = fromLegend[key] !== false;
+            const b = toLegend[key] !== false;
+            if (a === b) continue;
+            // Volume legend entries have no trace style; they need the
+            // volume crossfade path.
+            if (!purePointTrace(key)) return null;
+            fadeKeys.push(key);
+          }
+
+          const styleKeys = new Set([...Object.keys(fromStyles), ...Object.keys(toStyles)]);
           const animated = [];
-          for (const key of keys) {
+          for (const key of styleKeys) {
             const a = fromStyles[key];
             const b = toStyles[key];
             if (!a || !b) return null;
@@ -2052,69 +2111,129 @@ THREEJS_STATE_RUNTIME_JS = r"""
             const opacityDelta = Math.abs((Number(a.opacity) || 0) - (Number(b.opacity) || 0));
             const sizeDelta = Math.abs((Number(a.sizeScale) || 1) - (Number(b.sizeScale) || 1));
             if (opacityDelta <= 1e-6 && sizeDelta <= 1e-6) continue;
-            // Only pure point traces have live buffer paths for both fields.
-            if (!a.hasPoints || a.hasSegments || a.hasLabels || a.hasVectors) return null;
+            if (!purePointTrace(key)) return null;
             animated.push(key);
           }
-          return animated.length ? animated : null;
+          if (!animated.length && !fadeKeys.length && !globalSize && !globalOpacity) return null;
+          return {
+            styleKeys: animated,
+            fadeKeys,
+            globalSize,
+            globalOpacity,
+          };
         } catch (err) {
           return null;
         }
       }
 
       function ovizApplyTransitionTraceStyleFastPath(transition) {
-        const keys = transition.appearanceStylesOnlyKeys;
+        const plan = transition.appearanceFastPlan;
         if (
-          !Array.isArray(keys)
-          || !keys.length
+          !plan
           || typeof ovizScaleRenderedPointOpacities !== "function"
           || typeof ovizScaleRenderedPointSizes !== "function"
         ) {
           return false;
         }
-        const applied = transition.appearanceStylesApplied
-          || (transition.appearanceStylesApplied = new Map());
-        keys.forEach((key) => {
+        const PRESENCE_FLOOR = 0.002;
+        const applied = transition.appearanceFastApplied
+          || (transition.appearanceFastApplied = {
+            styles: new Map(),
+            presence: new Map(),
+            globalSize: null,
+            globalOpacity: null,
+            prepared: false,
+          });
+        if (plan.fadeKeys.length && !applied.prepared) {
+          // One prepared rebuild: batch fading-in traces at a floor presence
+          // so their per-point opacity ratios survive the live scaling that
+          // follows. Every later frame only scales buffers.
+          plan.fadeKeys.forEach((key) => {
+            const presence = Number(ovizStateTransitionTraceOpacity.get(key));
+            if (Number.isFinite(presence)) {
+              ovizStateTransitionTraceOpacity.set(key, Math.max(presence, PRESENCE_FLOOR));
+            }
+          });
+          renderInterpolatedFrameValue(displayedFrameValue, {
+            updateWidgets: false,
+            preserveCamera: true,
+            transitionOwnerToken: "",
+          });
+          transition.sceneRenderCount += 1;
+          plan.fadeKeys.forEach((key) => {
+            const presence = Number(ovizStateTransitionTraceOpacity.get(key));
+            applied.presence.set(
+              key,
+              Math.max(Number.isFinite(presence) ? presence : 1.0, PRESENCE_FLOOR),
+            );
+          });
+          plan.styleKeys.forEach((key) => {
+            const live = traceStyleStateByKey[key];
+            if (!live) return;
+            applied.styles.set(key, {
+              opacity: Math.max(Number(live.opacity) || 0, 1e-4),
+              sizeScale: Math.max(Number(live.sizeScale) || 1, 1e-4),
+            });
+          });
+          applied.globalSize = plan.globalSize
+            ? Math.max(Number(globalPointSizeScale) || 1, 1e-4)
+            : null;
+          applied.globalOpacity = plan.globalOpacity
+            ? Math.max(Number(globalPointOpacityScale) || 1, 1e-4)
+            : null;
+          applied.prepared = true;
+          return true;
+        }
+        const seedStyle = (key) => {
+          const fromStyle = (transition.fromSnapshot.trace_style_state || {})[key] || {};
+          return {
+            opacity: Math.max(Number(fromStyle.opacity) || 1, 1e-4),
+            sizeScale: Math.max(Number(fromStyle.sizeScale) || 1, 1e-4),
+          };
+        };
+        plan.styleKeys.forEach((key) => {
           const live = traceStyleStateByKey[key];
           if (!live) return;
-          const previous = applied.get(key) || {
-            opacity: null,
-            sizeScale: null,
-          };
+          const previous = applied.styles.get(key) || seedStyle(key);
           const liveOpacity = Math.max(Number(live.opacity) || 0, 1e-4);
           const liveSize = Math.max(Number(live.sizeScale) || 1, 1e-4);
-          if (previous.opacity !== null && Math.abs(previous.opacity - liveOpacity) > 1e-7) {
+          if (Math.abs(previous.opacity - liveOpacity) > 1e-7) {
             ovizScaleRenderedPointOpacities(liveOpacity / previous.opacity, key);
-          } else if (previous.opacity === null) {
-            // First frame: styles were at the from-state values when the
-            // scene was last rebuilt, so seed from those rendered values.
-            const seeded = Math.max(
-              Number(
-                (transition.fromSnapshot.trace_style_state || {})[key]
-                && (transition.fromSnapshot.trace_style_state || {})[key].opacity
-              ) || liveOpacity,
-              1e-4,
-            );
-            if (Math.abs(seeded - liveOpacity) > 1e-7) {
-              ovizScaleRenderedPointOpacities(liveOpacity / seeded, key);
-            }
           }
-          if (previous.sizeScale !== null && Math.abs(previous.sizeScale - liveSize) > 1e-7) {
+          if (Math.abs(previous.sizeScale - liveSize) > 1e-7) {
             ovizScaleRenderedPointSizes(liveSize / previous.sizeScale, key);
-          } else if (previous.sizeScale === null) {
-            const seededSize = Math.max(
-              Number(
-                (transition.fromSnapshot.trace_style_state || {})[key]
-                && (transition.fromSnapshot.trace_style_state || {})[key].sizeScale
-              ) || liveSize,
-              1e-4,
-            );
-            if (Math.abs(seededSize - liveSize) > 1e-7) {
-              ovizScaleRenderedPointSizes(liveSize / seededSize, key);
-            }
           }
-          applied.set(key, { opacity: liveOpacity, sizeScale: liveSize });
+          applied.styles.set(key, { opacity: liveOpacity, sizeScale: liveSize });
         });
+        plan.fadeKeys.forEach((key) => {
+          const presence = Math.max(
+            Number(ovizStateTransitionTraceOpacity.get(key)) || 0,
+            PRESENCE_FLOOR,
+          );
+          const previous = applied.presence.get(key);
+          if (Number.isFinite(previous) && Math.abs(previous - presence) > 1e-7) {
+            ovizScaleRenderedPointOpacities(presence / previous, key);
+          }
+          applied.presence.set(key, presence);
+        });
+        if (plan.globalSize) {
+          const liveGlobal = Math.max(Number(globalPointSizeScale) || 1, 1e-4);
+          const previous = applied.globalSize
+            || Math.max(Number(plan.globalSize.from) || 1, 1e-4);
+          if (Math.abs(previous - liveGlobal) > 1e-7) {
+            ovizScaleRenderedPointSizes(liveGlobal / previous, "");
+          }
+          applied.globalSize = liveGlobal;
+        }
+        if (plan.globalOpacity) {
+          const liveGlobal = Math.max(Number(globalPointOpacityScale) || 1, 1e-4);
+          const previous = applied.globalOpacity
+            || Math.max(Number(plan.globalOpacity.from) || 1, 1e-4);
+          if (Math.abs(previous - liveGlobal) > 1e-7) {
+            ovizScaleRenderedPointOpacities(liveGlobal / previous, "");
+          }
+          applied.globalOpacity = liveGlobal;
+        }
         return true;
       }
 
@@ -2455,8 +2574,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ) {
             ovizApplyTransitionNumericControls(from, to, appearanceProgress);
             ovizApplyTransitionTraceStyles(from, to, appearanceProgress);
-            ovizApplyTransitionVolumes(from, to, appearanceProgress);
-            ovizApplyTransitionPanelGeometry(from, to, appearanceProgress);
+            if (!transition.appearanceFastPlan) {
+              // The fast plan guarantees volumes and widget geometry are
+              // identical between the two States; skip their per-frame
+              // identity writes.
+              ovizApplyTransitionVolumes(from, to, appearanceProgress);
+              ovizApplyTransitionPanelGeometry(from, to, appearanceProgress);
+            }
             transition.traceOpacity.forEach((value, key) => {
               ovizStateTransitionTraceOpacity.set(
                 key,
@@ -2536,7 +2660,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             transition.lastRenderedAppearanceProgress = appearanceRaw;
           } else if (appearanceSceneDirty) {
             const updatedStyleFastPath = Boolean(
-              transition.appearanceStylesOnlyKeys
+              transition.appearanceFastPlan
               && ovizApplyTransitionTraceStyleFastPath(transition)
             );
             if (updatedStyleFastPath) {

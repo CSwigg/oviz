@@ -26592,9 +26592,20 @@ __STATE_RUNTIME_JS__
         }
         if (globalPointOpacityEl) {
           globalPointOpacityEl.addEventListener("input", () => {
+            const previousGlobalOpacity = Math.max(Number(globalPointOpacityScale) || 1.0, 1e-4);
             globalPointOpacityScale = Number(globalPointOpacityEl.value);
             applyGlobalControlState();
             renderSceneControls();
+            if (typeof ovizScaleRenderedPointOpacities === "function") {
+              ovizScaleRenderedPointOpacities(
+                Math.max(globalPointOpacityScale, 1e-4) / previousGlobalOpacity,
+                ""
+              );
+              return;
+            }
+            renderFrame(currentFrameIndex);
+          });
+          globalPointOpacityEl.addEventListener("change", () => {
             renderFrame(currentFrameIndex);
           });
         }
