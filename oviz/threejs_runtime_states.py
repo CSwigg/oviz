@@ -2149,6 +2149,11 @@ THREEJS_STATE_RUNTIME_JS = r"""
               || String(a.colormap || "") !== String(b.colormap || "")
               || String(a.colorMode || "") !== String(b.colorMode || "")
             ) return null;
+            if (
+              Boolean(a.memberArrowsEnabled) !== Boolean(b.memberArrowsEnabled)
+              || Math.abs((Number(a.memberArrowLength) || 1) - (Number(b.memberArrowLength) || 1)) > 1e-6
+              || Math.abs((Number(a.memberArrowWidth) || 1) - (Number(b.memberArrowWidth) || 1)) > 1e-6
+            ) return null;
             const opacityDelta = Math.abs((Number(a.opacity) || 0) - (Number(b.opacity) || 0));
             const sizeDelta = Math.abs((Number(a.sizeScale) || 1) - (Number(b.sizeScale) || 1));
             if (opacityDelta <= 1e-6 && sizeDelta <= 1e-6) continue;

@@ -11115,6 +11115,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       let ovizBatchedRasterPointSizeMax = null;
       let ovizRetainedPointComponentCount = 0;
       const skyMemberBatchOpacityEntries = [];
+      const skyMemberArrowEntries = [];
       const skyMemberBulkOpacityEntries = [];
       const skyMemberBulkFramePositionCache = new Map();
       let skyMemberTimelineFastPathCount = 0;
@@ -11730,6 +11731,9 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           hasVectors: Boolean(item.has_vectors || item.kind === "vector" || item.trace_type === "vector"),
           hasNStars: Boolean(item.has_n_stars),
           sizeByNStarsDefault: Boolean(item.size_by_n_stars_default),
+          memberArrowsEnabled: Boolean(item.member_arrows_default),
+          memberArrowLength: Math.max(Number(item.member_arrow_length_default) || 1.0, 0.01),
+          memberArrowWidth: Math.max(Number(item.member_arrow_width_default) || 1.0, 0.01),
           colorBy: colorBy,
           colorMode: colorBy && String(colorBy.default_color_mode || "by_value") === "by_value"
             ? "by_value"
@@ -13825,6 +13829,15 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
             }
             if (Number.isFinite(Number(state.sizeScale))) {
               target.sizeScale = Math.max(Number(state.sizeScale), 0.05);
+            }
+            if (typeof state.memberArrowsEnabled === "boolean") {
+              target.memberArrowsEnabled = state.memberArrowsEnabled;
+            }
+            if (Number.isFinite(Number(state.memberArrowLength))) {
+              target.memberArrowLength = Math.max(Number(state.memberArrowLength), 0.01);
+            }
+            if (Number.isFinite(Number(state.memberArrowWidth))) {
+              target.memberArrowWidth = Math.max(Number(state.memberArrowWidth), 0.01);
             }
             if (target.colorBy && typeof state.colorMode === "string" && state.colorMode) {
               const requestedColorMode = String(state.colorMode);
@@ -23393,6 +23406,187 @@ __SKY_RUNTIME_JS__
         return drawObjectCount;
       }
 
+      const SKY_MEMBER_ARROW_LENGTH_MYR = 0.3;
+      const SKY_MEMBER_ARROW_HALF_WIDTH_RAD = 0.0009;
+
+      function skyMemberArrowStyleFor(traceKey) {
+        const style = traceStyleStateByKey[String(traceKey || "")] || null;
+        return {
+          enabled: Boolean(style && style.memberArrowsEnabled),
+          lengthScale: Math.max(Number(style && style.memberArrowLength) || 1.0, 0.01),
+          widthScale: Math.max(Number(style && style.memberArrowWidth) || 1.0, 0.01),
+        };
+      }
+
+      function ovizWriteSkyMemberArrowVertices(entry, lengthScale, widthScale) {
+        // Per arrow the packed data holds: rel(3), dir(3), perpUnit(3),
+        // tangential speed (pc/Myr), distance (pc) — 11 floats. Each arrow
+        // renders as a shaft quad (2 triangles) plus a head triangle:
+        // 9 vertices, 27 floats.
+        const data = entry.arrowData;
+        const positions = entry.positionAttribute.array;
+        for (let index = 0; index < entry.arrowCount; index += 1) {
+          const d = index * 11;
+          const relX = data[d]; const relY = data[d + 1]; const relZ = data[d + 2];
+          const dirX = data[d + 3]; const dirY = data[d + 4]; const dirZ = data[d + 5];
+          const perpX = data[d + 6]; const perpY = data[d + 7]; const perpZ = data[d + 8];
+          const speed = data[d + 9];
+          const distance = data[d + 10];
+          let length = speed * SKY_MEMBER_ARROW_LENGTH_MYR * lengthScale;
+          length = Math.min(length, distance * 0.6);
+          const halfWidth = distance * SKY_MEMBER_ARROW_HALF_WIDTH_RAD * widthScale;
+          const headLength = Math.min(Math.max(0.30 * length, halfWidth * 2.0), length * 0.6);
+          const shaftLength = Math.max(length - headLength, 0.0);
+          const px = perpX * halfWidth; const py = perpY * halfWidth; const pz = perpZ * halfWidth;
+          const sx = relX + dirX * shaftLength;
+          const sy = relY + dirY * shaftLength;
+          const sz = relZ + dirZ * shaftLength;
+          const tx = relX + dirX * length;
+          const ty = relY + dirY * length;
+          const tz = relZ + dirZ * length;
+          const headHalf = 2.6;
+          let o = index * 27;
+          // shaft triangle 1: (rel+p, rel-p, s-p)
+          positions[o] = relX + px; positions[o + 1] = relY + py; positions[o + 2] = relZ + pz;
+          positions[o + 3] = relX - px; positions[o + 4] = relY - py; positions[o + 5] = relZ - pz;
+          positions[o + 6] = sx - px; positions[o + 7] = sy - py; positions[o + 8] = sz - pz;
+          // shaft triangle 2: (rel+p, s-p, s+p)
+          positions[o + 9] = relX + px; positions[o + 10] = relY + py; positions[o + 11] = relZ + pz;
+          positions[o + 12] = sx - px; positions[o + 13] = sy - py; positions[o + 14] = sz - pz;
+          positions[o + 15] = sx + px; positions[o + 16] = sy + py; positions[o + 17] = sz + pz;
+          // head triangle: (s + headHalf*p, s - headHalf*p, tip)
+          positions[o + 18] = sx + px * headHalf; positions[o + 19] = sy + py * headHalf; positions[o + 20] = sz + pz * headHalf;
+          positions[o + 21] = sx - px * headHalf; positions[o + 22] = sy - py * headHalf; positions[o + 23] = sz - pz * headHalf;
+          positions[o + 24] = tx; positions[o + 25] = ty; positions[o + 26] = tz;
+        }
+        entry.positionAttribute.needsUpdate = true;
+        if (entry.mesh && entry.mesh.geometry) {
+          entry.mesh.geometry.computeBoundingSphere();
+        }
+      }
+
+      function ovizAddSkyMemberMotionArrows(memberGroup, positionedMembers, options = {}) {
+        const trace = options.trace || {};
+        const style = skyMemberArrowStyleFor(trace.key);
+        if (!style.enabled) {
+          return null;
+        }
+        const bulkPosition = options.bulkPosition;
+        const earthPoint = options.earthPoint;
+        if (!(bulkPosition instanceof THREE.Vector3) || !(earthPoint instanceof THREE.Vector3)) {
+          return null;
+        }
+        const arrows = [];
+        const radial = new THREE.Vector3();
+        const tangential = new THREE.Vector3();
+        const perpendicular = new THREE.Vector3();
+        positionedMembers.forEach((member) => {
+          const full = member.fullVelocityPcMyr;
+          if (!(full instanceof THREE.Vector3) || !member.hasProperMotion) {
+            return;
+          }
+          radial.copy(member.position).sub(earthPoint);
+          const distance = radial.length();
+          if (distance <= 1e-6) {
+            return;
+          }
+          radial.multiplyScalar(1.0 / distance);
+          tangential.copy(full).addScaledVector(radial, -full.dot(radial));
+          const speed = tangential.length();
+          if (speed <= 1e-9) {
+            return;
+          }
+          tangential.multiplyScalar(1.0 / speed);
+          perpendicular.crossVectors(radial, tangential);
+          if (perpendicular.lengthSq() <= 1e-12) {
+            return;
+          }
+          perpendicular.normalize();
+          arrows.push(
+            member.position.x - bulkPosition.x,
+            member.position.y - bulkPosition.y,
+            member.position.z - bulkPosition.z,
+            tangential.x, tangential.y, tangential.z,
+            perpendicular.x, perpendicular.y, perpendicular.z,
+            speed,
+            distance,
+          );
+        });
+        const arrowCount = arrows.length / 11;
+        if (!arrowCount) {
+          return null;
+        }
+        const positions = new Float32Array(arrowCount * 27);
+        const positionAttribute = new THREE.BufferAttribute(positions, 3);
+        positionAttribute.setUsage(THREE.DynamicDrawUsage);
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", positionAttribute);
+        const baseOpacity = clamp01(Number(options.effectiveOpacity) || 0.0) * 0.9;
+        const material = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(String(options.pointColor || "#ffffff")),
+          transparent: true,
+          opacity: baseOpacity * skyMemberRevealProgress,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.frustumCulled = false;
+        mesh.renderOrder = 1;
+        memberGroup.add(mesh);
+        const entry = {
+          traceKey: String(trace.key || ""),
+          mesh,
+          material,
+          arrowData: new Float32Array(arrows),
+          arrowCount,
+          positionAttribute,
+          baseOpacity,
+          appliedLength: style.lengthScale,
+          appliedWidth: style.widthScale,
+        };
+        ovizWriteSkyMemberArrowVertices(entry, style.lengthScale, style.widthScale);
+        skyMemberArrowEntries.push(entry);
+        if (root && root.dataset) {
+          root.dataset.skyMemberArrowMeshes = String(skyMemberArrowEntries.length);
+          root.dataset.skyMemberArrowCount = String(
+            (Number(root.dataset.skyMemberArrowCount) || 0) + arrowCount
+          );
+        }
+        return mesh;
+      }
+
+      function ovizUpdateSkyMemberArrowStyle(traceKey) {
+        const style = skyMemberArrowStyleFor(traceKey);
+        let touched = 0;
+        for (let index = skyMemberArrowEntries.length - 1; index >= 0; index -= 1) {
+          const entry = skyMemberArrowEntries[index];
+          if (!entry || !entry.mesh || !entry.mesh.parent) {
+            skyMemberArrowEntries.splice(index, 1);
+            continue;
+          }
+          if (entry.traceKey !== String(traceKey || "")) {
+            continue;
+          }
+          entry.mesh.visible = style.enabled;
+          if (
+            style.enabled
+            && (
+              Math.abs(entry.appliedLength - style.lengthScale) > 1e-9
+              || Math.abs(entry.appliedWidth - style.widthScale) > 1e-9
+            )
+          ) {
+            ovizWriteSkyMemberArrowVertices(entry, style.lengthScale, style.widthScale);
+            entry.appliedLength = style.lengthScale;
+            entry.appliedWidth = style.widthScale;
+          }
+          touched += 1;
+        }
+        if (touched && typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
+        }
+        return touched;
+      }
+
       function addSkyMemberStars(group, catalog, options = {}) {
         if (!catalog || !Array.isArray(catalog.points) || !catalog.points.length) {
           return false;
@@ -23471,6 +23665,9 @@ __SKY_RUNTIME_JS__
           // The 3D orbit supplies the cluster's common motion. Retain only each
           // star's measured motion relative to the catalog mean so the member
           // pattern evolves without drifting away from its bulk cluster.
+          // Motion arrows show the star's full measured tangential motion, so
+          // keep a copy from before the mean is removed.
+          entry.fullVelocityPcMyr = entry.velocityPcMyr.clone();
           entry.velocityPcMyr.sub(meanMemberVelocityPcMyr);
         });
         if (root && root.dataset) {
@@ -23587,6 +23784,14 @@ __SKY_RUNTIME_JS__
             renderOrder: 0,
           });
         }
+
+        ovizAddSkyMemberMotionArrows(memberGroup, positionedMembers, {
+          trace,
+          bulkPosition,
+          earthPoint,
+          pointColor,
+          effectiveOpacity,
+        });
 
         // One non-rendering proxy preserves cluster hover, click, lasso, and
         // tooltip behavior without putting every member into hoverTargets.
@@ -25146,6 +25351,76 @@ __SKY_RUNTIME_JS__
                 : "Point size is applied as a multiplier on the original marker sizes."
             ));
           controls.appendChild(summary);
+        }
+
+        if (
+          state.hasPoints
+          && skySpec
+          && skySpec.members_by_cluster
+          && Object.keys(skySpec.members_by_cluster || {}).length
+        ) {
+          // Tangential-motion arrows for this trace's member stars (Sky view).
+          const arrowRow = document.createElement("label");
+          arrowRow.className = "oviz-three-controls-toggle-row";
+          const arrowToggle = document.createElement("input");
+          arrowToggle.type = "checkbox";
+          arrowToggle.checked = Boolean(state.memberArrowsEnabled);
+          const arrowText = document.createElement("span");
+          arrowText.textContent = "Motion arrows (Sky members)";
+          arrowRow.appendChild(arrowToggle);
+          arrowRow.appendChild(arrowText);
+          controls.appendChild(arrowRow);
+
+          const arrowLengthInput = document.createElement("input");
+          arrowLengthInput.type = "range";
+          arrowLengthInput.min = "0.1";
+          arrowLengthInput.max = "5";
+          arrowLengthInput.step = "0.05";
+          arrowLengthInput.value = String(Math.max(Number(state.memberArrowLength) || 1.0, 0.1));
+          const arrowLengthField = createLegendField(
+            `Arrow length (${Number(state.memberArrowLength || 1.0).toFixed(2)}x)`,
+            arrowLengthInput,
+          );
+          controls.appendChild(arrowLengthField.field);
+
+          const arrowWidthInput = document.createElement("input");
+          arrowWidthInput.type = "range";
+          arrowWidthInput.min = "0.2";
+          arrowWidthInput.max = "4";
+          arrowWidthInput.step = "0.05";
+          arrowWidthInput.value = String(Math.max(Number(state.memberArrowWidth) || 1.0, 0.2));
+          const arrowWidthField = createLegendField(
+            `Arrow width (${Number(state.memberArrowWidth || 1.0).toFixed(2)}x)`,
+            arrowWidthInput,
+          );
+          controls.appendChild(arrowWidthField.field);
+
+          const syncArrowSliderVisibility = () => {
+            arrowLengthField.field.style.display = state.memberArrowsEnabled ? "" : "none";
+            arrowWidthField.field.style.display = state.memberArrowsEnabled ? "" : "none";
+          };
+          syncArrowSliderVisibility();
+
+          arrowToggle.addEventListener("change", () => {
+            state.memberArrowsEnabled = Boolean(arrowToggle.checked);
+            syncArrowSliderVisibility();
+            const touched = ovizUpdateSkyMemberArrowStyle(String(item.key || ""));
+            // Enabling with no meshes yet (arrows were skipped at build time)
+            // needs one member-scene rebuild to create them.
+            if (state.memberArrowsEnabled && !touched && cameraViewMode === "earth") {
+              renderFrame(currentFrameIndex);
+            }
+          });
+          arrowLengthInput.addEventListener("input", () => {
+            state.memberArrowLength = Math.max(Number(arrowLengthInput.value) || 1.0, 0.1);
+            arrowLengthField.label.textContent = `Arrow length (${state.memberArrowLength.toFixed(2)}x)`;
+            ovizUpdateSkyMemberArrowStyle(String(item.key || ""));
+          });
+          arrowWidthInput.addEventListener("input", () => {
+            state.memberArrowWidth = Math.max(Number(arrowWidthInput.value) || 1.0, 0.2);
+            arrowWidthField.label.textContent = `Arrow width (${state.memberArrowWidth.toFixed(2)}x)`;
+            ovizUpdateSkyMemberArrowStyle(String(item.key || ""));
+          });
         }
 
         return controls;

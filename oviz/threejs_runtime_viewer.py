@@ -999,6 +999,13 @@ THREEJS_VIEWER_RUNTIME_JS = """
             entry.material.opacity = effectiveOpacity;
           }
         });
+        if (typeof skyMemberArrowEntries !== "undefined") {
+          skyMemberArrowEntries.forEach((entry) => {
+            if (!entry || !entry.material) return;
+            entry.material.opacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)
+              * skyMemberRevealProgress;
+          });
+        }
         skyMemberBulkOpacityEntries.forEach((entry) => {
           if (!entry || !entry.material) return;
           entry.material.opacity = Math.max(Number(entry.baseOpacity) || 0.0, 0.0)

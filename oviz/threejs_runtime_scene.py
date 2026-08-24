@@ -2165,6 +2165,7 @@ THREEJS_SCENE_RUNTIME_JS = """
           ovizBatchedDrawObjectCount = 0;
           ovizRetainedPointComponentCount = 0;
           skyMemberBatchOpacityEntries.length = 0;
+          skyMemberArrowEntries.length = 0;
           skyMemberBulkOpacityEntries.length = 0;
           cameraResponsiveImagePlaneEntries.length = 0;
           galacticReferenceOpacityGroups.length = 0;
