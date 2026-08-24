@@ -20883,6 +20883,71 @@ __SKY_RUNTIME_JS__
         );
       }
 
+      function ovizScaleRenderedPointOpacities(ratio, requestedTraceKey = "") {
+        // Live per-trace opacity multiplier, mirroring the point-size fast
+        // path: scale the batch opacity attributes in place instead of
+        // rebuilding the scene. Ratios floor at a tiny epsilon so a value
+        // can climb back up after approaching zero; exact values are
+        // restored by the next full rebuild (slider release or State
+        // completion apply).
+        const scaleRatio = Number(ratio);
+        if (!Number.isFinite(scaleRatio) || !(scaleRatio > 0.0)) {
+          return 0;
+        }
+        const traceKey = String(requestedTraceKey || "");
+        const opacityAttributes = new Set();
+        let updatedEntries = 0;
+        cameraResponsivePointEntries.forEach((entry) => {
+          if (!entry || !entry.sprite) {
+            return;
+          }
+          if (traceKey && ovizResponsivePointTraceKey(entry) !== traceKey) {
+            return;
+          }
+          if (Number.isFinite(Number(entry.batchBaseOpacity))) {
+            entry.batchBaseOpacity = clamp01(
+              Math.max(Number(entry.batchBaseOpacity), 1e-4) * scaleRatio
+            );
+          }
+          if (entry.batchOpacityAttribute && entry.batchOpacityAttribute.array) {
+            opacityAttributes.add(entry.batchOpacityAttribute);
+          } else if (entry.sprite.material) {
+            entry.sprite.material.opacity = clamp01(
+              Math.max(Number(entry.sprite.material.opacity) || 0.0, 1e-4) * scaleRatio
+            );
+          }
+          const overflowSprite = entry.batchOverflow && entry.batchOverflow.sprite;
+          if (overflowSprite && overflowSprite.material) {
+            overflowSprite.material.opacity = clamp01(
+              Math.max(Number(overflowSprite.material.opacity) || 0.0, 1e-4) * scaleRatio
+            );
+          }
+          updatedEntries += 1;
+        });
+        opacityAttributes.forEach((attribute) => {
+          const values = attribute && attribute.array;
+          if (!values) {
+            return;
+          }
+          for (let index = 0; index < values.length; index += 1) {
+            values[index] = Math.min(Math.max(values[index], 1e-4) * scaleRatio, 1.0);
+          }
+          attribute.needsUpdate = true;
+        });
+        if (updatedEntries > 0) {
+          ovizRenderedPointOpacityUpdateCount += 1;
+          if (root && root.dataset) {
+            root.dataset.pointOpacityLiveUpdates = String(ovizRenderedPointOpacityUpdateCount);
+          }
+          if (typeof ovizInvalidateRender === "function") {
+            ovizInvalidateRender();
+          }
+        }
+        return updatedEntries;
+      }
+
+      let ovizRenderedPointOpacityUpdateCount = 0;
+
       function ovizScaleRenderedPointSizes(ratio, requestedTraceKey = "") {
         const scaleRatio = Number(ratio);
         if (!Number.isFinite(scaleRatio) || !(scaleRatio > 0.0)) {
@@ -24932,8 +24997,27 @@ __SKY_RUNTIME_JS__
           });
         }
         opacityInput.addEventListener("input", () => {
+          const previousOpacity = clamp01(Number(state.opacity));
           state.opacity = clamp01(opacityInput.value);
           opacityField.label.textContent = `Opacity (${state.opacity.toFixed(2)})`;
+          // Pure point traces update their batch buffers in place; a full
+          // scene rebuild per input tick freezes the slider on large scenes.
+          if (
+            state.hasPoints
+            && !state.hasSegments
+            && !state.hasLabels
+            && !state.hasVectors
+            && typeof ovizScaleRenderedPointOpacities === "function"
+          ) {
+            const ratio = Math.max(state.opacity, 1e-4) / Math.max(previousOpacity, 1e-4);
+            ovizScaleRenderedPointOpacities(ratio, String(item.key || ""));
+            return;
+          }
+          renderFrame(currentFrameIndex);
+        });
+        opacityInput.addEventListener("change", () => {
+          // Exact rebuild on release: the live ratio path floors near zero,
+          // so re-render once with the final stored opacity.
           renderFrame(currentFrameIndex);
         });
 

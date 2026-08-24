@@ -1820,6 +1820,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
           selectionTransition: null,
           currentPhase: usesViewButtonHandoff ? "view-handoff" : phasePlan.phases[0].name,
           currentAppearanceProgress: 0.0,
+          appearanceStylesOnlyKeys: ovizStylesOnlyAppearanceKeys(from, destination),
+          appearanceStylesApplied: null,
           lastAppliedAppearanceProgress: null,
           lastRenderedTimeProgress: 0.0,
           lastRenderedAppearanceProgress: 0.0,
@@ -2013,6 +2015,107 @@ THREEJS_STATE_RUNTIME_JS = r"""
           easing: transitionSpec.easing,
         });
         return promise;
+      }
+
+      function ovizStylesOnlyAppearanceKeys(from, to) {
+        // Appearance fast path: when two States differ only in point-trace
+        // opacity / size (no visibility, selection, volume, global-control,
+        // color, label, or timeline changes), the transition can animate by
+        // scaling the live GPU buffers instead of rebuilding the scene every
+        // frame. Returns the animated trace keys, or null when any other
+        // appearance-affecting field differs.
+        try {
+          const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+          if (!same(from.legend_state, to.legend_state)) return null;
+          if (!same(from.volume_state_by_key, to.volume_state_by_key)) return null;
+          if (!same(from.global_controls, to.global_controls)) return null;
+          if (!same(from.lasso_selection_mask, to.lasso_selection_mask)) return null;
+          if (!same(from.current_selection, to.current_selection)) return null;
+          if (!same(from.current_selections, to.current_selections)) return null;
+          if (!same(from.selected_cluster_keys, to.selected_cluster_keys)) return null;
+          if (!same(from.manual_labels, to.manual_labels)) return null;
+          if (!same(from.sky_layers, to.sky_layers)) return null;
+          if (Math.abs(ovizStateFrameValue(from) - ovizStateFrameValue(to)) > 1e-9) return null;
+          const fromStyles = from.trace_style_state || {};
+          const toStyles = to.trace_style_state || {};
+          const keys = new Set([...Object.keys(fromStyles), ...Object.keys(toStyles)]);
+          const animated = [];
+          for (const key of keys) {
+            const a = fromStyles[key];
+            const b = toStyles[key];
+            if (!a || !b) return null;
+            if (
+              String(a.color || "") !== String(b.color || "")
+              || String(a.colormap || "") !== String(b.colormap || "")
+              || String(a.colorMode || "") !== String(b.colorMode || "")
+            ) return null;
+            const opacityDelta = Math.abs((Number(a.opacity) || 0) - (Number(b.opacity) || 0));
+            const sizeDelta = Math.abs((Number(a.sizeScale) || 1) - (Number(b.sizeScale) || 1));
+            if (opacityDelta <= 1e-6 && sizeDelta <= 1e-6) continue;
+            // Only pure point traces have live buffer paths for both fields.
+            if (!a.hasPoints || a.hasSegments || a.hasLabels || a.hasVectors) return null;
+            animated.push(key);
+          }
+          return animated.length ? animated : null;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function ovizApplyTransitionTraceStyleFastPath(transition) {
+        const keys = transition.appearanceStylesOnlyKeys;
+        if (
+          !Array.isArray(keys)
+          || !keys.length
+          || typeof ovizScaleRenderedPointOpacities !== "function"
+          || typeof ovizScaleRenderedPointSizes !== "function"
+        ) {
+          return false;
+        }
+        const applied = transition.appearanceStylesApplied
+          || (transition.appearanceStylesApplied = new Map());
+        keys.forEach((key) => {
+          const live = traceStyleStateByKey[key];
+          if (!live) return;
+          const previous = applied.get(key) || {
+            opacity: null,
+            sizeScale: null,
+          };
+          const liveOpacity = Math.max(Number(live.opacity) || 0, 1e-4);
+          const liveSize = Math.max(Number(live.sizeScale) || 1, 1e-4);
+          if (previous.opacity !== null && Math.abs(previous.opacity - liveOpacity) > 1e-7) {
+            ovizScaleRenderedPointOpacities(liveOpacity / previous.opacity, key);
+          } else if (previous.opacity === null) {
+            // First frame: styles were at the from-state values when the
+            // scene was last rebuilt, so seed from those rendered values.
+            const seeded = Math.max(
+              Number(
+                (transition.fromSnapshot.trace_style_state || {})[key]
+                && (transition.fromSnapshot.trace_style_state || {})[key].opacity
+              ) || liveOpacity,
+              1e-4,
+            );
+            if (Math.abs(seeded - liveOpacity) > 1e-7) {
+              ovizScaleRenderedPointOpacities(liveOpacity / seeded, key);
+            }
+          }
+          if (previous.sizeScale !== null && Math.abs(previous.sizeScale - liveSize) > 1e-7) {
+            ovizScaleRenderedPointSizes(liveSize / previous.sizeScale, key);
+          } else if (previous.sizeScale === null) {
+            const seededSize = Math.max(
+              Number(
+                (transition.fromSnapshot.trace_style_state || {})[key]
+                && (transition.fromSnapshot.trace_style_state || {})[key].sizeScale
+              ) || liveSize,
+              1e-4,
+            );
+            if (Math.abs(seededSize - liveSize) > 1e-7) {
+              ovizScaleRenderedPointSizes(liveSize / seededSize, key);
+            }
+          }
+          applied.set(key, { opacity: liveOpacity, sizeScale: liveSize });
+        });
+        return true;
       }
 
       function ovizApplyTransitionNumericControls(from, to, progress) {
@@ -2432,6 +2535,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
             transition.lastRenderedTimeProgress = timeRaw;
             transition.lastRenderedAppearanceProgress = appearanceRaw;
           } else if (appearanceSceneDirty) {
+            const updatedStyleFastPath = Boolean(
+              transition.appearanceStylesOnlyKeys
+              && ovizApplyTransitionTraceStyleFastPath(transition)
+            );
+            if (updatedStyleFastPath) {
+              transition.skippedSceneUpdateCount += 1;
+              transition.lastRenderedTimeProgress = timeRaw;
+              transition.lastRenderedAppearanceProgress = appearanceRaw;
+              if (root && root.dataset) {
+                root.dataset.stateTransitionStyleFastPath = "true";
+              }
+            } else {
             const updatedResidentSkyScene = Boolean(
               transition.skyMemberAppearanceFastPath
               && typeof ovizUpdateSkyMemberStateAppearanceFastPath === "function"
@@ -2451,6 +2566,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             transition.sceneRenderCount += 1;
             transition.lastRenderedTimeProgress = timeRaw;
             transition.lastRenderedAppearanceProgress = appearanceRaw;
+            }
           } else {
             transition.skippedSceneUpdateCount += 1;
           }
