@@ -17474,7 +17474,6 @@ __SKY_RUNTIME_JS__
           } catch (_redrawErr) {
           }
           currentSkyBackgroundView = view;
-          scheduleOvizHips2FitsRefresh();
           return view;
         }
         function postSkyBackgroundViewAppliedAfterPaint(data, transition = null) {
@@ -18014,211 +18013,68 @@ __SKY_RUNTIME_JS__
           }
           return true;
         }
-        // ---- hips2fits fallback for CORS-blocked HiPS ----------------------
-        // Some HiPS surveys (notably IRSA-hosted ones like GLIMPSE360) send
-        // no Access-Control-Allow-Origin header, so Aladin Lite v3 (WebGL,
-        // CORS-required) can never load their tiles directly. Render them
-        // server-side through the CDS hips2fits service instead: fetch a
-        // view-matched JPEG (host fallback; blob URL, so fully CORS-clean)
-        // and attach it as a WCS-registered image overlay under the
-        // requested layer name, refreshed when the camera settles.
-        const ovizHips2FitsSurveys = new Map([
-          ["P/GLIMPSE360", { hips: "IPAC/P/GLIMPSE360" }],
-          ["IPAC/P/GLIMPSE360", { hips: "IPAC/P/GLIMPSE360" }],
-          ["GLIMPSE360", { hips: "IPAC/P/GLIMPSE360" }],
-        ]);
-        const ovizHips2FitsHosts = [
-          "https://alasky.cds.unistra.fr",
-          "https://alaskybis.cds.unistra.fr",
+        // ---- CORS proxy for IRSA-hosted HiPS ------------------------------
+        // IRSA serves its HiPS trees (GLIMPSE360 and others) without CORS
+        // headers, which Aladin Lite v3's WebGL tile engine cannot use.
+        // Route those requests through the CDS pass-through proxy (the same
+        // one Aladin itself uses for CORS-blocked images): tiles stream
+        // natively at full resolution with the engine's own caching and
+        // progressive refinement. The alias map lets the usual survey
+        // identifiers resolve to the direct IRSA tree.
+        const ovizCorsProxyPrefix = "https://alaskybis.cds.unistra.fr/cgi/JSONProxy?url=";
+        const ovizCorsBlockedHipsPrefixes = [
+          "https://irsa.ipac.caltech.edu/data/hips/",
+          "http://irsa.ipac.caltech.edu/data/hips/",
         ];
-        const ovizHips2FitsLayers = new Map();
-        let ovizHips2FitsRefreshTimer = 0;
-        let ovizHips2FitsHostStart = 0;
+        const ovizCorsBlockedHipsAliases = new Map([
+          ["P/GLIMPSE360", "https://irsa.ipac.caltech.edu/data/hips/Spitzer/GLIMPSE360"],
+          ["IPAC/P/GLIMPSE360", "https://irsa.ipac.caltech.edu/data/hips/Spitzer/GLIMPSE360"],
+          ["GLIMPSE360", "https://irsa.ipac.caltech.edu/data/hips/Spitzer/GLIMPSE360"],
+        ]);
 
-        function ovizHips2FitsEntryFor(survey) {
-          const key = String(survey || "").trim();
-          if (!key) return null;
-          return ovizHips2FitsSurveys.get(key) || null;
+        function ovizIsCorsBlockedHipsUrl(url) {
+          const candidate = String(url || "");
+          for (let index = 0; index < ovizCorsBlockedHipsPrefixes.length; index += 1) {
+            if (candidate.indexOf(ovizCorsBlockedHipsPrefixes[index]) === 0) {
+              return true;
+            }
+          }
+          return false;
         }
 
-        function ovizHips2FitsViewSpec() {
+        function ovizResolveCorsBlockedSurvey(survey) {
+          const key = String(survey || "").trim();
+          return ovizCorsBlockedHipsAliases.get(key) || key;
+        }
+
+        (function ovizInstallIrsaCorsProxy() {
           try {
-            const raDec = aladinInstance.getRaDec();
-            const fovPair = aladinInstance.getFov() || [60.0];
-            const el = document.getElementById("aladin-lite-div");
-            const aspect = el && el.clientWidth > 0 && el.clientHeight > 0
-              ? el.clientHeight / el.clientWidth
-              : 0.5;
-            const fovX = Math.max(0.2, Math.min(Number(fovPair[0]) * 1.15 || 60.0, 120.0));
-            const width = 1024;
-            const height = Math.max(128, Math.min(1024, Math.round(width * aspect)));
-            return {
-              ra: Number(raDec[0]) || 0.0,
-              dec: Number(raDec[1]) || 0.0,
-              fovX,
-              width,
-              height,
+            const originalFetch = window.fetch.bind(window);
+            window.fetch = function (input, init) {
+              try {
+                const url = typeof input === "string" ? input : (input && input.url) || "";
+                if (ovizIsCorsBlockedHipsUrl(url)) {
+                  const proxied = ovizCorsProxyPrefix + encodeURIComponent(url);
+                  return originalFetch(proxied, typeof input === "string" ? init : undefined);
+                }
+              } catch (_err) {
+              }
+              return originalFetch(input, init);
+            };
+            const originalOpen = window.XMLHttpRequest.prototype.open;
+            window.XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+              let target = url;
+              if (ovizIsCorsBlockedHipsUrl(url)) {
+                target = ovizCorsProxyPrefix + encodeURIComponent(String(url));
+              }
+              return originalOpen.call(this, method, target, ...rest);
             };
           } catch (_err) {
-            return null;
           }
-        }
-
-        function ovizHips2FitsWcs(view) {
-          const scale = view.fovX / view.width;
-          return {
-            NAXIS: 2,
-            NAXIS1: view.width,
-            NAXIS2: view.height,
-            CTYPE1: "RA---TAN",
-            CTYPE2: "DEC--TAN",
-            CUNIT1: "deg",
-            CUNIT2: "deg",
-            CRPIX1: (view.width / 2.0) + 0.5,
-            CRPIX2: (view.height / 2.0) + 0.5,
-            CRVAL1: view.ra,
-            CRVAL2: view.dec,
-            CDELT1: -scale,
-            CDELT2: scale,
-            CROTA2: 0.0,
-          };
-        }
-
-        function ovizAttachHips2FitsLayer(layerName, survey, layerState, entry) {
-          const view = ovizHips2FitsViewSpec();
-          if (
-            !view
-            || typeof A === "undefined"
-            || typeof A.image !== "function"
-            || typeof aladinInstance.setOverlayImageLayer !== "function"
-          ) {
-            return false;
-          }
-          const record = ovizHips2FitsLayers.get(layerName)
-            || { serial: 0, hostIndex: ovizHips2FitsHostStart, objectUrl: null, lastView: null };
-          record.survey = String(survey);
-          record.hips = entry.hips;
-          record.serial += 1;
-          const requestSerial = record.serial;
-          ovizHips2FitsLayers.set(layerName, record);
-          const hostCount = ovizHips2FitsHosts.length;
-          const attempt = (offset) => {
-            if (offset >= hostCount) {
-              return;
-            }
-            const host = ovizHips2FitsHosts[(record.hostIndex + offset) % hostCount];
-            const url = host + "/hips-image-services/hips2fits"
-              + "?hips=" + encodeURIComponent(entry.hips)
-              + "&width=" + view.width + "&height=" + view.height
-              + "&projection=TAN&coordsys=icrs"
-              + "&ra=" + view.ra.toFixed(5) + "&dec=" + view.dec.toFixed(5)
-              + "&fov=" + view.fovX.toFixed(4) + "&format=png";
-            fetch(url, { signal: AbortSignal.timeout(15000) })
-              .then((response) => {
-                if (!response.ok) throw new Error("hips2fits " + response.status);
-                return response.blob();
-              })
-              .then((blob) => {
-                if (record.serial !== requestSerial) return Promise.resolve(null);
-                // hips2fits paints out-of-coverage sky as opaque black for
-                // JPEG-tile HiPS, which would occlude the layers below.
-                // Key the alpha channel to luminance so empty/dark sky is
-                // transparent and only the survey's emission composites.
-                return createImageBitmap(blob).then((bitmap) => {
-                  const keyCanvas = document.createElement("canvas");
-                  keyCanvas.width = bitmap.width;
-                  keyCanvas.height = bitmap.height;
-                  const keyCtx = keyCanvas.getContext("2d");
-                  keyCtx.drawImage(bitmap, 0, 0);
-                  const pixels = keyCtx.getImageData(0, 0, keyCanvas.width, keyCanvas.height);
-                  const data = pixels.data;
-                  for (let index = 0; index < data.length; index += 4) {
-                    const brightest = Math.max(data[index], data[index + 1], data[index + 2]);
-                    data[index + 3] = Math.min(
-                      data[index + 3],
-                      Math.min(255, Math.round(brightest * 2.5)),
-                    );
-                  }
-                  keyCtx.putImageData(pixels, 0, 0);
-                  return new Promise((resolve) => keyCanvas.toBlob(resolve, "image/png"));
-                });
-              })
-              .then((keyedBlob) => {
-                if (!keyedBlob || record.serial !== requestSerial) return;
-                const beforeCanvases = new Set(skyLayerCanvasElements());
-                const objectUrl = URL.createObjectURL(keyedBlob);
-                const image = A.image(objectUrl, {
-                  name: layerName,
-                  imgFormat: "png",
-                  wcs: ovizHips2FitsWcs(view),
-                });
-                aladinInstance.setOverlayImageLayer(image, layerName);
-                managedSkyOverlayLayerNames.add(layerName);
-                scheduleSkyLayerCanvasTagging(layerName, beforeCanvases, "main");
-                if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
-                record.objectUrl = objectUrl;
-                record.lastView = view;
-                record.hostIndex = (record.hostIndex + offset) % hostCount;
-                ovizHips2FitsHostStart = record.hostIndex;
-                const latest = latestSkyLayerStateByName.get(layerName) || layerState;
-                if (latest) applySkyImageLayerOptions(layerName, latest, false);
-              })
-              .catch(() => attempt(offset + 1));
-          };
-          attempt(0);
-          window.__ovizHips2FitsDebug = {
-            layers: ovizHips2FitsLayers,
-            managed: managedSkyOverlayLayerNames,
-          };
-          return true;
-        }
-
-        function scheduleOvizHips2FitsRefresh() {
-          if (!ovizHips2FitsLayers.size) return;
-          if (ovizHips2FitsRefreshTimer) window.clearTimeout(ovizHips2FitsRefreshTimer);
-          ovizHips2FitsRefreshTimer = window.setTimeout(() => {
-            ovizHips2FitsRefreshTimer = 0;
-            ovizHips2FitsLayers.forEach((record, layerName) => {
-              if (!managedSkyOverlayLayerNames.has(layerName)) {
-                if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
-                ovizHips2FitsLayers.delete(layerName);
-                return;
-              }
-              const view = ovizHips2FitsViewSpec();
-              if (!view) return;
-              const previous = record.lastView;
-              const moved = previous
-                ? Math.abs(view.ra - previous.ra) + Math.abs(view.dec - previous.dec)
-                : Infinity;
-              const fovChange = previous
-                ? Math.abs(view.fovX - previous.fovX) / Math.max(previous.fovX, 1e-6)
-                : Infinity;
-              if (moved > (previous ? previous.fovX : 1.0) * 0.08 || fovChange > 0.12) {
-                ovizAttachHips2FitsLayer(
-                  layerName,
-                  record.survey,
-                  null,
-                  { hips: record.hips },
-                );
-              }
-            });
-          }, 800);
-        }
+        })();
         // --------------------------------------------------------------------
 
         function setBaseSkyImageLayer(survey) {
-          const hips2fitsBase = ovizHips2FitsEntryFor(survey);
-          if (hips2fitsBase) {
-            console.warn(
-              "Oviz: " + survey + " is CORS-blocked at its HiPS server; rendering "
-              + "it via the CDS hips2fits service as an overlay above the previous base."
-            );
-            skyImageSurveyReadyPromises.set(
-              String(survey),
-              Promise.resolve({ ready: true, hips2fits: true, survey: String(survey) }),
-            );
-            return ovizAttachHips2FitsLayer("oviz-hips2fits-base", survey, null, hips2fitsBase);
-          }
 
           if (!aladinInstance || !survey) {
             return false;
@@ -18247,6 +18103,7 @@ __SKY_RUNTIME_JS__
           if (!aladinInstance || !survey) {
             return null;
           }
+          survey = ovizResolveCorsBlockedSurvey(survey);
           if (preloadedSkyImageSurveys.has(survey)) {
             if (!skyImageSurveyReadyPromises.has(survey)) {
               skyImageSurveyReadyPromises.set(survey, Promise.resolve({ ready: true, cached: true }));
@@ -18289,7 +18146,7 @@ __SKY_RUNTIME_JS__
         }
 
         function waitForSkyImageSurveyReady(survey, timeoutMs = 12000) {
-          const safeSurvey = String(survey || "").trim();
+          const safeSurvey = ovizResolveCorsBlockedSurvey(String(survey || "").trim());
           if (!safeSurvey) {
             return Promise.resolve({ ready: false, failed: true, survey: safeSurvey });
           }
@@ -18324,16 +18181,6 @@ __SKY_RUNTIME_JS__
         function setOverlaySkyImageLayer(layerName, survey, layer, expectedSignature, expectedGeneration) {
           if (!aladinInstance || !survey || !layerName) {
             return Promise.resolve(false);
-          }
-          const hips2fitsEntry = ovizHips2FitsEntryFor(survey);
-          if (hips2fitsEntry) {
-            skyImageSurveyReadyPromises.set(
-              String(survey),
-              Promise.resolve({ ready: true, hips2fits: true, survey: String(survey) }),
-            );
-            return Promise.resolve(
-              ovizAttachHips2FitsLayer(layerName, survey, layer, hips2fitsEntry)
-            );
           }
           const beforeCanvases = new Set(skyLayerCanvasElements());
           const attachOverlay = (overlaySurvey) => {
