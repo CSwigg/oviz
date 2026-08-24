@@ -102,6 +102,7 @@ SKY_BACKGROUND_GROUPS = [
         "surveys": [
             "P/2MASS/color",
             "P/allWISE/color",
+            "IPAC/P/GLIMPSE360",
             "CDS/P/IRIS/color",
             "CDS/P/AKARI/FIS/Color",
             "P/GALEXGR6/AIS/color",
@@ -168,6 +169,15 @@ SKY_BACKGROUND_LAYERS = [
         "cut_max": 0.07,
     },
     {
+        # IRSA-hosted HiPS: the runtime streams it through the CDS CORS
+        # proxy (see ovizCorsBlockedHipsAliases in the Aladin frame).
+        "key": "IPAC/P/GLIMPSE360",
+        "label": "GLIMPSE360 Spitzer IR",
+        "survey": "IPAC/P/GLIMPSE360",
+        "opacity": 1.0,
+        "visible": False,
+    },
+    {
         "key": "CDS/P/IRIS/color",
         "label": "IRIS Far IR",
         "survey": "CDS/P/IRIS/color",
@@ -218,11 +228,13 @@ SKY_BACKGROUND_SURVEY_ALIASES = {
 # Mellinger renders dimmed, and DSS2 is enabled as the second visible layer.
 SKY_BACKGROUND_STACK_TOP_ORDER = [
     "P/PLANCK/R2/HFI/color",
+    "IPAC/P/GLIMPSE360",
     "P/Mellinger/color",
     "P/DSS2/color",
 ]
 SKY_BACKGROUND_STACK_DEFAULTS = {
     "P/PLANCK/R2/HFI/color": {"visible": False, "opacity": 0.27},
+    "IPAC/P/GLIMPSE360": {"visible": False, "opacity": 1.0},
     "P/Mellinger/color": {"visible": True, "opacity": 0.23},
     "P/DSS2/color": {"visible": True, "opacity": 1.0},
 }

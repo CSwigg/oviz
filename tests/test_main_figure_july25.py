@@ -167,14 +167,17 @@ def test_build_scene_enforces_default_sky_background_stack():
 
     layers = scene["initial_state"]["sky_layers"]
     surveys = [layer["survey"] for layer in layers]
-    assert surveys[:3] == [
+    assert surveys[:4] == [
         "P/PLANCK/R2/HFI/color",
+        "IPAC/P/GLIMPSE360",
         "P/Mellinger/color",
         "P/DSS2/color",
     ]
     by_survey = {layer["survey"]: layer for layer in layers}
     assert by_survey["P/PLANCK/R2/HFI/color"]["visible"] is False
     assert by_survey["P/PLANCK/R2/HFI/color"]["opacity"] == 0.27
+    assert by_survey["IPAC/P/GLIMPSE360"]["visible"] is False
+    assert by_survey["IPAC/P/GLIMPSE360"]["opacity"] == 1.0
     assert by_survey["P/Mellinger/color"]["visible"] is True
     assert by_survey["P/Mellinger/color"]["opacity"] == 0.23
     assert by_survey["P/DSS2/color"]["visible"] is True
@@ -368,8 +371,9 @@ def test_july25_artifact_keeps_presentation_and_adds_runtime_upgrades(tmp_path):
     assert scene["initial_state"]["global_controls"]["size_points_by_stars_enabled"] is True
     assert scene["initial_state"]["global_controls"]["fade_opacity_by_birth_time_enabled"] is True
     sky_layers = scene["initial_state"]["sky_layers"]
-    assert [layer["survey"] for layer in sky_layers[:3]] == [
+    assert [layer["survey"] for layer in sky_layers[:4]] == [
         "P/PLANCK/R2/HFI/color",
+        "IPAC/P/GLIMPSE360",
         "P/Mellinger/color",
         "P/DSS2/color",
     ]
