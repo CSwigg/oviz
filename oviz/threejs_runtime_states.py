@@ -2039,7 +2039,6 @@ THREEJS_STATE_RUNTIME_JS = r"""
         // layers, widgets, timeline) falls back to the exact slow path.
         try {
           const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-          if (!same(from.volume_state_by_key, to.volume_state_by_key)) return null;
           if (!same(from.lasso_selection_mask, to.lasso_selection_mask)) return null;
           if (!same(from.current_selection, to.current_selection)) return null;
           if (!same(from.current_selections, to.current_selections)) return null;
@@ -2049,6 +2048,48 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (!same(from.widgets, to.widgets)) return null;
           if (!same(from.legend_panel_state, to.legend_panel_state)) return null;
           if (Math.abs(ovizStateFrameValue(from) - ovizStateFrameValue(to)) > 1e-9) return null;
+
+          // Volumes: fades and numeric window/lighting changes run as live
+          // shader-uniform lerps. Structural changes (colormap, stretch,
+          // lighting mode, show-all-times, KDE window, ...) still need the
+          // exact rebuild path.
+          const VOLUME_NUMERIC_FIELDS = [
+            "opacity", "vmin", "vmax", "steps", "alphaCoef", "gradientStep",
+            "galacticLightIntensity", "galacticAmbient", "galacticExtinction",
+            "galacticScattering", "galacticAnisotropy", "galacticWarmth",
+          ];
+          const fromVolumes = from.volume_state_by_key || {};
+          const toVolumes = to.volume_state_by_key || {};
+          const volumeStateKeys = new Set([
+            ...Object.keys(fromVolumes),
+            ...Object.keys(toVolumes),
+          ]);
+          const volumeKeys = [];
+          const volumePrepKeys = [];
+          const fromLegendAll = from.legend_state || {};
+          const toLegendAll = to.legend_state || {};
+          for (const key of volumeStateKeys) {
+            const a = fromVolumes[key];
+            const b = toVolumes[key];
+            if (!a || !b) return null;
+            let animated = false;
+            for (const field of new Set([...Object.keys(a), ...Object.keys(b)])) {
+              if (same(a[field], b[field])) continue;
+              if (field === "visible") { animated = true; continue; }
+              if (
+                VOLUME_NUMERIC_FIELDS.includes(field)
+                && Number.isFinite(Number(a[field]))
+                && Number.isFinite(Number(b[field]))
+              ) { animated = true; continue; }
+              return null;
+            }
+            const legendChanged = (fromLegendAll[key] !== false) !== (toLegendAll[key] !== false);
+            if (!animated && !legendChanged) continue;
+            const effFrom = (a.visible !== false) && (fromLegendAll[key] !== false);
+            const effTo = (b.visible !== false) && (toLegendAll[key] !== false);
+            volumeKeys.push(key);
+            if (!effFrom && effTo) volumePrepKeys.push(key);
+          }
 
           const fromGlobal = from.global_controls || {};
           const toGlobal = to.global_controls || {};
@@ -2091,8 +2132,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
             const a = fromLegend[key] !== false;
             const b = toLegend[key] !== false;
             if (a === b) continue;
-            // Volume legend entries have no trace style; they need the
-            // volume crossfade path.
+            // Volume legend entries are handled by the volume fade above.
+            if (volumeStateKeys.has(key)) continue;
             if (!purePointTrace(key)) return null;
             fadeKeys.push(key);
           }
@@ -2114,10 +2155,18 @@ THREEJS_STATE_RUNTIME_JS = r"""
             if (!purePointTrace(key)) return null;
             animated.push(key);
           }
-          if (!animated.length && !fadeKeys.length && !globalSize && !globalOpacity) return null;
+          if (
+            !animated.length
+            && !fadeKeys.length
+            && !volumeKeys.length
+            && !globalSize
+            && !globalOpacity
+          ) return null;
           return {
             styleKeys: animated,
             fadeKeys,
+            volumeKeys,
+            volumePrepKeys,
             globalSize,
             globalOpacity,
           };
@@ -2144,7 +2193,14 @@ THREEJS_STATE_RUNTIME_JS = r"""
             globalOpacity: null,
             prepared: false,
           });
-        if (plan.fadeKeys.length && !applied.prepared) {
+        if ((plan.fadeKeys.length || plan.volumePrepKeys.length) && !applied.prepared) {
+          // Volumes fading in have no mesh yet (their legend entry was off);
+          // force the legend flag on for the transition so the single
+          // prepared rebuild creates the runtime. The completion apply
+          // restores the exact target legend state.
+          plan.volumePrepKeys.forEach((key) => {
+            legendState[key] = true;
+          });
           // One prepared rebuild: batch fading-in traces at a floor presence
           // so their per-point opacity ratios survive the live scaling that
           // follows. Every later frame only scales buffers.
@@ -2234,7 +2290,66 @@ THREEJS_STATE_RUNTIME_JS = r"""
           }
           applied.globalOpacity = liveGlobal;
         }
+        if (plan.volumeKeys.length) {
+          ovizApplyFastVolumeFadeFrame(transition, plan);
+        }
         return true;
+      }
+
+      function ovizApplyFastVolumeFadeFrame(transition, plan) {
+        // Lerp the allowed volume fields into the live state and write the
+        // shader uniforms directly — no scene rebuild, no texture work.
+        if (
+          typeof applyVolumeStateToRuntime !== "function"
+          || typeof volumeRuntimeByKey === "undefined"
+        ) {
+          return;
+        }
+        const progress = clampRange(
+          Number(transition.currentAppearanceProgress) || 0.0,
+          0.0,
+          1.0,
+        );
+        const fromVolumes = transition.fromSnapshot.volume_state_by_key || {};
+        const toVolumes = transition.targetSnapshot.volume_state_by_key || {};
+        const fromLegend = transition.fromSnapshot.legend_state || {};
+        const toLegend = transition.targetSnapshot.legend_state || {};
+        const numericFields = [
+          "vmin", "vmax", "steps", "alphaCoef", "gradientStep",
+          "galacticLightIntensity", "galacticAmbient", "galacticExtinction",
+          "galacticScattering", "galacticAnisotropy", "galacticWarmth",
+        ];
+        let touched = false;
+        plan.volumeKeys.forEach((stateKey) => {
+          const live = volumeStateByKey[stateKey];
+          const a = fromVolumes[stateKey];
+          const b = toVolumes[stateKey];
+          if (!live || !a || !b) return;
+          numericFields.forEach((field) => {
+            const av = Number(a[field]);
+            const bv = Number(b[field]);
+            if (Number.isFinite(av) && Number.isFinite(bv)) {
+              live[field] = ovizLerp(av, bv, progress);
+            }
+          });
+          const effFrom = (a.visible !== false) && (fromLegend[stateKey] !== false);
+          const effTo = (b.visible !== false) && (toLegend[stateKey] !== false);
+          const aOpacity = effFrom ? Number(a.opacity) || 0 : 0;
+          const bOpacity = effTo ? Number(b.opacity) || 0 : 0;
+          live.opacity = ovizLerp(aOpacity, bOpacity, progress);
+          live.visible = effFrom || effTo;
+          const layer = typeof frameVolumeLayerForStateKey === "function"
+            ? frameVolumeLayerForStateKey(stateKey)
+            : null;
+          if (!layer) return;
+          const runtime = volumeRuntimeByKey.get(String(layer.key));
+          if (!runtime) return;
+          applyVolumeStateToRuntime(layer, runtime);
+          touched = true;
+        });
+        if (touched && typeof ovizInvalidateRender === "function") {
+          ovizInvalidateRender();
+        }
       }
 
       function ovizApplyTransitionNumericControls(from, to, progress) {
