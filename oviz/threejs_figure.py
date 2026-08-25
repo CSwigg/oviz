@@ -23430,7 +23430,9 @@ __SKY_RUNTIME_JS__
         return drawObjectCount;
       }
 
-      const SKY_MEMBER_ARROW_LENGTH_MYR = 0.3;
+      // Cluster-frame internal motions are a few pc/Myr at most, so the base
+      // arrow shows a few Myr of travel to stay visible at cluster scales.
+      const SKY_MEMBER_ARROW_LENGTH_MYR = 3.0;
       const SKY_MEMBER_ARROW_HALF_WIDTH_RAD = 0.0009;
 
       function skyMemberArrowStyleFor(traceKey) {
@@ -23505,8 +23507,11 @@ __SKY_RUNTIME_JS__
         const tangential = new THREE.Vector3();
         const perpendicular = new THREE.Vector3();
         positionedMembers.forEach((member) => {
-          const full = member.fullVelocityPcMyr;
-          if (!(full instanceof THREE.Vector3) || !member.hasProperMotion) {
+          // Arrows show each star's motion in its parent cluster's bulk rest
+          // frame (the catalog-mean velocity is already subtracted), so the
+          // pattern reads as internal kinematics rather than common streaming.
+          const clusterFrame = member.velocityPcMyr;
+          if (!(clusterFrame instanceof THREE.Vector3) || !member.hasProperMotion) {
             return;
           }
           radial.copy(member.position).sub(earthPoint);
@@ -23515,7 +23520,7 @@ __SKY_RUNTIME_JS__
             return;
           }
           radial.multiplyScalar(1.0 / distance);
-          tangential.copy(full).addScaledVector(radial, -full.dot(radial));
+          tangential.copy(clusterFrame).addScaledVector(radial, -clusterFrame.dot(radial));
           const speed = tangential.length();
           if (speed <= 1e-9) {
             return;
@@ -23689,9 +23694,6 @@ __SKY_RUNTIME_JS__
           // The 3D orbit supplies the cluster's common motion. Retain only each
           // star's measured motion relative to the catalog mean so the member
           // pattern evolves without drifting away from its bulk cluster.
-          // Motion arrows show the star's full measured tangential motion, so
-          // keep a copy from before the mean is removed.
-          entry.fullVelocityPcMyr = entry.velocityPcMyr.clone();
           entry.velocityPcMyr.sub(meanMemberVelocityPcMyr);
         });
         if (root && root.dataset) {
@@ -25420,8 +25422,16 @@ __SKY_RUNTIME_JS__
           controls.appendChild(arrowWidthField.field);
 
           const syncArrowSliderVisibility = () => {
-            arrowLengthField.field.style.display = state.memberArrowsEnabled ? "" : "none";
-            arrowWidthField.field.style.display = state.memberArrowsEnabled ? "" : "none";
+            // The HUD stylesheet pins legend fields to `display: grid
+            // !important`, so hiding the sliders needs an !important inline
+            // override.
+            [arrowLengthField.field, arrowWidthField.field].forEach((field) => {
+              if (state.memberArrowsEnabled) {
+                field.style.removeProperty("display");
+              } else {
+                field.style.setProperty("display", "none", "important");
+              }
+            });
           };
           syncArrowSliderVisibility();
 

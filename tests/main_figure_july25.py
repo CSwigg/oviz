@@ -726,13 +726,6 @@ def build_state_only_scene(
                 visibility[sigma_trace_key] = group_name == "All"
                 for sigma_track_key in sigma_track_keys:
                     visibility.pop(sigma_track_key, None)
-    # July 25 presentation default: member-star tangential-motion arrows are
-    # on for every point trace (the viewer draws them only where a trace
-    # actually has Sky member stars; the per-trace legend toggle and length/
-    # width sliders remain available).
-    for legend_item in (scene.get("legend") or {}).get("items") or []:
-        if legend_item.get("kind") == "trace" and legend_item.get("has_points"):
-            legend_item["member_arrows_default"] = True
     return scene
 
 
