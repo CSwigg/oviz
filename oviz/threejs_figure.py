@@ -23433,7 +23433,7 @@ __SKY_RUNTIME_JS__
       // Cluster-frame internal motions are a few pc/Myr at most, so the base
       // arrow shows a few Myr of travel to stay visible at cluster scales.
       const SKY_MEMBER_ARROW_LENGTH_MYR = 3.0;
-      const SKY_MEMBER_ARROW_HALF_WIDTH_RAD = 0.0009;
+      const SKY_MEMBER_ARROW_HALF_WIDTH_RAD = 0.00045;
 
       function skyMemberArrowStyleFor(traceKey) {
         const style = traceStyleStateByKey[String(traceKey || "")] || null;
