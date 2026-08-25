@@ -14294,6 +14294,29 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
         return `${title}-${frameLabel}.html`;
       }
 
+      async function ovizExitFullscreenBeforeExport() {
+        // Browsers block downloads and suppress prompt/file-picker dialogs
+        // while an element holds fullscreen, and the export's long
+        // serialization freeze composites as a blank screen there. Every
+        // export flow leaves fullscreen first and lets the viewer settle at
+        // its windowed size (which also keeps exported width/height sane).
+        const fullscreenEl = document.fullscreenElement || document.webkitFullscreenElement || null;
+        if (!fullscreenEl) {
+          return false;
+        }
+        try {
+          if (typeof document.exitFullscreen === "function") {
+            await document.exitFullscreen();
+          } else if (typeof document.webkitExitFullscreen === "function") {
+            document.webkitExitFullscreen();
+          }
+        } catch (_err) {
+          return false;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+        return true;
+      }
+
       async function buildExportHtml(exportSceneSpec) {
         // Runtime-authored controls have live event listeners that cannot be
         // serialized into HTML. Remove them from a detached clone so the
@@ -14394,6 +14417,7 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       async function saveSceneStateToHtml() {
+        await ovizExitFullscreenBeforeExport();
         const exportSceneSpec = safeJsonClone(sceneSpec, {});
         exportSceneSpec.initial_state = captureRuntimeState();
         delete exportSceneSpec.states;

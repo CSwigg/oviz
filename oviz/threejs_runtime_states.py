@@ -3453,6 +3453,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
       }
 
       async function ovizWriteHtmlFile(htmlText, suggestedName, options = {}) {
+        await ovizExitFullscreenBeforeExport();
         const writeHandle = async (handle) => {
           if (!handle || typeof handle.createWritable !== "function") return null;
           if (typeof handle.queryPermission === "function") {
@@ -3547,6 +3548,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
         if (typeof ovizDeckSyncStatus === "function") ovizDeckSyncStatus();
         ovizStateEvent("authoring-save-start", { source: String(options.source || "api") });
         try {
+          await ovizExitFullscreenBeforeExport();
           const { compact, exportSceneSpec } = await ovizBuildAuthoringSceneSpec();
           const html = await buildExportHtml(exportSceneSpec);
           const result = await ovizWriteHtmlFile(
@@ -3611,7 +3613,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return /\.html?$/i.test(cleaned) ? cleaned : cleaned + ".html";
       }
 
-      function ovizPromptExportStatesHtml() {
+      async function ovizPromptExportStatesHtml() {
+        await ovizExitFullscreenBeforeExport();
         const filename = window.prompt(
           "Name the exported HTML file",
           ovizDefaultStatesExportFilename(),
@@ -3624,7 +3627,8 @@ THREEJS_STATE_RUNTIME_JS = r"""
         });
       }
 
-      function ovizPromptExportStatesPresentOnlyHtml() {
+      async function ovizPromptExportStatesPresentOnlyHtml() {
+        await ovizExitFullscreenBeforeExport();
         const filename = window.prompt(
           "Name the present-only HTML file",
           ovizDefaultStatesExportFilename({ presentOnly: true }),
@@ -3640,6 +3644,9 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       async function ovizExportStatesHtml(options = {}) {
         const presentOnly = options.presentOnly === true;
+        if (options.download !== false) {
+          await ovizExitFullscreenBeforeExport();
+        }
         const compact = await ovizCompactProjectForStorage(ovizStatesPublicProject());
         compact.default_mode = "present";
         compact.present_only = presentOnly;

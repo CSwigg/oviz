@@ -735,6 +735,55 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn(r"/\.html?$/i.test(cleaned)", normalize_body)
         self.assertIn('cleaned + ".html"', normalize_body)
 
+    def test_exports_leave_fullscreen_before_dialogs_and_downloads(self):
+        # Browsers block downloads and suppress prompt/file-picker dialogs
+        # while an element holds fullscreen, so every export entry point must
+        # exit fullscreen before prompting, serializing, or downloading.
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+
+        self.assertIn("async function ovizExitFullscreenBeforeExport()", html)
+
+        prompt_body = html.split(
+            "async function ovizPromptExportStatesHtml()", 1
+        )[1].split("async function ovizPromptExportStatesPresentOnlyHtml", 1)[0]
+        self.assertLess(
+            prompt_body.index("await ovizExitFullscreenBeforeExport()"),
+            prompt_body.index("window.prompt("),
+        )
+
+        present_prompt_body = html.split(
+            "async function ovizPromptExportStatesPresentOnlyHtml()", 1
+        )[1].split("async function ovizExportStatesHtml", 1)[0]
+        self.assertLess(
+            present_prompt_body.index("await ovizExitFullscreenBeforeExport()"),
+            present_prompt_body.index("window.prompt("),
+        )
+
+        export_body = html.split(
+            "async function ovizExportStatesHtml(options = {})", 1
+        )[1].split("function ovizOpenDraftDb", 1)[0]
+        self.assertIn("await ovizExitFullscreenBeforeExport()", export_body)
+
+        write_body = html.split(
+            "async function ovizWriteHtmlFile(htmlText, suggestedName, options = {})", 1
+        )[1].split("function ovizDefaultAuthoringFilename", 1)[0]
+        self.assertIn("await ovizExitFullscreenBeforeExport()", write_body)
+
+        save_body = html.split(
+            "async function saveSceneStateToHtml()", 1
+        )[1].split("function selectionKeyFor", 1)[0]
+        self.assertIn("await ovizExitFullscreenBeforeExport()", save_body)
+
+        authoring_body = html.split(
+            "async function ovizSaveAuthoringDocument", 1
+        )[1].split("function ovizDefaultStatesExportFilename", 1)[0]
+        self.assertIn("await ovizExitFullscreenBeforeExport()", authoring_body)
+
     def test_authoring_document_autosaves_states_actions_and_slides(self):
         html = ThreeJSFigure({
             "width": 640,
@@ -859,6 +908,7 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
           }},
         }};
         const window = {{}};
+        async function ovizExitFullscreenBeforeExport() {{ return false; }}
         {helper_source}
         (async () => {{
           const result = await ovizWriteHtmlFile("<html>saved</html>", "fallback.html", {{
