@@ -112,7 +112,7 @@ class Trace:
             for coord_group in self.cluster_int_coords
         )
 
-    def create_integrated_dataframe(self, time):
+    def create_integrated_dataframe(self, time, *, ro=8.122, vo=236.):
         """
         Create an integrated DataFrame of the star cluster.
 
@@ -133,7 +133,7 @@ class Trace:
         xint, yint, zint = self.cluster_int_coords[0]
         xint_helio, yint_helio, zint_helio = self.cluster_int_coords[1]
         xint_gc, yint_gc, zint_gc = self.cluster_int_coords[2]
-        rint_gc, phiint_gc, zint_gc = self.cluster_int_coords[3]
+        rint_gc, phiint_gc, zint_gc_cyl = self.cluster_int_coords[3]
 
         df_int = pd.DataFrame({
             'x': xint.flatten(), 
@@ -147,7 +147,7 @@ class Trace:
             'z_gc': zint_gc.flatten(),
             'r_gc': rint_gc.flatten(),
             'phi_gc': np.rad2deg(phiint_gc.flatten()),
-            'z_gc_cyl': zint_gc.flatten()
+            'z_gc_cyl': zint_gc_cyl.flatten()
         })
 
         
@@ -162,7 +162,7 @@ class Trace:
 
         df_int.reset_index(drop=True, inplace=True)
 
-        df_int = orbit_maker.coordFIX_to_coordROT(df_int)
+        df_int = orbit_maker.coordFIX_to_coordROT(df_int, r_sun=ro, v_sun=vo)
         return df_int
     
     def set_age_based_sizes(self, fade_in_time=None, fade_in_and_out=None, fade_in_and_disp=None, disp_time=None):
@@ -219,6 +219,7 @@ class Trace:
             Solar height above the galactic plane in kpc. Defaults to 0.0208.
         """
 
+        time = orbit_maker.normalize_time_grid(time)
         if self.shifted_rf is not None:
             reference_frame_center = self.shifted_rf
 
@@ -228,8 +229,9 @@ class Trace:
             potential=potential,
             vo=vo, ro=ro, zo=zo
         )
-        self.df_int = self.create_integrated_dataframe(time)
+        self.df_int = self.create_integrated_dataframe(time, ro=ro, vo=vo)
         self.integrated = True
+        self.sizes_set = False
 
     def limit_cluster_age(self, age_min, age_max):
         """
@@ -444,6 +446,8 @@ class Layer(Trace):
     def integrate_orbits(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
         """Integrate a phase-space layer or replicate a stationary layer in time."""
 
+        time = orbit_maker.normalize_time_grid(time)
+
         if self.supports_orbit_tracing:
             return super().integrate_orbits(
                 time,
@@ -455,8 +459,9 @@ class Layer(Trace):
             )
 
         self.cluster_int_coords = self._static_cluster_int_coords(time)
-        self.df_int = self.create_integrated_dataframe(np.asarray(time, dtype=float))
+        self.df_int = self.create_integrated_dataframe(time, ro=ro, vo=vo)
         self.integrated = True
+        self.sizes_set = False
 
 class TraceCollection:
     """An ordered collection of :class:`Trace` objects.
@@ -582,7 +587,7 @@ class TraceCollection:
         zo : float, optional
             Solar height above the galactic plane in kpc. Defaults to 0.0208.
         """
-        self.time = time
+        self.time = orbit_maker.normalize_time_grid(time)
         self.potential = potential
         self.vo = vo
         self.ro = ro

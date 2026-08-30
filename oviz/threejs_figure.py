@@ -11373,10 +11373,17 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
       const presentOnlyExport = Boolean(
         sceneSpec.states && sceneSpec.states.present_only
       );
+      const deckPresentationExport = Boolean(
+        sceneSpec.deck && sceneSpec.deck.start_in_presentation
+      );
+      const startInPresentationMode = presentOnlyExport || deckPresentationExport;
       const presentationModeLocked = false;
-      let presentationModeEnabled = presentOnlyExport;
+      // Controllers own presentation navigation, so startup enters the mode
+      // only after States and Deck have both finished initializing.
+      let presentationModeEnabled = false;
       root.dataset.presentationLocked = presentationModeLocked ? "true" : "false";
       root.dataset.presentOnlyExport = presentOnlyExport ? "true" : "false";
+      root.dataset.presentationStartsOnReady = startInPresentationMode ? "true" : "false";
       // Simplified controls: keep the core interface (Controls, Text, legend,
       // States navigation, Sky) but drop authoring/power-user chrome —
       // Widgets, Slides, sky aperture, Save State — from the top toolbar.
@@ -14328,9 +14335,14 @@ _THREEJS_HTML_TEMPLATE = """<!DOCTYPE html>
           const exportPresentOnly = Boolean(
             exportSceneSpec.states && exportSceneSpec.states.present_only
           );
-          exportRoot.dataset.presentationMode = exportPresentOnly ? "true" : "false";
+          const exportStartsInPresentation = Boolean(
+            exportPresentOnly
+            || (exportSceneSpec.deck && exportSceneSpec.deck.start_in_presentation)
+          );
+          exportRoot.dataset.presentationMode = "false";
           exportRoot.dataset.presentationLocked = "false";
           exportRoot.dataset.presentOnlyExport = exportPresentOnly ? "true" : "false";
+          exportRoot.dataset.presentationStartsOnReady = exportStartsInPresentation ? "true" : "false";
           exportRoot.dataset.deckPresenting = "false";
           exportRoot.dataset.deckEditing = "false";
         }
@@ -18705,7 +18717,28 @@ __SKY_RUNTIME_JS__
           return new Promise((resolve) => {
             let idleFrames = 0;
             let sawActive = false;
+            let settled = false;
+            let frameHandle = null;
+            let timerHandle = null;
+            const finish = (result) => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              if (frameHandle !== null && typeof window.cancelAnimationFrame === "function") {
+                window.cancelAnimationFrame(frameHandle);
+              }
+              if (timerHandle !== null && typeof window.clearTimeout === "function") {
+                window.clearTimeout(timerHandle);
+              }
+              frameHandle = null;
+              timerHandle = null;
+              skyBackgroundAfterPaint(() => resolve(result));
+            };
             const check = (timestampMs) => {
+              if (settled) {
+                return;
+              }
               const now = Number(timestampMs) || ((typeof performance !== "undefined" && performance.now)
                 ? performance.now()
                 : Date.now());
@@ -18721,29 +18754,39 @@ __SKY_RUNTIME_JS__
               idleFrames = stillActive ? 0 : idleFrames + 1;
               const elapsedMs = now - startedAt;
               if (idleFrames >= 2 && (sawActive || elapsedMs >= 360.0)) {
-                skyBackgroundAfterPaint(() => resolve({ ready: true }));
+                finish({ ready: true });
                 return;
               }
               if (elapsedMs >= Math.max(Number(timeoutMs) || 0, 0)) {
-                skyBackgroundAfterPaint(() => resolve({ ready: false, timedOut: true }));
+                finish({ ready: false, timedOut: true });
                 return;
               }
               scheduleIdleCheck();
             };
             // Hidden iframes suspend requestAnimationFrame, so pace the poll
             // with a timer as well; whichever fires first advances the loop.
-            let scheduled = false;
             function scheduleIdleCheck() {
-              scheduled = false;
+              if (settled) {
+                return;
+              }
+              let claimed = false;
               const run = (timestampMs) => {
-                if (scheduled) {
+                if (settled || claimed) {
                   return;
                 }
-                scheduled = true;
+                claimed = true;
+                if (frameHandle !== null && typeof window.cancelAnimationFrame === "function") {
+                  window.cancelAnimationFrame(frameHandle);
+                }
+                if (timerHandle !== null && typeof window.clearTimeout === "function") {
+                  window.clearTimeout(timerHandle);
+                }
+                frameHandle = null;
+                timerHandle = null;
                 check(timestampMs);
               };
-              window.requestAnimationFrame(run);
-              window.setTimeout(run, 120);
+              frameHandle = window.requestAnimationFrame(run);
+              timerHandle = window.setTimeout(run, 120);
             }
             scheduleIdleCheck();
           });
@@ -22142,7 +22185,6 @@ __SKY_RUNTIME_JS__
           gapSize: 5.0,
           transparent: lineOpacity < 1.0,
           opacity: lineOpacity,
-          worldUnits: false,
         });
         material.resolution.set(root.clientWidth, root.clientHeight);
         const line = new LineSegments2(geometry, material);
@@ -22169,7 +22211,6 @@ __SKY_RUNTIME_JS__
           dashed: false,
           transparent: clamp01(Number(options.opacity) || 1.0) < 1.0,
           opacity: clamp01(Number(options.opacity) || 1.0),
-          worldUnits: false,
         });
         material.resolution.set(root.clientWidth, root.clientHeight);
         const line = new LineSegments2(geometry, material);
@@ -27603,23 +27644,33 @@ __STATE_RUNTIME_JS__
       setCameraAutoOrbitEnabled(cameraAutoOrbitEnabled);
       initialActionViewState = captureCurrentActionViewState();
       syncActionButtons();
-      initializeOvizStates().then(() => {
-        initializeOvizDeck().catch((err) => {
+      async function initializeOvizAuthoringRuntime() {
+        try {
+          await initializeOvizStates();
+        } catch (err) {
+          if (root && root.dataset) root.dataset.statesReady = "error";
+          console.error("Oviz States initialization failed", err);
+          return false;
+        }
+        try {
+          await initializeOvizDeck();
+        } catch (err) {
           if (root && root.dataset) root.dataset.deckReady = "error";
           console.error("Oviz Deck initialization failed", err);
-        });
+          return false;
+        }
         try {
           initializeOvizPaper();
         } catch (err) {
           if (root && root.dataset) root.dataset.paperReady = "error";
           console.error("Oviz Paper initialization failed", err);
         }
-      }).catch((err) => {
-        if (root && root.dataset) {
-          root.dataset.statesReady = "error";
+        if (startInPresentationMode) {
+          setPresentationMode(true);
         }
-        console.error("Oviz States initialization failed", err);
-      });
+        return true;
+      }
+      initializeOvizAuthoringRuntime();
       ovizStartupRecordPhase("sceneInitialize", ovizSceneInitializeStartMs);
       const ovizSkyLayersStartupStartMs = ovizStartupNow();
       waitForInitialSkyLayers({ timeoutMs: 30000.0 }).then((ovizSkyLayersStartupResult) => {

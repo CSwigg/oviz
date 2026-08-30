@@ -340,16 +340,25 @@ class Animate3D:
         """
         renderer_name = _normalize_renderer_name(renderer)
 
-        # Ensure t=0 is present
-        if 0 not in time:
-            raise ValueError("The time array must include 0 for the present day.")
+        time = orbit_maker.normalize_time_grid(time)
 
         # Determine the reference frame center
         if reference_frame_center is None:
             reference_frame_center = self.set_focus(focus_group)
 
-        # Integrate orbits if not already integrated
-        if self.data_collection.time is None:
+        # Re-integrate whenever the requested grid differs from the cached one.
+        # Orbit frames and marker sizes are both functions of this timeline.
+        cached_time = getattr(self.data_collection, 'time', None)
+        needs_integration = cached_time is None
+        if not needs_integration:
+            try:
+                needs_integration = not np.array_equal(
+                    np.asarray(cached_time, dtype=float),
+                    time,
+                )
+            except (TypeError, ValueError):
+                needs_integration = True
+        if needs_integration:
             self.data_collection.integrate_all_orbits(
                 time, 
                 reference_frame_center=reference_frame_center,
@@ -3597,7 +3606,6 @@ def _load_threejs_cluster_catalog(cluster_members_file, cluster_names=None):
             member = {
                 'ra': float(np.round(ra_vals[i], 6)),
                 'dec': float(np.round(dec_vals[i], 6)),
-                'label': str(cluster_name),
                 'is_cluster_member': True,
             }
             if not compact_member_payload:

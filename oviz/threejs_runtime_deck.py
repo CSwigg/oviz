@@ -155,6 +155,7 @@ THREEJS_DECK_RUNTIME_JS = r"""
           available: source.available === undefined ? true : Boolean(source.available),
           enabled: Boolean(source.enabled || rawSlides.length),
           embedded: Boolean(source.embedded),
+          start_in_presentation: Boolean(source.start_in_presentation),
           revision: Math.max(0, Math.floor(Number(source.revision) || 0)),
           aspect_ratio: "16:9",
           guides: {
@@ -201,6 +202,9 @@ THREEJS_DECK_RUNTIME_JS = r"""
         const output = ovizDeckClone(ovizDeckProject || ovizDeckNormalizeProject(null), {});
         output.enabled = Boolean(output.available && output.slides && output.slides.length);
         output.embedded = options.embedded === undefined ? true : Boolean(options.embedded);
+        output.start_in_presentation = options.startInPresentation === undefined
+          ? Boolean(output.start_in_presentation)
+          : Boolean(options.startInPresentation);
         return output;
       }
 
@@ -939,7 +943,7 @@ THREEJS_DECK_RUNTIME_JS = r"""
             ovizDeckRenderEditor();
           }),
           ovizDeckMakeButton("Present", () => setPresentationMode(true)),
-          ovizDeckMakeButton("Export", () => ovizPromptExportStatesHtml()),
+          ovizDeckMakeButton("Export", () => ovizPromptExportStatesHtml({ startPresentation: true })),
         );
         ovizDeckEditorEl.append(toolbar);
         if (ovizDeckAddMenuOpen) {
@@ -2400,7 +2404,9 @@ THREEJS_DECK_RUNTIME_JS = r"""
           setEditorOpen: ovizDeckSetEditorOpen,
           present: () => setPresentationMode(true),
           exit: () => setPresentationMode(false),
-          exportHtml: (options = {}) => ovizExportStatesHtml(options),
+          exportHtml: (options = {}) => ovizExportStatesHtml(
+            Object.assign({ startPresentation: true }, options)
+          ),
           objects: {
             list: ovizDeckObjectList,
             get: ovizDeckObjectGet,

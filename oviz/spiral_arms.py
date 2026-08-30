@@ -184,6 +184,8 @@ class SpiralArmTrace:
         zo : float, optional
             Solar height in kpc
         """
+        time = orbit_maker.normalize_time_grid(time)
+
         # Calculate pattern rotation effect
         omega_pattern = self.omega  # Pattern speed in km/s/kpc
         
@@ -221,7 +223,7 @@ class SpiralArmTrace:
         )
         
         # Create integrated DataFrame
-        self.df_int = self._create_integrated_dataframe(time)
+        self.df_int = self._create_integrated_dataframe(time, ro=ro, vo=vo)
         self.integrated = True
         
     def _rotate_spiral_pattern(self, delta_phi):
@@ -259,7 +261,7 @@ class SpiralArmTrace:
         
         return np.array([x_new, y_new, z_new, U, V, W])
         
-    def _create_integrated_dataframe(self, time):
+    def _create_integrated_dataframe(self, time, *, ro=8.122, vo=236.):
         """
         Create integrated DataFrame for spiral arm motion.
         
@@ -279,7 +281,7 @@ class SpiralArmTrace:
         xint, yint, zint = self.cluster_int_coords[0]
         xint_helio, yint_helio, zint_helio = self.cluster_int_coords[1]
         xint_gc, yint_gc, zint_gc = self.cluster_int_coords[2]
-        rint_gc, phiint_gc, zint_gc = self.cluster_int_coords[3]
+        rint_gc, phiint_gc, zint_gc_cyl = self.cluster_int_coords[3]
 
         df_int = pd.DataFrame({
             'x': xint.flatten(), 
@@ -293,7 +295,7 @@ class SpiralArmTrace:
             'z_gc': zint_gc.flatten(),
             'r_gc': rint_gc.flatten(),
             'phi_gc': np.rad2deg(phiint_gc.flatten()),
-            'z_gc_cyl': zint_gc.flatten()
+            'z_gc_cyl': zint_gc_cyl.flatten()
         })
 
         # Add spiral arm specific columns
@@ -304,7 +306,7 @@ class SpiralArmTrace:
         df_int['spiral_arm'] = self.arm_name
 
         df_int.reset_index(drop=True, inplace=True)
-        df_int = orbit_maker.coordFIX_to_coordROT(df_int)
+        df_int = orbit_maker.coordFIX_to_coordROT(df_int, r_sun=ro, v_sun=vo)
         
         return df_int
         

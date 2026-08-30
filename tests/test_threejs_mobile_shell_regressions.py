@@ -59,7 +59,7 @@ def test_states_is_a_real_sheet_panel_and_resyncs_after_async_build(
 
     initialize_states = mobile_html.split(
         "async function initializeOvizStates()", 1
-    )[1].split("initializeOvizStates().then", 1)[0]
+    )[1].split("async function initializeOvizAuthoringRuntime()", 1)[0]
     build_position = initialize_states.index("ovizBuildStatesDrawer();")
     sync_position = initialize_states.index("syncMobileSheetAvailability();")
     assert build_position < sync_position

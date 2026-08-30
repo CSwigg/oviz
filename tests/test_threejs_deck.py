@@ -162,6 +162,14 @@ def test_keynote_lite_runtime_exposes_object_tools_and_snap_modifiers():
     assert "deck-object-changed" in runtime
 
 
+def test_slides_export_preserves_deck_and_requests_presentation_start():
+    runtime = THREEJS_DECK_RUNTIME_JS
+
+    assert "start_in_presentation: Boolean(source.start_in_presentation)" in runtime
+    assert 'ovizPromptExportStatesHtml({ startPresentation: true })' in runtime
+    assert "Object.assign({ startPresentation: true }, options)" in runtime
+
+
 def test_deck_changes_share_the_authoring_draft_and_saved_status():
     runtime = THREEJS_DECK_RUNTIME_JS
     changed_body = runtime.split("function ovizDeckChanged(reason", 1)[1].split(

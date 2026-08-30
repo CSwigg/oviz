@@ -692,7 +692,7 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             html,
         )
 
-    def test_states_export_button_prompts_for_filename(self):
+    def test_states_export_button_uses_guarded_filename_request(self):
         html = ThreeJSFigure({
             "width": 640,
             "height": 480,
@@ -700,14 +700,16 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             "initial_state": {},
         }).to_html(compress_scene_spec=False)
         prompt_body = html.split(
-            "function ovizPromptExportStatesHtml()", 1
+            "function ovizRequestStatesExportFilename(message, options = {})", 1
         )[1].split("async function ovizExportStatesHtml", 1)[0]
 
-        self.assertIn("window.prompt(", prompt_body)
+        self.assertIn('typeof promptFilename !== "function"', prompt_body)
+        self.assertIn("const promptFilename = window.prompt;", prompt_body)
+        self.assertIn("await Promise.resolve(promptFilename.call(window", prompt_body)
+        self.assertIn("return fallback", prompt_body)
         self.assertIn('"Name the exported HTML file"', prompt_body)
-        self.assertIn("ovizDefaultStatesExportFilename()", prompt_body)
         self.assertIn("if (filename === null)", prompt_body)
-        self.assertIn("ovizNormalizeStatesExportFilename(filename)", prompt_body)
+        self.assertIn("Object.assign({}, options, { filename })", prompt_body)
         self.assertIn(
             'ovizMakeButton("Export HTML", ovizPromptExportStatesHtml)',
             html,
@@ -719,6 +721,119 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn('"Name the present-only HTML file"', html)
         self.assertIn("compact.present_only = presentOnly", html)
         self.assertIn("delete exportSceneSpec.deck", html)
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_states_and_slides_exports_fall_back_when_prompt_is_unavailable(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        helper_source = (
+            "function ovizDefaultStatesExportFilename(options = {})"
+            + html.split("function ovizDefaultStatesExportFilename(options = {})", 1)[1].split(
+                "async function ovizExportStatesHtml", 1
+            )[0]
+        )
+        script = f"""
+        const sceneSpec = {{ title: "Prompt Fixture" }};
+        const calls = [];
+        const window = {{}};
+        function slugifyFilename(value) {{ return String(value).replace(/\\s+/g, "_"); }}
+        function ovizDeckHasSlides() {{ return true; }}
+        async function ovizExitFullscreenBeforeExport() {{ return false; }}
+        async function ovizExportStatesHtml(options) {{
+          calls.push(options);
+          return options;
+        }}
+        {helper_source}
+        (async () => {{
+          const states = await ovizPromptExportStatesHtml();
+          window.prompt = () => {{ throw new Error("prompt blocked"); }};
+          const slides = await ovizPromptExportStatesHtml({{ startPresentation: true }});
+          window.prompt = () => null;
+          const cancelled = await ovizPromptExportStatesPresentOnlyHtml();
+          process.stdout.write(JSON.stringify({{ states, slides, cancelled, calls }}));
+        }})().catch((error) => {{ throw error; }});
+        """
+        result = subprocess.run(
+            ["node"], input=script, text=True, capture_output=True, check=True
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertEqual(payload["states"]["filename"], "Prompt_Fixture-presentation.html")
+        self.assertEqual(payload["slides"]["filename"], "Prompt_Fixture-presentation.html")
+        self.assertTrue(payload["slides"]["startPresentation"])
+        self.assertEqual(payload["cancelled"], {"saved": False, "cancelled": True})
+        self.assertEqual(len(payload["calls"]), 2)
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_presentation_start_waits_for_states_and_deck_initialization(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        helper_source = (
+            "async function initializeOvizAuthoringRuntime()"
+            + html.split("async function initializeOvizAuthoringRuntime()", 1)[1].split(
+                "\n      initializeOvizAuthoringRuntime();", 1
+            )[0]
+        )
+        script = f"""
+        const events = [];
+        const root = {{ dataset: {{}} }};
+        const startInPresentationMode = true;
+        let failDeck = false;
+        async function initializeOvizStates() {{
+          events.push("states-start");
+          await Promise.resolve();
+          root.dataset.statesReady = "true";
+          events.push("states-ready");
+        }}
+        async function initializeOvizDeck() {{
+          events.push("deck-start");
+          await Promise.resolve();
+          if (failDeck) throw new Error("deck failed");
+          root.dataset.deckReady = "true";
+          events.push("deck-ready");
+        }}
+        function initializeOvizPaper() {{ events.push("paper-ready"); }}
+        function setPresentationMode(value) {{
+          events.push(`present:${{value}}:${{root.dataset.statesReady}}:${{root.dataset.deckReady}}`);
+        }}
+        {helper_source}
+        (async () => {{
+          const ready = await initializeOvizAuthoringRuntime();
+          const successEvents = events.slice();
+          events.length = 0;
+          failDeck = true;
+          const failed = await initializeOvizAuthoringRuntime();
+          process.stdout.write(JSON.stringify({{ ready, successEvents, failed, failedEvents: events }}));
+        }})().catch((error) => {{ throw error; }});
+        """
+        result = subprocess.run(
+            ["node"], input=script, text=True, capture_output=True, check=True
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertTrue(payload["ready"])
+        self.assertEqual(
+            payload["successEvents"],
+            [
+                "states-start",
+                "states-ready",
+                "deck-start",
+                "deck-ready",
+                "paper-ready",
+                "present:true:true:true",
+            ],
+        )
+        self.assertFalse(payload["failed"])
+        self.assertNotIn("paper-ready", payload["failedEvents"])
+        self.assertFalse(any(event.startswith("present:") for event in payload["failedEvents"]))
 
     def test_states_export_filename_is_safe_and_gets_html_extension(self):
         html = ThreeJSFigure({
@@ -749,11 +864,11 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertIn("async function ovizExitFullscreenBeforeExport()", html)
 
         prompt_body = html.split(
-            "async function ovizPromptExportStatesHtml()", 1
+            "async function ovizPromptExportStatesHtml(options = {})", 1
         )[1].split("async function ovizPromptExportStatesPresentOnlyHtml", 1)[0]
         self.assertLess(
             prompt_body.index("await ovizExitFullscreenBeforeExport()"),
-            prompt_body.index("window.prompt("),
+            prompt_body.index("await ovizRequestStatesExportFilename("),
         )
 
         present_prompt_body = html.split(
@@ -761,7 +876,7 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         )[1].split("async function ovizExportStatesHtml", 1)[0]
         self.assertLess(
             present_prompt_body.index("await ovizExitFullscreenBeforeExport()"),
-            present_prompt_body.index("window.prompt("),
+            present_prompt_body.index("await ovizRequestStatesExportFilename("),
         )
 
         export_body = html.split(
@@ -1022,15 +1137,23 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
           try {{ return JSON.parse(JSON.stringify(value)); }} catch (_err) {{ return fallback; }}
         }}
         function ovizStatesClone(value, fallback) {{ return safeJsonClone(value, fallback); }}
-        function ovizDeckExportSpec() {{
-          return {{ available: true, slides: [{{ id: "exported-slide" }}] }};
+        function ovizDeckExportSpec(options = {{}}) {{
+          return {{
+            available: true,
+            slides: [{{ id: "exported-slide" }}],
+            start_in_presentation: options.startInPresentation === true,
+          }};
         }}
         async function buildExportHtml(value) {{ return JSON.stringify(value); }}
         {export_source}
         (async () => {{
           const presentOnly = JSON.parse(await ovizExportStatesHtml({{ download: false, presentOnly: true }}));
+          const slides = JSON.parse(await ovizExportStatesHtml({{
+            download: false,
+            startPresentation: true,
+          }}));
           const editable = JSON.parse(await ovizExportStatesHtml({{ download: false }}));
-          process.stdout.write(JSON.stringify({{ presentOnly, editable }}));
+          process.stdout.write(JSON.stringify({{ presentOnly, slides, editable }}));
         }})().catch((error) => {{ throw error; }});
         """
         result = subprocess.run(
@@ -1046,7 +1169,14 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
         self.assertEqual(payload["presentOnly"]["states"]["default_mode"], "present")
         self.assertNotIn("deck", payload["presentOnly"])
         self.assertEqual(payload["presentOnly"]["initial_state"], {"original": True})
+        self.assertFalse(payload["slides"]["states"]["present_only"])
+        self.assertEqual(
+            payload["slides"]["deck"]["slides"],
+            [{"id": "exported-slide"}],
+        )
+        self.assertTrue(payload["slides"]["deck"]["start_in_presentation"])
         self.assertFalse(payload["editable"]["states"]["present_only"])
+        self.assertFalse(payload["editable"]["deck"]["start_in_presentation"])
         self.assertEqual(
             payload["editable"]["deck"]["slides"],
             [{"id": "exported-slide"}],
@@ -1249,6 +1379,75 @@ class ThreeJSStatesRuntimeTests(unittest.TestCase):
             [("time", 0, 800), ("appearance", 800, 1600)],
         )
         self.assertEqual(payload["effectiveDurationMs"], 1600)
+
+        script = f"""
+        {helper_source}
+        const result = ovizStatePhasePlanAfterViewButtonHandoff({{
+          changed: {{ camera: true, time: false, appearance: true }},
+          requestedDurationMs: 1320,
+          effectiveDurationMs: 1600,
+          phases: [
+            {{ name: "camera", domains: ["camera"], startMs: 0, endMs: 800 }},
+            {{ name: "appearance", domains: ["appearance"], startMs: 800, endMs: 1600 }},
+          ],
+        }});
+        process.stdout.write(JSON.stringify(result));
+        """
+        result = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertAlmostEqual(payload["effectiveDurationMs"], 528)
+        self.assertEqual(payload["phases"][0]["domains"], ["appearance"])
+
+    def test_state_view_handoff_uses_presentation_specific_timing(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+
+        self.assertIn("function ovizStateViewHandoffTimings(", html)
+        self.assertIn("durationMs: 420.0 * scale", html)
+        self.assertIn("opacityDurationMs: 180.0 * scale", html)
+        self.assertIn("memberRevealDurationMs: 280.0 * scale", html)
+        self.assertIn("...handoffTimings", html)
+        self.assertIn("wallStartedAt: now", html)
+        self.assertIn(
+            "wallDurationMs: Math.max(0, performance.now() - transition.wallStartedAt)",
+            html,
+        )
+
+    def test_sky_layer_only_appearance_uses_no_rebuild_fast_path(self):
+        html = ThreeJSFigure({
+            "width": 640,
+            "height": 480,
+            "frames": [],
+            "initial_state": {},
+        }).to_html(compress_scene_spec=False)
+        plan = html.split("function ovizAppearanceFastPlan(", 1)[1].split(
+            "function ovizApplyTransitionTraceStyleFastPath", 1
+        )[0]
+        apply_plan = html.split(
+            "function ovizApplyTransitionTraceStyleFastPath(", 1
+        )[1].split("function ovizApplyFastVolumeFadeFrame", 1)[0]
+
+        self.assertIn(
+            "const skyLayersChanged = !same(from.sky_layers, to.sky_layers)",
+            plan,
+        )
+        self.assertIn("&& !skyLayersChanged", plan)
+        self.assertIn("skyLayersChanged,", plan)
+        self.assertIn("const needsPointScaling = Boolean(", apply_plan)
+        self.assertNotIn(
+            'if (!same(from.sky_layers, to.sky_layers)) return null;',
+            plan,
+        )
 
     def test_legacy_time_actions_advance_fractional_frames_each_animation_frame(self):
         html = ThreeJSFigure({

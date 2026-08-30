@@ -1057,11 +1057,25 @@ THREEJS_STATE_RUNTIME_JS = r"""
           };
         }
         let cursorMs = 0.0;
+        const authoredScale = Math.min(
+          Math.max(
+            Math.max(Number(original.requestedDurationMs) || 1200.0, 1.0) / 1200.0,
+            1.0,
+          ),
+          2.0,
+        );
         const phases = remaining.map((phase, index) => {
-          const originalDuration = Math.max(
+          let originalDuration = Math.max(
             Number(phase.endMs) - Number(phase.startMs),
             800.0,
           );
+          if (phase.domains.length === 1 && phase.domains[0] === "appearance") {
+            // The registered view handoff already performs the Sky/member
+            // opacity work.  Leave a short synchronized appearance phase for
+            // any remaining State deltas instead of paying the generic 800 ms
+            // floor a second time.
+            originalDuration = Math.min(originalDuration, 480.0 * authoredScale);
+          }
           const next = Object.assign({}, phase, {
             name: phase.domains.join("+"),
             startMs: cursorMs,
@@ -1078,6 +1092,35 @@ THREEJS_STATE_RUNTIME_JS = r"""
           phases,
           effectiveDurationMs: cursorMs,
           requestedDurationMs: original.requestedDurationMs,
+        };
+      }
+
+      function ovizStateViewHandoffTimings(transition, destinationViewMode) {
+        // State/presentation navigation already has a separately authored
+        // transition phase after the registered 3D/Sky handoff.  Reusing the
+        // deliberately leisurely manual View-button timings here made a
+        // default presentation step feel like two transitions in series.
+        // Keep the same ordered fades and exact endpoints, but use a tighter
+        // handoff clock that still scales with an explicitly longer State.
+        const requestedDurationMs = Math.max(
+          Number(transition && transition.transitionSpec
+            && transition.transitionSpec.duration_ms) || 1200.0,
+          1.0,
+        );
+        const scale = clampRange(requestedDurationMs / 1200.0, 0.75, 2.0);
+        if (String(destinationViewMode || "") === "earth") {
+          return {
+            durationMs: 420.0 * scale,
+            milkyWayFadeDurationMs: 100.0 * scale,
+            opacityDurationMs: 180.0 * scale,
+            memberRevealDurationMs: 280.0 * scale,
+          };
+        }
+        return {
+          durationMs: 420.0 * scale,
+          milkyWayFadeDurationMs: 100.0 * scale,
+          opacityDurationMs: 180.0 * scale,
+          memberRevealDurationMs: 240.0 * scale,
         };
       }
 
@@ -1795,6 +1838,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           cameraBehavior: preserveCamera ? "keep" : "follow",
           allowLiveCameraOrbit,
           phasePlan,
+          wallStartedAt: now,
           startedAt: now,
           startedAtEpochMs: ovizTransitionEpochMs(now),
           traceOpacity,
@@ -1919,6 +1963,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           const destinationCameraState = ovizStateDestinationCameraState(destination);
           if (usesViewButtonHandoff) {
             const transition = ovizStateTransition;
+            const handoffTimings = ovizStateViewHandoffTimings(transition, toViewMode);
             const completeViewButtonHandoff = () => {
               if (transition !== ovizStateTransition) {
                 return;
@@ -1961,11 +2006,13 @@ THREEJS_STATE_RUNTIME_JS = r"""
                 preserveDirection: true,
                 preserveFov: false,
                 destinationCameraState,
+                ...handoffTimings,
                 onComplete: completeViewButtonHandoff,
               });
             } else {
               exitEarthViewToCameraState({
                 destinationCameraState,
+                ...handoffTimings,
                 onComplete: completeViewButtonHandoff,
               });
             }
@@ -2044,7 +2091,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           if (!same(from.current_selections, to.current_selections)) return null;
           if (!same(from.selected_cluster_keys, to.selected_cluster_keys)) return null;
           if (!same(from.manual_labels, to.manual_labels)) return null;
-          if (!same(from.sky_layers, to.sky_layers)) return null;
+          const skyLayersChanged = !same(from.sky_layers, to.sky_layers);
           if (!same(from.widgets, to.widgets)) return null;
           if (!same(from.legend_panel_state, to.legend_panel_state)) return null;
           if (Math.abs(ovizStateFrameValue(from) - ovizStateFrameValue(to)) > 1e-9) return null;
@@ -2166,6 +2213,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             && !volumeKeys.length
             && !globalSize
             && !globalOpacity
+            && !skyLayersChanged
           ) return null;
           return {
             styleKeys: animated,
@@ -2174,6 +2222,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
             volumePrepKeys,
             globalSize,
             globalOpacity,
+            skyLayersChanged,
           };
         } catch (err) {
           return null;
@@ -2182,13 +2231,22 @@ THREEJS_STATE_RUNTIME_JS = r"""
 
       function ovizApplyTransitionTraceStyleFastPath(transition) {
         const plan = transition.appearanceFastPlan;
-        if (
-          !plan
-          || typeof ovizScaleRenderedPointOpacities !== "function"
-          || typeof ovizScaleRenderedPointSizes !== "function"
-        ) {
+        if (!plan) {
           return false;
         }
+        const needsPointScaling = Boolean(
+          plan.styleKeys.length
+          || plan.fadeKeys.length
+          || plan.globalSize
+          || plan.globalOpacity
+        );
+        if (
+          needsPointScaling
+          && (
+            typeof ovizScaleRenderedPointOpacities !== "function"
+            || typeof ovizScaleRenderedPointSizes !== "function"
+          )
+        ) return false;
         const PRESENCE_FLOOR = 0.002;
         const applied = transition.appearanceFastApplied
           || (transition.appearanceFastApplied = {
@@ -3075,6 +3133,7 @@ THREEJS_STATE_RUNTIME_JS = r"""
           ovizStateDirty = false;
           const performanceMetrics = {
             durationMs: Math.max(0, performance.now() - transition.startedAt),
+            wallDurationMs: Math.max(0, performance.now() - transition.wallStartedAt),
             effectiveDurationMs: transition.phasePlan.effectiveDurationMs,
             animationFrames: transition.animationFrameCount,
             sceneRenders: transition.sceneRenderCount,
@@ -3613,31 +3672,43 @@ THREEJS_STATE_RUNTIME_JS = r"""
         return /\.html?$/i.test(cleaned) ? cleaned : cleaned + ".html";
       }
 
-      async function ovizPromptExportStatesHtml() {
+      async function ovizRequestStatesExportFilename(message, options = {}) {
+        const fallback = ovizDefaultStatesExportFilename(options);
+        try {
+          const promptFilename = window.prompt;
+          if (typeof promptFilename !== "function") return fallback;
+          const value = await Promise.resolve(promptFilename.call(window, message, fallback));
+          if (value === null) return null;
+          return ovizNormalizeStatesExportFilename(value, options);
+        } catch (error) {
+          console.warn("Oviz filename prompt is unavailable; using the suggested export name.", error);
+          return fallback;
+        }
+      }
+
+      async function ovizPromptExportStatesHtml(options = {}) {
         await ovizExitFullscreenBeforeExport();
-        const filename = window.prompt(
+        const filename = await ovizRequestStatesExportFilename(
           "Name the exported HTML file",
-          ovizDefaultStatesExportFilename(),
+          options,
         );
         if (filename === null) {
           return { saved: false, cancelled: true };
         }
-        return ovizExportStatesHtml({
-          filename: ovizNormalizeStatesExportFilename(filename),
-        });
+        return ovizExportStatesHtml(Object.assign({}, options, { filename }));
       }
 
       async function ovizPromptExportStatesPresentOnlyHtml() {
         await ovizExitFullscreenBeforeExport();
-        const filename = window.prompt(
+        const filename = await ovizRequestStatesExportFilename(
           "Name the present-only HTML file",
-          ovizDefaultStatesExportFilename({ presentOnly: true }),
+          { presentOnly: true },
         );
         if (filename === null) {
           return { saved: false, cancelled: true };
         }
         return ovizExportStatesHtml({
-          filename: ovizNormalizeStatesExportFilename(filename, { presentOnly: true }),
+          filename,
           presentOnly: true,
         });
       }
@@ -3659,7 +3730,10 @@ THREEJS_STATE_RUNTIME_JS = r"""
           // their edge arrows always navigate the ordered State sequence.
           delete exportSceneSpec.deck;
         } else if (typeof ovizDeckExportSpec === "function") {
-          exportSceneSpec.deck = ovizDeckExportSpec({ embedded: true });
+          exportSceneSpec.deck = ovizDeckExportSpec({
+            embedded: true,
+            startInPresentation: options.startPresentation === true,
+          });
         }
         exportSceneSpec.width = Math.max(root.clientWidth || sceneSpec.width || 900, 1);
         exportSceneSpec.height = Math.max(root.clientHeight || sceneSpec.height || 700, 1);

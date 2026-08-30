@@ -2111,7 +2111,6 @@ THREEJS_SCENE_RUNTIME_JS = """
           dashed: false,
           transparent: opacity < 1.0,
           opacity,
-          worldUnits: false,
         });
         material.resolution.set(root.clientWidth, root.clientHeight);
         const line = new LineSegments2(geometry, material);

@@ -1,6 +1,6 @@
 """Integrate Galactic orbits and convert them to Oviz coordinate frames."""
 
-from astropy.coordinates import SkyCoord, concatenate
+from astropy.coordinates import SkyCoord
 import astropy.units as u
 from copy import deepcopy
 import math
@@ -10,6 +10,70 @@ import warnings
 warnings.filterwarnings("ignore")
 #from galpy.potential import MWPotential2014, SpiralArmsPotential
 from galpy.potential import MWPotential2014, DehnenBarPotential, SpiralArmsPotential
+
+
+def normalize_time_grid(time, *, require_zero=True):
+    """Return a validated one-dimensional timeline in caller-supplied order."""
+
+    if time is None:
+        raise ValueError("time must be a non-empty one-dimensional array-like.")
+    try:
+        time_array = np.asarray(time, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("time must contain only numeric values.") from exc
+    if time_array.ndim != 1 or time_array.size == 0:
+        raise ValueError("time must be a non-empty one-dimensional array-like.")
+    if not np.all(np.isfinite(time_array)):
+        raise ValueError("time must contain only finite values.")
+    if np.unique(time_array).size != time_array.size:
+        raise ValueError("time must not contain duplicate values.")
+    if require_zero and not np.any(time_array == 0.0):
+        raise ValueError("The time array must include 0 for the present day.")
+    return np.array(time_array, dtype=float, copy=True)
+
+
+def _integrate_orbit_in_requested_order(orbit, time, potential):
+    """Integrate outward from zero and return SkyCoords in requested order."""
+
+    requested_time = normalize_time_grid(time)
+    negative_time = np.sort(requested_time[requested_time < 0.0])
+    positive_time = np.sort(requested_time[requested_time > 0.0])
+    branches = []
+
+    if negative_time.size:
+        integration_time = np.concatenate(([0.0], negative_time[::-1]))
+        negative_orbit = deepcopy(orbit)
+        negative_orbit.integrate(integration_time * u.Myr, potential)
+        negative_coords = negative_orbit.SkyCoord(integration_time * u.Myr)
+        branches.append((np.concatenate((negative_time, [0.0])), negative_coords, True, False))
+
+    if positive_time.size:
+        integration_time = np.concatenate(([0.0], positive_time))
+        positive_orbit = deepcopy(orbit)
+        positive_orbit.integrate(integration_time * u.Myr, potential)
+        positive_coords = positive_orbit.SkyCoord(integration_time * u.Myr)
+        branches.append((integration_time, positive_coords, False, bool(negative_time.size)))
+    elif not negative_time.size:
+        present_time = np.array([0.0])
+        branches.append((present_time, orbit.SkyCoord(present_time * u.Myr), False, False))
+
+    canonical_time = np.concatenate([branch[0][1:] if branch[3] else branch[0] for branch in branches])
+    canonical_index = {float(value): idx for idx, value in enumerate(canonical_time)}
+    requested_index = np.array([canonical_index[float(value)] for value in requested_time], dtype=int)
+
+    def values(accessor):
+        pieces = []
+        for _branch_time, coords, reverse, drop_zero in branches:
+            value = np.atleast_1d(np.asarray(accessor(coords)))
+            if reverse:
+                value = value[..., ::-1]
+            if drop_zero:
+                value = value[..., 1:]
+            pieces.append(value)
+        canonical_values = np.concatenate(pieces, axis=-1)
+        return canonical_values[..., requested_index]
+
+    return values
 
 def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236., ro=8.122, zo=0.0208):
     """
@@ -26,6 +90,7 @@ def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236
     Returns:
     tuple: Coordinates of the center orbit (x, y, z).
     """
+    time = normalize_time_grid(time)
     if potential is None:
         potential = MWPotential2014
         
@@ -42,24 +107,10 @@ def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236
     )
     rf_orbit = Orbit(vxvv=rf_sc, solarmotion='schoenrich', ro=ro, vo=vo, zo=zo)
 
-    if np.any(time > 0) and np.any(time < 0):
-        time_pos = time[time >= 0]
-        time_neg = np.flip(time[time <= 0])
-        rf_orbit_neg = deepcopy(rf_orbit)
-        rf_orbit_pos = deepcopy(rf_orbit)
-        rf_orbit_neg.integrate(time_neg*u.Myr, potential)
-        sc_int_neg = rf_orbit_neg.SkyCoord(time_neg*u.Myr)
-        rf_orbit_pos.integrate(time_pos*u.Myr, potential)
-        sc_int_pos = rf_orbit_pos.SkyCoord(time_pos*u.Myr)
-        x_rf_int = np.append(np.flip(sc_int_neg.galactic.cartesian.x.value[1:]), sc_int_pos.galactic.cartesian.x.value) * 1000
-        y_rf_int = np.append(np.flip(sc_int_neg.galactic.cartesian.y.value[1:]), sc_int_pos.galactic.cartesian.y.value) * 1000
-        z_rf_int = np.append(np.flip(sc_int_neg.galactic.cartesian.z.value[1:]), sc_int_pos.galactic.cartesian.z.value) * 1000
-    else:
-        rf_orbit.integrate(time*u.Myr, potential)
-        sc_int = rf_orbit.SkyCoord(time*u.Myr)
-        x_rf_int = sc_int.galactic.cartesian.x.value * 1000
-        y_rf_int = sc_int.galactic.cartesian.y.value * 1000
-        z_rf_int = sc_int.galactic.cartesian.z.value * 1000
+    integrated_values = _integrate_orbit_in_requested_order(rf_orbit, time, potential)
+    x_rf_int = integrated_values(lambda sc: sc.galactic.cartesian.x.value) * 1000
+    y_rf_int = integrated_values(lambda sc: sc.galactic.cartesian.y.value) * 1000
+    z_rf_int = integrated_values(lambda sc: sc.galactic.cartesian.z.value) * 1000
 
     return (x_rf_int, y_rf_int, z_rf_int)
 
@@ -104,6 +155,7 @@ def create_orbit(coordinates, time, reference_frame_center=None, potential=None,
     Returns:
     tuple: Centered, heliocentric, and galactocentric coordinates.
     """
+    time = normalize_time_grid(time)
     if potential is None:
         potential = MWPotential2014
         
@@ -114,31 +166,13 @@ def create_orbit(coordinates, time, reference_frame_center=None, potential=None,
     )
     orbit = Orbit(vxvv=sc, ro=ro, vo=vo, zo=zo, solarmotion='schoenrich')
 
-    if np.any(time > 0) and np.any(time < 0):
-        time_pos = time[time >= 0]
-        time_neg = np.flip(time[time <= 0])
-        orbit_pos = deepcopy(orbit)
-        orbit_neg = deepcopy(orbit)
-        orbit_pos.integrate(time_pos*u.Myr, potential)
-        sc_int_pos = orbit_pos.SkyCoord(time_pos*u.Myr)
-        orbit_neg.integrate(time_neg*u.Myr, potential)
-        sc_int_neg = orbit_neg.SkyCoord(time_neg*u.Myr)
-        x_helio_int = np.append(np.flip(sc_int_neg.galactic.cartesian.x.value[:, 1:], axis=1), sc_int_pos.galactic.cartesian.x.value, axis=1).reshape(len(x), len(time)) * 1000
-        y_helio_int = np.append(np.flip(sc_int_neg.galactic.cartesian.y.value[:, 1:], axis=1), sc_int_pos.galactic.cartesian.y.value, axis=1).reshape(len(x), len(time)) * 1000
-        z_helio_int = np.append(np.flip(sc_int_neg.galactic.cartesian.z.value[:, 1:], axis=1), sc_int_pos.galactic.cartesian.z.value, axis=1).reshape(len(x), len(time)) * 1000
-        x_gc_int = np.append(np.flip(sc_int_neg.galactocentric.cartesian.x.value[:, 1:], axis=1), sc_int_pos.galactocentric.cartesian.x.value, axis=1).reshape(len(x), len(time)) * 1000
-        y_gc_int = np.append(np.flip(sc_int_neg.galactocentric.cartesian.y.value[:, 1:], axis=1), sc_int_pos.galactocentric.cartesian.y.value, axis=1).reshape(len(x), len(time)) * 1000
-        z_gc_int = np.append(np.flip(sc_int_neg.galactocentric.cartesian.z.value[:, 1:], axis=1), sc_int_pos.galactocentric.cartesian.z.value, axis=1).reshape(len(x), len(time)) * 1000
-
-    else:
-        orbit.integrate(time*u.Myr, potential)
-        sc_int = orbit.SkyCoord(time*u.Myr)
-        x_helio_int = sc_int.galactic.cartesian.x.value * 1000
-        y_helio_int = sc_int.galactic.cartesian.y.value * 1000
-        z_helio_int = sc_int.galactic.cartesian.z.value * 1000
-        x_gc_int = sc_int.galactocentric.cartesian.x.value * 1000
-        y_gc_int = sc_int.galactocentric.cartesian.y.value * 1000
-        z_gc_int = sc_int.galactocentric.cartesian.z.value * 1000
+    integrated_values = _integrate_orbit_in_requested_order(orbit, time, potential)
+    x_helio_int = integrated_values(lambda sc: sc.galactic.cartesian.x.value) * 1000
+    y_helio_int = integrated_values(lambda sc: sc.galactic.cartesian.y.value) * 1000
+    z_helio_int = integrated_values(lambda sc: sc.galactic.cartesian.z.value) * 1000
+    x_gc_int = integrated_values(lambda sc: sc.galactocentric.cartesian.x.value) * 1000
+    y_gc_int = integrated_values(lambda sc: sc.galactocentric.cartesian.y.value) * 1000
+    z_gc_int = integrated_values(lambda sc: sc.galactocentric.cartesian.z.value) * 1000
     
     helio_coords = (x_helio_int, y_helio_int, z_helio_int)
     galactocentric_coords = (x_gc_int, y_gc_int, z_gc_int)

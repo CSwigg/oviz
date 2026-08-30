@@ -376,7 +376,9 @@ class ThreeJSRendererTests(unittest.TestCase):
         # interface while keeping the current State.
         self.assertIn("oviz-three-presentation-exit", html)
         self.assertIn("const presentOnlyExport = Boolean(", html)
-        self.assertIn("let presentationModeEnabled = presentOnlyExport;", html)
+        self.assertIn("const startInPresentationMode = presentOnlyExport || deckPresentationExport;", html)
+        self.assertIn("let presentationModeEnabled = false;", html)
+        self.assertIn("root.dataset.presentationStartsOnReady", html)
         self.assertIn("const presentationModeLocked = false;", html)
         self.assertIn("presentationExitButtonEl.addEventListener", html)
         self.assertIn(".oviz-three-presentation-nav .oviz-three-presentation-exit {", html)
@@ -1451,9 +1453,11 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn('["opacity", "opacity_scale"].forEach((fieldName)', html)
         self.assertIn("const persistentImagePlaneTextures = new WeakSet()", html)
         self.assertIn("persistentImagePlaneTextures.add(texture)", html)
-        self.assertIn("initializeOvizStates().then(() => {", html)
-        self.assertIn("initializeOvizDeck().catch((err) =>", html)
-        self.assertNotIn("await initializeOvizStates()", html)
+        self.assertIn("async function initializeOvizAuthoringRuntime()", html)
+        self.assertIn("await initializeOvizStates();", html)
+        self.assertIn("await initializeOvizDeck();", html)
+        self.assertIn("if (startInPresentationMode) {", html)
+        self.assertIn("setPresentationMode(true);", html)
         self.assertIn('sliderEl.step = "0.02"', html)
         self.assertIn("const stableFrameIndex = clampFrameIndex(targetIndex)", html)
         self.assertIn("updateTimelineMotionOpacity()", html)
@@ -1874,6 +1878,12 @@ class ThreeJSRendererTests(unittest.TestCase):
                 for member in scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"]
             )
         )
+        self.assertTrue(
+            all(
+                "label" not in member
+                for member in scene_spec["sky_panel"]["members_by_cluster"]["Cluster A"]
+            )
+        )
         self.assertEqual(selection["cluster_name"], "member_1")
         self.assertEqual(selection["name_all"], "member_1,Cluster A")
         self.assertEqual(selection["trace_name"], "Cluster A")
@@ -1887,6 +1897,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertIn("View: Mollweide all-sky", html)
         self.assertIn('type: "oviz-sky-hover-cluster"', html)
         self.assertIn("function skyMemberCatalogForPoint(point, trace)", html)
+        self.assertIn("label: pt.label || lookupName,", html)
         self.assertIn("motionKeyForPoint(point),", html)
         self.assertIn("function addSkyMemberStars(group, catalog, options = {})", html)
         self.assertIn("function skyMemberScaleForPoint(basePointScale, position)", html)
@@ -2048,6 +2059,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         self.assertEqual(len(members), 2)
         self.assertEqual(members[0]["source_id"], "123456789")
         self.assertTrue(members[0]["is_cluster_member"])
+        self.assertNotIn("label", members[0])
         self.assertTrue(np.isfinite(members[0]["l"]))
         self.assertTrue(np.isfinite(members[0]["b"]))
         self.assertAlmostEqual(members[0]["ra"], 120.0)

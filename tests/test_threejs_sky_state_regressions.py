@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
+import shutil
+import subprocess
 import unittest
 
 from oviz.threejs_figure import ThreeJSFigure
@@ -438,6 +441,94 @@ class ThreeJSSkyStateRegressionTests(unittest.TestCase):
         self.assertIn("aladinInstance.isStillActive()", idle_wait)
         self.assertIn("transition.skyLayerTransitionStarted && !transition.skyLayerReady", update_transition)
         self.assertIn("transition.startedAt += frameGapMs", update_transition)
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not available")
+    def test_aladin_idle_poll_uses_one_bounded_scheduler_cycle(self):
+        idle_wait = _function_region(
+            self.html,
+            "waitForAladinLayerPaintIdle",
+            "postSkyLayerTransitionReady",
+        )
+        script = f"""
+        let now = 0;
+        let nextHandle = 1;
+        let activeChecks = 0;
+        let afterPaintCalls = 0;
+        const animationFrames = new Map();
+        const timers = new Map();
+        const performance = {{ now: () => now }};
+        const window = {{
+          requestAnimationFrame(callback) {{
+            const handle = nextHandle++;
+            animationFrames.set(handle, callback);
+            return handle;
+          }},
+          cancelAnimationFrame(handle) {{ animationFrames.delete(handle); }},
+          setTimeout(callback, delay) {{
+            const handle = nextHandle++;
+            timers.set(handle, {{ callback, at: now + Number(delay || 0) }});
+            return handle;
+          }},
+          clearTimeout(handle) {{ timers.delete(handle); }},
+        }};
+        const aladinInstance = {{
+          isStillActive() {{
+            activeChecks += 1;
+            return now < 480;
+          }},
+        }};
+        function skyBackgroundAfterPaint(callback) {{
+          afterPaintCalls += 1;
+          callback();
+        }}
+        {idle_wait}
+        let result = null;
+        const pending = waitForAladinLayerPaintIdle(1000).then((value) => {{ result = value; }});
+        async function advance(target) {{
+          now = target;
+          const frames = Array.from(animationFrames.values());
+          animationFrames.clear();
+          frames.forEach((callback) => callback(now));
+          const due = Array.from(timers.entries()).filter((entry) => entry[1].at <= now);
+          due.forEach(([handle, timer]) => {{
+            timers.delete(handle);
+            timer.callback(now);
+          }});
+          await Promise.resolve();
+        }}
+        (async () => {{
+          for (let tick = 20; tick <= 1000 && !result; tick += 20) {{
+            await advance(tick);
+          }}
+          await pending;
+          const checksAtResolution = activeChecks;
+          for (let tick = 1020; tick <= 1400; tick += 20) {{
+            await advance(tick);
+          }}
+          process.stdout.write(JSON.stringify({{
+            result,
+            activeChecks,
+            checksAtResolution,
+            afterPaintCalls,
+            pendingAnimationFrames: animationFrames.size,
+            pendingTimers: timers.size,
+          }}));
+        }})().catch((error) => {{ throw error; }});
+        """
+        completed = subprocess.run(
+            ["node"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["result"], {"ready": True})
+        self.assertLessEqual(payload["activeChecks"], 30)
+        self.assertEqual(payload["activeChecks"], payload["checksAtResolution"])
+        self.assertEqual(payload["afterPaintCalls"], 1)
+        self.assertEqual(payload["pendingAnimationFrames"], 0)
+        self.assertEqual(payload["pendingTimers"], 0)
 
     def test_completed_sky_crossfade_keeps_its_painted_resident_stack(self):
         finish_transition = _function_region(
