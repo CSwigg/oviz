@@ -1,0 +1,85 @@
+/* ------------------------------------------------------------------
+   Oviz design tokens
+   An observatory instrument: quiet glass surfaces over a deep field,
+   hairline structure, tabular numerals, one warm starlight accent.
+   ------------------------------------------------------------------ */
+:root {
+  --ov-font: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ov-font-display: "Inter Display", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ov-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --ov-bg: #04060a;
+  --ov-bg-glow: radial-gradient(120% 90% at 50% 40%, #0b1120 0%, #05070c 55%, #020305 100%);
+  --ov-surface: rgba(13, 16, 23, 0.74);
+  --ov-surface-strong: rgba(15, 18, 26, 0.9);
+  --ov-surface-solid: #0e1118;
+  --ov-surface-raised: rgba(28, 33, 44, 0.9);
+  --ov-hover: rgba(255, 255, 255, 0.055);
+  --ov-active: rgba(255, 255, 255, 0.09);
+  --ov-line: rgba(255, 255, 255, 0.075);
+  --ov-line-strong: rgba(255, 255, 255, 0.14);
+  --ov-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+
+  --ov-text: #eef1f6;
+  --ov-text-2: #a9b2c1;
+  --ov-text-3: #6b7485;
+  --ov-text-inverse: #0b0d12;
+
+  --ov-accent: #f4c46a;
+  --ov-accent-strong: #ffd488;
+  --ov-accent-soft: rgba(244, 196, 106, 0.14);
+  --ov-accent-line: rgba(244, 196, 106, 0.42);
+  --ov-sky: #7cc4ff;
+  --ov-sky-soft: rgba(124, 196, 255, 0.14);
+  --ov-danger: #ff7a70;
+  --ov-ok: #6fdc9b;
+
+  --ov-radius-lg: 16px;
+  --ov-radius: 12px;
+  --ov-radius-sm: 8px;
+  --ov-pill: 999px;
+  --ov-blur: blur(22px) saturate(160%);
+  --ov-shadow: 0 18px 50px -18px rgba(0, 0, 0, 0.75), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+  --ov-shadow-sm: 0 6px 20px -8px rgba(0, 0, 0, 0.7);
+  --ov-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ov-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ov-dur: 180ms;
+
+  --ov-gutter: 16px;
+  --ov-safe-top: env(safe-area-inset-top, 0px);
+  --ov-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ov-safe-left: env(safe-area-inset-left, 0px);
+  --ov-safe-right: env(safe-area-inset-right, 0px);
+  --ov-panel-w: 296px;
+  --ov-inspector-w: 300px;
+  --ov-dock-h: 64px;
+
+  color-scheme: dark;
+}
+
+[data-oviz-theme="light"] {
+  --ov-bg: #eef1f5;
+  --ov-bg-glow: radial-gradient(120% 90% at 50% 40%, #ffffff 0%, #eef1f6 60%, #e3e8ef 100%);
+  --ov-surface: rgba(255, 255, 255, 0.78);
+  --ov-surface-strong: rgba(255, 255, 255, 0.93);
+  --ov-surface-solid: #ffffff;
+  --ov-surface-raised: rgba(255, 255, 255, 0.98);
+  --ov-hover: rgba(15, 23, 42, 0.05);
+  --ov-active: rgba(15, 23, 42, 0.085);
+  --ov-line: rgba(15, 23, 42, 0.09);
+  --ov-line-strong: rgba(15, 23, 42, 0.16);
+  --ov-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --ov-text: #10151f;
+  --ov-text-2: #4a5566;
+  --ov-text-3: #8591a3;
+  --ov-text-inverse: #ffffff;
+  --ov-accent: #b8791b;
+  --ov-accent-strong: #9a620d;
+  --ov-accent-soft: rgba(184, 121, 27, 0.12);
+  --ov-accent-line: rgba(184, 121, 27, 0.4);
+  --ov-sky: #1d78c9;
+  --ov-sky-soft: rgba(29, 120, 201, 0.12);
+  --ov-shadow: 0 18px 50px -20px rgba(15, 23, 42, 0.35), 0 2px 8px -3px rgba(15, 23, 42, 0.15);
+  --ov-shadow-sm: 0 6px 20px -10px rgba(15, 23, 42, 0.4);
+  color-scheme: light;
+}
