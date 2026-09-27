@@ -19,6 +19,22 @@ VIEWER_VERSION = "2.0.0"
 _PLACEHOLDER_RE = re.compile(r"__(?:TITLE|VERSION|THEME|CSS|RUNTIME|MANIFEST|BLOBS)__")
 
 
+def _spec_fingerprint(spec: dict[str, Any]) -> str:
+    """Cheap change detector: identity of the big members + small ones' JSON."""
+
+    parts = []
+    for k in sorted(spec):
+        v = spec[k]
+        if k in ("frames", "volumes", "sky_panel", "image_planes", "dendrogram"):
+            parts.append(f"{k}:{id(v)}:{len(v) if hasattr(v, '__len__') else 0}")
+        else:
+            try:
+                parts.append(f"{k}:{json.dumps(v, sort_keys=True, default=str)}")
+            except (TypeError, ValueError):
+                parts.append(f"{k}:{id(v)}")
+    return str(hash("|".join(parts)))
+
+
 def _json_for_script(obj: Any) -> str:
     text = json.dumps(obj, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
     # Never let data terminate the surrounding <script> element.
@@ -53,24 +69,37 @@ class OvizFigure:
     """An interactive figure rendered by the Oviz WebGL2 viewer.
 
     Build one from a scene spec (what :meth:`oviz.Animate3D.make_plot`
-    produces internally) or from an existing :class:`Bundle`, then call
-    :meth:`write_html`.
+    produces) or from an existing :class:`Bundle`, then call
+    :meth:`write_html`. ``scene_spec`` stays mutable until the HTML is
+    written, so scripts can attach saved States (``fig.scene_spec["states"]``)
+    exactly as with the classic figure.
     """
 
     def __init__(self, scene_spec: dict[str, Any] | None = None, *, bundle: Bundle | None = None,
-                 theme: str = "dark", title: str | None = None):
-        if bundle is None:
-            if scene_spec is None:
-                raise ValueError("OvizFigure needs a scene_spec or a bundle")
-            bundle = compile_scene_spec(scene_spec)
-        self.bundle = bundle
+                 theme: str = "dark", title: str | None = None, **_legacy_options: Any):
+        if bundle is None and scene_spec is None:
+            raise ValueError("OvizFigure needs a scene_spec or a bundle")
         self.scene_spec = scene_spec
+        self._bundle = bundle
+        self._bundle_key: str | None = None
         self.theme = theme
         self.title = title
 
-    # Mirror the legacy figure's API so callers can switch transparently.
+    @property
+    def bundle(self) -> Bundle:
+        """The compiled bundle (recompiled if the scene spec changed)."""
+
+        if self.scene_spec is None:
+            return self._bundle
+        key = _spec_fingerprint(self.scene_spec)
+        if self._bundle is None or key != self._bundle_key:
+            self._bundle = compile_scene_spec(self.scene_spec)
+            self._bundle_key = key
+        return self._bundle
+
+    # Mirror the classic figure's API so callers can switch transparently.
     def to_dict(self) -> dict[str, Any]:
-        return self.bundle.manifest
+        return self.scene_spec if self.scene_spec is not None else self.bundle.manifest
 
     def to_html(self, **_: Any) -> str:
         return render_bundle_html(self.bundle, title=self.title, theme=self.theme)

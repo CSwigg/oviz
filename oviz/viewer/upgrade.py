@@ -50,7 +50,16 @@ def read_legacy_scene_spec(path: str | Path) -> dict[str, Any]:
             re.S,
         )
         if not chunks:
-            raise ValueError(f"{path}: compressed payload chunks for {payload_id!r} not found")
+            # Older figures store the payload in one element keyed by id.
+            single = re.search(
+                r"<script\b(?=[^>]*type=[\"']application/octet-stream[\"'])"
+                r"(?=[^>]*\bid=[\"']" + re.escape(payload_id) + r"[\"'])[^>]*>(.*?)</script>",
+                html,
+                re.S,
+            )
+            if not single:
+                raise ValueError(f"{path}: compressed payload chunks for {payload_id!r} not found")
+            chunks = [("0", single.group(1))]
         encoded = "".join(re.sub(r"\s+", "", c) for _, c in sorted(chunks, key=lambda x: int(x[0])))
         return json.loads(gzip.decompress(base64.b64decode(encoded)))
     m = _INLINE_RE.search(html)

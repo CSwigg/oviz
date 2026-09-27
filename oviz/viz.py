@@ -303,6 +303,7 @@ class Animate3D:
         actions=None,
         compress_scene_spec="auto",
         scene_spec_compression_threshold_bytes=None,
+        viewer=None,
     ):
         """Integrate the data, build timeline frames, and return a figure.
 
@@ -327,7 +328,13 @@ class Animate3D:
         actions : sequence of mappings, optional
             Declarative camera, legend, State, or timeline Actions.
         compress_scene_spec : bool or ``"auto"``
-            Store the scene payload as gzip-compressed base64 when requested.
+            Classic viewer only: store the scene payload as gzip-compressed
+            base64. The Oviz viewer always stores compact binary data.
+        viewer : {"oviz", "classic"}, optional
+            ``"oviz"`` (the default) writes the WebGL2 Oviz viewer: compact
+            binary payloads, GPU time interpolation, Views & story, video
+            capture. ``"classic"`` writes the previous Three.js runtime
+            byte-for-byte (Slides, Paper and AR remain classic-only).
         show : bool
             Display the figure after construction.
         save_name : path-like, optional
@@ -335,10 +342,11 @@ class Animate3D:
 
         Returns
         -------
-        ThreeJSFigure
-            HTML-backed interactive figure when ``renderer="threejs"``.
+        OvizFigure or ThreeJSFigure
+            The interactive figure for the selected viewer.
         """
         renderer_name = _normalize_renderer_name(renderer)
+        self.viewer_name = _normalize_viewer_name(viewer)
 
         time = orbit_maker.normalize_time_grid(time)
 
@@ -1888,10 +1896,15 @@ class Animate3D:
         self.figure = _OvizAttrDict(self.fig)
 
     def _build_threejs_figure(self, frames):
-        """Build a standalone three.js figure wrapper from the current frame data."""
+        """Build the standalone figure wrapper from the current frame data."""
         scene_spec = self._build_threejs_scene_spec(frames)
         self.fig = scene_spec
         self.fig_dict = scene_spec
+        if getattr(self, "viewer_name", DEFAULT_VIEWER) == "oviz":
+            from .viewer.figure import OvizFigure
+
+            self.figure = OvizFigure(scene_spec)
+            return
         self.figure = ThreeJSFigure(
             scene_spec,
             compress_scene_spec=getattr(self, "threejs_compress_scene_spec", "auto"),
@@ -2771,6 +2784,20 @@ class Animate3D:
 
 
 ####################################################################################################
+DEFAULT_VIEWER = "oviz"
+
+
+def _normalize_viewer_name(viewer):
+    if viewer is None:
+        return DEFAULT_VIEWER
+    name = str(viewer).strip().lower()
+    if name in ("oviz", "new", "v2", "webgl2", "default"):
+        return "oviz"
+    if name in ("classic", "legacy", "threejs", "three.js"):
+        return "classic"
+    raise ValueError("viewer must be 'oviz' or 'classic'.")
+
+
 def _normalize_renderer_name(renderer):
     renderer_name = str(renderer).strip().lower()
     if renderer_name in ('three', 'threejs', 'three.js'):

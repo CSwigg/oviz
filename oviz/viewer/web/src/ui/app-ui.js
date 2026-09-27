@@ -1,6 +1,6 @@
 // The application shell: wires panels, dock, overlays, shortcuts and modes.
 
-import { h, icon, iconButton, kbd, isEditable, MOD, downloadBlob, copyText, clear } from "./dom.js";
+import { h, icon, iconButton, kbd, isEditable, MOD, downloadBlob, copyText, clear, localStorageGet, localStorageSet } from "./dom.js";
 import { slider, toggle, miniSeg, installTooltips, createToasts } from "./controls.js";
 import { LayersPanel } from "./layers.js";
 import { TimelineDock } from "./dock.js";
@@ -12,10 +12,15 @@ import { formatAngle, formatDistance, clamp } from "../core/math.js";
 import { clonePose } from "../engine/camera.js";
 import { cpuFramePosition, frameOffset } from "../engine/frames.js";
 import { SkyPlugin } from "../sky/sky.js";
+import { encodeViewHash, decodeViewHash } from "../app/viewhash.js";
+import { StoryPlugin } from "./story.js";
+import { RecorderPlugin } from "./recorder.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
   ui.use(new SkyPlugin());
+  ui.use(new StoryPlugin());
+  ui.use(new RecorderPlugin());
   return ui;
 }
 
@@ -792,46 +797,4 @@ function stamp() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-}
-
-export function localStorageGet(k) {
-  try { return localStorage.getItem(k); } catch (_) { return null; }
-}
-
-export function localStorageSet(k, v) {
-  try { localStorage.setItem(k, v); } catch (_) { /* private mode */ }
-}
-
-/** Compact, human-readable hash: #t=-12.5&v=3d&c=x,y,z,d,yaw,pitch,fov */
-export function encodeViewHash(viewer) {
-  const p = viewer.pose;
-  const r = (x, d = 2) => Number(x.toFixed(d));
-  const parts = [
-    `t=${r(viewer.timeline.time, 3)}`,
-    `v=${viewer.state.view.mode}`,
-    `c=${[...p.target.map((x) => r(x, 1)), r(p.distance, 1), r(p.yaw, 4), r(p.pitch, 4), r(p.fov, 2)].join(",")}`,
-  ];
-  if (viewer.state.group) parts.push(`g=${encodeURIComponent(viewer.state.group)}`);
-  return parts.join("&");
-}
-
-export function decodeViewHash(hash) {
-  const out = {};
-  for (const part of String(hash || "").replace(/^#/, "").split("&")) {
-    const [k, val] = part.split("=");
-    if (!k || val == null) continue;
-    out[k] = decodeURIComponent(val);
-  }
-  if (!out.c && !out.t) return null;
-  const view = {};
-  if (out.t != null && Number.isFinite(Number(out.t))) view.time = Number(out.t);
-  if (out.v) view.mode = out.v === "sky" ? "sky" : "3d";
-  if (out.g) view.group = out.g;
-  if (out.c) {
-    const n = out.c.split(",").map(Number);
-    if (n.length === 7 && n.every(Number.isFinite)) {
-      view.pose = { target: n.slice(0, 3), distance: n[3], yaw: n[4], pitch: n[5], fov: n[6] };
-    }
-  }
-  return view;
 }

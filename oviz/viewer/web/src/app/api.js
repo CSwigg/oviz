@@ -13,6 +13,7 @@ export function installApi(root, viewer, ui) {
     getState: () => viewer.captureState?.(),
     applyState: (s, opts) => viewer.applyState?.(s, opts),
     screenshot: (opts) => viewer.renderer.capture(opts),
+    get states() { return ui.plugins.find((p) => p.name === "states")?.api(); },
     stats: () => ({
       frames: viewer.renderer.frameCount,
       avgFrameMs: viewer.renderer.fps(),

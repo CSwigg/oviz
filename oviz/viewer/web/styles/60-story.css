@@ -1,0 +1,99 @@
+/* --------------------------------------------------------------- story */
+.ov-story {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom));
+  width: min(960px, calc(100vw - 2 * var(--ov-gutter)));
+  transform: translateX(-50%);
+  border-radius: 18px;
+  overflow: hidden;
+  transition: opacity 260ms var(--ov-ease), transform 320ms var(--ov-ease);
+  z-index: 12;
+}
+.ov-story[data-open="false"] { opacity: 0; transform: translateX(-50%) translateY(14px); pointer-events: none; }
+.ov-story-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 16px; }
+.ov-story-title { font: 680 14px/1 var(--ov-font-display); }
+.ov-story-count { font: 550 11.5px/1 var(--ov-font); color: var(--ov-text-3); font-variant-numeric: tabular-nums; }
+.ov-grow { flex: 1; }
+.ov-story-strip {
+  display: flex; gap: 10px; align-items: stretch;
+  overflow-x: auto; overscroll-behavior: contain;
+  padding: 6px 14px 14px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin; scrollbar-color: var(--ov-line-strong) transparent;
+}
+.ov-story-status { padding: 0 16px 10px; font: 500 11px/1 var(--ov-font); color: var(--ov-text-3); }
+.ov-story-status:empty { display: none; }
+.ov-story-empty { padding: 10px 4px 12px; color: var(--ov-text-2); font: 450 12.5px/1.6 var(--ov-font); max-width: 64ch; }
+.ov-story-empty-title { font: 650 13.5px/1.3 var(--ov-font); color: var(--ov-text); margin-bottom: 4px; }
+
+.ov-card {
+  position: relative; flex: none;
+  width: 168px;
+  border-radius: 12px;
+  background: var(--ov-hover);
+  border: 1px solid var(--ov-line);
+  overflow: hidden; cursor: pointer;
+  scroll-snap-align: start;
+  transition: border-color var(--ov-dur), transform 200ms var(--ov-ease), box-shadow var(--ov-dur), background var(--ov-dur);
+}
+.ov-card:hover { transform: translateY(-2px); border-color: var(--ov-line-strong); background: var(--ov-active); }
+.ov-card[data-active="true"] { border-color: var(--ov-accent-line); box-shadow: 0 0 0 1px var(--ov-accent-line), 0 10px 24px -12px var(--ov-accent); }
+.ov-card[data-dragging="true"] { opacity: 0.4; }
+.ov-card[data-over="true"] { box-shadow: -3px 0 0 var(--ov-accent); }
+.ov-card-thumb {
+  position: relative; aspect-ratio: 16 / 9; width: 100%;
+  background: #05070b center / cover no-repeat;
+  display: grid; place-items: center;
+}
+.ov-card-mode { font: 650 11px/1 var(--ov-font); color: var(--ov-text-3); letter-spacing: 0.08em; text-transform: uppercase; }
+.ov-card-meta { display: flex; align-items: center; gap: 8px; padding: 8px 10px 9px; min-width: 0; }
+.ov-card-index {
+  display: inline-grid; place-items: center; flex: none;
+  width: 18px; height: 18px; border-radius: 5px;
+  font: 700 10.5px/1 var(--ov-font); font-variant-numeric: tabular-nums;
+  color: var(--ov-text-inverse); background: var(--ov-text-2);
+}
+.ov-card[data-active="true"] .ov-card-index { background: var(--ov-accent); }
+.ov-card-name { font: 580 12px/1.25 var(--ov-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.ov-card-name .ov-input { height: 24px; padding: 0 6px; font-size: 12px; }
+.ov-card-more { position: absolute !important; top: 6px; right: 6px; width: 28px !important; height: 28px !important; background: rgba(5, 7, 11, 0.6) !important; color: #fff !important; opacity: 0; transition: opacity var(--ov-dur); }
+.ov-card:hover .ov-card-more, .ov-card:focus-within .ov-card-more { opacity: 1; }
+.ov-card-flag { position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; background: rgba(5, 7, 11, 0.6); color: var(--ov-sky); }
+.ov-card-flag .ov-icon { transform: scale(0.75); }
+.ov-story-add {
+  flex: none; width: 64px; border-radius: 12px;
+  border: 1.5px dashed var(--ov-line-strong); background: transparent; color: var(--ov-text-3);
+  display: grid; place-items: center;
+  transition: color var(--ov-dur), border-color var(--ov-dur), background var(--ov-dur);
+}
+.ov-story-add:hover { color: var(--ov-accent); border-color: var(--ov-accent-line); background: var(--ov-accent-soft); }
+
+/* --------------------------------------------------------- presentation */
+.ov-present {
+  position: absolute; left: 50%;
+  bottom: calc(var(--ov-gutter) * 1.5 + var(--ov-safe-bottom));
+  transform: translateX(-50%);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
+  width: min(760px, calc(100vw - 2 * var(--ov-gutter)));
+  padding: 12px 12px 12px 12px;
+  border-radius: 20px;
+  z-index: 20;
+  transition: opacity 320ms var(--ov-ease), transform 360ms var(--ov-ease);
+}
+.ov-present[data-open="false"] { opacity: 0; transform: translateX(-50%) translateY(20px); pointer-events: none; }
+.ov-present .ov-ibtn { width: 44px; height: 44px; background: var(--ov-hover); }
+.ov-present .ov-ibtn:hover { background: var(--ov-active); }
+.ov-present-text { display: grid; gap: 5px; justify-items: center; text-align: center; min-width: 0; }
+.ov-present-title { font: 680 17px/1.25 var(--ov-font-display); letter-spacing: -0.01em; max-width: 100%; }
+.ov-present-caption { font: 450 13px/1.5 var(--ov-font); color: var(--ov-text-2); max-width: 62ch; user-select: text; -webkit-user-select: text; }
+.ov-present-dots { display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap; justify-content: center; }
+.ov-present-dot { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: var(--ov-line-strong); transition: background var(--ov-dur), transform var(--ov-dur); }
+.ov-present-dot:hover { background: var(--ov-text-3); }
+.ov-present-dot[aria-current="step"] { background: var(--ov-accent); transform: scale(1.35); }
+.ov-present-exit { align-self: start; }
+.ov-root[data-presenting="true"] .ov-labels .ov-label--dyn { display: none; }
+.ov-root[data-story="true"] .ov-layers,
+.ov-root[data-story="true"] .ov-inspector {
+  max-height: calc(100% - 52px - var(--ov-dock-h) - 3 * var(--ov-gutter) - 24px - 200px - var(--ov-safe-top) - var(--ov-safe-bottom));
+}

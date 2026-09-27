@@ -117,3 +117,11 @@
 .ov-choice-title { display: flex; align-items: center; gap: 8px; font: 650 13px/1.2 var(--ov-font); color: var(--ov-text); }
 .ov-choice-title .ov-icon { color: var(--ov-accent); }
 .ov-choice-desc { font: 450 12px/1.45 var(--ov-font); color: var(--ov-text-2); }
+
+/* ---- Recording pill ------------------------------------------------ */
+.ov-rec-pill {
+  position: absolute; left: 50%; top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 999px; z-index: 40;
+  font: 650 12.5px/1 var(--ov-font);
+}
+.ov-rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 10px #ff5a4f; animation: ov-twinkle 1.2s infinite; }

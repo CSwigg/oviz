@@ -280,6 +280,15 @@ export class SkyPlugin {
     return this.viewer.state.sky.layers || [];
   }
 
+  throttledApply() {
+    if (this._applyQueued) return;
+    this._applyQueued = true;
+    requestAnimationFrame(() => {
+      this._applyQueued = false;
+      this.applyLayers();
+    });
+  }
+
   applyLayers() {
     if (!this.sky.ready) return;
     this.sky.applyStack(this.layers(), { backgroundVisible: this.viewer.state.sky.backgroundVisible });

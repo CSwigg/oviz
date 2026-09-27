@@ -13,12 +13,15 @@ from .threejs_profiles import (
 )
 from .traces import Layer, LayerCollection, Trace, TraceCollection
 from .viz import Animate3D
+from .viewer import OvizFigure, upgrade_html
 
 from . import orbit_maker
 from . import point_sizes
 
 __all__ = [
 	"Animate3D",
+	"OvizFigure",
+	"upgrade_html",
 	"Scene3D",
 	"Trace",
 	"TraceCollection",

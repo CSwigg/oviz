@@ -151,16 +151,23 @@ class ThreeJSRendererTests(unittest.TestCase):
             encoded = json.loads(encoded_expr)
         return json.loads(gzip.decompress(base64.b64decode(encoded)).decode("utf-8"))
 
-    def test_make_plot_defaults_to_threejs_renderer(self):
+    def test_make_plot_defaults_to_oviz_viewer(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         fig = viz.make_plot(time=np.array([0.0, -1.0]), show=False)
 
-        self.assertEqual(fig.__class__.__name__, "ThreeJSFigure")
+        self.assertEqual(fig.__class__.__name__, "OvizFigure")
         self.assertEqual([frame["time"] for frame in viz.fig_dict["frames"]], [-1.0, 0.0])
+
+        classic = Animate3D(_FakeCollection(), figure_theme="dark").make_plot(
+            time=np.array([0.0, -1.0]), show=False, viewer="classic"
+        )
+        self.assertEqual(classic.__class__.__name__, "ThreeJSFigure")
+        with self.assertRaises(ValueError):
+            Animate3D(_FakeCollection(), figure_theme="dark").make_plot(time=np.array([0.0]), viewer="plotly")
 
     def test_make_plot_can_return_threejs_html_wrapper(self):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
-        fig = viz.make_plot(time=np.array([0.0, -1.0]), renderer="threejs", show=False)
+        fig = viz.make_plot(viewer="classic", time=np.array([0.0, -1.0]), renderer="threejs", show=False)
 
         html = fig.to_html()
         repr_html = fig._repr_html_()
@@ -725,7 +732,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         collection.cluster.cmin = 0.0
         collection.cluster.cmax = 20.0
         viz = Animate3D(collection, figure_theme="dark")
-        fig = viz.make_plot(time=np.array([0.0, -1.0]), renderer="threejs", show=False)
+        fig = viz.make_plot(viewer="classic", time=np.array([0.0, -1.0]), renderer="threejs", show=False)
 
         legend_item = next(
             item
@@ -961,7 +968,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
 
         with self.assertRaisesRegex(ValueError, "renderer must be 'threejs'"):
-            fig = viz.make_plot(
+            fig = viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="legacy",
                 show=False,
@@ -969,7 +976,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_serializes_actions(self):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1039,7 +1046,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_keeps_actions_in_minimal_mode(self):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1065,7 +1072,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_exports_mobile_mode_metadata_and_ui_hooks(self):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1123,7 +1130,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_can_explicitly_enable_experimental_ar(self):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1219,7 +1226,7 @@ class ThreeJSRendererTests(unittest.TestCase):
             members_file = Path(tmp_dir) / "members.csv"
             members_file.write_text("name,l,b\nCluster A,120.0,-20.0\n", encoding="utf-8")
 
-            viz.make_plot(
+            viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -1248,7 +1255,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 fits.ImageHDU(cube, name="MEAN"),
             ]).writeto(cube_path)
 
-            fig = viz.make_plot(
+            fig = viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -1281,7 +1288,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 "Families": ["Family A"],
             },
         )
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1307,7 +1314,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 "Families": ["Family A"],
             },
         )
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1349,7 +1356,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
 
         with self.assertRaisesRegex(ValueError, "lite threejs exports"):
-            viz.make_plot(
+            viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -1364,7 +1371,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_scene3d_supports_profile_helpers(self):
         viz = Scene3D(_FakeCollection(show_tracks=True), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1408,7 +1415,7 @@ class ThreeJSRendererTests(unittest.TestCase):
             image_path = Path(tmp_dir) / "galaxy.jpg"
             image_path.write_bytes(b"\xff\xd8\xff\xd9")
             viz = Animate3D(_FakeCollection(show_tracks=True), figure_theme="dark")
-            fig = viz.make_plot(
+            fig = viz.make_plot(viewer="classic", 
                 time=np.arange(0.0, -6.0, -1.0),
                 renderer="threejs",
                 show=False,
@@ -1494,7 +1501,7 @@ class ThreeJSRendererTests(unittest.TestCase):
             xyz_widths=(1000, 1000, 400),
             trace_grouping_dict={"Sun": ["Sun"]},
         )
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1509,7 +1516,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_milky_way_model_only_exists_at_t0(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.arange(0.0, -10.0, -1.0),
             renderer="threejs",
             show=False,
@@ -1533,7 +1540,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_galactic_coordinates_are_labelled_and_time_independent(self):
         viz = Animate3D(_FakeCollection(show_tracks=False), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([1.0, 0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1748,7 +1755,7 @@ class ThreeJSRendererTests(unittest.TestCase):
             "hoverinfo": "skip",
         }
 
-        viz.make_plot(
+        viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -1769,7 +1776,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_scale_bar_is_fixed_and_not_saved(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(time=np.array([0.0, -1.0]), renderer="threejs", show=False)
+        fig = viz.make_plot(viewer="classic", time=np.array([0.0, -1.0]), renderer="threejs", show=False)
         html = fig.to_html()
 
         self.assertIn('class="oviz-three-scale-bar" data-dragging="false"', html)
@@ -1814,7 +1821,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            fig = viz.make_plot(
+            fig = viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -2046,7 +2053,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 "Cluster A,987654321,120.1,-20.1\n",
                 encoding="utf-8",
             )
-            viz.make_plot(
+            viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -2069,7 +2076,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
 
         with self.assertRaisesRegex(ValueError, "cluster_members_file"):
-            viz.make_plot(
+            viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -2083,7 +2090,7 @@ class ThreeJSRendererTests(unittest.TestCase):
             image_path = Path(tmp_dir) / "local_sky.png"
             image_path.write_bytes(b"\x89PNG\r\n\x1a\n")
 
-            viz.make_plot(
+            viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -2131,7 +2138,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_can_enable_local_sky_dome_from_data_url(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        viz.make_plot(
+        viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2205,7 +2212,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_can_enable_aladin_sky_dome_without_local_image(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2251,7 +2258,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_can_use_live_aladin_sky_dome_background(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2408,7 +2415,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_searches_point_traces_and_resolves_aladin_targets(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2443,7 +2450,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_exposes_opt_in_sky_debug_instrumentation(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2492,7 +2499,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_exposes_sky_aperture_for_live_aladin_backgrounds(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2681,7 +2688,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_restores_saved_sky_aperture_state(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        viz.make_plot(
+        viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2711,7 +2718,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_can_use_native_hips_sky_dome_background(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2866,7 +2873,7 @@ class ThreeJSRendererTests(unittest.TestCase):
 
     def test_threejs_renderer_can_use_hips2fits_sky_dome_background(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2941,7 +2948,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz.data_collection.cluster.df_int["y_helio"] = [-5.0, -5.0]
         viz.data_collection.cluster.df_int["z_helio"] = [2.0, 2.0]
 
-        viz.make_plot(
+        viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2961,7 +2968,7 @@ class ThreeJSRendererTests(unittest.TestCase):
     def test_threejs_renderer_can_compact_repeated_frame_payloads(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
 
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -2989,7 +2996,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz.data_collection.cluster.df_int["y_helio"] = [-5.0, -10.0]
         viz.data_collection.cluster.df_int["z_helio"] = [2.0, 4.0]
 
-        viz.make_plot(
+        viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -3007,7 +3014,7 @@ class ThreeJSRendererTests(unittest.TestCase):
     def test_threejs_renderer_allows_initial_state_overrides(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
 
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -3035,7 +3042,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         viz.data_collection.cluster.df_int["age_myr"] = [0.5, 0.5]
 
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -3070,7 +3077,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz.data_collection.cluster.df_int["age_myr"] = [8.0, 2.0]
         viz.data_collection.cluster.df_int["name"] = ["member_1", "member_2"]
 
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -3122,7 +3129,7 @@ class ThreeJSRendererTests(unittest.TestCase):
             image_hdu.header["CDELT3"] = 2.0
             fits.HDUList([fits.PrimaryHDU(), image_hdu]).writeto(cube_path)
 
-            fig = viz.make_plot(
+            fig = viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -3257,7 +3264,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 image_hdu.header[f"CDELT{axis_number}"] = 2.0
             fits.HDUList([fits.PrimaryHDU(), image_hdu]).writeto(cube_path)
 
-            fig = viz.make_plot(
+            fig = viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -3294,7 +3301,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 fits.ImageHDU(cube, name="MEAN"),
             ]).writeto(cube_path)
 
-            fig = viz.make_plot(
+            fig = viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -3332,7 +3339,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         collection.cluster.df_int.loc[:, "z"] = [3.456789, -7.654321]
         viz = Animate3D(collection, figure_theme="dark")
 
-        fig = viz.make_plot(
+        fig = viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -3373,7 +3380,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 fits.ImageHDU(cube, name="MEAN"),
             ]).writeto(cube_path)
 
-            fig = viz.make_plot(
+            fig = viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,
@@ -3396,7 +3403,7 @@ class ThreeJSRendererTests(unittest.TestCase):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         cube = np.linspace(0.0, 1.0, 12 * 12 * 12, dtype=np.float32).reshape(12, 12, 12)
 
-        viz.make_plot(
+        viz.make_plot(viewer="classic", 
             time=np.array([0.0, -1.0]),
             renderer="threejs",
             show=False,
@@ -3425,7 +3432,7 @@ class ThreeJSRendererTests(unittest.TestCase):
                 fits.ImageHDU(mean_cube, name="MEAN"),
             ]).writeto(cube_path)
 
-            viz.make_plot(
+            viz.make_plot(viewer="classic", 
                 time=np.array([0.0, -1.0]),
                 renderer="threejs",
                 show=False,

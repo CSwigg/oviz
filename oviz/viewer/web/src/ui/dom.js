@@ -165,3 +165,11 @@ export function downloadBlob(blob, filename) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+
+export function localStorageGet(k) {
+  try { return localStorage.getItem(k); } catch (_) { return null; }
+}
+
+export function localStorageSet(k, v) {
+  try { localStorage.setItem(k, v); } catch (_) { /* private mode or quota */ }
+}
