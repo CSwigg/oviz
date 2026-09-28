@@ -4,7 +4,7 @@
 // frame dirty (camera motion, time change, style edit, async asset arrival)
 // or an animation asked for continuous frames. Idle figures cost ~0 CPU/GPU.
 
-import { createContext } from "./gl.js";
+import { createContext, enableExtensions } from "./gl.js";
 import { Camera } from "./camera.js";
 
 export class Renderer {
@@ -37,13 +37,18 @@ export class Renderer {
     this._resizeObserver = new ResizeObserver(() => this.resize());
     this._resizeObserver.observe(canvas.parentElement || canvas);
     this.contextLost = false;
+    this.onContextRestored = null;
     canvas.addEventListener("webglcontextlost", (e) => {
+      // preventDefault asks the browser to restore the context later.
       e.preventDefault();
       this.contextLost = true;
     });
     canvas.addEventListener("webglcontextrestored", () => {
       this.contextLost = false;
-      for (const layer of this.layers) layer.restore?.();
+      this.caps = enableExtensions(this.gl);
+      // Every GL object died with the old context; the owner rebuilds them.
+      this.layers = [];
+      this.onContextRestored?.();
       this.invalidate();
     });
     this.resize();

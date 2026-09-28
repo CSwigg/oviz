@@ -100,9 +100,12 @@ void main() {
   }
   float stars = pow(max(aStatic.w, 1e-6), uStarsExp);
   float eff = opacity * uOpacityScale * p.w;
-  if (aState > 0.5 && aState < 1.5) eff *= uDimOpacity;
-  if (aState > 2.5 && aState < 3.5) eff = 0.0;
-  if (aState > 3.5) eff *= 1.0 - uMemberFade;   // replaced by member stars in Sky
+  // State bits: 1 dimmed (filter), 2 hidden (filter), 4 replaced by member
+  // stars in Sky view.
+  int st = int(aState + 0.5);
+  if ((st & 2) != 0) eff = 0.0;
+  else if ((st & 1) != 0) eff *= uDimOpacity;
+  if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
   vec4 center = uViewProj * vec4(p.xyz + uOffset, 1.0);
   if (size <= 0.0 || eff <= 0.001 || p.w <= 0.0 || center.w <= 0.0) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -262,6 +265,11 @@ function psfTexture(gl, kind, size = 512) {
 }
 
 let sharedTextures = null;
+/** Forget cached textures (they die with a lost WebGL context). */
+export function resetStarTextures() {
+  sharedTextures = null;
+}
+
 export function starTextures(gl) {
   if (!sharedTextures || sharedTextures.gl !== gl) {
     sharedTextures = {
@@ -369,11 +377,13 @@ class PointBatch {
     ]);
   }
 
-  setStates(states) {
+  /** Replace the bits in `mask` with `values` (Uint8Array, same length). */
+  setStateBits(mask, values) {
     const gl = this.gl;
-    this.state.set(states);
+    const s = this.state;
+    for (let i = 0; i < s.length; i++) s[i] = (s[i] & ~mask) | (values ? values[i] & mask : 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.state);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.state);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, s);
   }
 
   dispose() {

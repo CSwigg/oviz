@@ -152,3 +152,13 @@
 .ov-btn--danger:hover { color: var(--ov-danger); border-color: rgba(255, 122, 112, 0.4); }
 .ov-btn--sm { height: 26px; padding: 0 9px; font-size: 11.5px; border-radius: 8px; }
 .ov-btn--block { width: 100%; }
+
+/* ---- Distribution filter ------------------------------------------- */
+.ov-filter { display: grid; gap: 8px; padding: 2px 12px 6px; }
+.ov-hist {
+  width: 100%; height: 80px; display: block;
+  border-radius: 8px; background: var(--ov-hover); cursor: crosshair; touch-action: none;
+}
+.ov-filter-foot { display: flex; align-items: center; gap: 8px; }
+.ov-filter-foot .ov-mini-seg { width: 104px; }
+.ov-hist-readout { font: 550 11px/1.3 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text-3); min-width: 0; }

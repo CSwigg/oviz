@@ -27,6 +27,9 @@ export function captureState(viewer, sky) {
   s.view = { mode: viewer.state.view.mode, pose: clonePose(viewer.pose) };
   s.time = { frame: viewer.timeline.frame, speed: viewer.timeline.speed };
   if (sky) s.sky = sky.captureState();
+  // Plugins (e.g. the distribution filter) contribute their own state.
+  s.ext = {};
+  for (const [name, ext] of viewer.stateExtensions || []) s.ext[name] = ext.capture();
   return s;
 }
 
@@ -212,6 +215,7 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
     viewer.timeline.setFrame(frameB);
     if (Number.isFinite(to.time?.speed)) viewer.timeline.speed = to.time.speed;
     if (sky && to.sky) sky.applyState(to.sky);
+    for (const [name, ext] of viewer.stateExtensions || []) ext.apply(to.ext ? to.ext[name] ?? null : null);
     viewer.controls.autoOrbit = st.global.autoOrbit ? 0.06 : 0;
     viewer.volumes.invalidate();
     viewer.invalidatePick();

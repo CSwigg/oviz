@@ -36,6 +36,13 @@ export class SkyPlugin {
     v.renderer.beforeRender.push(() => this.tick());
     v.on("viewmode", ({ mode }) => this.onViewMode(mode));
     v.on("viewmode-settled", ({ mode }) => { if (mode === "sky") this.revealMembers(true); });
+    v.on("gpu-restored", () => {
+      // The member layer's GL objects died with the context: rebuild lazily.
+      this.members = null;
+      this._membersLoading = null;
+      this._clusterSig = "";
+      if (v.state.view.mode === "sky") this.ensureMembers();
+    });
     // Quick controls next to the 3D/Sky switch.
     this.memberSeg = miniSeg({
       label: "",
@@ -107,7 +114,7 @@ export class SkyPlugin {
         if (!batch) continue;
         const states = new Uint8Array(batch.count);
         for (let i = 0; i < link.length; i++) states[i] = link[i] >= 0 ? 4 : 0;
-        batch.setStates(states);
+        batch.setStateBits(4, states);
       }
       this.members.visible = true;
       v.renderer.invalidate();

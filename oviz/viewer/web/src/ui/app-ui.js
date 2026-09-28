@@ -15,12 +15,15 @@ import { SkyPlugin } from "../sky/sky.js";
 import { encodeViewHash, decodeViewHash } from "../app/viewhash.js";
 import { StoryPlugin } from "./story.js";
 import { RecorderPlugin } from "./recorder.js";
+import { FilterPlugin } from "./filter.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
   ui.use(new SkyPlugin());
+  ui.use(new FilterPlugin());
   ui.use(new StoryPlugin());
   ui.use(new RecorderPlugin());
+  ui.layers.render();
   return ui;
 }
 
@@ -130,6 +133,12 @@ export class AppUI {
       if (this.following) this.updateFollow();
     });
     new ResizeObserver(() => this.syncViewSeg()).observe(this.viewSeg);
+    v.on("gpu-restored", () => {
+      // Trails and measurement lines were GPU objects; drop them cleanly.
+      this.trails.clear();
+      this.clearMeasure();
+      this.inspector.refresh();
+    });
   }
 
   onBackgroundLoad(event) {

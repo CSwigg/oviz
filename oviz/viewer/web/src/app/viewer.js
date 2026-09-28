@@ -8,7 +8,7 @@ import { Controls } from "../engine/controls.js";
 import { RenderTarget } from "../engine/gl.js";
 import { makePose, clonePose, poseFromEyeTarget, poseTween, forwardFromAngles, anglesFromForward } from "../engine/camera.js";
 import { cpuFramePosition, frameOffset } from "../engine/frames.js";
-import { PointsLayer } from "../layers/points.js";
+import { PointsLayer, resetStarTextures } from "../layers/points.js";
 import { LinesLayer } from "../layers/lines.js";
 import { ImagesLayer } from "../layers/images.js";
 import { VolumesLayer } from "../layers/volumes.js";
@@ -48,6 +48,7 @@ export class Viewer extends Emitter {
     this.pickTarget = new RenderTarget(this.gl, { depth: true, filter: this.gl.NEAREST });
     this._pickVersion = 0;
     this.extraStyles = new Map(); // synthetic overlays (trails, measurements)
+    this.stateExtensions = new Map(); // name → {capture, apply} for States
     this._buildLayers();
     this.controls = new Controls(this.canvas, this.renderer, {
       onChange: () => this._onCameraChange(),
@@ -57,6 +58,7 @@ export class Viewer extends Emitter {
     this.labels = new LabelsOverlay(container);
     this.renderer.overlays.push(this.labels);
     this.renderer.beforeRender.push((now) => this._beforeRender(now));
+    this.renderer.onContextRestored = () => this._restoreGPU();
     this.timeline.on(() => {
       this.renderer.invalidate();
       this.emit("time", this.timeline);
@@ -76,7 +78,7 @@ export class Viewer extends Emitter {
   }
 
   /** Upload every trace whose blobs are loaded (call after critical load). */
-  async attachTraces() {
+  async attachTraces({ labels = true } = {}) {
     const store = this.store;
     const cm = this.manifest.colormaps || {};
     for (const [name, entry] of Object.entries(cm)) {
@@ -111,13 +113,34 @@ export class Viewer extends Emitter {
         if (L.arc?.blob) ld.arc = await store.get(L.arc.blob);
         this.lines.addTrace(trace, ld);
       }
-      if (trace.labels) {
+      if (trace.labels && labels) {
         const L = trace.labels;
         const ld = { position: await store.get(L.position.blob) };
         if (L.position.offset) ld.offset = await store.get(L.position.offset);
         this.labels.addTrace(trace, ld);
       }
     }
+    this.renderer.invalidate();
+  }
+
+  /**
+   * Rebuild every GPU resource after a lost WebGL context is restored.
+   * Decoded arrays stay cached in the bundle store, so this re-uploads
+   * without re-decoding; plugins rebuild their own layers on "gpu-restored".
+   */
+  async _restoreGPU() {
+    resetStarTextures();
+    this.data.clear();
+    this.pickIds = [];
+    this.pickTarget = new RenderTarget(this.gl, { depth: true, filter: this.gl.NEAREST });
+    this._pickVersion++;
+    this.extraStyles.clear();
+    this._buildLayers();
+    this.renderer.overlays = this.renderer.overlays.filter((o) => o === this.labels);
+    await this.attachTraces({ labels: false });
+    this.emit("gpu-restored", {});
+    this.attachImages();
+    this.attachVolumes();
     this.renderer.invalidate();
   }
 

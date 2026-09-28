@@ -16,7 +16,12 @@ export function createContext(canvas, options = {}) {
     ...options,
   });
   if (!gl) throw new GLError("WebGL2 is not available in this browser.");
-  const caps = {
+  return { gl, caps: enableExtensions(gl) };
+}
+
+/** Enable the extensions the viewer uses; call again after a context restore. */
+export function enableExtensions(gl) {
+  return {
     floatRT: !!gl.getExtension("EXT_color_buffer_float"),
     halfFloatRT: !!gl.getExtension("EXT_color_buffer_half_float"),
     floatLinear: !!gl.getExtension("OES_texture_float_linear"),
@@ -24,7 +29,6 @@ export function createContext(canvas, options = {}) {
     maxTexture: gl.getParameter(gl.MAX_TEXTURE_SIZE),
     max3DTexture: gl.getParameter(gl.MAX_3D_TEXTURE_SIZE),
   };
-  return { gl, caps };
 }
 
 function compile(gl, type, source, label) {

@@ -55,6 +55,8 @@ export class LayersPanel {
       traces.forEach((t, i) => sec.append(...this.traceRow(t, i)));
       this.body.append(sec);
     }
+    const filterSection = this.ui.filter?.section();
+    if (filterSection) this.body.append(filterSection);
     const volKeys = uniqueVolumes(m.volumes || []);
     if (volKeys.length) {
       const sec = h("div", { class: "ov-section" }, h("div", { class: "ov-section-head" }, h("span", { class: "ov-grow" }, "Volumes")));
