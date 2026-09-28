@@ -16,11 +16,13 @@ import { encodeViewHash, decodeViewHash } from "../app/viewhash.js";
 import { StoryPlugin } from "./story.js";
 import { RecorderPlugin } from "./recorder.js";
 import { FilterPlugin } from "./filter.js";
+import { NotesPlugin } from "./notes.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
   ui.use(new SkyPlugin());
   ui.use(new FilterPlugin());
+  ui.use(new NotesPlugin());
   ui.use(new StoryPlugin());
   ui.use(new RecorderPlugin());
   ui.layers.render();

@@ -61,6 +61,7 @@ export class Inspector {
       h("button", { class: "ov-btn", type: "button", "aria-pressed": String(!!following), onclick: () => { this.ui.toggleFollow(hit); this.refresh(); } }, icon("follow"), following ? "Following" : "Follow"),
       h("button", { class: "ov-btn", type: "button", "aria-pressed": String(trailOn), disabled: v.timeline.count <= 1 ? true : null, onclick: () => { this.ui.toggleTrail(hit); this.refresh(); } }, icon("trail"), "Orbit trail"),
       h("button", { class: "ov-btn", type: "button", onclick: () => this.copy(d) }, icon("copy"), "Copy"),
+      h("button", { class: "ov-btn", type: "button", onclick: () => this.ui.notes?.addForObject(hit) }, icon("edit"), "Add note"),
     );
     this.body.append(hero, facts, actions);
     if (d.ra != null && d.dec != null) {

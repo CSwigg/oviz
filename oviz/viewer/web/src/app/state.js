@@ -209,6 +209,9 @@ export function legacySnapshotToState(snap, manifest, base) {
   if (gc.sky_member_display_mode) st.sky.members = gc.sky_member_display_mode === "clusters" ? "clusters" : "stars";
   if (gc.sky_background_hidden != null) st.sky.backgroundVisible = !gc.sky_background_hidden;
   if (Array.isArray(snap.sky_layers) && snap.sky_layers.length) st.sky.layers = cloneJson(snap.sky_layers);
+  if (Array.isArray(snap.manual_labels)) {
+    st.ext = { ...(st.ext || {}), notes: snap.manual_labels.map(legacyNote).filter(Boolean) };
+  }
   const fv = Number(snap.current_frame_value ?? snap.current_frame_index);
   if (Number.isFinite(fv)) st.time.frame = fv;
   const mode = gc.camera_view_mode === "earth" ? "sky" : "3d";
@@ -249,4 +252,11 @@ function num(v, fb) {
 
 function bool(v, fb) {
   return v === undefined || v === null ? !!fb : !!v;
+}
+
+function legacyNote(l, i) {
+  if (!l || typeof l !== "object") return null;
+  const x = Number(l.x ?? l.position?.x), y = Number(l.y ?? l.position?.y), z = Number(l.z ?? l.position?.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  return { id: String(l.id || `legacy-${i}`), text: String(l.text || "Note"), anchor: { pos: [x, y, z] }, color: String(l.color || "#ffffff") };
 }

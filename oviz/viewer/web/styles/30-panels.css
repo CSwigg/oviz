@@ -165,3 +165,4 @@
 .ov-insp-links { display: flex; align-items: center; gap: 4px; padding: 0 12px 12px; }
 .ov-insp-links .ov-fact-label { margin-right: auto; }
 .ov-insp-links a { text-decoration: none; }
+.ov-insp-actions > :last-child:nth-child(odd) { grid-column: 1 / -1; }
