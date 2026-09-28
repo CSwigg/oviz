@@ -7,7 +7,7 @@ import { Renderer } from "../engine/renderer.js";
 import { Controls } from "../engine/controls.js";
 import { RenderTarget } from "../engine/gl.js";
 import { makePose, clonePose, poseFromEyeTarget, poseTween, forwardFromAngles, anglesFromForward } from "../engine/camera.js";
-import { cpuFramePosition, frameOffset } from "../engine/frames.js";
+import { cpuFramePosition, frameOffset, trailParams } from "../engine/frames.js";
 import { PointsLayer, resetStarTextures } from "../layers/points.js";
 import { LinesLayer } from "../layers/lines.js";
 import { ImagesLayer } from "../layers/images.js";
@@ -283,6 +283,7 @@ export class Viewer extends Emitter {
       fadeByOpacity: g.fadeByOpacity,
       // Markers of clusters with member stars crossfade to the stars in Sky.
       memberFade: memberMode ? this.memberReveal ?? 0 : 0,
+      trails: this._trailParams(g.trails),
     };
     this.points.params = pointParams;
     this.lines.params = { styles, frame, lineOpacity: 1 };
@@ -397,11 +398,11 @@ export class Viewer extends Emitter {
    * Fly the camera to `pose`. Resolves {done: true} on arrival, or
    * {done: false} if the flight was interrupted (user input, a new flight).
    */
-  animateTo(pose, { duration = 1100, onDone } = {}) {
+  animateTo(pose, { duration = 1100, onDone, ease } = {}) {
     this._cancelTween();
     this.controls.stop();
     const d = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : duration;
-    const tween = poseTween(this.renderer.camera.pose, pose, d);
+    const tween = poseTween(this.renderer.camera.pose, pose, d, ease);
     this.tween = tween;
     this.renderer.hold("tween");
     return new Promise((resolve) => {
@@ -515,6 +516,11 @@ export class Viewer extends Emitter {
     this.volumes.invalidate();
     this.renderer.invalidate();
     this.emit("volume", { key, patch });
+  }
+
+  /** Motion trails of `myr` Myr, pointing back along the playback direction. */
+  _trailParams(myr) {
+    return trailParams(this.timeline.times, this.timeline.direction, myr);
   }
 
   setGlobal(patch) {

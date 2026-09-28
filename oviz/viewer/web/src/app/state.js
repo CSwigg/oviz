@@ -100,6 +100,7 @@ export function initialViewerState(manifest) {
       gridOpacity: 1,
       labels: true,
       autoOrbit: bool(gc.camera_auto_orbit_enabled, false),
+      trails: 0,
     },
     sky: {
       layers: cloneJson(manifest.sky?.layers || []),

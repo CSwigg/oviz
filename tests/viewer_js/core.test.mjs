@@ -130,3 +130,19 @@ test("fuzzy search prefers prefix and word matches", () => {
   assert.equal(s3, 0);
   assert.ok(fuzzyScore("ngc2516", "NGC 2516") > 0);
 });
+
+test("motion trails point back along playback and respect the time axis", async () => {
+  const { trailParams } = await import("../../oviz/viewer/web/src/engine/frames.js");
+  const times = [-60, -50, -40, -30, -20, -10, 0];
+  const fwd = trailParams(times, 1, 6);
+  close(fwd.myrPerFrame, 10);
+  close(fwd.span, 0.6); // 6 Myr at 10 Myr per frame, toward earlier frames
+  close(trailParams(times, -1, 6).span, -0.6);
+  // A descending time axis flips the time step, not the frame direction.
+  const desc = trailParams([...times].reverse(), 1, 6);
+  close(desc.span, 0.6);
+  close(desc.myrPerFrame, -10);
+  assert.equal(trailParams(times, 1, 0), null);
+  assert.equal(trailParams([0], 1, 5), null);
+  assert.equal(trailParams([3, 3, 3], 1, 5), null);
+});

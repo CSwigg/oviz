@@ -176,7 +176,7 @@ caption, and reorder views, and present them in order with **P**. Export
 the result as an editable figure (**⌘S**) or as a present-only figure that
 opens straight into the first view. Press **?** in any figure for the full
 keyboard map; the classic keys (W A S D, Q E, R F, L, C, P, [ ]) work as
-before.
+before, and **J** adds GPU motion trails during playback.
 
 The export is a single HTML file containing the scientific scene and its saved
 States. It can be opened locally, placed on a static web host, or sent to a

@@ -246,6 +246,22 @@ class RuntimeBuildTests(unittest.TestCase):
             build._strip_module("x.js", "import * as z from './z.js';\n")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_shaders_avoid_glsl_reserved_identifiers(self):
+        # GLSL ES 3.0 reserves words such as `half`; declaring one fails the
+        # shader at runtime only, so check every shader source statically.
+        reserved = (
+            "half|fixed|input|output|filter|sample|sizeof|cast|namespace|using|packed|superp|"
+            "common|partition|active|external|interface|long|short|double|unsigned|goto|inline|"
+            "noinline|volatile|public|static|extern|template|this|class|union|enum|typedef|asm"
+        )
+        decl = re.compile(r"\b(?:float|int|uint|bool|[iu]?vec[234]|mat[234])\s+(" + reserved + r")\b")
+        shaders = 0
+        for js in sorted((REPO / "oviz" / "viewer" / "web" / "src").rglob("*.js")):
+            for source in re.findall(r"`([^`]*void main\(\)[^`]*)`", js.read_text()):
+                shaders += 1
+                self.assertIsNone(decl.search(source), f"reserved GLSL identifier in {js.name}")
+        self.assertGreater(shaders, 5)
+
     def test_node_unit_tests(self):
         files = sorted(str(p) for p in (REPO / "tests" / "viewer_js").glob("*.test.mjs"))
         r = subprocess.run([NODE, "--test", *files], capture_output=True, text=True, cwd=REPO)

@@ -5,6 +5,10 @@
 // (world-space size, size-by-n_stars, birth fade) and renders the stellar
 // halo + core PSF in a single premultiplied pass: halo·a_h + core·a_c +
 // dst·(1 − a_h) — identical to the legacy "normal halo, additive core" pair.
+//
+// Optional motion trails: a tapered screen-space ribbon per point, sampled
+// back along its own orbit from the same frame texture, so trails follow the
+// exact interpolated path at no CPU cost.
 
 import { createProgram, createBuffer, createVAO, createTexture2D } from "../engine/gl.js";
 import { FRAME_GLSL, packFrameTexture, packScalarTexture, frameOffset } from "../engine/frames.js";
@@ -217,6 +221,118 @@ void main() {
 }
 `;
 
+const TRAIL_SEGMENTS = 24;
+
+const TRAIL_VERT = `
+${FRAME_GLSL}
+layout(location = 0) in vec2 aTrail;    // s (0 head → 1 tail), side (±1)
+layout(location = 1) in float aIndex;
+layout(location = 2) in vec3 aColor;
+layout(location = 3) in vec4 aStatic;   // opacity, scalar, ageNow, starsFactor
+layout(location = 6) in float aState;
+
+uniform mat4 uViewProj;
+uniform vec2 uViewport;
+uniform highp sampler2D uFrameTex;
+uniform int uCount;
+uniform int uFrames;
+uniform float uFrame;
+uniform float uSpan;          // trail length in frames, signed toward the past
+uniform float uTime;
+uniform float uMyrPerFrame;   // signed
+uniform vec3 uOffset;
+uniform float uOpacityScale;
+uniform float uWidthPx;
+uniform float uDimOpacity;
+uniform int uHasAge;
+uniform float uMemberFade;
+
+out vec3 vColor;
+out float vScalar;
+out float vAlpha;
+out float vSide;
+
+vec4 clipAt(int index, float f, out float presence) {
+  float sc;
+  vec4 p = framePosition(uFrameTex, index, uCount, uFrames, f, sc);
+  presence = p.w;
+  return uViewProj * vec4(p.xyz + uOffset, 1.0);
+}
+
+void main() {
+  int index = int(aIndex + 0.5);
+  float s = aTrail.x;
+  float ds = 1.0 / float(${TRAIL_SEGMENTS});
+  float last = float(uFrames - 1);
+  float pres, pa, pb;
+  vec4 c = clipAt(index, clamp(uFrame - uSpan * s, 0.0, last), pres);
+  vec4 ca = clipAt(index, clamp(uFrame - uSpan * max(s - ds, 0.0), 0.0, last), pa);
+  vec4 cb = clipAt(index, clamp(uFrame - uSpan * min(s + ds, 1.0), 0.0, last), pb);
+  float eff = aStatic.x * uOpacityScale * pres;
+  int st = int(aState + 0.5);
+  if ((st & 18) != 0) eff = 0.0;
+  else if ((st & 9) != 0) eff *= uDimOpacity;
+  if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
+  if (uHasAge == 1 && aStatic.z == aStatic.z && aStatic.z > -1e29) {
+    // No trail before the object was born.
+    float birth = -aStatic.z;
+    eff *= smoothstep(birth - 0.25, birth + 0.25, uTime - uSpan * s * uMyrPerFrame);
+  }
+  if (eff <= 0.002 || c.w <= 0.0 || ca.w <= 0.0 || cb.w <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    vAlpha = 0.0;
+    return;
+  }
+  vec2 hv = uViewport * 0.5;
+  vec2 dir = (ca.xy / ca.w - cb.xy / cb.w) * hv;
+  float len = length(dir);
+  dir = len > 1e-4 ? dir / len : vec2(1.0, 0.0);
+  vec2 nrm = vec2(-dir.y, dir.x);
+  float w = uWidthPx * mix(1.0, 0.3, s);
+  gl_Position = c + vec4(nrm * aTrail.y * w * 0.5 / hv * c.w, 0.0, 0.0);
+  float tail = 1.0 - s;
+  vAlpha = eff * tail * tail;
+  vColor = aColor;
+  vScalar = aStatic.y;
+  vSide = aTrail.y;
+}
+`;
+
+const TRAIL_FRAG = `
+in vec3 vColor;
+in float vScalar;
+in float vAlpha;
+in float vSide;
+uniform sampler2D uCmap;
+uniform int uColorMode;
+uniform vec3 uTraceColor;
+uniform int uUseObjectColor;
+uniform vec2 uCRange;
+uniform float uStrength;
+out vec4 outColor;
+
+void main() {
+  vec3 color = uUseObjectColor == 1 ? vColor : uTraceColor;
+  if (uColorMode == 1) {
+    float u = clamp((vScalar - uCRange.x) / max(uCRange.y - uCRange.x, 1e-9), 0.0, 1.0);
+    color = texture(uCmap, vec2(u, 0.5)).rgb;
+  }
+  float a = vAlpha * uStrength * (1.0 - smoothstep(0.35, 1.0, abs(vSide)));
+  if (a < 0.003) discard;
+  // Mostly additive: trails brighten the sky rather than covering it.
+  outColor = vec4(color * a, a * 0.45);
+}
+`;
+
+function trailTemplate() {
+  const out = new Float32Array((TRAIL_SEGMENTS + 1) * 4);
+  for (let i = 0; i <= TRAIL_SEGMENTS; i++) {
+    const s = i / TRAIL_SEGMENTS;
+    out.set([s, -1, s, 1], i * 4);
+  }
+  return out;
+}
+
 /** Radial profiles of the legacy Oviz star textures (r = 1 at the edge). */
 const PSF = {
   halo: (r) => 0.82 * Math.exp(-0.5 * (r / 0.024) ** 2)
@@ -389,6 +505,7 @@ class PointBatch {
   dispose() {
     const gl = this.gl;
     gl.deleteVertexArray(this.vao);
+    if (this.trailVao) gl.deleteVertexArray(this.trailVao);
     for (const buf of Object.values(this.buffers)) gl.deleteBuffer(buf);
     gl.deleteTexture(this.frameTex.texture);
     if (this.auxTex) gl.deleteTexture(this.auxTex.texture);
@@ -404,6 +521,8 @@ export class PointsLayer {
     this.byKey = new Map();
     this.program = createProgram(gl, VERT, FRAG, { label: "points" });
     this.pickProgram = createProgram(gl, VERT, FRAG, { label: "points-pick", defines: { PICK: 1 } });
+    this.trailProgram = null; // compiled on first use
+    this.trailBuffer = null;
     this.textures = starTextures(gl);
     this.cmapTextures = new Map();
     this.fallbackCmap = createTexture2D(gl, {
@@ -459,9 +578,69 @@ export class PointsLayer {
     prog.f("uMemberFade", global.memberFade ?? 0);
   }
 
+  /** Motion trails, drawn under the points. */
+  drawTrails(frame) {
+    const p = this.params;
+    const tr = p?.trails;
+    if (!tr || Math.abs(tr.span) < 0.05) return;
+    const gl = this.gl;
+    if (!this.trailProgram) {
+      this.trailProgram = createProgram(gl, TRAIL_VERT, TRAIL_FRAG, { label: "point-trails" });
+      this.trailBuffer = createBuffer(gl, trailTemplate());
+    }
+    const prog = this.trailProgram.use();
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    const cam = frame.camera;
+    prog.m4("uViewProj", cam.viewProj).v2("uViewport", frame.width, frame.height);
+    prog.f("uFrame", p.frame).f("uTime", p.time).f("uSpan", tr.span).f("uMyrPerFrame", tr.myrPerFrame);
+    prog.f("uWidthPx", (1.2 + 0.8 * Math.min(p.pointSize, 3)) * frame.dpr);
+    prog.f("uMemberFade", p.memberFade ?? 0);
+    prog.f("uStrength", Math.min(1.6, 0.55 + 0.35 * p.glow));
+    for (const batch of this.batches) {
+      if (batch.posFrames <= 1) continue;
+      const style = p.styles.get(batch.key);
+      if (!style || !style.visible || style.presence <= 0.001 || style.trails === false) continue;
+      if (!batch.trailVao) {
+        const b = batch.buffers;
+        batch.trailVao = createVAO(gl, [
+          { loc: 0, buffer: this.trailBuffer, size: 2 },
+          { loc: 1, buffer: b.index, size: 1, divisor: 1 },
+          { loc: 2, buffer: b.color, size: 3, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
+          { loc: 3, buffer: b.stat, size: 4, divisor: 1 },
+          { loc: 6, buffer: b.state, size: 1, type: gl.UNSIGNED_BYTE, divisor: 1 },
+        ]);
+      }
+      prog.tex("uFrameTex", batch.frameTex.texture);
+      prog.i("uCount", batch.count).i("uFrames", batch.texFrames);
+      const off = frameOffset(batch.offsets, p.frame);
+      prog.v3("uOffset", off[0], off[1], off[2]);
+      prog.f("uOpacityScale", style.opacityScale * p.pointOpacity * Math.min(1, style.presence ?? 1));
+      prog.f("uDimOpacity", style.dimOpacity ?? 0.16);
+      prog.i("uHasAge", batch.hasAge ? 1 : 0);
+      const colorMode = style.colorMode === "by_value" && batch.trace.colorBy ? 1 : 0;
+      prog.i("uColorMode", colorMode);
+      if (colorMode) {
+        prog.tex("uCmap", this.cmapTextures.get(style.colormap) || this.fallbackCmap);
+        prog.v2("uCRange", style.cmin, style.cmax);
+      } else {
+        prog.tex("uCmap", this.fallbackCmap);
+      }
+      const c = style.colorOverride ? parseColor(style.colorOverride) : parseColor(batch.trace.color);
+      prog.v3("uTraceColor", c[0], c[1], c[2]);
+      prog.i("uUseObjectColor", style.colorOverride ? 0 : 1);
+      gl.bindVertexArray(batch.trailVao);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, (TRAIL_SEGMENTS + 1) * 2, batch.count);
+    }
+    gl.bindVertexArray(null);
+  }
+
   draw(frame) {
     const p = this.params;
     if (!p) return;
+    this.drawTrails(frame);
     const gl = this.gl;
     const prog = this.program.use();
     gl.enable(gl.BLEND);
@@ -514,5 +693,7 @@ export class PointsLayer {
     this.batches = [];
     this.program.dispose();
     this.pickProgram.dispose();
+    this.trailProgram?.dispose();
+    if (this.trailBuffer) this.gl.deleteBuffer(this.trailBuffer);
   }
 }

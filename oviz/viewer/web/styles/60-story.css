@@ -87,7 +87,8 @@
 .ov-present-text { display: grid; gap: 5px; justify-items: center; text-align: center; min-width: 0; }
 .ov-present-title { font: 680 17px/1.25 var(--ov-font-display); letter-spacing: -0.01em; max-width: 100%; }
 .ov-present-caption { font: 450 13px/1.5 var(--ov-font); color: var(--ov-text-2); max-width: 62ch; user-select: text; -webkit-user-select: text; }
-.ov-present-dots { display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap; justify-content: center; }
+/* Progress segments and the reel replace the dots; kept for assistive tech. */
+.ov-present-dots { display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap; justify-content: center; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .ov-present-dot { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: var(--ov-line-strong); transition: background var(--ov-dur), transform var(--ov-dur); }
 .ov-present-dot:hover { background: var(--ov-text-3); }
 .ov-present-dot[aria-current="step"] { background: var(--ov-accent); transform: scale(1.35); }
@@ -97,3 +98,53 @@
 .ov-root[data-story="true"] .ov-inspector {
   max-height: calc(100% - 52px - var(--ov-dock-h) - 3 * var(--ov-gutter) - 24px - 200px - var(--ov-safe-top) - var(--ov-safe-bottom));
 }
+
+/* Story progress: one segment per view; the current one fills during the
+   flight. The stage is always a night sky, so the bars are plain white. */
+.ov-present-progress {
+  position: absolute; left: 50%; top: calc(var(--ov-gutter) + var(--ov-safe-top));
+  transform: translateX(-50%);
+  display: flex; gap: 5px;
+  width: min(560px, calc(100vw - 2 * var(--ov-gutter) - 40px));
+  z-index: 21;
+  transition: opacity 320ms var(--ov-ease), transform 380ms var(--ov-ease);
+}
+.ov-present-progress[data-open="false"] { opacity: 0; transform: translateX(-50%) translateY(-12px); pointer-events: none; }
+.ov-present-seg { flex: 1; min-width: 0; height: 18px; padding: 7px 0; border: 0; background: none; }
+.ov-present-seg span { display: block; height: 3px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, 0.2); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transition: background var(--ov-dur); }
+.ov-present-seg:hover span { background: rgba(255, 255, 255, 0.34); }
+.ov-present-seg i { display: block; width: 0; height: 100%; border-radius: 3px; background: rgba(255, 255, 255, 0.92); }
+
+/* Caption entrance for each view. */
+.ov-present-text.ov-anim > * { --ov-rise-dy: 10px; animation: ov-rise 620ms var(--ov-ease) backwards; }
+.ov-present-text.ov-anim > :nth-child(2) { animation-delay: 90ms; }
+.ov-present-text.ov-anim > :nth-child(3) { animation-delay: 160ms; }
+
+/* 3D reel of views. */
+.ov-present-reel {
+  position: absolute; left: 50%; width: 0;
+  bottom: calc(var(--ov-gutter) * 1.5 + var(--ov-safe-bottom) + var(--ov-present-h, 96px) + 16px);
+  height: 96px;
+  perspective: 900px; perspective-origin: 50% 40%;
+  transform-style: preserve-3d;
+  z-index: 19;
+  transition: opacity 420ms var(--ov-ease), transform 520ms var(--ov-ease);
+}
+.ov-present-reel[data-open="false"], .ov-present-reel[data-idle="true"] { opacity: 0; transform: translateY(18px); }
+.ov-present-reel[data-open="false"] .ov-reel-card, .ov-present-reel[data-idle="true"] .ov-reel-card { pointer-events: none !important; }
+.ov-reel-card {
+  position: absolute; left: -76px; top: 0;
+  width: 152px; height: 86px; padding: 0;
+  border-radius: 12px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #070a11 center / cover no-repeat;
+  box-shadow: 0 18px 36px -18px rgba(0, 0, 0, 0.95);
+  transition: transform 760ms var(--ov-ease), opacity 760ms var(--ov-ease), border-color 300ms, box-shadow 300ms;
+}
+.ov-reel-card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.72)); }
+.ov-reel-card[aria-current="step"] { border-color: var(--ov-accent-line); box-shadow: 0 0 0 1px var(--ov-accent-line), 0 20px 44px -16px rgba(0, 0, 0, 0.95); }
+.ov-reel-card b, .ov-reel-card span, .ov-reel-card em { position: absolute; z-index: 1; color: #fff; }
+.ov-reel-card b { left: 8px; top: 7px; font: 700 10px/1 var(--ov-font); opacity: 0.75; }
+.ov-reel-card span { left: 9px; right: 9px; bottom: 7px; text-align: left; font: 600 11.5px/1.2 var(--ov-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }
+.ov-reel-card em { inset: 0; display: grid; place-items: center; font: 650 11px/1 var(--ov-font); font-style: normal; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; }
+@media (max-width: 720px) { .ov-present-reel { display: none; } }

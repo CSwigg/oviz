@@ -49,7 +49,13 @@ async function boot() {
     const ui = mountUI(root, viewer);
     installApi(root, viewer, ui);
     root.dataset.boot = "ready";
-    bootEl?.remove();
+    // The loading screen dissolves while the chrome rises into place.
+    root.dataset.entrance = "true";
+    if (bootEl) {
+      bootEl.dataset.leaving = "true";
+      setTimeout(() => bootEl.remove(), 450);
+    }
+    setTimeout(() => { delete root.dataset.entrance; }, 1700);
     // Stream heavier assets without blocking interaction.
     viewer.attachImages();
     ui.onBackgroundLoad?.("start");

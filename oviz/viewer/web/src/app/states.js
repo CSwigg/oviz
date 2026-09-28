@@ -101,6 +101,9 @@ function resolvedTraceOpacity(viewer, st, key) {
  * {step(t) → applies the blended state, finish() → applies target exactly}.
  */
 export function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
+  // A camera flight still in progress would override the State's camera
+  // once the transition lands, so the transition takes the camera over.
+  if (!keepCamera) viewer._cancelTween?.();
   const from = captureState(viewer, sky);
   const to = cloneJson(target);
   if (target.view?.pose) to.view.pose = clonePose(target.view.pose);
@@ -168,7 +171,7 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
     viewer.volumes.invalidate();
     // Globals
     const ga = from.global || {}, gb = to.global || {};
-    for (const f of ["pointSize", "pointOpacity", "glow", "fadeTime", "gridOpacity"]) {
+    for (const f of ["pointSize", "pointOpacity", "glow", "fadeTime", "gridOpacity", "trails"]) {
       if (Number.isFinite(ga[f]) && Number.isFinite(gb[f])) st.global[f] = lerp(ga[f], gb[f], t);
     }
     for (const f of ["fadeInOut", "fadeByOpacity", "sizeByStars", "labels"]) st.global[f] = (t < 0.5 ? ga : gb)[f];

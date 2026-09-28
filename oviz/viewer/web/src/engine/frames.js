@@ -167,3 +167,17 @@ export function frameOffset(offsets, frame, out = [0, 0, 0]) {
   for (let k = 0; k < 3; k++) out[k] = offsets[f1 * 3 + k] + (offsets[f2 * 3 + k] - offsets[f1 * 3 + k]) * t;
   return out;
 }
+
+/**
+ * Motion-trail span for a trail `myr` long: `span` is in frames, signed so
+ * the trail points back along the playback `direction`; `myrPerFrame` is
+ * signed by the time axis. Returns null when trails are off or undefined.
+ */
+export function trailParams(times, direction, myr) {
+  const len = Number(myr) || 0;
+  const n = times?.length || 0;
+  if (len <= 0 || n < 2) return null;
+  const myrPerFrame = (times[n - 1] - times[0]) / (n - 1);
+  if (!(Math.abs(myrPerFrame) > 0)) return null;
+  return { span: (len / Math.abs(myrPerFrame)) * (direction < 0 ? -1 : 1), myrPerFrame };
+}

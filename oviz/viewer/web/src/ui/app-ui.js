@@ -19,6 +19,7 @@ import { RecorderPlugin } from "./recorder.js";
 import { FilterPlugin } from "./filter.js";
 import { NotesPlugin } from "./notes.js";
 import { LassoPlugin } from "./lasso.js";
+import { SelectionReticle } from "./reticle.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
@@ -59,6 +60,7 @@ export class AppUI {
     this.palette = new Palette(this);
     this.buildBottom();
     this.ui.append(this.layers.el, this.inspector.el, this.hovercard.el);
+    this.reticle = new SelectionReticle(this);
     this.bindPointer();
     this.bindKeys();
     this.bindViewer();
@@ -158,7 +160,27 @@ export class AppUI {
     for (const p of this.plugins) p.afterBoot?.();
     const hv = decodeViewHash(location.hash);
     if (hv) this.applyViewHash(hv);
+    else this.introFlight();
     this.updateScale();
+  }
+
+  /**
+   * Open on a short dolly into the home view, so the scene reads as 3D from
+   * the first second. Skipped for present-only files, shared links, Sky
+   * starts and reduced motion; any input takes the camera over at once.
+   */
+  introFlight() {
+    const v = this.viewer;
+    const story = this.plugins.find((p) => p.name === "states");
+    if (story?.readOnly || this.manifest.states?.apply_first_on_load || v.state.view.mode !== "3d") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const home = clonePose(v.pose);
+    const start = clonePose(home);
+    start.distance = home.distance * 1.55;
+    start.yaw = home.yaw + 0.38;
+    start.pitch = home.pitch * 0.8;
+    v.setPose(start);
+    v.animateTo(home, { duration: 2300, ease: (x) => 1 - Math.pow(1 - x, 3) });
   }
 
   async applyViewHash(hv) {
@@ -435,8 +457,13 @@ export class AppUI {
     if (!sb) return;
     this.scaleBar.style.width = `${Math.max(24, sb.px).toFixed(0)}px`;
     if (sb.unit === "deg") {
+      // Sky view: where the view is centred, in Galactic coordinates.
+      const cam = this.viewer.renderer.camera;
+      const f = cam.forward;
+      const l = ((Math.atan2(f[1], f[0]) * 180) / Math.PI + 360) % 360;
+      const b = (Math.asin(clamp(f[2], -1, 1)) * 180) / Math.PI;
       this.scaleLabel.textContent = formatAngle(sb.value);
-      this.scaleSub.textContent = `Field ${formatAngle(this.viewer.renderer.camera.hfov)}`;
+      this.scaleSub.textContent = `l ${l.toFixed(1)}° b ${b >= 0 ? "+" : "−"}${Math.abs(b).toFixed(1)}° · ${formatAngle(cam.hfov)} field`;
     } else {
       this.scaleLabel.textContent = formatDistance(sb.value);
       const p = this.viewer.pose;
@@ -521,11 +548,28 @@ export class AppUI {
       toggle({ label: "Fade by opacity", hint: "Otherwise newborn clusters grow in size", checked: g.fadeByOpacity, onChange: (x) => v.setGlobal({ fadeByOpacity: x }) }),
       toggle({ label: "Fade out after birth", checked: g.fadeInOut, onChange: (x) => v.setGlobal({ fadeInOut: x }) }),
       toggle({ label: "Size by member count", checked: g.sizeByStars, onChange: (x) => v.setGlobal({ sizeByStars: x }) }),
+      v.timeline.count > 1 ? slider({ label: "Motion trails", min: 0, max: this.maxTrailMyr(), step: this.maxTrailMyr() / 60, value: g.trails || 0, format: (x) => (x <= 0 ? "Off" : `${x.toFixed(x >= 10 ? 0 : 1)} Myr`), onInput: (x) => v.setGlobal({ trails: x }) }) : null,
       toggle({ label: "Auto-orbit camera", checked: !!v.controls.autoOrbit, onChange: (x) => this.setAutoOrbit(x) }),
       slider({ label: "Field of view", min: 10, max: 100, step: 1, value: v.pose.fov, format: (x) => `${Math.round(x)}°`, onInput: (x) => { v.pose.fov = x; v.renderer.invalidate(); } }),
       toggle({ label: "Performance overlay", checked: !!this.perfEl, onChange: (x) => this.setPerfOverlay(x) }),
     );
     this.menu(anchor, [{ body }], { title: "Display" });
+  }
+
+  /** Longest useful trail: a third of the timeline. */
+  maxTrailMyr() {
+    const tl = this.viewer.timeline;
+    return Math.max(0.5, Math.abs(tl.times[tl.count - 1] - tl.times[0]) / 3);
+  }
+
+  /** Toggle motion trails at a length that reads well for this timeline. */
+  toggleTrails() {
+    const v = this.viewer;
+    if (v.timeline.count < 2) return;
+    const on = !(v.state.global.trails > 0);
+    const len = on ? +(this.maxTrailMyr() * 0.3).toPrecision(2) : 0;
+    v.setGlobal({ trails: len });
+    this.toast(on ? `Motion trails · ${len} Myr` : "Motion trails off", { ms: 1200 });
   }
 
   setAutoOrbit(on) {
@@ -598,6 +642,7 @@ export class AppUI {
       { title: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
       { title: this.theme === "dark" ? "Switch to light theme" : "Switch to dark theme", icon: this.theme === "dark" ? "sun" : "moon", run: () => this.applyTheme(this.theme === "dark" ? "light" : "dark") },
       { title: v.controls.autoOrbit ? "Stop auto-orbit" : "Auto-orbit camera", icon: "orbit", shortcut: "O", run: () => this.setAutoOrbit(!v.controls.autoOrbit) },
+      ...(tl.count > 1 ? [{ title: v.state.global.trails > 0 ? "Hide motion trails" : "Show motion trails", icon: "trail", shortcut: "J", keywords: "streaks motion history comet", run: () => this.toggleTrails() }] : []),
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
       { title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
@@ -698,7 +743,7 @@ export class AppUI {
     const groups = [
       ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
       ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
-      ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
+      ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Motion trails", "J"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
       ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Fly to object", "Double-click"], ["Measure separation", "⇧ Click"], ["Lasso", "L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
       ["Views & presenting", [["Save current view", "N"], ["Present", "P"], ["Next / previous view", "→ ←"], ["Views panel", "Y"], ["Save figure", `${MOD} S`]]],
       ["Capture", [["Screenshot", "I"], ["Hide interface", "Z"], ["Fullscreen", "M"], ["This help", "?"]]],
@@ -810,6 +855,7 @@ export class AppUI {
         case "v": this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky"); break;
         case "g": v.setGlobal({ grid: !v.state.global.grid }); break;
         case "o": this.setAutoOrbit(!v.controls.autoOrbit); break;
+        case "j": this.toggleTrails(); break;
         case "z": this.setZen(this.root.dataset.zen !== "true"); break;
         case "t": this.layers.toggleAll(this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false)); break;
         case "[": case "{": case "]": case "}": {

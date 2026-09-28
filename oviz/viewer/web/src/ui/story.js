@@ -314,6 +314,7 @@ export class StoryPlugin {
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const dur = instant || reduce ? 0 : Math.max(0, spec.duration_ms) * (transition.modeChange ? 1.35 : 1);
     const ease = easing(spec.easing);
+    if (this.presenting) this.renderProgress(dur);
     v.emit("state-transition-start", { index: i, id: it.id });
     return new Promise((resolve) => {
       if (dur <= 0) {
@@ -393,12 +394,29 @@ export class StoryPlugin {
     this.pPrev = iconButton("stepBack", "Previous view", () => this.previous(), { shortcut: "←" });
     this.pNext = iconButton("stepFwd", "Next view", () => this.next(), { shortcut: "→" });
     this.pExit = h("button", { class: "ov-btn ov-btn--ghost ov-btn--sm", type: "button", onclick: () => this.present(false) }, this.readOnly ? "Explore" : "Exit", kbd("Esc"));
+    this.pText = h("div", { class: "ov-present-text" }, this.pTitle, this.pCaption, this.pDots);
     this.presenter = h("div", { class: "ov-present ov-glass", "data-open": "false", role: "region", "aria-label": "Presentation" },
       this.pPrev,
-      h("div", { class: "ov-present-text" }, this.pTitle, this.pCaption, this.pDots),
+      this.pText,
       this.pNext,
       h("div", { class: "ov-present-exit" }, this.pExit));
-    ui.ui.append(this.presenter);
+    // Story-style progress along the top; the current segment fills while
+    // the camera flies to the view.
+    this.pProgress = h("div", { class: "ov-present-progress", "data-open": "false", role: "group", "aria-label": "Views" });
+    // A 3D reel of the views above the caption bar, shown while the pointer
+    // moves and tucked away when the presenter is idle.
+    this.pReel = h("div", { class: "ov-present-reel", "data-open": "false", "data-idle": "true" });
+    ui.ui.append(this.pReel, this.presenter, this.pProgress);
+    let idleTimer = 0;
+    const wake = () => {
+      if (!this.presenting) return;
+      this.pReel.dataset.idle = "false";
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => { this.pReel.dataset.idle = "true"; }, 2600);
+    };
+    ui.root.addEventListener("pointermove", wake, { passive: true });
+    this.pReel.addEventListener("pointerenter", () => clearTimeout(idleTimer));
+    this.pReel.addEventListener("pointerleave", wake);
   }
 
   present(on, { startAt = null, instant = false } = {}) {
@@ -407,6 +425,9 @@ export class StoryPlugin {
     this.presenting = on;
     this.ui.root.dataset.presenting = String(on);
     this.presenter.dataset.open = String(on);
+    this.pProgress.dataset.open = String(on);
+    this.pReel.dataset.open = String(on);
+    this.pReel.dataset.idle = "true";
     this.ui.setZen(on);
     if (on) {
       this.toggle(false);
@@ -419,6 +440,8 @@ export class StoryPlugin {
   renderPresenter() {
     const items = this.project.items;
     const it = items[this.active];
+    const changed = this._shown !== it;
+    this._shown = it;
     this.pTitle.textContent = it ? it.name : "";
     this.pCaption.textContent = it?.caption || "";
     this.pCaption.hidden = !it?.caption;
@@ -426,6 +449,62 @@ export class StoryPlugin {
     items.forEach((x, j) => {
       const d = h("button", { class: "ov-present-dot", type: "button", "aria-label": `Go to ${x.name}`, "aria-current": j === this.active ? "step" : null, onclick: () => this.goTo(j) });
       this.pDots.append(d);
+    });
+    if (changed && this.presenting) {
+      // Replay the caption entrance for each new view.
+      this.pText.classList.remove("ov-anim");
+      void this.pText.offsetWidth;
+      this.pText.classList.add("ov-anim");
+    }
+    this.renderProgress();
+    this.renderReel();
+    requestAnimationFrame(() => this.ui.root.style.setProperty("--ov-present-h", `${this.presenter.offsetHeight}px`));
+  }
+
+  renderProgress(durationMs = 0) {
+    const items = this.project.items;
+    if (this.pProgress.childElementCount !== items.length) {
+      this.pProgress.replaceChildren(...items.map((x, j) => h("button", { class: "ov-present-seg", type: "button", "aria-label": `Go to ${x.name}`, onclick: () => this.goTo(j) }, h("span", null, h("i")))));
+    }
+    [...this.pProgress.children].forEach((seg, j) => {
+      const fill = seg.querySelector("i");
+      seg.setAttribute("aria-current", j === this.active ? "step" : "false");
+      if (j === this.active && durationMs > 0) {
+        fill.style.transition = "none";
+        fill.style.width = "0%";
+        void fill.offsetWidth;
+        fill.style.transition = `width ${durationMs}ms linear`;
+        fill.style.width = "100%";
+      } else if (j !== this.active || !fill.style.width) {
+        fill.style.transition = "none";
+        fill.style.width = j <= this.active ? "100%" : "0%";
+      }
+    });
+  }
+
+  renderReel() {
+    const items = this.project.items;
+    const reel = this.pReel;
+    if (reel.childElementCount !== items.length || [...reel.children].some((c, j) => c._item !== items[j] || c._thumb !== (items[j].thumb || ""))) {
+      reel.replaceChildren(...items.map((it, j) => {
+        const card = h("button", { class: "ov-reel-card", type: "button", "aria-label": `Go to ${it.name}`, onclick: () => this.goTo(j) },
+          h("b", null, String(j + 1)), h("span", null, it.name));
+        if (it.thumb) card.style.backgroundImage = `url("${it.thumb}")`;
+        else card.append(h("em", null, it.state.view?.mode === "sky" ? "Sky" : "3D"));
+        card._item = it;
+        card._thumb = it.thumb || "";
+        return card;
+      }));
+    }
+    const n = items.length;
+    [...reel.children].forEach((card, j) => {
+      const o = j - Math.max(this.active, 0);
+      const a = Math.abs(o);
+      card.style.transform = `translateX(${o * 150}px) translateZ(${-a * 90}px) rotateY(${Math.max(-50, Math.min(50, -o * 26))}deg)`;
+      card.style.opacity = a > 3 ? "0" : String(1 - a * 0.2);
+      card.style.zIndex = String(n - a);
+      card.style.pointerEvents = a > 3 ? "none" : "";
+      card.setAttribute("aria-current", o === 0 ? "step" : "false");
     });
   }
 

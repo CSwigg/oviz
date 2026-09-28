@@ -25,11 +25,16 @@ empty space to reset the view (also **Home**). **O** auto-orbits.
 frames on the GPU, so playback is smooth at any speed. Use **Space** to play,
 **←/→** to step a frame (Shift for five), **< >** to change speed and **0** to
 return to the present day. The timeline marks t = 0 and each saved view.
+**J** turns on motion trails: every object draws a fading streak along its
+own orbit for the last few Myr, pointing back along the playback direction
+(set the length under *Display*). Trails are saved with views.
 
 **Inspect.** Click an object for its details (age today and at time t, member
-count, distance, Galactic and ICRS coordinates, position). From the inspector
-you can fly to it, *follow* it through time, draw its full *orbit trail*, or
-copy its coordinates. Shift-click a second object to measure the 3D separation
+count, distance, Galactic and ICRS coordinates, position). A reticle locks on
+to the object and a leader line ties it to the inspector. The inspector charts
+the object's distance from the Sun across the whole timeline; drag along the
+chart to scrub time. From the inspector you can fly to it, *follow* it through
+time, draw its full *orbit trail*, or copy its coordinates. Shift-click a second object to measure the 3D separation
 and the angular separation seen from the Sun.
 
 **Select.** Press **L** (or **X**) to lasso objects; the rest dims. **C**
@@ -49,6 +54,8 @@ colormap, stretch, data window, opacity, density gain and samples. The
 height; brush a range to dim or hide everything else.
 
 **Sky.** Press **V** or use the 3D/Sky switch to fly to the Sun and look out.
+The corner readout gives the Galactic l, b at the centre of the view and the
+field of view.
 The WebGL scene is registered to Aladin Lite exactly (TAN projection, matching
 centre, horizontal field and Galactic-north-up orientation). Cluster markers
 crossfade into their member stars, which inherit the parent's orbit, birth time,
@@ -59,7 +66,10 @@ includes camera and 3D/Sky mode, time, layer styles, volumes, Sky layers,
 filters and display settings. Transitions animate every continuous property
 together and then assign the saved values exactly. Views get thumbnails and
 captions, can be reordered by dragging, and play as a presentation
-(**P**, arrows to navigate, **Esc** or **P** to exit).
+(**P**, arrows to navigate, **Esc** or **P** to exit). While presenting,
+progress segments along the top fill as the camera flies to each view, and a
+3D reel of view thumbnails rises above the caption whenever the pointer
+moves; click a segment or a card to jump.
 
 Your unsaved edits autosave in the browser. **⌘S** saves the figure as a new
 HTML file. *Export presentation* writes a present-only file that opens
@@ -72,6 +82,10 @@ background is composited into both.
 
 **Share.** *Copy link to this view* encodes time, mode, group and camera in the
 URL hash. Opening the link restores that view.
+
+**Motion.** Figures open with a short camera dolly into the home view, and
+panels swing in on a hinge. Everything animated respects the system
+*reduce motion* setting.
 
 **Display.** **G** toggles the Galactic grid, **B** the Sky background,
 **Z** hides the interface and **M** goes fullscreen. **?** lists every
