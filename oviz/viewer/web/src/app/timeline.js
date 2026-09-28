@@ -145,3 +145,29 @@ export function formatTime(t, unit = "Myr") {
   s = s.replace("-", "−");
   return `${s} ${unit}`;
 }
+
+/**
+ * How many objects were born in each of `bins` equal slices of the
+ * timeline (birth time = −age). Births outside the timeline are ignored.
+ * Returns a Float64Array, lightly smoothed so the profile reads as a shape.
+ */
+export function birthProfile(timeline, ageArrays, bins = 96) {
+  const counts = new Float64Array(bins);
+  const tl = timeline;
+  if (tl.count < 2) return counts;
+  for (const ages of ageArrays) {
+    for (let i = 0; i < ages.length; i++) {
+      const birth = -ages[i];
+      if (!(birth >= tl.min && birth <= tl.max)) continue;
+      counts[Math.min(bins - 1, Math.floor((tl.timeToFrame(birth) / (tl.count - 1)) * bins))] += 1;
+    }
+  }
+  const kernel = [0.06, 0.24, 0.4, 0.24, 0.06];
+  const out = new Float64Array(bins);
+  for (let i = 0; i < bins; i++) {
+    let acc = 0;
+    for (let j = -2; j <= 2; j++) acc += counts[Math.min(bins - 1, Math.max(0, i + j))] * kernel[j + 2];
+    out[i] = acc;
+  }
+  return out;
+}

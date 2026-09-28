@@ -18,7 +18,6 @@ export class Inspector {
     this.track = null;
     // Time only changes a few values: patch those instead of rebuilding.
     v.on("time", () => this.current && this.updateDynamic());
-    this.bindTilt();
   }
 
   show(hit) {
@@ -26,29 +25,6 @@ export class Inspector {
     this.el.dataset.open = hit ? "true" : "false";
     if (hit) this.refresh();
     else { this.dyn = null; this.track = null; }
-  }
-
-  /** The card leans a few degrees toward the pointer, with a moving sheen. */
-  bindTilt() {
-    const el = this.el;
-    const fine = window.matchMedia?.("(hover: hover) and (pointer: fine)");
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    const set = (x, y) => {
-      el.style.setProperty("--ov-tilt-y", `${((x - 0.5) * 5).toFixed(2)}deg`);
-      el.style.setProperty("--ov-tilt-x", `${((0.5 - y) * 4).toFixed(2)}deg`);
-      el.style.setProperty("--ov-sheen-x", `${(x * 100).toFixed(1)}%`);
-      el.style.setProperty("--ov-sheen-y", `${(y * 100).toFixed(1)}%`);
-    };
-    el.addEventListener("pointermove", (e) => {
-      if (!fine?.matches || reduce?.matches || this.ui.narrow || e.pointerType !== "mouse") return;
-      const r = el.getBoundingClientRect();
-      set(clamp01((e.clientX - r.left) / r.width), clamp01((e.clientY - r.top) / r.height));
-      el.dataset.tilting = "true";
-    });
-    el.addEventListener("pointerleave", () => {
-      el.dataset.tilting = "false";
-      set(0.5, 0.5);
-    });
   }
 
   async refresh() {
@@ -265,8 +241,7 @@ class DistanceTrack {
       c.height = Math.round(hgt * dpr);
     }
     const ctx = c.getContext("2d");
-    const de = document.documentElement.dataset;
-    const theme = `${de.ovizTheme || "dark"}/${de.ovizSkin || ""}`;
+    const theme = document.documentElement.dataset.ovizTheme || "dark";
     if (this._theme !== theme) {
       const css = getComputedStyle(this.ui.root);
       const get = (name, fb) => css.getPropertyValue(name).trim() || fb;

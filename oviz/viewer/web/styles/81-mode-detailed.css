@@ -1,0 +1,19 @@
+/* ============================================================= Detailed
+   Everything in view, in the same quiet glass: a search field and the
+   toolbar at the top, the layers panel open on the left, a details panel
+   for the selection on the right, and the full transport (steps, speed,
+   loop, labelled ticks) with the 3D/Sky switch along the bottom. The key
+   appears whenever the layers panel is closed. */
+
+[data-oviz-mode="detailed"] .ov-root[data-layers="true"] .ov-legend { display: none; }
+
+/* Room for tick labels under the track. */
+[data-oviz-mode="detailed"] .ov-scrub { --ov-track-y: 42%; height: 46px; }
+[data-oviz-mode="detailed"] .ov-scrub-tick-label { display: block; }
+
+@media (min-width: 721px) {
+  [data-oviz-mode="detailed"] .ov-search-trigger { width: min(260px, 24vw); }
+}
+@media (min-width: 1181px) {
+  [data-oviz-mode="detailed"] .ov-dock { width: min(880px, calc(100vw - 2 * var(--ov-gutter) - 600px)); min-width: 560px; }
+}

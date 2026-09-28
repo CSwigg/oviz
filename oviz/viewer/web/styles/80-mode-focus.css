@@ -1,0 +1,35 @@
+/* ================================================================ Focus
+   The figure, its key and one quiet bar. The title sits on the sky, a
+   round search button in the corner, and every control lives in a single
+   bar at the bottom that fades while you look (like a video player).
+   Clicking an object shows a small label beside it; the full details open
+   only when asked. */
+
+/* ---- Top: the title and a search button ----------------------------- */
+[data-oviz-mode="focus"] .ov-top { grid-template-columns: minmax(0, 1fr) auto; }
+[data-oviz-mode="focus"] .ov-toolbar { display: none; }
+[data-oviz-mode="focus"] .ov-search-trigger { width: 40px; padding: 0; justify-content: center; }
+[data-oviz-mode="focus"] .ov-search-trigger > :not(.ov-icon) { display: none; }
+
+/* ---- Bottom: key | bar | (Sky extras) ------------------------------- */
+[data-oviz-mode="focus"] .ov-bottom-right > :not(:first-child) { display: none; }
+[data-oviz-mode="focus"] .ov-dock :is([aria-label="Previous frame"], [aria-label="Next frame"], [aria-label="Loop playback"]) { display: none; }
+[data-oviz-mode="focus"] .ov-scale-sub { display: none; }
+@media (min-width: 1181px) {
+  [data-oviz-mode="focus"] .ov-scrub { flex: none; width: clamp(240px, 26vw, 420px); }
+}
+
+/* ---- Fade while looking --------------------------------------------- */
+[data-oviz-mode="focus"] :is(.ov-top, .ov-dock, .ov-bottom-right) { transition: opacity 600ms var(--ov-ease), transform 320ms var(--ov-ease); }
+[data-oviz-mode="focus"] .ov-root[data-idle="true"] :is(.ov-top, .ov-dock, .ov-bottom-right) { opacity: 0; }
+[data-oviz-mode="focus"] .ov-root[data-idle="true"] .ov-canvas { cursor: none; }
+
+/* ---- Desktop: layers open as a popover above their button ----------- */
+@media (min-width: 721px) {
+  [data-oviz-mode="focus"] .ov-layers {
+    top: auto; bottom: var(--ov-anchor-bottom, 84px);
+    left: clamp(12px, calc(var(--ov-anchor-x, 50%) - 160px), calc(100% - 332px));
+    width: 320px; max-height: min(64vh, 620px);
+  }
+  [data-oviz-mode="focus"] .ov-inspector { top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); }
+}

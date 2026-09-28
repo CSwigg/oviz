@@ -1,11 +1,10 @@
 /* ------------------------------------------------------------- overlays */
 .ov-scrim {
   position: absolute; inset: 0; z-index: 70;
-  background: rgba(3, 5, 9, 0.62);
-  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  background: rgba(3, 5, 9, 0.28);
   animation: ov-fade-in 180ms var(--ov-ease);
 }
-[data-oviz-theme="light"] .ov-scrim { background: rgba(230, 235, 242, 0.5); }
+[data-oviz-theme="light"] .ov-scrim { background: rgba(230, 235, 242, 0.3); }
 @keyframes ov-fade-in { from { opacity: 0; } }
 
 /* ---- Command palette ---------------------------------------------- */
@@ -13,7 +12,7 @@
   position: absolute; left: 50%; top: calc(12vh + var(--ov-safe-top)); z-index: 71;
   width: min(620px, calc(100vw - 32px));
   transform: translateX(-50%);
-  border-radius: 18px;
+  border-radius: 16px;
   overflow: hidden;
   background: var(--ov-surface-strong);
   animation: ov-pop-in 220ms var(--ov-ease);
@@ -75,12 +74,12 @@
   transform-origin: top right;
 }
 @keyframes ov-menu-in { from { opacity: 0; transform: scale(0.97) translateY(-4px); } }
-.ov-pop-title { padding: 8px 10px 6px; font: 650 10px/1 var(--ov-font); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ov-text-3); }
+.ov-pop-title { padding: 8px 10px 6px; font: 600 10px/1 var(--ov-font); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ov-text-3); }
 .ov-pop-item {
   display: flex; align-items: center; gap: 10px; width: 100%;
   height: 34px; padding: 0 10px; border: 0; border-radius: 9px;
   background: transparent; color: var(--ov-text); text-align: left;
-  font: 540 12.5px/1 var(--ov-font);
+  font: 500 13px/1 var(--ov-font);
 }
 .ov-pop-item:hover, .ov-pop-item:focus-visible { background: var(--ov-hover); outline: none; }
 .ov-pop-item .ov-icon { color: var(--ov-text-2); }
@@ -93,9 +92,9 @@
 .ov-hovercard {
   position: absolute; z-index: 30; left: 0; top: 0;
   display: flex; align-items: center; gap: 9px;
-  padding: 7px 11px 7px 9px; border-radius: 11px;
-  pointer-events: none;
-  font: 560 12.5px/1.2 var(--ov-font);
+  padding: 7px 11px 7px 9px; border-radius: 10px;
+  pointer-events: none; background: var(--ov-surface-strong);
+  font: 500 12.5px/1.2 var(--ov-font);
   white-space: nowrap;
   opacity: 0; transition: opacity 120ms;
 }

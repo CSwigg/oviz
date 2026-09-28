@@ -1,0 +1,77 @@
+/* ------------------------------------------------------------ components
+   Pieces the mode layouts place: the key (legend), the selection callout,
+   the inspector's coordinates disclosure, and the hidden holder for
+   controls a mode does not use. */
+
+:root {
+  /* Sampled from a critically damped spring (see ui/motion.js). */
+  --ov-spring-smooth: linear(0, 0.025, 0.077, 0.146, 0.225, 0.307, 0.388, 0.466, 0.539, 0.606, 0.666, 0.72, 0.767, 0.808, 0.843, 0.872, 0.898, 0.919, 0.936, 0.95, 0.962, 0.971, 0.979, 0.985, 0.989, 0.993, 0.996, 0.998, 0.999, 1, 1.001, 1.001, 1);
+}
+@supports not (transition-timing-function: linear(0, 1)) {
+  :root { --ov-spring-smooth: cubic-bezier(0.2, 0.9, 0.3, 1); }
+}
+
+.ov-spare { display: none !important; }
+.ov-ibtn-label { display: none; }
+
+/* ---- Coordinates fold away in the inspector ------------------------- */
+.ov-insp-more { border-bottom: 1px solid var(--ov-line); }
+.ov-insp-more > summary {
+  display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px 0 16px;
+  list-style: none; cursor: pointer; user-select: none;
+  font: 600 10px/1 var(--ov-font); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ov-text-3);
+}
+.ov-insp-more > summary::-webkit-details-marker { display: none; }
+.ov-insp-more > summary:hover { color: var(--ov-text-2); }
+.ov-insp-more > summary span { flex: 1; }
+.ov-insp-more > summary .ov-icon { transition: transform 180ms var(--ov-ease); }
+.ov-insp-more[open] > summary .ov-icon { transform: rotate(180deg); }
+.ov-facts--coords { border-bottom: 0; }
+
+/* ---- Legend: the figure's key, plain text over the sky ------------- */
+.ov-legend { display: grid; justify-items: start; gap: 1px; pointer-events: auto; }
+.ov-legend[hidden] { display: none; }
+.ov-legend .ov-legend-item {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 260px;
+  height: 24px; padding: 0 8px 0 6px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--ov-on-sky);
+  font: 500 12.5px/1 var(--ov-font);
+  text-shadow: var(--ov-on-sky-shadow);
+  transition: opacity 160ms var(--ov-ease), background 160ms var(--ov-ease);
+}
+.ov-legend .ov-legend-item:hover { background: rgba(10, 12, 16, 0.45); }
+.ov-legend-item[data-visible="false"] { opacity: 0.42; }
+.ov-legend-item[data-visible="false"] .ov-legend-name { text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.55); }
+.ov-legend-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.4); }
+.ov-legend-dot[data-ramp] { width: 18px; height: 8px; border-radius: 3px; }
+.ov-legend-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ov-legend .ov-legend-more { height: 22px; padding: 0 8px 0 23px; border: 0; background: transparent; color: rgba(255, 255, 255, 0.62); font: 500 12px/1 var(--ov-font); text-shadow: var(--ov-on-sky-shadow); }
+.ov-legend .ov-legend-more:hover { color: #fff; }
+
+/* ---- Selection callout: a small label card beside the object ------- */
+.ov-callout {
+  position: absolute; left: 0; top: 0; z-index: 1;
+  width: max-content; min-width: 190px; max-width: 270px;
+  padding: 10px 12px 11px; border-radius: 14px;
+  background: var(--ov-surface-strong);
+  color: var(--ov-text); font: 400 13px/1.35 var(--ov-font);
+  animation: ov-callout-in 200ms var(--ov-ease);
+}
+.ov-callout[hidden] { display: none; }
+@keyframes ov-callout-in { from { opacity: 0; translate: 0 4px; } }
+.ov-callout-head { display: flex; align-items: center; gap: 7px; min-width: 0; font: 500 11.5px/1 var(--ov-font); color: var(--ov-text-3); }
+.ov-callout-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.ov-callout-kicker { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ov-callout .ov-callout-close { width: 24px; height: 24px; margin: -6px -8px -6px 0; color: var(--ov-text-3); }
+.ov-callout .ov-callout-close:hover { color: var(--ov-text); }
+.ov-callout-name { margin-top: 5px; font: 650 15.5px/1.25 var(--ov-font-display); letter-spacing: -0.01em; }
+.ov-callout-facts { margin-top: 3px; color: var(--ov-text-2); font: 400 12.5px/1.35 var(--ov-font); font-variant-numeric: tabular-nums; }
+.ov-callout-actions { display: flex; gap: 6px; margin-top: 10px; }
+.ov-callout .ov-callout-btn {
+  height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ov-line-strong);
+  background: transparent; color: var(--ov-text); font: 500 12.5px/1 var(--ov-font);
+  transition: background var(--ov-dur), border-color var(--ov-dur);
+}
+.ov-callout .ov-callout-btn:hover { background: var(--ov-hover); }
+.ov-callout .ov-callout-btn--primary { background: var(--ov-glass-btn); border-color: var(--ov-line-strong); }
+.ov-callout .ov-callout-btn--primary:hover { background: var(--ov-glass-btn-hover); }

@@ -11,6 +11,7 @@
   z-index: 12;
 }
 .ov-story[data-open="false"] { opacity: 0; transform: translateX(-50%) translateY(14px); pointer-events: none; }
+.ov-story.ov-glass, .ov-present.ov-glass { background: var(--ov-surface-strong); }
 .ov-story-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 16px; }
 .ov-story-title { font: 680 14px/1 var(--ov-font-display); }
 .ov-story-count { font: 550 11.5px/1 var(--ov-font); color: var(--ov-text-3); font-variant-numeric: tabular-nums; }

@@ -87,17 +87,17 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
   each module gets its own scope, only named relative imports are allowed, and
   exported names must be unique. Styles live in `oviz/viewer/web/styles`
   (tokens in `00-tokens.css`).
-- Interface styles ("skins": observatory, focus, maps, studio) are CSS layers
-  keyed on `<html data-oviz-skin>` (`styles/8x-skin-*.css`, phones in
-  `85-skins-mobile.css`) plus an optional layout in `src/ui/layout.js`, which
-  moves (never rebuilds) the shared components and undoes every move on a
-  style or breakpoint change. The registry with each style's behaviour flags
-  (selection panel vs. callout, legend, idle fade) is `src/ui/skins.js`; the
-  Python list is `figure.VIEWER_STYLES`. Motion helpers live in
-  `src/ui/motion.js`. Every skin wears
-  the same components, so features must never depend on one skin; keep skin
-  layout rules inside `@media (min-width: 721px)` so phones keep the mobile
-  layout. Adding a skin means updating all three places.
+- The viewer has one design (tokens in `00-tokens.css`: see-through glass,
+  system type, calm motion) and two modes, keyed on `<html data-oviz-mode>`:
+  `focus` (default: figure, key and one bar; selection shows a callout) and
+  `detailed` (layers, inspector, toolbar and full transport in view). Mode
+  CSS lives in `styles/80-mode-focus.css`, `81-mode-detailed.css` and
+  `85-modes-mobile.css`; behaviour flags in `src/ui/modes.js`; arrangements
+  in `src/ui/layout.js`, which moves (never rebuilds) the shared components
+  and undoes every move on a mode or breakpoint change; the Python list is
+  `figure.VIEWER_MODES`. Keep mode layout rules inside desktop media queries
+  so phones keep the mobile layout, and never make a feature depend on one
+  mode.
 - `src/app/export.js` mirrors `web/template.html` for in-browser self-export.
   Keep the two in sync; `tests/test_viewer.py` checks this.
 - Time is continuous: the vertex shader interpolates frame textures, so

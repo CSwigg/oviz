@@ -1,11 +1,12 @@
 /* ------------------------------------------------------------------
    Oviz design tokens
-   An observatory instrument: quiet glass surfaces over a deep field,
-   hairline structure, tabular numerals, one warm starlight accent.
+   The figure comes first: controls are quiet, see-through glass over the
+   night sky, with system type, hairlines and one warm starlight accent.
+   Motion is quick and calm; nothing moves unless you move it.
    ------------------------------------------------------------------ */
 :root {
-  --ov-font: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --ov-font-display: "Inter Display", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ov-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ov-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
   --ov-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
   --ov-bg: #04060a;
@@ -13,27 +14,35 @@
   /* The data stage stays a night sky in every theme: additive starlight
      and emission volumes are calibrated against a dark background. */
   --ov-stage: radial-gradient(120% 90% at 50% 40%, #0b1120 0%, #05070c 55%, #020305 100%);
-  --ov-surface: rgba(13, 16, 23, 0.74);
-  --ov-surface-strong: rgba(15, 18, 26, 0.9);
-  --ov-surface-solid: #0e1118;
-  --ov-surface-raised: rgba(28, 33, 44, 0.9);
-  --ov-hover: rgba(255, 255, 255, 0.055);
-  --ov-active: rgba(255, 255, 255, 0.09);
-  --ov-line: rgba(255, 255, 255, 0.075);
-  --ov-line-strong: rgba(255, 255, 255, 0.14);
-  --ov-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 
-  --ov-text: #eef1f6;
-  --ov-text-2: #a9b2c1;
-  --ov-text-3: #6b7485;
+  /* Glass: bars and buttons are the most see-through, panels and menus a
+     little denser so text stays easy to read. */
+  --ov-surface: rgba(20, 23, 31, 0.36);
+  --ov-surface-strong: rgba(20, 23, 31, 0.52);
+  --ov-surface-solid: #16181f;
+  --ov-surface-raised: rgba(34, 37, 48, 0.86);
+  --ov-glass-btn: rgba(255, 255, 255, 0.12);
+  --ov-glass-btn-hover: rgba(255, 255, 255, 0.2);
+  --ov-hover: rgba(255, 255, 255, 0.08);
+  --ov-active: rgba(255, 255, 255, 0.14);
+  --ov-line: rgba(255, 255, 255, 0.1);
+  --ov-line-strong: rgba(255, 255, 255, 0.18);
+  --ov-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  --ov-text: #f5f7fa;
+  --ov-text-2: rgba(236, 240, 246, 0.74);
+  --ov-text-3: rgba(236, 240, 246, 0.5);
   --ov-text-inverse: #0b0d12;
+  /* Text drawn straight onto the sky (title, key, scale) in every theme. */
+  --ov-on-sky: rgba(255, 255, 255, 0.92);
+  --ov-on-sky-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 12px rgba(0, 0, 0, 0.7);
 
-  --ov-accent: #f4c46a;
-  --ov-accent-strong: #ffd488;
-  --ov-accent-soft: rgba(244, 196, 106, 0.14);
-  --ov-accent-line: rgba(244, 196, 106, 0.42);
-  --ov-sky: #7cc4ff;
-  --ov-sky-soft: rgba(124, 196, 255, 0.14);
+  --ov-accent: #ffd27a;
+  --ov-accent-strong: #ffe2a6;
+  --ov-accent-soft: rgba(255, 210, 122, 0.16);
+  --ov-accent-line: rgba(255, 210, 122, 0.45);
+  --ov-sky: #9cc8ff;
+  --ov-sky-soft: rgba(156, 200, 255, 0.16);
   --ov-danger: #ff7a70;
   --ov-ok: #6fdc9b;
 
@@ -41,21 +50,21 @@
   --ov-radius: 12px;
   --ov-radius-sm: 8px;
   --ov-pill: 999px;
-  --ov-blur: blur(22px) saturate(160%);
-  --ov-shadow: 0 18px 50px -18px rgba(0, 0, 0, 0.75), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
-  --ov-shadow-sm: 0 6px 20px -8px rgba(0, 0, 0, 0.7);
-  --ov-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ov-blur: blur(24px) saturate(170%);
+  --ov-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.7), 0 1px 3px rgba(0, 0, 0, 0.25);
+  --ov-shadow-sm: 0 8px 20px -10px rgba(0, 0, 0, 0.6);
+  --ov-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --ov-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --ov-dur: 180ms;
+  --ov-dur: 140ms;
 
   --ov-gutter: 16px;
   --ov-safe-top: env(safe-area-inset-top, 0px);
   --ov-safe-bottom: env(safe-area-inset-bottom, 0px);
   --ov-safe-left: env(safe-area-inset-left, 0px);
   --ov-safe-right: env(safe-area-inset-right, 0px);
-  --ov-panel-w: 296px;
-  --ov-inspector-w: 300px;
-  --ov-dock-h: 64px;
+  --ov-panel-w: 300px;
+  --ov-inspector-w: 320px;
+  --ov-dock-h: 52px;
 
   color-scheme: dark;
 }
@@ -63,18 +72,20 @@
 [data-oviz-theme="light"] {
   --ov-bg: #eef1f5;
   --ov-bg-glow: radial-gradient(120% 90% at 50% 40%, #ffffff 0%, #eef1f6 60%, #e3e8ef 100%);
-  --ov-surface: rgba(255, 255, 255, 0.78);
-  --ov-surface-strong: rgba(255, 255, 255, 0.93);
+  --ov-surface: rgba(255, 255, 255, 0.55);
+  --ov-surface-strong: rgba(255, 255, 255, 0.74);
   --ov-surface-solid: #ffffff;
-  --ov-surface-raised: rgba(255, 255, 255, 0.98);
-  --ov-hover: rgba(15, 23, 42, 0.05);
-  --ov-active: rgba(15, 23, 42, 0.085);
-  --ov-line: rgba(15, 23, 42, 0.09);
-  --ov-line-strong: rgba(15, 23, 42, 0.16);
-  --ov-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --ov-surface-raised: rgba(255, 255, 255, 0.96);
+  --ov-glass-btn: rgba(15, 23, 42, 0.07);
+  --ov-glass-btn-hover: rgba(15, 23, 42, 0.12);
+  --ov-hover: rgba(15, 23, 42, 0.06);
+  --ov-active: rgba(15, 23, 42, 0.1);
+  --ov-line: rgba(15, 23, 42, 0.1);
+  --ov-line-strong: rgba(15, 23, 42, 0.18);
+  --ov-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --ov-text: #10151f;
-  --ov-text-2: #4a5566;
-  --ov-text-3: #8591a3;
+  --ov-text-2: rgba(16, 21, 31, 0.72);
+  --ov-text-3: rgba(16, 21, 31, 0.5);
   --ov-text-inverse: #ffffff;
   --ov-accent: #b8791b;
   --ov-accent-strong: #9a620d;
@@ -82,7 +93,7 @@
   --ov-accent-line: rgba(184, 121, 27, 0.4);
   --ov-sky: #1d78c9;
   --ov-sky-soft: rgba(29, 120, 201, 0.12);
-  --ov-shadow: 0 18px 50px -20px rgba(15, 23, 42, 0.35), 0 2px 8px -3px rgba(15, 23, 42, 0.15);
-  --ov-shadow-sm: 0 6px 20px -10px rgba(15, 23, 42, 0.4);
+  --ov-shadow: 0 16px 40px -22px rgba(15, 23, 42, 0.4), 0 1px 3px rgba(15, 23, 42, 0.12);
+  --ov-shadow-sm: 0 8px 20px -12px rgba(15, 23, 42, 0.4);
   color-scheme: light;
 }

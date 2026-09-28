@@ -45,7 +45,6 @@ export class StoryPlugin {
     this.homeState = captureState(v, this.sky);
     this.restoreDraft();
     this.render();
-    this.ui.dock.setMarkers?.([]);
     // Present-only exports open straight into the first view. (The legacy
     // `default_mode` flag only chose the drawer tab, so it does not.)
     if (this.readOnly && this.project.items.length) {
@@ -99,7 +98,7 @@ export class StoryPlugin {
       this.strip.append(h("button", { class: "ov-story-add", type: "button", onclick: () => this.add(), "data-tip": "Save current view  N" }, icon("plus")));
     }
     this.status.textContent = this.dirty ? "Unsaved changes · autosaved in this browser" : "";
-    this.ui.dock.setMarkers?.(items.map((it) => this.viewer.timeline.frameToTime(it.state.time?.frame ?? 0)));
+    this.ui.dock.setMarkers?.(items.map((it, index) => ({ time: this.viewer.timeline.frameToTime(it.state.time?.frame ?? 0), name: it.name, index })));
   }
 
   card(it, i) {

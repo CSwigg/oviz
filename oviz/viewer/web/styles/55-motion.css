@@ -1,91 +1,46 @@
 /* ---------------------------------------------------------------- motion
-   Depth and motion. The chrome rises into place once the first frame is
-   up, panels swing open on a hinge, the inspector tilts toward the pointer,
-   and the selection carries a live reticle tied to its card. Under
-   prefers-reduced-motion every animation collapses to an instant change
-   (see 10-base). */
+   Quiet motion. The chrome settles into place once the first frame is up,
+   panels fade and slide a few pixels, and the selection gets a simple ring.
+   Under prefers-reduced-motion every animation collapses to an instant
+   change (see 10-base). */
 
 /* ---- Entrance ------------------------------------------------------- */
-@keyframes ov-rise { from { opacity: 0; transform: translateY(var(--ov-rise-dy, 14px)) scale(0.97); } }
-@keyframes ov-hinge-left { from { opacity: 0; transform: perspective(1200px) translateX(-28px) rotateY(16deg); } }
-@keyframes ov-stage-in { from { opacity: 0; transform: scale(1.035); } }
+@keyframes ov-rise { from { opacity: 0; transform: translateY(var(--ov-rise-dy, 10px)); } }
+@keyframes ov-stage-in { from { opacity: 0; transform: scale(1.03); } }
 
 /* Zoom the drawing, not the stage: the stage's size must stay true for the
    renderer and for Aladin, which measure it while this runs. */
 .ov-root[data-entrance="true"] .ov-canvas,
-.ov-root[data-entrance="true"] .ov-labels { animation: ov-stage-in 1200ms var(--ov-ease) backwards; }
-.ov-root[data-entrance="true"] .ov-top > * { --ov-rise-dy: -14px; animation: ov-rise 760ms var(--ov-ease) backwards; }
-.ov-root[data-entrance="true"] .ov-brand { animation-delay: 140ms; }
-.ov-root[data-entrance="true"] .ov-search-trigger { animation-delay: 210ms; }
-.ov-root[data-entrance="true"] .ov-toolbar { animation-delay: 280ms; }
-.ov-root[data-entrance="true"] .ov-layers[data-open="true"] { animation: ov-hinge-left 900ms var(--ov-ease) 320ms backwards; }
-.ov-root[data-entrance="true"] .ov-bottom > * { animation: ov-rise 760ms var(--ov-ease) backwards; }
-.ov-root[data-entrance="true"] .ov-bottom-left { animation-delay: 400ms; }
-.ov-root[data-entrance="true"] .ov-dock { animation-delay: 460ms; }
-.ov-root[data-entrance="true"] .ov-bottom-right { animation-delay: 520ms; }
+.ov-root[data-entrance="true"] .ov-labels { animation: ov-stage-in 1100ms var(--ov-ease) backwards; }
+.ov-root[data-entrance="true"] .ov-top > * { --ov-rise-dy: -10px; animation: ov-rise 520ms var(--ov-ease) backwards; }
+.ov-root[data-entrance="true"] .ov-search-trigger { animation-delay: 80ms; }
+.ov-root[data-entrance="true"] .ov-toolbar { animation-delay: 140ms; }
+.ov-root[data-entrance="true"] .ov-layers[data-open="true"] { animation: ov-rise 560ms var(--ov-ease) 180ms backwards; }
+.ov-root[data-entrance="true"] .ov-bottom > * { animation: ov-rise 520ms var(--ov-ease) backwards; }
+.ov-root[data-entrance="true"] .ov-bottom-left { animation-delay: 200ms; }
+.ov-root[data-entrance="true"] .ov-dock { animation-delay: 240ms; }
+.ov-root[data-entrance="true"] .ov-bottom-right { animation-delay: 280ms; }
 .ov-boot[data-leaving="true"] { opacity: 0; pointer-events: none; }
 
-/* ---- Panels swing open on a hinge --------------------------------- */
-.ov-layers { transform-origin: left center; }
-.ov-layers[data-open="false"] { transform: perspective(1200px) translateX(-18px) rotateY(11deg); }
-.ov-inspector { transform-origin: right center; }
-.ov-inspector[data-open="false"] { transform: perspective(1200px) translateX(18px) rotateY(-11deg); }
-
-/* ---- Inspector: tilt toward the pointer, with a moving sheen ------- */
-@media (hover: hover) and (pointer: fine) and (min-width: 721px) {
-  .ov-inspector[data-open="true"] {
-    transform: perspective(1400px) rotateX(var(--ov-tilt-x, 0deg)) rotateY(var(--ov-tilt-y, 0deg));
-  }
-  .ov-inspector[data-tilting="true"] { transition: opacity 240ms var(--ov-ease), transform 140ms linear; }
-}
-.ov-inspector::after {
-  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  border-radius: inherit;
-  background: radial-gradient(360px circle at var(--ov-sheen-x, 50%) var(--ov-sheen-y, 0%), rgba(255, 255, 255, 0.075), transparent 55%);
-  opacity: 0; transition: opacity 360ms var(--ov-ease);
-}
-.ov-inspector[data-tilting="true"]::after { opacity: 1; }
-[data-oviz-theme="light"] .ov-inspector::after { background: radial-gradient(360px circle at var(--ov-sheen-x, 50%) var(--ov-sheen-y, 0%), rgba(255, 255, 255, 0.55), transparent 55%); }
-.ov-inspector[data-open="true"] .ov-insp-hero > * { animation: ov-rise 520ms var(--ov-ease) backwards; --ov-rise-dy: 6px; }
-.ov-inspector[data-open="true"] .ov-insp-hero > :nth-child(2) { animation-delay: 60ms; }
-.ov-inspector[data-open="true"] .ov-insp-hero > :nth-child(3) { animation-delay: 110ms; }
-
-/* ---- Trajectory sparkline ----------------------------------------- */
-.ov-insp-track { display: grid; gap: 6px; padding: 12px 14px 11px; border-bottom: 1px solid var(--ov-line); }
+/* ---- Distance-from-Sun chart in the inspector ---------------------- */
+.ov-insp-track { display: grid; gap: 6px; padding: 10px 16px 12px; }
 .ov-insp-track-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
 .ov-insp-track-read { font: 600 12px/1.2 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text); white-space: nowrap; }
 .ov-insp-track-read small { font-weight: 500; color: var(--ov-text-3); margin-left: 3px; }
 .ov-spark { display: block; width: 100%; height: 54px; cursor: ew-resize; touch-action: none; border-radius: 8px; }
 .ov-insp-track-axis { display: flex; justify-content: space-between; font: 500 10px/1 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text-3); }
 
-/* ---- Selection reticle + leader to the inspector ------------------- */
+/* ---- Selection ring -------------------------------------------------- */
 .ov-ui > .ov-reticle { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .ov-reticle-mark { transition: opacity 180ms linear; }
-.ov-reticle-lock { transform-box: fill-box; transform-origin: center; animation: ov-lock 620ms var(--ov-ease) backwards; }
-.ov-reticle-spin { transform-box: fill-box; transform-origin: center; animation: ov-spin 7s linear infinite; }
-.ov-reticle circle, .ov-reticle path { fill: none; vector-effect: non-scaling-stroke; }
-.ov-reticle-ring { stroke: var(--ov-accent); stroke-width: 1.6; stroke-linecap: round; }
-.ov-reticle-halo { stroke: var(--ov-accent-line); stroke-width: 1; opacity: 0.55; }
-.ov-reticle-tick { stroke: var(--ov-accent); stroke-width: 1.4; stroke-linecap: round; opacity: 0.8; }
-.ov-reticle-leader { stroke: var(--ov-accent-line); stroke-width: 1; stroke-dasharray: 1; stroke-dashoffset: 0; animation: ov-draw 700ms var(--ov-ease) 200ms backwards; }
-.ov-reticle-end { fill: var(--ov-accent) !important; }
-.ov-root[data-reticle="true"] .ov-label--sel { margin-left: 16px; }
-.ov-root[data-zen="true"] .ov-reticle-leader, .ov-root[data-zen="true"] .ov-reticle-end { display: none; }
-@keyframes ov-lock { from { transform: scale(2.1) rotate(-40deg); opacity: 0; } }
-@keyframes ov-draw { from { stroke-dashoffset: 1; } }
+.ov-reticle-lock { transform-box: fill-box; transform-origin: center; animation: ov-lock 260ms var(--ov-ease) backwards; }
+.ov-reticle circle { fill: none; vector-effect: non-scaling-stroke; }
+.ov-reticle-halo { stroke: var(--ov-accent); stroke-width: 1.5; filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8)); }
+.ov-root[data-reticle="true"] .ov-label--sel { margin-left: 10px; }
+@keyframes ov-lock { from { transform: scale(1.6); opacity: 0; } }
 
-/* ---- 3D/Sky switch: a springier thumb ------------------------------ */
-.ov-seg-thumb { transition: transform 460ms cubic-bezier(0.3, 1.3, 0.5, 1), width 460ms cubic-bezier(0.3, 1.3, 0.5, 1), background 300ms; }
-.ov-root[data-view="sky"] .ov-seg--view .ov-seg-thumb { background: var(--ov-sky-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ov-sky) 35%, transparent); }
-.ov-root[data-view="3d"] .ov-seg--view .ov-seg-thumb { background: var(--ov-accent-soft); box-shadow: inset 0 0 0 1px var(--ov-accent-line); }
-
-/* ---- Cards lift in depth on hover ---------------------------------- */
-@media (hover: hover) and (pointer: fine) {
-  .ov-card:hover { transform: perspective(700px) translateY(-3px) rotateX(6deg); }
-}
-
-/* ---- Narrow desktop: keep the dock clear of the corner controls ---- */
-/* Sky extras (member display, overlays) sit on their own row above the
+/* ---- Narrow desktop: keep the bar clear of the corner controls ------ */
+/* Sky extras (member display, background) sit on their own row above the
    view switch, so Sky view never pushes the corner into the timeline. */
 @media (min-width: 721px) {
   .ov-bottom-right { display: grid; grid-template-columns: auto auto; justify-items: end; align-items: end; gap: 8px; }

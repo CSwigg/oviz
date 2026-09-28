@@ -20,7 +20,7 @@ import { FilterPlugin } from "./filter.js";
 import { NotesPlugin } from "./notes.js";
 import { LassoPlugin } from "./lasso.js";
 import { SelectionReticle } from "./reticle.js";
-import { SKINS, skinById, initialSkin, applySkin } from "./skins.js";
+import { MODES, modeById, initialMode, applyMode } from "./modes.js";
 import { reveal, conceal, SPRINGS, flickToDismiss } from "./motion.js";
 import { LayoutManager } from "./layout.js";
 import { CompactLegend } from "./legend.js";
@@ -54,7 +54,7 @@ export class AppUI {
       if (lut) this.luts.set(name, lut);
     }
     root.dataset.view = viewer.state.view.mode;
-    this.skin = applySkin(initialSkin());
+    this.mode = applyMode(initialMode());
     this.ui = h("div", { class: "ov-ui" });
     root.append(this.ui);
     this.toasts = createToasts(this.ui);
@@ -80,11 +80,11 @@ export class AppUI {
     this.bindKeys();
     this.bindViewer();
     this.applyTheme(localStorageGet("oviz.theme") || document.documentElement.dataset.ovizTheme || "dark");
-    this.setLayersOpen(window.innerWidth > 720 && this.skinConfig.layersOpen);
+    this.setLayersOpen(window.innerWidth > 720 && this.modeConfig.layersOpen);
   }
 
-  get skinConfig() {
-    return skinById(this.skin);
+  get modeConfig() {
+    return modeById(this.mode);
   }
 
   /** Controls that only some layouts place (kept in a hidden holder). */
@@ -92,22 +92,18 @@ export class AppUI {
     const v = this.viewer;
     this.viewToggle = iconButton("globe", "Sky view", () => this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky"), { cls: "ov-view-toggle", shortcut: "V" });
     this.moreBtn = iconButton("more", "More", (e) => this.moreMenu(e.currentTarget));
-    this.zoomInBtn = iconButton("plus", "Zoom in", () => this.zoomBy(0.65), { shortcut: "E" });
-    this.zoomOutBtn = iconButton("minus", "Zoom out", () => this.zoomBy(1 / 0.65), { shortcut: "Q" });
-    this.sidebarBtn = iconButton("sidebar", "Hide sidebar", () => this.setSidebar(this.root.dataset.sidebar === "collapsed"), { shortcut: "⇧L" });
+    this.modeBtn = iconButton("sidebar", "Detailed mode", () => this.toggleMode(), { cls: "ov-mode-btn", shortcut: "U" });
     this.legend = new CompactLegend(this);
-    this.spare = h("div", { class: "ov-spare", hidden: true },
-      this.viewToggle, this.moreBtn, this.zoomInBtn, this.zoomOutBtn, this.sidebarBtn, this.legend.el);
+    this.spare = h("div", { class: "ov-spare", hidden: true }, this.viewToggle, this.moreBtn, this.modeBtn, this.legend.el);
     this.ui.append(this.spare);
     this.syncViewToggle();
   }
 
-  /** Arrange the components for the current style and screen size. */
+  /** Arrange the components for the current mode and screen size. */
   applyLayout() {
-    const skin = this.skinConfig;
-    this.layout.apply(skin, this.narrow);
+    this.layout.apply(this.modeConfig, this.narrow);
     this.root.dataset.layout = this.layout.current.layout;
-    if (skin.layout === "studio" && !this.root.dataset.sidebar) this.root.dataset.sidebar = "open";
+    this.modeBtn.setAttribute("aria-pressed", String(this.mode === "detailed"));
     this.syncViewToggle();
     this.legend.render();
     this.refit();
@@ -333,12 +329,11 @@ export class AppUI {
     const v = this.viewer;
     if (recordUndo && hit !== this.selection && (hit || this.selection)) this.pushSelectionUndo();
     this.selection = hit;
-    const skin = this.skinConfig;
-    if (hit && (this.narrow || skin.layout === "maps")) this.setLayersOpen(false);
-    // Callout styles open the inspector only on request (and keep it in step
+    if (hit && this.narrow) this.setLayersOpen(false);
+    // Focus mode opens the inspector only on request (and keeps it in step
     // with the selection once it is open).
     const detailsOpen = this.inspector.el.dataset.open === "true";
-    this.inspector.show(skin.selection === "panel" || (hit && detailsOpen) ? hit : null);
+    this.inspector.show(this.modeConfig.selection === "panel" || (hit && detailsOpen) ? hit : null);
     const labels = v.labels;
     labels.removeDynamic("selection");
     this.clearMeasure();
@@ -495,16 +490,11 @@ export class AppUI {
   }
 
   setLayersOpen(open) {
-    // Studio keeps the layers in its sidebar: the layers button shows or
-    // hides the whole sidebar instead.
-    if (this.layout?.current?.layout === "studio" && !this.narrow) {
-      this.setSidebar(open);
-      open = true;
-    }
     if (open && this.narrow && this.selection) this.select(null);
     this.layersOpen = open;
     this.layers.el.dataset.open = String(open);
     this.root.dataset.layers = String(open);
+    this.idle?.wake();
     this.layersBtn.setAttribute("aria-pressed", String(open));
     if (open) this.anchorLayers();
   }
@@ -523,29 +513,9 @@ export class AppUI {
     el.style.setProperty("--ov-anchor-bottom", `${(rr.bottom - b.top + 12).toFixed(0)}px`);
   }
 
-  /** Studio: show or collapse the sidebar; the figure takes the room. */
-  setSidebar(open) {
-    this.root.dataset.sidebar = open ? "open" : "collapsed";
-    const label = open ? "Hide sidebar" : "Show sidebar";
-    this.sidebarBtn.setAttribute("aria-label", label);
-    this.sidebarBtn.dataset.tip = `${label}  ⇧L`;
-    this.refit();
-    clearTimeout(this._sideTimer);
-    this._sideTimer = setTimeout(() => this.refit(), 320);
-  }
-
-  /** Show the full details of the selection (callout styles). */
+  /** Show the full details of the selection (Focus mode's callout). */
   openDetails() {
     if (this.selection) this.inspector.show(this.selection);
-  }
-
-  zoomBy(factor) {
-    const v = this.viewer;
-    const c = v.controls;
-    const p = clonePose(v.pose);
-    if (v.state.view.mode === "sky" || p.distance <= 1e-6) p.fov = clamp(p.fov * factor, c.minFov, c.maxFov);
-    else p.distance = clamp(p.distance * factor, c.minDistance, c.maxDistance);
-    v.animateTo(p, { duration: 420, ease: (x) => 1 - Math.pow(1 - x, 3) });
   }
 
   syncViewToggle() {
@@ -563,6 +533,7 @@ export class AppUI {
     const v = this.viewer;
     const lasso = this.plugins.find((p) => p.name === "lasso");
     this.menu(anchor, [
+      { label: this.mode === "focus" ? "Detailed mode" : "Focus mode", icon: "sidebar", shortcut: "U", run: () => this.toggleMode() },
       { label: "Search", icon: "search", shortcut: "/", run: () => this.palette.show() },
       ...(!this.statesBtn.hidden ? [{ label: "Views & story", icon: "bookmark", shortcut: "Y", run: () => this.plugins.find((p) => p.name === "states")?.toggle() }] : []),
       { label: "Reset view", icon: "home", shortcut: "Home", run: () => v.resetView() },
@@ -584,7 +555,7 @@ export class AppUI {
     this.refit();
   }
 
-  /** Re-measure the stage now (its frame depends on skin and zen mode). */
+  /** Re-measure the stage now (zen mode changes its frame). */
   refit() {
     this.viewer.renderer.resize();
     try { this.plugins.find((p) => p.name === "sky")?.sky?.aladin?.view?.fixLayoutDimensions?.(); } catch (_) { /* Aladin not ready */ }
@@ -599,6 +570,7 @@ export class AppUI {
   applyTheme(theme) {
     this.theme = theme === "light" ? "light" : "dark";
     document.documentElement.dataset.ovizTheme = this.theme;
+    this.viewer.emit("theme", { theme: this.theme });
     const v = this.viewer;
     v.renderer.clearColor = [0, 0, 0, 0];
     v.renderer.invalidate();
@@ -699,10 +671,11 @@ export class AppUI {
     return true;
   }
 
-  /** Track open overlays; skins use data-overlay to push the scene back. */
+  /** Track open overlays (data-overlay on the root while any is open). */
   setOverlay(kind, on) {
     if (on) this.overlays.add(kind);
     else this.overlays.delete(kind);
+    this.idle?.wake();
     if (this.overlays.size) this.root.dataset.overlay = [...this.overlays].join(" ");
     else delete this.root.dataset.overlay;
   }
@@ -710,15 +683,9 @@ export class AppUI {
   settingsMenu(anchor) {
     const v = this.viewer;
     const g = v.state.global;
-    const skinPick = h("div", { class: "ov-field" },
-      h("div", { class: "ov-field-head" }, h("span", { class: "ov-field-label" }, "Interface"), h("span", { class: "ov-field-value" }, kbd("U"))),
-      h("div", { class: "ov-skin-chips" }, SKINS.map((sk) => h("button", {
-        class: "ov-skin-chip", type: "button", "aria-pressed": String(sk.id === this.skin), "data-tip": sk.desc,
-        onclick: () => { this.closeMenu(); this.setSkin(sk.id); },
-      }, h("span", { class: "ov-skin-dots" }, sk.swatch.map((c) => h("i", { style: { background: c } }))), sk.name))));
     const body = h("div", { class: "ov-pop-body" },
-      skinPick,
-      this.skin === "observatory" ? miniSeg({ label: "Theme", value: this.theme, options: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }], onChange: (t) => this.applyTheme(t) }) : null,
+      miniSeg({ label: "Mode", value: this.mode, options: MODES.map((m) => ({ value: m.id, label: m.name })), onChange: (m) => { this.closeMenu(); this.setMode(m); } }),
+      miniSeg({ label: "Theme", value: this.theme, options: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }], onChange: (t) => this.applyTheme(t) }),
       slider({ label: "Point size", min: 0.25, max: 4, value: g.pointSize, scale: "log", format: (x) => `${x.toFixed(2)}×`, onInput: (x) => v.setGlobal({ pointSize: x }) }),
       slider({ label: "Point brightness", min: 0, max: 2, value: g.pointOpacity, format: (x) => `${x.toFixed(2)}×`, onInput: (x) => v.setGlobal({ pointOpacity: x }) }),
       slider({ label: "Star glow", min: 0, max: 4, value: g.glow, format: (x) => (x <= 0.02 ? "Markers" : x.toFixed(2)), onInput: (x) => v.setGlobal({ glow: x }) }),
@@ -734,30 +701,22 @@ export class AppUI {
     this.menu(anchor, [{ body }], { title: "Display" });
   }
 
-  // ------------------------------------------------------------- skins
+  // ------------------------------------------------------------- modes
 
-  /** Switch interface style; the chrome re-enters in the new style. */
-  setSkin(id) {
-    const prev = this.skin;
-    this.skin = applySkin(id);
-    if (prev === this.skin) return;
-    const root = this.root;
-    root.dataset.entrance = "true";
-    clearTimeout(this._skinTimer);
-    this._skinTimer = setTimeout(() => { delete root.dataset.entrance; }, 1700);
-    this.viewer.emit("skin", { skin: this.skin });
-    this.viewer.renderer.invalidate();
+  /** Switch between Focus and Detailed mode. */
+  setMode(id) {
+    const prev = this.mode;
+    this.mode = applyMode(id);
+    if (prev === this.mode) return;
+    this.viewer.emit("mode", { mode: this.mode });
     this.applyLayout();
-    if (!this.narrow) this.setLayersOpen(this.skinConfig.layersOpen);
+    if (!this.narrow) this.setLayersOpen(this.modeConfig.layersOpen);
     if (this.selection) {
-      this.inspector.show(this.skinConfig.selection === "panel" ? this.selection : null);
+      this.inspector.show(this.modeConfig.selection === "panel" ? this.selection : null);
       this.reticle.onSelect();
     }
     this.idle.wake();
     const settle = () => {
-      // Skins can reframe the stage (Atlas); do not wait on ResizeObserver,
-      // which browsers defer for background tabs.
-      this.refit();
       this.syncViewSeg();
       this.reticle.update();
       this.anchorLayers();
@@ -765,24 +724,11 @@ export class AppUI {
       this.updateScale();
     };
     requestAnimationFrame(settle);
-    setTimeout(settle, 400);
-    this.toast(`Interface · ${skinById(this.skin).name}`, { ms: 1200 });
+    setTimeout(settle, 320);
   }
 
-  cycleSkin(dir = 1) {
-    const i = SKINS.findIndex((s) => s.id === this.skin);
-    this.setSkin(SKINS[(i + dir + SKINS.length) % SKINS.length].id);
-  }
-
-  showSkins() {
-    const grid = h("div", { class: "ov-choice-grid ov-skin-grid" }, SKINS.map((sk) => h("button", {
-      class: "ov-choice ov-skin-card", type: "button", "aria-pressed": String(sk.id === this.skin),
-      onclick: () => { this.closeSheet(); this.setSkin(sk.id); },
-    },
-    h("span", { class: "ov-skin-preview", "data-preview": sk.id }, sk.swatch.map((c) => h("i", { style: { background: c } }))),
-    h("span", { class: "ov-choice-title" }, sk.name),
-    h("span", { class: "ov-choice-desc" }, sk.desc))));
-    this.sheet("Interface style", grid, { wide: true });
+  toggleMode() {
+    this.setMode(this.mode === "focus" ? "detailed" : "focus");
   }
 
   /** Longest useful trail: a third of the timeline. */
@@ -873,8 +819,7 @@ export class AppUI {
       { title: v.controls.autoOrbit ? "Stop auto-orbit" : "Auto-orbit camera", icon: "orbit", shortcut: "O", run: () => this.setAutoOrbit(!v.controls.autoOrbit) },
       ...(tl.count > 1 ? [{ title: v.state.global.trails > 0 ? "Hide motion trails" : "Show motion trails", icon: "trail", shortcut: "J", keywords: "streaks motion history comet", run: () => this.toggleTrails() }] : []),
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
-      { title: "Interface style…", icon: "sliders", shortcut: "U", keywords: "skin theme look layout focus maps studio observatory", run: () => this.showSkins() },
-      ...SKINS.filter((sk) => sk.id !== this.skin).map((sk) => ({ title: `Interface: ${sk.name}`, sub: sk.desc, icon: "sliders", keywords: "skin style theme", run: () => this.setSkin(sk.id) })),
+      { title: this.mode === "focus" ? "Detailed mode" : "Focus mode", sub: this.mode === "focus" ? MODES[1].desc : MODES[0].desc, icon: "sidebar", shortcut: "U", keywords: "mode layout panels simple minimal focus detailed", run: () => this.toggleMode() },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
       { title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
     ];
@@ -982,7 +927,7 @@ export class AppUI {
       ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Motion trails", "J"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
       ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Fly to object", "Double-click"], ["Measure separation", "⇧ Click"], ["Lasso", "L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
       ["Views & presenting", [["Save current view", "N"], ["Present", "P"], ["Next / previous view", "→ ←"], ["Views panel", "Y"], ["Save figure", `${MOD} S`]]],
-      ["Capture", [["Screenshot", "I"], ["Hide interface", "Z"], ["Fullscreen", "M"], ["Interface style", "U"], ["This help", "?"]]],
+      ["Capture", [["Screenshot", "I"], ["Hide interface", "Z"], ["Fullscreen", "M"], ["Focus / detailed mode", "U"], ["This help", "?"]]],
     ];
     const grid = h("div", { class: "ov-help-grid" }, groups.map(([title, rows]) => h("div", { class: "ov-help-group" },
       h("h4", null, title),
@@ -1092,7 +1037,7 @@ export class AppUI {
         case "g": v.setGlobal({ grid: !v.state.global.grid }); break;
         case "o": this.setAutoOrbit(!v.controls.autoOrbit); break;
         case "j": this.toggleTrails(); break;
-        case "u": this.cycleSkin(e.shiftKey ? -1 : 1); break;
+        case "u": this.toggleMode(); break;
         case "z": this.setZen(this.root.dataset.zen !== "true"); break;
         case "t": this.layers.toggleAll(this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false)); break;
         case "[": case "{": case "]": case "}": {

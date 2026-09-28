@@ -1,0 +1,22 @@
+/* -------------------------------------------------------- modes · phones
+   Phone layouts. Panels are bottom sheets that swipe down to dismiss
+   (70-mobile); the bar spans the screen in both modes. */
+@media (max-width: 720px) {
+  .ov-panel-head { touch-action: none; }
+  .ov-panel[data-dragging="true"] { transition: none !important; }
+
+  .ov-dock { width: 100%; padding: 0 6px; }
+  .ov-scrub { flex: 1; width: auto; min-width: 56px; margin: 0 4px; }
+  .ov-time-read { min-width: 60px; padding: 0 2px 0 8px; }
+  .ov-time-caption, .ov-speed, .ov-scrub-tick-label { display: none !important; }
+
+  /* Focus: views and the mode switch live in "more"; the label card docks
+     above the bar. */
+  [data-oviz-mode="focus"] .ov-dock :is([aria-label="Views & story"], .ov-mode-btn) { display: none; }
+  [data-oviz-mode="focus"] .ov-callout {
+    transform: none !important; left: 10px; right: 10px; top: auto;
+    bottom: calc(var(--ov-dock-h) + 24px + var(--ov-safe-bottom));
+    width: auto; max-width: none;
+  }
+  .ov-legend .ov-legend-item { height: 22px; font-size: 12px; }
+}

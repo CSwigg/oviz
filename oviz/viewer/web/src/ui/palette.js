@@ -58,7 +58,7 @@ export class Palette {
         h("span", null, kbd("⇧↵"), "select without flying")),
     );
     ui.root.append(this.scrim, this.el);
-    // Search flows out of the search capsule (the island, in that skin).
+    // Search flows out of the search button.
     reveal(this.el, ui.search?.getBoundingClientRect(), { spring: SPRINGS.pop });
     ui.setOverlay?.("palette", true);
     this.input.value = initial;

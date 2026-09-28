@@ -20,9 +20,9 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-export function buildExportHtml(manifest, { title, theme = "dark", skin } = {}) {
+export function buildExportHtml(manifest, { title, theme = "dark", mode } = {}) {
   const doc = document;
-  const skinId = skin || doc.documentElement.dataset.ovizSkin || "observatory";
+  const modeId = mode || manifest.viewer?.mode || "focus";
   const style = doc.getElementById("oviz-style")?.textContent || "";
   const runtime = doc.getElementById("oviz-runtime")?.textContent || "";
   const blobs = [...doc.querySelectorAll("script[data-oviz-blob]")].map((el) => el.outerHTML).join("\n");
@@ -30,7 +30,7 @@ export function buildExportHtml(manifest, { title, theme = "dark", skin } = {}) 
   const pageTitle = title ?? (manifest.title || doc.title || "Oviz figure");
   return [
     "<!doctype html>",
-    `<html lang="en" data-oviz-theme="${escapeHtml(theme)}" data-oviz-skin="${escapeHtml(skinId)}">`,
+    `<html lang="en" data-oviz-theme="${escapeHtml(theme)}" data-oviz-mode="${escapeHtml(modeId)}">`,
     "<head>",
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">',

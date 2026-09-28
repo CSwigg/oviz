@@ -280,26 +280,26 @@ class IntegrationTests(unittest.TestCase):
         names = {t["name"] for t in manifest["traces"]}
         self.assertTrue(names)
 
-    def test_interface_style_is_written_and_validated(self):
+    def test_viewer_mode_is_written_and_validated(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(time=np.array([0.0, -1.0, -2.0]), show=False, viewer_style="maps")
-        self.assertEqual(fig.style, "maps")
+        fig = viz.make_plot(time=np.array([0.0, -1.0, -2.0]), show=False, viewer_mode="detailed")
+        self.assertEqual(fig.mode, "detailed")
         html = fig.to_html()
-        self.assertIn('data-oviz-skin="maps"', html)
+        self.assertIn('data-oviz-mode="detailed"', html)
         manifest = json.loads(re.search(r'id="oviz-manifest">(.*?)</script>', html, re.S).group(1))
-        self.assertEqual(manifest["viewer"]["style"], "maps")
-        self.assertIn('data-oviz-skin="studio"', fig.to_html(style="studio"))
-        self.assertIn('data-oviz-skin="observatory"', OvizFigure(bundle=fig.bundle).to_html())
+        self.assertEqual(manifest["viewer"]["mode"], "detailed")
+        self.assertIn('data-oviz-mode="focus"', fig.to_html(mode="focus"))
+        # Focus is the default.
+        self.assertIn('data-oviz-mode="focus"', OvizFigure(bundle=fig.bundle).to_html())
         with self.assertRaises(ValueError):
-            OvizFigure(bundle=fig.bundle, style="neon")
-        # Every style the Python side accepts has a stylesheet and a runtime entry.
+            OvizFigure(bundle=fig.bundle, mode="studio")
+        # Every mode the Python side accepts has a stylesheet and a runtime entry.
         css = build.bundle_css()
         runtime = build.bundle_js()
-        from oviz.viewer.figure import VIEWER_STYLES
-        for style in VIEWER_STYLES:
-            self.assertIn(f'id: "{style}"', runtime)
-            if style != "observatory":
-                self.assertIn(f'[data-oviz-skin="{style}"]', css)
+        from oviz.viewer.figure import VIEWER_MODES
+        for mode in VIEWER_MODES:
+            self.assertIn(f'id: "{mode}"', runtime)
+            self.assertIn(f'[data-oviz-mode="{mode}"]', css)
 
     def test_upgrade_reads_compressed_and_inline_legacy_figures(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")

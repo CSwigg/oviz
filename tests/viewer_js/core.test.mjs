@@ -155,3 +155,16 @@ test("spring easings settle, and livelier springs overshoot", async () => {
   const stiff = springEasing({ stiffness: 900, damping: 60 });
   assert.ok(stiff.duration < springEasing({ stiffness: 120, damping: 14 }).duration);
 });
+
+test("the birth profile counts births inside the timeline only", async () => {
+  const { Timeline, birthProfile } = await import("../../oviz/viewer/web/src/app/timeline.js");
+  const tl = new Timeline([-100, -75, -50, -25, 0]);
+  const profile = birthProfile(tl, [Float64Array.from([10, 12, 90, 200, -5])], 4);
+  assert.equal(profile.length, 4);
+  // Ages 200 (born before the timeline) and −5 (in the future) are ignored.
+  const inside = birthProfile(tl, [Float64Array.from([10, 12, 90])], 4);
+  assert.deepEqual(Array.from(profile), Array.from(inside));
+  // Two births near the present outweigh the one at −90 Myr.
+  assert.ok(profile[3] > profile[0] && profile[0] > 0);
+  assert.equal(birthProfile(tl, [], 4).every((x) => x === 0), true);
+});

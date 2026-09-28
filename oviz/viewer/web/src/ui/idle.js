@@ -1,9 +1,9 @@
-// Idle fade: in styles that ask for it, the controls fade out while the
+// Idle fade: in Focus mode the controls fade out while the
 // pointer rests over the figure (like a video player) and return the moment
 // it moves. Never while a menu, panel or story is open, while the pointer is
 // over the controls, on touch screens, or while presenting.
 
-const CHROME = ".ov-top, .ov-bottom, .ov-panel, .ov-pop, .ov-callout, .ov-story, .ov-legend, .ov-mapctl, .ov-sidebar";
+const CHROME = ".ov-top, .ov-bottom, .ov-panel, .ov-pop, .ov-callout, .ov-story, .ov-legend";
 
 export class IdleFade {
   constructor(ui, { delay = 2800 } = {}) {
@@ -20,7 +20,7 @@ export class IdleFade {
   }
 
   get enabled() {
-    return !!this.ui.skinConfig?.autoHide && !!this.fine?.matches;
+    return !!this.ui.modeConfig?.autoHide && !!this.fine?.matches;
   }
 
   busy() {

@@ -305,7 +305,7 @@ class Animate3D:
         compress_scene_spec="auto",
         scene_spec_compression_threshold_bytes=None,
         viewer=None,
-        viewer_style=None,
+        viewer_mode=None,
     ):
         """Integrate the data, build timeline frames, and return a figure.
 
@@ -337,10 +337,11 @@ class Animate3D:
             binary payloads, GPU time interpolation, Views & story, video
             capture. ``"classic"`` writes the previous Three.js runtime
             byte-for-byte (Slides, Paper and AR remain classic-only).
-        viewer_style : {"observatory", "focus", "maps", "studio"}, optional
-            Oviz viewer only: the interface style the figure opens in
-            (default ``"observatory"``). Readers can switch styles at any
-            time with **U** or the Display menu.
+        viewer_mode : {"focus", "detailed"}, optional
+            Oviz viewer only: the mode the figure opens in. ``"focus"`` (the
+            default) shows the figure, its key and one quiet bar;
+            ``"detailed"`` keeps the layers panel, details and every control
+            in view. Readers switch modes at any time with **U**.
         show : bool
             Display the figure after construction.
         save_name : path-like, optional
@@ -353,7 +354,7 @@ class Animate3D:
         """
         renderer_name = _normalize_renderer_name(renderer)
         self.viewer_name = _normalize_viewer_name(viewer)
-        self.viewer_style = viewer_style
+        self.viewer_mode = viewer_mode
 
         time = orbit_maker.normalize_time_grid(time)
 
@@ -1897,7 +1898,7 @@ class Animate3D:
         if getattr(self, "viewer_name", DEFAULT_VIEWER) == "oviz":
             from .viewer.figure import OvizFigure
 
-            self.figure = OvizFigure(scene_spec, style=getattr(self, "viewer_style", None) or "observatory")
+            self.figure = OvizFigure(scene_spec, mode=getattr(self, "viewer_mode", None) or "focus")
             return
         self.figure = ThreeJSFigure(
             scene_spec,
