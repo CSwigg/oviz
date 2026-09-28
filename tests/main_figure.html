@@ -889,6 +889,107 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-selbar-count { display: inline-flex; align-items: center; gap: 6px; margin-right: 6px; font: 650 12.5px/1 var(--ov-font); color: var(--ov-sky); font-variant-numeric: tabular-nums; }
 .ov-root[data-story="true"] .ov-selbar { bottom: calc(var(--ov-gutter) * 3 + var(--ov-dock-h) + 200px + var(--ov-safe-bottom)); }
 
+/* ---------------------------------------------------------------- motion
+   Depth and motion. The chrome rises into place once the first frame is
+   up, panels swing open on a hinge, the inspector tilts toward the pointer,
+   and the selection carries a live reticle tied to its card. Under
+   prefers-reduced-motion every animation collapses to an instant change
+   (see 10-base). */
+
+/* ---- Entrance ------------------------------------------------------- */
+@keyframes ov-rise { from { opacity: 0; transform: translateY(var(--ov-rise-dy, 14px)) scale(0.97); } }
+@keyframes ov-hinge-left { from { opacity: 0; transform: perspective(1200px) translateX(-28px) rotateY(16deg); } }
+@keyframes ov-stage-in { from { opacity: 0; transform: scale(1.035); } }
+
+.ov-root[data-entrance="true"] .ov-stage { animation: ov-stage-in 1200ms var(--ov-ease) backwards; }
+.ov-root[data-entrance="true"] .ov-top > * { --ov-rise-dy: -14px; animation: ov-rise 760ms var(--ov-ease) backwards; }
+.ov-root[data-entrance="true"] .ov-brand { animation-delay: 140ms; }
+.ov-root[data-entrance="true"] .ov-search-trigger { animation-delay: 210ms; }
+.ov-root[data-entrance="true"] .ov-toolbar { animation-delay: 280ms; }
+.ov-root[data-entrance="true"] .ov-layers[data-open="true"] { animation: ov-hinge-left 900ms var(--ov-ease) 320ms backwards; }
+.ov-root[data-entrance="true"] .ov-bottom > * { animation: ov-rise 760ms var(--ov-ease) backwards; }
+.ov-root[data-entrance="true"] .ov-bottom-left { animation-delay: 400ms; }
+.ov-root[data-entrance="true"] .ov-dock { animation-delay: 460ms; }
+.ov-root[data-entrance="true"] .ov-bottom-right { animation-delay: 520ms; }
+.ov-boot[data-leaving="true"] { opacity: 0; pointer-events: none; }
+
+/* ---- Panels swing open on a hinge --------------------------------- */
+.ov-layers { transform-origin: left center; }
+.ov-layers[data-open="false"] { transform: perspective(1200px) translateX(-18px) rotateY(11deg); }
+.ov-inspector { transform-origin: right center; }
+.ov-inspector[data-open="false"] { transform: perspective(1200px) translateX(18px) rotateY(-11deg); }
+
+/* ---- Inspector: tilt toward the pointer, with a moving sheen ------- */
+@media (hover: hover) and (pointer: fine) and (min-width: 721px) {
+  .ov-inspector[data-open="true"] {
+    transform: perspective(1400px) rotateX(var(--ov-tilt-x, 0deg)) rotateY(var(--ov-tilt-y, 0deg));
+  }
+  .ov-inspector[data-tilting="true"] { transition: opacity 240ms var(--ov-ease), transform 140ms linear; }
+}
+.ov-inspector::after {
+  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(360px circle at var(--ov-sheen-x, 50%) var(--ov-sheen-y, 0%), rgba(255, 255, 255, 0.075), transparent 55%);
+  opacity: 0; transition: opacity 360ms var(--ov-ease);
+}
+.ov-inspector[data-tilting="true"]::after { opacity: 1; }
+[data-oviz-theme="light"] .ov-inspector::after { background: radial-gradient(360px circle at var(--ov-sheen-x, 50%) var(--ov-sheen-y, 0%), rgba(255, 255, 255, 0.55), transparent 55%); }
+.ov-inspector[data-open="true"] .ov-insp-hero > * { animation: ov-rise 520ms var(--ov-ease) backwards; --ov-rise-dy: 6px; }
+.ov-inspector[data-open="true"] .ov-insp-hero > :nth-child(2) { animation-delay: 60ms; }
+.ov-inspector[data-open="true"] .ov-insp-hero > :nth-child(3) { animation-delay: 110ms; }
+
+/* ---- Trajectory sparkline ----------------------------------------- */
+.ov-insp-track { display: grid; gap: 6px; padding: 12px 14px 11px; border-bottom: 1px solid var(--ov-line); }
+.ov-insp-track-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.ov-insp-track-read { font: 600 12px/1.2 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text); white-space: nowrap; }
+.ov-insp-track-read small { font-weight: 500; color: var(--ov-text-3); margin-left: 3px; }
+.ov-spark { display: block; width: 100%; height: 54px; cursor: ew-resize; touch-action: none; border-radius: 8px; }
+.ov-insp-track-axis { display: flex; justify-content: space-between; font: 500 10px/1 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text-3); }
+
+/* ---- Selection reticle + leader to the inspector ------------------- */
+.ov-ui > .ov-reticle { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.ov-reticle-mark { transition: opacity 180ms linear; }
+.ov-reticle-lock { transform-box: fill-box; transform-origin: center; animation: ov-lock 620ms var(--ov-ease) backwards; }
+.ov-reticle-spin { transform-box: fill-box; transform-origin: center; animation: ov-spin 7s linear infinite; }
+.ov-reticle circle, .ov-reticle path { fill: none; vector-effect: non-scaling-stroke; }
+.ov-reticle-ring { stroke: var(--ov-accent); stroke-width: 1.6; stroke-linecap: round; }
+.ov-reticle-halo { stroke: var(--ov-accent-line); stroke-width: 1; opacity: 0.55; }
+.ov-reticle-tick { stroke: var(--ov-accent); stroke-width: 1.4; stroke-linecap: round; opacity: 0.8; }
+.ov-reticle-leader { stroke: var(--ov-accent-line); stroke-width: 1; stroke-dasharray: 1; stroke-dashoffset: 0; animation: ov-draw 700ms var(--ov-ease) 200ms backwards; }
+.ov-reticle-end { fill: var(--ov-accent) !important; }
+.ov-root[data-reticle="true"] .ov-label--sel { margin-left: 16px; }
+.ov-root[data-zen="true"] .ov-reticle-leader, .ov-root[data-zen="true"] .ov-reticle-end { display: none; }
+@keyframes ov-lock { from { transform: scale(2.1) rotate(-40deg); opacity: 0; } }
+@keyframes ov-draw { from { stroke-dashoffset: 1; } }
+
+/* ---- 3D/Sky switch: a springier thumb ------------------------------ */
+.ov-seg-thumb { transition: transform 460ms cubic-bezier(0.3, 1.3, 0.5, 1), width 460ms cubic-bezier(0.3, 1.3, 0.5, 1), background 300ms; }
+.ov-root[data-view="sky"] .ov-seg--view .ov-seg-thumb { background: var(--ov-sky-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ov-sky) 35%, transparent); }
+.ov-root[data-view="3d"] .ov-seg--view .ov-seg-thumb { background: var(--ov-accent-soft); box-shadow: inset 0 0 0 1px var(--ov-accent-line); }
+
+/* ---- Cards lift in depth on hover ---------------------------------- */
+@media (hover: hover) and (pointer: fine) {
+  .ov-card:hover { transform: perspective(700px) translateY(-3px) rotateX(6deg); }
+}
+
+/* ---- Narrow desktop: keep the dock clear of the corner controls ---- */
+@media (min-width: 721px) and (max-width: 1180px) {
+  .ov-bottom { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ov-dock { width: auto; min-width: 0; }
+  .ov-colorbar { min-width: 0; max-width: 220px; }
+  /* Sky extras sit on their own row above the view switch. */
+  .ov-bottom-right { display: grid; grid-template-columns: auto auto; justify-items: end; align-items: end; gap: 8px; }
+  .ov-bottom-right > :first-child { grid-column: 1 / -1; }
+  .ov-bottom-right > :first-child:empty { display: none; }
+}
+@media (min-width: 721px) and (max-width: 980px) {
+  .ov-bottom-right { grid-template-columns: auto; }
+  .ov-dock [aria-label="Previous frame"], .ov-dock [aria-label="Next frame"], .ov-dock [aria-label="Loop playback"] { display: none; }
+  .ov-time-read { min-width: 84px; }
+  .ov-scrub { min-width: 72px; }
+  .ov-scale-sub { display: none; }
+}
+
 /* --------------------------------------------------------------- story */
 .ov-story {
   position: absolute;
@@ -978,7 +1079,8 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-present-text { display: grid; gap: 5px; justify-items: center; text-align: center; min-width: 0; }
 .ov-present-title { font: 680 17px/1.25 var(--ov-font-display); letter-spacing: -0.01em; max-width: 100%; }
 .ov-present-caption { font: 450 13px/1.5 var(--ov-font); color: var(--ov-text-2); max-width: 62ch; user-select: text; -webkit-user-select: text; }
-.ov-present-dots { display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap; justify-content: center; }
+/* Progress segments and the reel replace the dots; kept for assistive tech. */
+.ov-present-dots { display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap; justify-content: center; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .ov-present-dot { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: var(--ov-line-strong); transition: background var(--ov-dur), transform var(--ov-dur); }
 .ov-present-dot:hover { background: var(--ov-text-3); }
 .ov-present-dot[aria-current="step"] { background: var(--ov-accent); transform: scale(1.35); }
@@ -988,6 +1090,56 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-root[data-story="true"] .ov-inspector {
   max-height: calc(100% - 52px - var(--ov-dock-h) - 3 * var(--ov-gutter) - 24px - 200px - var(--ov-safe-top) - var(--ov-safe-bottom));
 }
+
+/* Story progress: one segment per view; the current one fills during the
+   flight. The stage is always a night sky, so the bars are plain white. */
+.ov-present-progress {
+  position: absolute; left: 50%; top: calc(var(--ov-gutter) + var(--ov-safe-top));
+  transform: translateX(-50%);
+  display: flex; gap: 5px;
+  width: min(560px, calc(100vw - 2 * var(--ov-gutter) - 40px));
+  z-index: 21;
+  transition: opacity 320ms var(--ov-ease), transform 380ms var(--ov-ease);
+}
+.ov-present-progress[data-open="false"] { opacity: 0; transform: translateX(-50%) translateY(-12px); pointer-events: none; }
+.ov-present-seg { flex: 1; min-width: 0; height: 18px; padding: 7px 0; border: 0; background: none; }
+.ov-present-seg span { display: block; height: 3px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, 0.2); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transition: background var(--ov-dur); }
+.ov-present-seg:hover span { background: rgba(255, 255, 255, 0.34); }
+.ov-present-seg i { display: block; width: 0; height: 100%; border-radius: 3px; background: rgba(255, 255, 255, 0.92); }
+
+/* Caption entrance for each view. */
+.ov-present-text.ov-anim > * { --ov-rise-dy: 10px; animation: ov-rise 620ms var(--ov-ease) backwards; }
+.ov-present-text.ov-anim > :nth-child(2) { animation-delay: 90ms; }
+.ov-present-text.ov-anim > :nth-child(3) { animation-delay: 160ms; }
+
+/* 3D reel of views. */
+.ov-present-reel {
+  position: absolute; left: 50%; width: 0;
+  bottom: calc(var(--ov-gutter) * 1.5 + var(--ov-safe-bottom) + var(--ov-present-h, 96px) + 16px);
+  height: 96px;
+  perspective: 900px; perspective-origin: 50% 40%;
+  transform-style: preserve-3d;
+  z-index: 19;
+  transition: opacity 420ms var(--ov-ease), transform 520ms var(--ov-ease);
+}
+.ov-present-reel[data-open="false"], .ov-present-reel[data-idle="true"] { opacity: 0; transform: translateY(18px); }
+.ov-present-reel[data-open="false"] .ov-reel-card, .ov-present-reel[data-idle="true"] .ov-reel-card { pointer-events: none !important; }
+.ov-reel-card {
+  position: absolute; left: -76px; top: 0;
+  width: 152px; height: 86px; padding: 0;
+  border-radius: 12px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #070a11 center / cover no-repeat;
+  box-shadow: 0 18px 36px -18px rgba(0, 0, 0, 0.95);
+  transition: transform 760ms var(--ov-ease), opacity 760ms var(--ov-ease), border-color 300ms, box-shadow 300ms;
+}
+.ov-reel-card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.72)); }
+.ov-reel-card[aria-current="step"] { border-color: var(--ov-accent-line); box-shadow: 0 0 0 1px var(--ov-accent-line), 0 20px 44px -16px rgba(0, 0, 0, 0.95); }
+.ov-reel-card b, .ov-reel-card span, .ov-reel-card em { position: absolute; z-index: 1; color: #fff; }
+.ov-reel-card b { left: 8px; top: 7px; font: 700 10px/1 var(--ov-font); opacity: 0.75; }
+.ov-reel-card span { left: 9px; right: 9px; bottom: 7px; text-align: left; font: 600 11.5px/1.2 var(--ov-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }
+.ov-reel-card em { inset: 0; display: grid; place-items: center; font: 650 11px/1 var(--ov-font); font-style: normal; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; }
+@media (max-width: 720px) { .ov-present-reel { display: none; } }
 
 /* --------------------------------------------------------------- mobile
    Phones get the same instrument, re-laid out for one thumb: sheets rise
@@ -3307,7 +3459,7 @@ return { Controls, keyMotion };
 })();
 
 // ---- engine/frames.js ----
-const { FRAME_TEX_WIDTH, ABSENT, packFrameTexture, packScalarTexture, FRAME_GLSL, cpuFramePosition, frameOffset } = (() => {
+const { FRAME_TEX_WIDTH, ABSENT, packFrameTexture, packScalarTexture, FRAME_GLSL, cpuFramePosition, frameOffset, trailParams } = (() => {
 // Per-frame data textures and the GLSL that samples them.
 //
 // Positions for every frame live in one RGBA32F texture per channel set:
@@ -3477,7 +3629,21 @@ function frameOffset(offsets, frame, out = [0, 0, 0]) {
   for (let k = 0; k < 3; k++) out[k] = offsets[f1 * 3 + k] + (offsets[f2 * 3 + k] - offsets[f1 * 3 + k]) * t;
   return out;
 }
-return { FRAME_TEX_WIDTH, ABSENT, packFrameTexture, packScalarTexture, FRAME_GLSL, cpuFramePosition, frameOffset };
+
+/**
+ * Motion-trail span for a trail `myr` long: `span` is in frames, signed so
+ * the trail points back along the playback `direction`; `myrPerFrame` is
+ * signed by the time axis. Returns null when trails are off or undefined.
+ */
+function trailParams(times, direction, myr) {
+  const len = Number(myr) || 0;
+  const n = times?.length || 0;
+  if (len <= 0 || n < 2) return null;
+  const myrPerFrame = (times[n - 1] - times[0]) / (n - 1);
+  if (!(Math.abs(myrPerFrame) > 0)) return null;
+  return { span: (len / Math.abs(myrPerFrame)) * (direction < 0 ? -1 : 1), myrPerFrame };
+}
+return { FRAME_TEX_WIDTH, ABSENT, packFrameTexture, packScalarTexture, FRAME_GLSL, cpuFramePosition, frameOffset, trailParams };
 })();
 
 // ---- core/color.js ----
@@ -3562,6 +3728,10 @@ const { resetStarTextures, starTextures, PointsLayer } = (() => {
 // (world-space size, size-by-n_stars, birth fade) and renders the stellar
 // halo + core PSF in a single premultiplied pass: halo·a_h + core·a_c +
 // dst·(1 − a_h) — identical to the legacy "normal halo, additive core" pair.
+//
+// Optional motion trails: a tapered screen-space ribbon per point, sampled
+// back along its own orbit from the same frame texture, so trails follow the
+// exact interpolated path at no CPU cost.
 
 
 
@@ -3774,6 +3944,118 @@ void main() {
 }
 `;
 
+const TRAIL_SEGMENTS = 24;
+
+const TRAIL_VERT = `
+${FRAME_GLSL}
+layout(location = 0) in vec2 aTrail;    // s (0 head → 1 tail), side (±1)
+layout(location = 1) in float aIndex;
+layout(location = 2) in vec3 aColor;
+layout(location = 3) in vec4 aStatic;   // opacity, scalar, ageNow, starsFactor
+layout(location = 6) in float aState;
+
+uniform mat4 uViewProj;
+uniform vec2 uViewport;
+uniform highp sampler2D uFrameTex;
+uniform int uCount;
+uniform int uFrames;
+uniform float uFrame;
+uniform float uSpan;          // trail length in frames, signed toward the past
+uniform float uTime;
+uniform float uMyrPerFrame;   // signed
+uniform vec3 uOffset;
+uniform float uOpacityScale;
+uniform float uWidthPx;
+uniform float uDimOpacity;
+uniform int uHasAge;
+uniform float uMemberFade;
+
+out vec3 vColor;
+out float vScalar;
+out float vAlpha;
+out float vSide;
+
+vec4 clipAt(int index, float f, out float presence) {
+  float sc;
+  vec4 p = framePosition(uFrameTex, index, uCount, uFrames, f, sc);
+  presence = p.w;
+  return uViewProj * vec4(p.xyz + uOffset, 1.0);
+}
+
+void main() {
+  int index = int(aIndex + 0.5);
+  float s = aTrail.x;
+  float ds = 1.0 / float(${TRAIL_SEGMENTS});
+  float last = float(uFrames - 1);
+  float pres, pa, pb;
+  vec4 c = clipAt(index, clamp(uFrame - uSpan * s, 0.0, last), pres);
+  vec4 ca = clipAt(index, clamp(uFrame - uSpan * max(s - ds, 0.0), 0.0, last), pa);
+  vec4 cb = clipAt(index, clamp(uFrame - uSpan * min(s + ds, 1.0), 0.0, last), pb);
+  float eff = aStatic.x * uOpacityScale * pres;
+  int st = int(aState + 0.5);
+  if ((st & 18) != 0) eff = 0.0;
+  else if ((st & 9) != 0) eff *= uDimOpacity;
+  if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
+  if (uHasAge == 1 && aStatic.z == aStatic.z && aStatic.z > -1e29) {
+    // No trail before the object was born.
+    float birth = -aStatic.z;
+    eff *= smoothstep(birth - 0.25, birth + 0.25, uTime - uSpan * s * uMyrPerFrame);
+  }
+  if (eff <= 0.002 || c.w <= 0.0 || ca.w <= 0.0 || cb.w <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    vAlpha = 0.0;
+    return;
+  }
+  vec2 hv = uViewport * 0.5;
+  vec2 dir = (ca.xy / ca.w - cb.xy / cb.w) * hv;
+  float len = length(dir);
+  dir = len > 1e-4 ? dir / len : vec2(1.0, 0.0);
+  vec2 nrm = vec2(-dir.y, dir.x);
+  float w = uWidthPx * mix(1.0, 0.3, s);
+  gl_Position = c + vec4(nrm * aTrail.y * w * 0.5 / hv * c.w, 0.0, 0.0);
+  float tail = 1.0 - s;
+  vAlpha = eff * tail * tail;
+  vColor = aColor;
+  vScalar = aStatic.y;
+  vSide = aTrail.y;
+}
+`;
+
+const TRAIL_FRAG = `
+in vec3 vColor;
+in float vScalar;
+in float vAlpha;
+in float vSide;
+uniform sampler2D uCmap;
+uniform int uColorMode;
+uniform vec3 uTraceColor;
+uniform int uUseObjectColor;
+uniform vec2 uCRange;
+uniform float uStrength;
+out vec4 outColor;
+
+void main() {
+  vec3 color = uUseObjectColor == 1 ? vColor : uTraceColor;
+  if (uColorMode == 1) {
+    float u = clamp((vScalar - uCRange.x) / max(uCRange.y - uCRange.x, 1e-9), 0.0, 1.0);
+    color = texture(uCmap, vec2(u, 0.5)).rgb;
+  }
+  float a = vAlpha * uStrength * (1.0 - smoothstep(0.35, 1.0, abs(vSide)));
+  if (a < 0.003) discard;
+  // Mostly additive: trails brighten the sky rather than covering it.
+  outColor = vec4(color * a, a * 0.45);
+}
+`;
+
+function trailTemplate() {
+  const out = new Float32Array((TRAIL_SEGMENTS + 1) * 4);
+  for (let i = 0; i <= TRAIL_SEGMENTS; i++) {
+    const s = i / TRAIL_SEGMENTS;
+    out.set([s, -1, s, 1], i * 4);
+  }
+  return out;
+}
+
 /** Radial profiles of the legacy Oviz star textures (r = 1 at the edge). */
 const PSF = {
   halo: (r) => 0.82 * Math.exp(-0.5 * (r / 0.024) ** 2)
@@ -3946,6 +4228,7 @@ class PointBatch {
   dispose() {
     const gl = this.gl;
     gl.deleteVertexArray(this.vao);
+    if (this.trailVao) gl.deleteVertexArray(this.trailVao);
     for (const buf of Object.values(this.buffers)) gl.deleteBuffer(buf);
     gl.deleteTexture(this.frameTex.texture);
     if (this.auxTex) gl.deleteTexture(this.auxTex.texture);
@@ -3961,6 +4244,8 @@ class PointsLayer {
     this.byKey = new Map();
     this.program = createProgram(gl, VERT, FRAG, { label: "points" });
     this.pickProgram = createProgram(gl, VERT, FRAG, { label: "points-pick", defines: { PICK: 1 } });
+    this.trailProgram = null; // compiled on first use
+    this.trailBuffer = null;
     this.textures = starTextures(gl);
     this.cmapTextures = new Map();
     this.fallbackCmap = createTexture2D(gl, {
@@ -4016,9 +4301,69 @@ class PointsLayer {
     prog.f("uMemberFade", global.memberFade ?? 0);
   }
 
+  /** Motion trails, drawn under the points. */
+  drawTrails(frame) {
+    const p = this.params;
+    const tr = p?.trails;
+    if (!tr || Math.abs(tr.span) < 0.05) return;
+    const gl = this.gl;
+    if (!this.trailProgram) {
+      this.trailProgram = createProgram(gl, TRAIL_VERT, TRAIL_FRAG, { label: "point-trails" });
+      this.trailBuffer = createBuffer(gl, trailTemplate());
+    }
+    const prog = this.trailProgram.use();
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    const cam = frame.camera;
+    prog.m4("uViewProj", cam.viewProj).v2("uViewport", frame.width, frame.height);
+    prog.f("uFrame", p.frame).f("uTime", p.time).f("uSpan", tr.span).f("uMyrPerFrame", tr.myrPerFrame);
+    prog.f("uWidthPx", (1.2 + 0.8 * Math.min(p.pointSize, 3)) * frame.dpr);
+    prog.f("uMemberFade", p.memberFade ?? 0);
+    prog.f("uStrength", Math.min(1.6, 0.55 + 0.35 * p.glow));
+    for (const batch of this.batches) {
+      if (batch.posFrames <= 1) continue;
+      const style = p.styles.get(batch.key);
+      if (!style || !style.visible || style.presence <= 0.001 || style.trails === false) continue;
+      if (!batch.trailVao) {
+        const b = batch.buffers;
+        batch.trailVao = createVAO(gl, [
+          { loc: 0, buffer: this.trailBuffer, size: 2 },
+          { loc: 1, buffer: b.index, size: 1, divisor: 1 },
+          { loc: 2, buffer: b.color, size: 3, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
+          { loc: 3, buffer: b.stat, size: 4, divisor: 1 },
+          { loc: 6, buffer: b.state, size: 1, type: gl.UNSIGNED_BYTE, divisor: 1 },
+        ]);
+      }
+      prog.tex("uFrameTex", batch.frameTex.texture);
+      prog.i("uCount", batch.count).i("uFrames", batch.texFrames);
+      const off = frameOffset(batch.offsets, p.frame);
+      prog.v3("uOffset", off[0], off[1], off[2]);
+      prog.f("uOpacityScale", style.opacityScale * p.pointOpacity * Math.min(1, style.presence ?? 1));
+      prog.f("uDimOpacity", style.dimOpacity ?? 0.16);
+      prog.i("uHasAge", batch.hasAge ? 1 : 0);
+      const colorMode = style.colorMode === "by_value" && batch.trace.colorBy ? 1 : 0;
+      prog.i("uColorMode", colorMode);
+      if (colorMode) {
+        prog.tex("uCmap", this.cmapTextures.get(style.colormap) || this.fallbackCmap);
+        prog.v2("uCRange", style.cmin, style.cmax);
+      } else {
+        prog.tex("uCmap", this.fallbackCmap);
+      }
+      const c = style.colorOverride ? parseColor(style.colorOverride) : parseColor(batch.trace.color);
+      prog.v3("uTraceColor", c[0], c[1], c[2]);
+      prog.i("uUseObjectColor", style.colorOverride ? 0 : 1);
+      gl.bindVertexArray(batch.trailVao);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, (TRAIL_SEGMENTS + 1) * 2, batch.count);
+    }
+    gl.bindVertexArray(null);
+  }
+
   draw(frame) {
     const p = this.params;
     if (!p) return;
+    this.drawTrails(frame);
     const gl = this.gl;
     const prog = this.program.use();
     gl.enable(gl.BLEND);
@@ -4071,6 +4416,8 @@ class PointsLayer {
     this.batches = [];
     this.program.dispose();
     this.pickProgram.dispose();
+    this.trailProgram?.dispose();
+    if (this.trailBuffer) this.gl.deleteBuffer(this.trailBuffer);
   }
 }
 return { resetStarTextures, starTextures, PointsLayer };
@@ -5118,6 +5465,7 @@ function initialViewerState(manifest) {
       gridOpacity: 1,
       labels: true,
       autoOrbit: bool(gc.camera_auto_orbit_enabled, false),
+      trails: 0,
     },
     sky: {
       layers: cloneJson(manifest.sky?.layers || []),
@@ -5568,6 +5916,7 @@ class Viewer extends Emitter {
       fadeByOpacity: g.fadeByOpacity,
       // Markers of clusters with member stars crossfade to the stars in Sky.
       memberFade: memberMode ? this.memberReveal ?? 0 : 0,
+      trails: this._trailParams(g.trails),
     };
     this.points.params = pointParams;
     this.lines.params = { styles, frame, lineOpacity: 1 };
@@ -5682,11 +6031,11 @@ class Viewer extends Emitter {
    * Fly the camera to `pose`. Resolves {done: true} on arrival, or
    * {done: false} if the flight was interrupted (user input, a new flight).
    */
-  animateTo(pose, { duration = 1100, onDone } = {}) {
+  animateTo(pose, { duration = 1100, onDone, ease } = {}) {
     this._cancelTween();
     this.controls.stop();
     const d = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : duration;
-    const tween = poseTween(this.renderer.camera.pose, pose, d);
+    const tween = poseTween(this.renderer.camera.pose, pose, d, ease);
     this.tween = tween;
     this.renderer.hold("tween");
     return new Promise((resolve) => {
@@ -5800,6 +6149,11 @@ class Viewer extends Emitter {
     this.volumes.invalidate();
     this.renderer.invalidate();
     this.emit("volume", { key, patch });
+  }
+
+  /** Motion trails of `myr` Myr, pointing back along the playback direction. */
+  _trailParams(myr) {
+    return trailParams(this.timeline.times, this.timeline.direction, myr);
   }
 
   setGlobal(patch) {
@@ -6917,13 +7271,41 @@ class Inspector {
     this.body = h("div", { class: "ov-panel-body", style: { padding: "0" } });
     this.el.append(this.head, this.body);
     this.current = null;
-    v.on("time", () => this.current && this.refresh());
+    this.dyn = null;
+    this.track = null;
+    // Time only changes a few values: patch those instead of rebuilding.
+    v.on("time", () => this.current && this.updateDynamic());
+    this.bindTilt();
   }
 
   show(hit) {
     this.current = hit;
     this.el.dataset.open = hit ? "true" : "false";
     if (hit) this.refresh();
+    else { this.dyn = null; this.track = null; }
+  }
+
+  /** The card leans a few degrees toward the pointer, with a moving sheen. */
+  bindTilt() {
+    const el = this.el;
+    const fine = window.matchMedia?.("(hover: hover) and (pointer: fine)");
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    const set = (x, y) => {
+      el.style.setProperty("--ov-tilt-y", `${((x - 0.5) * 5).toFixed(2)}deg`);
+      el.style.setProperty("--ov-tilt-x", `${((0.5 - y) * 4).toFixed(2)}deg`);
+      el.style.setProperty("--ov-sheen-x", `${(x * 100).toFixed(1)}%`);
+      el.style.setProperty("--ov-sheen-y", `${(y * 100).toFixed(1)}%`);
+    };
+    el.addEventListener("pointermove", (e) => {
+      if (!fine?.matches || reduce?.matches || this.ui.narrow || e.pointerType !== "mouse") return;
+      const r = el.getBoundingClientRect();
+      set(clamp01((e.clientX - r.left) / r.width), clamp01((e.clientY - r.top) / r.height));
+      el.dataset.tilting = "true";
+    });
+    el.addEventListener("pointerleave", () => {
+      el.dataset.tilting = "false";
+      set(0.5, 0.5);
+    });
   }
 
   async refresh() {
@@ -6935,38 +7317,32 @@ class Inspector {
     if (hit !== this.current) return;
     const d = v.describeObject(hit.trace, hit.index);
     if (!d) return;
-    const t = v.timeline.time;
     clear(this.body);
     const kicker = h("div", { class: "ov-insp-kicker" }, h("span", { class: "ov-swatch", style: { color: d.color } }), d.traceName);
     const hero = h("div", { class: "ov-insp-hero" }, kicker, h("div", { class: "ov-insp-name" }, d.name));
     if (d.aliases.length) hero.append(h("div", { class: "ov-insp-aliases" }, `Also: ${d.aliases.slice(0, 6).join(", ")}`));
     const facts = h("div", { class: "ov-facts" });
-    const fact = (label, value, unit, wide) => facts.append(h("div", { class: `ov-fact${wide ? " ov-fact--wide" : ""}` },
-      h("div", { class: "ov-fact-label" }, label),
-      h("div", { class: "ov-fact-value" }, value, unit ? h("small", null, unit) : null)));
-    if (d.ageNow != null) {
-      fact("Age today", fmt(d.ageNow, d.ageNow >= 100 ? 0 : 1), "Myr");
-      const ageAt = d.ageAt;
-      fact(Math.abs(t) < 1e-6 ? "Born" : "Age at t", Math.abs(t) < 1e-6 ? fmt(-d.ageNow, d.ageNow >= 100 ? 0 : 1) : ageAt < 0 ? "unborn" : fmt(ageAt, 1), Math.abs(t) < 1e-6 || ageAt >= 0 ? "Myr" : "");
+    this.dyn = { hit, facts: new Map() };
+    for (const f of this.factList(d)) {
+      const label = h("div", { class: "ov-fact-label" }, f.label);
+      const value = h("div", { class: "ov-fact-value" });
+      facts.append(h("div", { class: `ov-fact${f.wide ? " ov-fact--wide" : ""}` }, label, value));
+      this.dyn.facts.set(f.key, { label, value });
+      setFact(this.dyn.facts.get(f.key), f);
     }
-    if (d.nStars != null) fact("Members", fmtInt(d.nStars), "stars");
-    if (d.dist != null) fact("Distance", fmt(d.dist, d.dist >= 1000 ? 0 : 1), "pc");
-    if (d.l != null && d.b != null) fact("Galactic l, b", `${fmt(d.l, 2)}°, ${fmt(d.b, 2)}°`, "", true);
-    if (d.ra != null && d.dec != null) fact("ICRS α, δ", `${fmt(d.ra, 3)}°, ${fmt(d.dec, 3)}°`, "", true);
-    if (d.position) {
-      const [x, y, z] = d.position;
-      fact(Math.abs(t) < 1e-6 ? "Position" : `Position at ${this.ui.formatTime(t)}`, `${fmt(x, 0)}, ${fmt(y, 0)}, ${fmt(z, 0)}`, "pc", true);
-    }
+    this.track = DistanceTrack.create(this.ui, hit, d.color);
     const following = this.ui.following && this.ui.following.trace === hit.trace && this.ui.following.index === hit.index;
     const trailOn = this.ui.hasTrail(hit);
     const actions = h("div", { class: "ov-insp-actions" },
       h("button", { class: "ov-btn", type: "button", onclick: () => v.flyToObject(hit.trace, hit.index) }, icon("target"), "Fly to"),
       h("button", { class: "ov-btn", type: "button", "aria-pressed": String(!!following), onclick: () => { this.ui.toggleFollow(hit); this.refresh(); } }, icon("follow"), following ? "Following" : "Follow"),
       h("button", { class: "ov-btn", type: "button", "aria-pressed": String(trailOn), disabled: v.timeline.count <= 1 ? true : null, onclick: () => { this.ui.toggleTrail(hit); this.refresh(); } }, icon("trail"), "Orbit trail"),
-      h("button", { class: "ov-btn", type: "button", onclick: () => this.copy(d) }, icon("copy"), "Copy"),
+      h("button", { class: "ov-btn", type: "button", onclick: () => this.copy(v.describeObject(hit.trace, hit.index) || d) }, icon("copy"), "Copy"),
       h("button", { class: "ov-btn", type: "button", onclick: () => this.ui.notes?.addForObject(hit) }, icon("edit"), "Add note"),
     );
-    this.body.append(hero, facts, actions);
+    this.body.append(hero);
+    if (this.track) this.body.append(this.track.el);
+    this.body.append(facts, actions);
     if (d.ra != null && d.dec != null) {
       const coord = `${d.ra.toFixed(5)} ${d.dec >= 0 ? "+" : ""}${d.dec.toFixed(5)}`;
       const simbad = `https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${encodeURIComponent(coord)}&CooFrame=ICRS&Radius=10&Radius.unit=arcmin`;
@@ -6981,10 +7357,52 @@ class Inspector {
       legacy.innerHTML = sanitize(d.hover);
       this.body.append(legacy);
     }
+    this.track?.draw();
+  }
+
+  /** Facts shown for an object; `key` identifies the ones that follow time. */
+  factList(d) {
+    const t = this.viewer.timeline.time;
+    const now = Math.abs(t) < 1e-6;
+    const out = [];
+    if (d.ageNow != null) {
+      const digits = d.ageNow >= 100 ? 0 : 1;
+      out.push({ key: "age", label: "Age today", value: fmt(d.ageNow, digits), unit: "Myr" });
+      const ageAt = d.ageAt;
+      out.push({
+        key: "ageAt",
+        label: now ? "Born" : "Age at t",
+        value: now ? fmt(-d.ageNow, digits) : ageAt < 0 ? "unborn" : fmt(ageAt, 1),
+        unit: now || ageAt >= 0 ? "Myr" : "",
+      });
+    }
+    if (d.nStars != null) out.push({ key: "members", label: "Members", value: fmtInt(d.nStars), unit: "stars" });
+    if (d.dist != null) out.push({ key: "dist", label: "Distance", value: fmt(d.dist, d.dist >= 1000 ? 0 : 1), unit: "pc" });
+    if (d.l != null && d.b != null) out.push({ key: "lb", label: "Galactic l, b", value: `${fmt(d.l, 2)}°, ${fmt(d.b, 2)}°`, wide: true });
+    if (d.ra != null && d.dec != null) out.push({ key: "radec", label: "ICRS α, δ", value: `${fmt(d.ra, 3)}°, ${fmt(d.dec, 3)}°`, wide: true });
+    if (d.position) {
+      const [x, y, z] = d.position;
+      out.push({ key: "pos", label: now ? "Position" : `Position at ${this.ui.formatTime(t)}`, value: `${fmt(x, 0)}, ${fmt(y, 0)}, ${fmt(z, 0)}`, unit: "pc", wide: true });
+    }
+    return out;
+  }
+
+  updateDynamic() {
+    const hit = this.current;
+    if (!hit || hit.kind === "member" || !this.dyn || this.dyn.hit !== hit) return;
+    const d = this.viewer.describeObject(hit.trace, hit.index);
+    if (!d) return;
+    for (const f of this.factList(d)) {
+      const slot = this.dyn.facts.get(f.key);
+      if (slot) setFact(slot, f);
+    }
+    this.track?.draw();
   }
 
   renderMember(hit) {
     clear(this.body);
+    this.dyn = null;
+    this.track = null;
     const m = hit.member;
     const hero = h("div", { class: "ov-insp-hero" },
       h("div", { class: "ov-insp-kicker" }, h("span", { class: "ov-swatch", style: { color: m.color } }), `Member of ${m.cluster}`),
@@ -7006,6 +7424,181 @@ class Inspector {
     if (d.ageNow != null) lines.push(`age = ${d.ageNow.toFixed(2)} Myr`);
     copyText(lines.join("\n")).then(() => this.ui.toast("Copied to clipboard", { icon: icon("copy") }));
   }
+}
+
+function setFact(slot, f) {
+  if (slot.label.textContent !== f.label) slot.label.textContent = f.label;
+  const text = `${f.value}${f.unit ? ` ${f.unit}` : ""}`;
+  if (slot.value.dataset.text === text) return;
+  slot.value.dataset.text = text;
+  slot.value.replaceChildren(f.value, f.unit ? h("small", null, f.unit) : "");
+}
+
+function clamp01(x) {
+  return x < 0 ? 0 : x > 1 ? 1 : x;
+}
+
+/**
+ * Distance from the Sun across the whole timeline, with a cursor at the
+ * current time. Dragging along the chart scrubs time.
+ */
+class DistanceTrack {
+  static create(ui, hit, color) {
+    const v = ui.viewer;
+    const tl = v.timeline;
+    const trace = v.traceByKey.get(hit.trace);
+    const F = trace?.points?.position?.frames || 1;
+    if (tl.count <= 1 || F <= 1 || /^sun$/i.test(String(trace.name).trim())) return null;
+    const dist = new Float64Array(F).fill(NaN);
+    const eye = v.skyEye();
+    let n = 0;
+    for (let f = 0; f < F; f++) {
+      const p = v.objectPosition(hit.trace, hit.index, f);
+      if (!p) continue;
+      dist[f] = Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]);
+      n++;
+    }
+    if (n < 2) return null;
+    return new DistanceTrack(ui, hit, dist, color);
+  }
+
+  constructor(ui, hit, dist, color) {
+    this.ui = ui;
+    this.hit = hit;
+    this.dist = dist;
+    this.color = color;
+    const tl = ui.viewer.timeline;
+    let lo = Infinity, hi = -Infinity;
+    for (const d of dist) if (d === d) { lo = Math.min(lo, d); hi = Math.max(hi, d); }
+    const pad = Math.max((hi - lo) * 0.12, 0.5);
+    this.lo = lo - pad;
+    this.hi = hi + pad;
+    this.readout = h("span", { class: "ov-insp-track-read" });
+    this.canvas = h("canvas", { class: "ov-spark", role: "slider", "aria-label": "Distance from the Sun over time; drag to change time" });
+    this.el = h("div", { class: "ov-insp-track" },
+      h("div", { class: "ov-insp-track-head" }, h("span", { class: "ov-fact-label" }, "Distance from the Sun"), this.readout),
+      this.canvas,
+      h("div", { class: "ov-insp-track-axis" }, h("span", null, ui.formatTime(tl.times[0])), h("span", null, ui.formatTime(tl.times[tl.count - 1]))));
+    this.bindScrub();
+  }
+
+  bindScrub() {
+    const c = this.canvas;
+    const tl = this.ui.viewer.timeline;
+    let dragging = false;
+    const seek = (e) => {
+      const r = c.getBoundingClientRect();
+      tl.setFrame(clamp01((e.clientX - r.left) / r.width) * (tl.count - 1));
+    };
+    c.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      tl.pause();
+      c.setPointerCapture(e.pointerId);
+      seek(e);
+    });
+    c.addEventListener("pointermove", (e) => { if (dragging) seek(e); });
+    const end = () => { dragging = false; };
+    c.addEventListener("pointerup", end);
+    c.addEventListener("pointercancel", end);
+  }
+
+  draw() {
+    const c = this.canvas;
+    const w = c.clientWidth, hgt = c.clientHeight;
+    if (!w || !hgt) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(hgt * dpr)) {
+      c.width = Math.round(w * dpr);
+      c.height = Math.round(hgt * dpr);
+    }
+    const ctx = c.getContext("2d");
+    const theme = document.documentElement.dataset.ovizTheme || "dark";
+    if (this._theme !== theme) {
+      const css = getComputedStyle(this.ui.root);
+      const get = (name, fb) => css.getPropertyValue(name).trim() || fb;
+      this._colors = {
+        accent: get("--ov-accent", "#f4c46a"),
+        line: get("--ov-line-strong", "rgba(255,255,255,0.14)"),
+        text: get("--ov-text", "#fff"),
+        surface: get("--ov-surface-solid", "#0e1118"),
+      };
+      this._theme = theme;
+    }
+    const { accent, line, text, surface } = this._colors;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, hgt);
+    const tl = this.ui.viewer.timeline;
+    const F = this.dist.length;
+    const X = (f) => (f / (F - 1)) * (w - 8) + 4;
+    const Y = (d) => 5 + (1 - (d - this.lo) / (this.hi - this.lo)) * (hgt - 10);
+    // Present day.
+    const z = tl.zeroFrame?.() ?? -1;
+    if (z > 0 && z < tl.count - 1) {
+      ctx.strokeStyle = line;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(X(z * (F - 1) / (tl.count - 1)), 2);
+      ctx.lineTo(X(z * (F - 1) / (tl.count - 1)), hgt - 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const path = () => {
+      ctx.beginPath();
+      let pen = false;
+      for (let f = 0; f < F; f++) {
+        const d = this.dist[f];
+        if (d !== d) { pen = false; continue; }
+        if (pen) ctx.lineTo(X(f), Y(d));
+        else { ctx.moveTo(X(f), Y(d)); pen = true; }
+      }
+    };
+    // Soft area under the curve, then the line.
+    path();
+    ctx.lineTo(X(F - 1), hgt);
+    ctx.lineTo(X(0), hgt);
+    ctx.closePath();
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = accent;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    path();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1.6;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    // Cursor at the current time.
+    const fr = (tl.frame / Math.max(tl.count - 1, 1)) * (F - 1);
+    const d = sampleSeries(this.dist, fr);
+    const cx = X(fr);
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, 0);
+    ctx.lineTo(cx, hgt);
+    ctx.stroke();
+    if (d === d) {
+      ctx.fillStyle = surface;
+      ctx.strokeStyle = text;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(cx, Y(d), 3.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    const t = tl.time;
+    const when = Math.abs(t) < 1e-6 ? "today" : `at ${this.ui.formatTime(t)}`;
+    this.readout.replaceChildren(d === d ? `${fmt(d, d >= 1000 ? 0 : 1)} pc` : "—", h("small", null, when));
+  }
+}
+
+function sampleSeries(arr, f) {
+  const i = Math.floor(f);
+  const j = Math.min(i + 1, arr.length - 1);
+  const a = arr[i], b = arr[j];
+  if (a !== a) return b;
+  if (b !== b) return a;
+  return a + (b - a) * (f - i);
 }
 
 /** Allow only simple formatting tags from legacy hover HTML. */
@@ -8362,6 +8955,9 @@ function resolvedTraceOpacity(viewer, st, key) {
  * {step(t) → applies the blended state, finish() → applies target exactly}.
  */
 function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
+  // A camera flight still in progress would override the State's camera
+  // once the transition lands, so the transition takes the camera over.
+  if (!keepCamera) viewer._cancelTween?.();
   const from = captureState(viewer, sky);
   const to = cloneJson(target);
   if (target.view?.pose) to.view.pose = clonePose(target.view.pose);
@@ -8429,7 +9025,7 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
     viewer.volumes.invalidate();
     // Globals
     const ga = from.global || {}, gb = to.global || {};
-    for (const f of ["pointSize", "pointOpacity", "glow", "fadeTime", "gridOpacity"]) {
+    for (const f of ["pointSize", "pointOpacity", "glow", "fadeTime", "gridOpacity", "trails"]) {
       if (Number.isFinite(ga[f]) && Number.isFinite(gb[f])) st.global[f] = lerp(ga[f], gb[f], t);
     }
     for (const f of ["fadeInOut", "fadeByOpacity", "sizeByStars", "labels"]) st.global[f] = (t < 0.5 ? ga : gb)[f];
@@ -8928,6 +9524,7 @@ class StoryPlugin {
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const dur = instant || reduce ? 0 : Math.max(0, spec.duration_ms) * (transition.modeChange ? 1.35 : 1);
     const ease = easing(spec.easing);
+    if (this.presenting) this.renderProgress(dur);
     v.emit("state-transition-start", { index: i, id: it.id });
     return new Promise((resolve) => {
       if (dur <= 0) {
@@ -9007,12 +9604,29 @@ class StoryPlugin {
     this.pPrev = iconButton("stepBack", "Previous view", () => this.previous(), { shortcut: "←" });
     this.pNext = iconButton("stepFwd", "Next view", () => this.next(), { shortcut: "→" });
     this.pExit = h("button", { class: "ov-btn ov-btn--ghost ov-btn--sm", type: "button", onclick: () => this.present(false) }, this.readOnly ? "Explore" : "Exit", kbd("Esc"));
+    this.pText = h("div", { class: "ov-present-text" }, this.pTitle, this.pCaption, this.pDots);
     this.presenter = h("div", { class: "ov-present ov-glass", "data-open": "false", role: "region", "aria-label": "Presentation" },
       this.pPrev,
-      h("div", { class: "ov-present-text" }, this.pTitle, this.pCaption, this.pDots),
+      this.pText,
       this.pNext,
       h("div", { class: "ov-present-exit" }, this.pExit));
-    ui.ui.append(this.presenter);
+    // Story-style progress along the top; the current segment fills while
+    // the camera flies to the view.
+    this.pProgress = h("div", { class: "ov-present-progress", "data-open": "false", role: "group", "aria-label": "Views" });
+    // A 3D reel of the views above the caption bar, shown while the pointer
+    // moves and tucked away when the presenter is idle.
+    this.pReel = h("div", { class: "ov-present-reel", "data-open": "false", "data-idle": "true" });
+    ui.ui.append(this.pReel, this.presenter, this.pProgress);
+    let idleTimer = 0;
+    const wake = () => {
+      if (!this.presenting) return;
+      this.pReel.dataset.idle = "false";
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => { this.pReel.dataset.idle = "true"; }, 2600);
+    };
+    ui.root.addEventListener("pointermove", wake, { passive: true });
+    this.pReel.addEventListener("pointerenter", () => clearTimeout(idleTimer));
+    this.pReel.addEventListener("pointerleave", wake);
   }
 
   present(on, { startAt = null, instant = false } = {}) {
@@ -9021,6 +9635,9 @@ class StoryPlugin {
     this.presenting = on;
     this.ui.root.dataset.presenting = String(on);
     this.presenter.dataset.open = String(on);
+    this.pProgress.dataset.open = String(on);
+    this.pReel.dataset.open = String(on);
+    this.pReel.dataset.idle = "true";
     this.ui.setZen(on);
     if (on) {
       this.toggle(false);
@@ -9033,6 +9650,8 @@ class StoryPlugin {
   renderPresenter() {
     const items = this.project.items;
     const it = items[this.active];
+    const changed = this._shown !== it;
+    this._shown = it;
     this.pTitle.textContent = it ? it.name : "";
     this.pCaption.textContent = it?.caption || "";
     this.pCaption.hidden = !it?.caption;
@@ -9040,6 +9659,62 @@ class StoryPlugin {
     items.forEach((x, j) => {
       const d = h("button", { class: "ov-present-dot", type: "button", "aria-label": `Go to ${x.name}`, "aria-current": j === this.active ? "step" : null, onclick: () => this.goTo(j) });
       this.pDots.append(d);
+    });
+    if (changed && this.presenting) {
+      // Replay the caption entrance for each new view.
+      this.pText.classList.remove("ov-anim");
+      void this.pText.offsetWidth;
+      this.pText.classList.add("ov-anim");
+    }
+    this.renderProgress();
+    this.renderReel();
+    requestAnimationFrame(() => this.ui.root.style.setProperty("--ov-present-h", `${this.presenter.offsetHeight}px`));
+  }
+
+  renderProgress(durationMs = 0) {
+    const items = this.project.items;
+    if (this.pProgress.childElementCount !== items.length) {
+      this.pProgress.replaceChildren(...items.map((x, j) => h("button", { class: "ov-present-seg", type: "button", "aria-label": `Go to ${x.name}`, onclick: () => this.goTo(j) }, h("span", null, h("i")))));
+    }
+    [...this.pProgress.children].forEach((seg, j) => {
+      const fill = seg.querySelector("i");
+      seg.setAttribute("aria-current", j === this.active ? "step" : "false");
+      if (j === this.active && durationMs > 0) {
+        fill.style.transition = "none";
+        fill.style.width = "0%";
+        void fill.offsetWidth;
+        fill.style.transition = `width ${durationMs}ms linear`;
+        fill.style.width = "100%";
+      } else if (j !== this.active || !fill.style.width) {
+        fill.style.transition = "none";
+        fill.style.width = j <= this.active ? "100%" : "0%";
+      }
+    });
+  }
+
+  renderReel() {
+    const items = this.project.items;
+    const reel = this.pReel;
+    if (reel.childElementCount !== items.length || [...reel.children].some((c, j) => c._item !== items[j] || c._thumb !== (items[j].thumb || ""))) {
+      reel.replaceChildren(...items.map((it, j) => {
+        const card = h("button", { class: "ov-reel-card", type: "button", "aria-label": `Go to ${it.name}`, onclick: () => this.goTo(j) },
+          h("b", null, String(j + 1)), h("span", null, it.name));
+        if (it.thumb) card.style.backgroundImage = `url("${it.thumb}")`;
+        else card.append(h("em", null, it.state.view?.mode === "sky" ? "Sky" : "3D"));
+        card._item = it;
+        card._thumb = it.thumb || "";
+        return card;
+      }));
+    }
+    const n = items.length;
+    [...reel.children].forEach((card, j) => {
+      const o = j - Math.max(this.active, 0);
+      const a = Math.abs(o);
+      card.style.transform = `translateX(${o * 150}px) translateZ(${-a * 90}px) rotateY(${Math.max(-50, Math.min(50, -o * 26))}deg)`;
+      card.style.opacity = a > 3 ? "0" : String(1 - a * 0.2);
+      card.style.zIndex = String(n - a);
+      card.style.pointerEvents = a > 3 ? "none" : "";
+      card.setAttribute("aria-current", o === 0 ? "step" : "false");
     });
   }
 
@@ -10033,9 +10708,136 @@ function csvCell(v) {
 return { LassoPlugin };
 })();
 
+// ---- ui/reticle.js ----
+const { SelectionReticle } = (() => {
+// Selection reticle: a lock-on ring around the selected object, tied to the
+// inspector card by a leader line. Positions are recomputed after every
+// rendered frame, so the mark tracks the object through camera moves and
+// time playback.
+
+const SVGNS = "http://www.w3.org/2000/svg";
+const R = 17;
+
+function el(tag, attrs = {}) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+  return e;
+}
+
+function arc(r, a0, a1) {
+  const p = (a) => [Math.cos((a * Math.PI) / 180) * r, Math.sin((a * Math.PI) / 180) * r];
+  const [x0, y0] = p(a0);
+  const [x1, y1] = p(a1);
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+
+class SelectionReticle {
+  constructor(ui) {
+    this.ui = ui;
+    const v = (this.viewer = ui.viewer);
+    this.svg = el("svg", { class: "ov-reticle", "aria-hidden": "true" });
+    this.mark = el("g", { class: "ov-reticle-mark", opacity: 0 });
+    this.leaderGroup = el("g");
+    this.svg.append(this.leaderGroup, this.mark);
+    ui.ui.prepend(this.svg);
+    this.scr = [0, 0, 0];
+    this.visible = false;
+    v.renderer.afterRender.push(() => this.update());
+    v.on("select", () => this.onSelect());
+    v.on("viewmode", () => this.update());
+    window.addEventListener("resize", () => this.update());
+  }
+
+  onSelect() {
+    const sel = this.ui.selection;
+    this.mark.replaceChildren();
+    this.leaderGroup.replaceChildren();
+    this.leader = null;
+    if (!sel) { this.hide(); return; }
+    // Rebuilt per selection so the lock-on and draw-in animations replay.
+    const lock = el("g", { class: "ov-reticle-lock" });
+    const spin = el("g", { class: "ov-reticle-spin" });
+    spin.append(
+      el("circle", { r: R, stroke: "none" }),
+      el("path", { class: "ov-reticle-ring", d: arc(R, -58, 18) }),
+      el("path", { class: "ov-reticle-ring", d: arc(R, 122, 198) }),
+    );
+    lock.append(el("circle", { class: "ov-reticle-halo", r: R + 6 }), spin);
+    for (const a of [45, 135, 225, 315]) {
+      const c = Math.cos((a * Math.PI) / 180), s = Math.sin((a * Math.PI) / 180);
+      lock.append(el("path", { class: "ov-reticle-tick", d: `M${(c * (R + 3)).toFixed(2)} ${(s * (R + 3)).toFixed(2)}L${(c * (R + 8)).toFixed(2)} ${(s * (R + 8)).toFixed(2)}` }));
+    }
+    this.mark.append(lock);
+    this.leader = el("path", { class: "ov-reticle-leader", pathLength: 1 });
+    this.end = el("circle", { class: "ov-reticle-end", r: 2.4 });
+    this.leaderGroup.append(this.leader, this.end);
+    // Follow the inspector while it swings open.
+    const until = performance.now() + 700;
+    const follow = () => {
+      this.update();
+      if (performance.now() < until && this.ui.selection === sel) requestAnimationFrame(follow);
+    };
+    requestAnimationFrame(follow);
+  }
+
+  hide() {
+    if (!this.visible) return;
+    this.visible = false;
+    this.mark.setAttribute("opacity", "0");
+    this.leaderGroup.setAttribute("opacity", "0");
+    delete this.ui.root.dataset.reticle;
+  }
+
+  update() {
+    const sel = this.ui.selection;
+    const v = this.viewer;
+    if (!sel) return this.hide();
+    const p = sel.kind === "member" ? sel.member.position : v.objectPosition(sel.trace, sel.index);
+    const cam = v.renderer.camera;
+    const s = p && cam.project(p, this.scr);
+    const W = cam.width, H = cam.height;
+    if (!s || s[0] < -40 || s[1] < -40 || s[0] > W + 40 || s[1] > H + 40) return this.hide();
+    const [x, y] = s;
+    this.mark.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    this.mark.setAttribute("opacity", "1");
+    this.visible = true;
+    this.ui.root.dataset.reticle = "true";
+    this.updateLeader(x, y);
+  }
+
+  updateLeader(x, y) {
+    const ui = this.ui;
+    const panel = ui.inspector.el;
+    if (!this.leader || ui.narrow || panel.dataset.open !== "true" || ui.root.dataset.zen === "true") {
+      this.leaderGroup.setAttribute("opacity", "0");
+      return;
+    }
+    const root = ui.root.getBoundingClientRect();
+    const r = panel.getBoundingClientRect();
+    const ex = r.left - root.left - 7;
+    const ey = Math.min(r.top - root.top + 40, r.bottom - root.top - 12);
+    if (ex - x < R + 40) {
+      this.leaderGroup.setAttribute("opacity", "0");
+      return;
+    }
+    // Run level out of the ring, angle toward the card only near it (so the
+    // line stays off the data), then enter the card level.
+    const sx = x + R + 7, sy = y;
+    const mx = ex - 22;
+    const kx = Math.max(sx, mx - Math.abs(ey - y));
+    this.leader.setAttribute("d", `M${sx.toFixed(1)} ${sy.toFixed(1)}L${kx.toFixed(1)} ${sy.toFixed(1)}L${mx.toFixed(1)} ${ey.toFixed(1)}L${ex.toFixed(1)} ${ey.toFixed(1)}`);
+    this.end.setAttribute("cx", ex.toFixed(1));
+    this.end.setAttribute("cy", ey.toFixed(1));
+    this.leaderGroup.setAttribute("opacity", "1");
+  }
+}
+return { SelectionReticle };
+})();
+
 // ---- ui/app-ui.js ----
 const { mountUI, AppUI } = (() => {
 // The application shell: wires panels, dock, overlays, shortcuts and modes.
+
 
 
 
@@ -10096,6 +10898,7 @@ class AppUI {
     this.palette = new Palette(this);
     this.buildBottom();
     this.ui.append(this.layers.el, this.inspector.el, this.hovercard.el);
+    this.reticle = new SelectionReticle(this);
     this.bindPointer();
     this.bindKeys();
     this.bindViewer();
@@ -10195,7 +10998,27 @@ class AppUI {
     for (const p of this.plugins) p.afterBoot?.();
     const hv = decodeViewHash(location.hash);
     if (hv) this.applyViewHash(hv);
+    else this.introFlight();
     this.updateScale();
+  }
+
+  /**
+   * Open on a short dolly into the home view, so the scene reads as 3D from
+   * the first second. Skipped for present-only files, shared links, Sky
+   * starts and reduced motion; any input takes the camera over at once.
+   */
+  introFlight() {
+    const v = this.viewer;
+    const story = this.plugins.find((p) => p.name === "states");
+    if (story?.readOnly || this.manifest.states?.apply_first_on_load || v.state.view.mode !== "3d") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const home = clonePose(v.pose);
+    const start = clonePose(home);
+    start.distance = home.distance * 1.55;
+    start.yaw = home.yaw + 0.38;
+    start.pitch = home.pitch * 0.8;
+    v.setPose(start);
+    v.animateTo(home, { duration: 2300, ease: (x) => 1 - Math.pow(1 - x, 3) });
   }
 
   async applyViewHash(hv) {
@@ -10472,8 +11295,13 @@ class AppUI {
     if (!sb) return;
     this.scaleBar.style.width = `${Math.max(24, sb.px).toFixed(0)}px`;
     if (sb.unit === "deg") {
+      // Sky view: where the view is centred, in Galactic coordinates.
+      const cam = this.viewer.renderer.camera;
+      const f = cam.forward;
+      const l = ((Math.atan2(f[1], f[0]) * 180) / Math.PI + 360) % 360;
+      const b = (Math.asin(clamp(f[2], -1, 1)) * 180) / Math.PI;
       this.scaleLabel.textContent = formatAngle(sb.value);
-      this.scaleSub.textContent = `Field ${formatAngle(this.viewer.renderer.camera.hfov)}`;
+      this.scaleSub.textContent = `l ${l.toFixed(1)}° b ${b >= 0 ? "+" : "−"}${Math.abs(b).toFixed(1)}° · ${formatAngle(cam.hfov)} field`;
     } else {
       this.scaleLabel.textContent = formatDistance(sb.value);
       const p = this.viewer.pose;
@@ -10558,11 +11386,28 @@ class AppUI {
       toggle({ label: "Fade by opacity", hint: "Otherwise newborn clusters grow in size", checked: g.fadeByOpacity, onChange: (x) => v.setGlobal({ fadeByOpacity: x }) }),
       toggle({ label: "Fade out after birth", checked: g.fadeInOut, onChange: (x) => v.setGlobal({ fadeInOut: x }) }),
       toggle({ label: "Size by member count", checked: g.sizeByStars, onChange: (x) => v.setGlobal({ sizeByStars: x }) }),
+      v.timeline.count > 1 ? slider({ label: "Motion trails", min: 0, max: this.maxTrailMyr(), step: this.maxTrailMyr() / 60, value: g.trails || 0, format: (x) => (x <= 0 ? "Off" : `${x.toFixed(x >= 10 ? 0 : 1)} Myr`), onInput: (x) => v.setGlobal({ trails: x }) }) : null,
       toggle({ label: "Auto-orbit camera", checked: !!v.controls.autoOrbit, onChange: (x) => this.setAutoOrbit(x) }),
       slider({ label: "Field of view", min: 10, max: 100, step: 1, value: v.pose.fov, format: (x) => `${Math.round(x)}°`, onInput: (x) => { v.pose.fov = x; v.renderer.invalidate(); } }),
       toggle({ label: "Performance overlay", checked: !!this.perfEl, onChange: (x) => this.setPerfOverlay(x) }),
     );
     this.menu(anchor, [{ body }], { title: "Display" });
+  }
+
+  /** Longest useful trail: a third of the timeline. */
+  maxTrailMyr() {
+    const tl = this.viewer.timeline;
+    return Math.max(0.5, Math.abs(tl.times[tl.count - 1] - tl.times[0]) / 3);
+  }
+
+  /** Toggle motion trails at a length that reads well for this timeline. */
+  toggleTrails() {
+    const v = this.viewer;
+    if (v.timeline.count < 2) return;
+    const on = !(v.state.global.trails > 0);
+    const len = on ? +(this.maxTrailMyr() * 0.3).toPrecision(2) : 0;
+    v.setGlobal({ trails: len });
+    this.toast(on ? `Motion trails · ${len} Myr` : "Motion trails off", { ms: 1200 });
   }
 
   setAutoOrbit(on) {
@@ -10635,6 +11480,7 @@ class AppUI {
       { title: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
       { title: this.theme === "dark" ? "Switch to light theme" : "Switch to dark theme", icon: this.theme === "dark" ? "sun" : "moon", run: () => this.applyTheme(this.theme === "dark" ? "light" : "dark") },
       { title: v.controls.autoOrbit ? "Stop auto-orbit" : "Auto-orbit camera", icon: "orbit", shortcut: "O", run: () => this.setAutoOrbit(!v.controls.autoOrbit) },
+      ...(tl.count > 1 ? [{ title: v.state.global.trails > 0 ? "Hide motion trails" : "Show motion trails", icon: "trail", shortcut: "J", keywords: "streaks motion history comet", run: () => this.toggleTrails() }] : []),
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
       { title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
@@ -10735,7 +11581,7 @@ class AppUI {
     const groups = [
       ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
       ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
-      ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
+      ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Motion trails", "J"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
       ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Fly to object", "Double-click"], ["Measure separation", "⇧ Click"], ["Lasso", "L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
       ["Views & presenting", [["Save current view", "N"], ["Present", "P"], ["Next / previous view", "→ ←"], ["Views panel", "Y"], ["Save figure", `${MOD} S`]]],
       ["Capture", [["Screenshot", "I"], ["Hide interface", "Z"], ["Fullscreen", "M"], ["This help", "?"]]],
@@ -10847,6 +11693,7 @@ class AppUI {
         case "v": this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky"); break;
         case "g": v.setGlobal({ grid: !v.state.global.grid }); break;
         case "o": this.setAutoOrbit(!v.controls.autoOrbit); break;
+        case "j": this.toggleTrails(); break;
         case "z": this.setZen(this.root.dataset.zen !== "true"); break;
         case "t": this.layers.toggleAll(this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false)); break;
         case "[": case "{": case "]": case "}": {
@@ -11048,7 +11895,13 @@ async function boot() {
     const ui = mountUI(root, viewer);
     installApi(root, viewer, ui);
     root.dataset.boot = "ready";
-    bootEl?.remove();
+    // The loading screen dissolves while the chrome rises into place.
+    root.dataset.entrance = "true";
+    if (bootEl) {
+      bootEl.dataset.leaving = "true";
+      setTimeout(() => bootEl.remove(), 450);
+    }
+    setTimeout(() => { delete root.dataset.entrance; }, 1700);
     // Stream heavier assets without blocking interaction.
     viewer.attachImages();
     ui.onBackgroundLoad?.("start");
