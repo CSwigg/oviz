@@ -337,7 +337,7 @@ class Animate3D:
             binary payloads, GPU time interpolation, Views & story, video
             capture. ``"classic"`` writes the previous Three.js runtime
             byte-for-byte (Slides, Paper and AR remain classic-only).
-        viewer_style : {"observatory", "spatial", "island", "cards"}, optional
+        viewer_style : {"observatory", "focus", "maps", "studio"}, optional
             Oviz viewer only: the interface style the figure opens in
             (default ``"observatory"``). Readers can switch styles at any
             time with **U** or the Display menu.

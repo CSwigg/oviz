@@ -21,9 +21,10 @@ import { NotesPlugin } from "./notes.js";
 import { LassoPlugin } from "./lasso.js";
 import { SelectionReticle } from "./reticle.js";
 import { SKINS, skinById, initialSkin, applySkin } from "./skins.js";
-import { reveal, conceal, SPRINGS, installParallax, installGaze, flickToDismiss } from "./motion.js";
-import { Island } from "./island.js";
-import { CardStack } from "./cards.js";
+import { reveal, conceal, SPRINGS, flickToDismiss } from "./motion.js";
+import { LayoutManager } from "./layout.js";
+import { CompactLegend } from "./legend.js";
+import { IdleFade } from "./idle.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
@@ -34,6 +35,7 @@ export function mountUI(root, viewer) {
   ui.use(new StoryPlugin());
   ui.use(new RecorderPlugin());
   ui.layers.render();
+  ui.applyLayout();
   return ui;
 }
 
@@ -66,11 +68,10 @@ export class AppUI {
     this.buildBottom();
     this.ui.append(this.layers.el, this.inspector.el, this.hovercard.el);
     this.reticle = new SelectionReticle(this);
-    this.island = new Island(this);
-    this.cards = new CardStack(this);
-    installParallax(root);
-    installGaze(root);
+    this.buildExtras();
+    this.layout = new LayoutManager(this);
     this.overlays = new Set();
+    this.idle = new IdleFade(this);
     // Phones: every bottom sheet swipes down to dismiss.
     const sheetHead = (el) => el.querySelector(".ov-panel-head");
     flickToDismiss(this.inspector.el, sheetHead(this.inspector.el), { axis: "y", sign: 1, enabled: () => this.narrow, onDismiss: () => this.select(null) });
@@ -79,7 +80,42 @@ export class AppUI {
     this.bindKeys();
     this.bindViewer();
     this.applyTheme(localStorageGet("oviz.theme") || document.documentElement.dataset.ovizTheme || "dark");
-    this.setLayersOpen(window.innerWidth > 720);
+    this.setLayersOpen(window.innerWidth > 720 && this.skinConfig.layersOpen);
+  }
+
+  get skinConfig() {
+    return skinById(this.skin);
+  }
+
+  /** Controls that only some layouts place (kept in a hidden holder). */
+  buildExtras() {
+    const v = this.viewer;
+    this.viewToggle = iconButton("globe", "Sky view", () => this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky"), { cls: "ov-view-toggle", shortcut: "V" });
+    this.moreBtn = iconButton("more", "More", (e) => this.moreMenu(e.currentTarget));
+    this.zoomInBtn = iconButton("plus", "Zoom in", () => this.zoomBy(0.65), { shortcut: "E" });
+    this.zoomOutBtn = iconButton("minus", "Zoom out", () => this.zoomBy(1 / 0.65), { shortcut: "Q" });
+    this.sidebarBtn = iconButton("sidebar", "Hide sidebar", () => this.setSidebar(this.root.dataset.sidebar === "collapsed"), { shortcut: "⇧L" });
+    this.legend = new CompactLegend(this);
+    this.spare = h("div", { class: "ov-spare", hidden: true },
+      this.viewToggle, this.moreBtn, this.zoomInBtn, this.zoomOutBtn, this.sidebarBtn, this.legend.el);
+    this.ui.append(this.spare);
+    this.syncViewToggle();
+  }
+
+  /** Arrange the components for the current style and screen size. */
+  applyLayout() {
+    const skin = this.skinConfig;
+    this.layout.apply(skin, this.narrow);
+    this.root.dataset.layout = this.layout.current.layout;
+    if (skin.layout === "studio" && !this.root.dataset.sidebar) this.root.dataset.sidebar = "open";
+    this.syncViewToggle();
+    this.legend.render();
+    this.refit();
+    requestAnimationFrame(() => {
+      this.syncViewSeg();
+      this.anchorLayers();
+      this.reticle.update();
+    });
   }
 
   // ------------------------------------------------------------- building
@@ -118,7 +154,8 @@ export class AppUI {
     this.colorbars = h("div", { class: "ov-colorbars" });
     this.stream = h("div", { class: "ov-stream ov-glass", "data-done": "true" }, h("span", { class: "ov-spinner" }), h("span", null, "Loading volumes…"));
     const left = h("div", { class: "ov-bottom-left" }, this.stream, this.colorbars, this.scale);
-    const hasSky = !!this.manifest.sky?.enabled;
+    this.bottomLeft = left;
+    const hasSky = (this.hasSky = !!this.manifest.sky?.enabled);
     this.viewSeg = h("div", { class: "ov-seg ov-seg--view ov-glass", role: "group", "aria-label": "View" });
     this.viewThumb = h("span", { class: "ov-seg-thumb" });
     this.view3d = h("button", { type: "button", "data-value": "3d", "data-tip": "Galactic 3D view  V" }, icon("cube"), "3D");
@@ -130,7 +167,9 @@ export class AppUI {
     this.homeBtn = iconButton("home", "Reset view", () => v.resetView(), { shortcut: "Home", cls: "ov-glass" });
     this.fsBtn = iconButton("expand", "Fullscreen", () => this.toggleFullscreen(), { shortcut: "M", cls: "ov-glass" });
     this.skyExtras = h("div", { class: "ov-corner-btns" });
-    const right = h("div", { class: "ov-bottom-right" }, this.skyExtras, this.viewSeg, h("div", { class: "ov-corner-btns" }, this.homeBtn, this.fsBtn));
+    this.cornerBtns = h("div", { class: "ov-corner-btns" }, this.homeBtn, this.fsBtn);
+    const right = h("div", { class: "ov-bottom-right" }, this.skyExtras, this.viewSeg, this.cornerBtns);
+    this.bottomRight = right;
     this.bottom = h("footer", { class: "ov-bottom ov-chrome" }, left, this.dock.el, right);
     this.ui.append(this.bottom);
     this.syncViewSeg();
@@ -147,6 +186,7 @@ export class AppUI {
     v.on("style", () => this.renderColorbars());
     v.on("viewmode", ({ mode }) => {
       this.root.dataset.view = mode;
+      this.syncViewToggle();
       this.syncViewSeg();
       this.renderColorbars();
     });
@@ -176,6 +216,22 @@ export class AppUI {
     if (hv) this.applyViewHash(hv);
     else this.introFlight();
     this.updateScale();
+    this.firstRunHint();
+    let narrow = this.narrow;
+    window.addEventListener("resize", rafThrottle(() => {
+      if (this.narrow !== narrow) { narrow = this.narrow; this.applyLayout(); }
+      this.anchorLayers();
+    }));
+  }
+
+  /** One gentle how-to line the first time someone opens a figure. */
+  firstRunHint() {
+    const story = this.plugins.find((p) => p.name === "states");
+    if (story?.readOnly || localStorageGet("oviz.hint.v1")) return;
+    localStorageSet("oviz.hint.v1", "1");
+    const touch = window.matchMedia?.("(pointer: coarse)").matches;
+    const text = touch ? "Drag to orbit · pinch to zoom · tap a cluster for details" : "Drag to orbit · scroll to zoom · click a cluster for details";
+    setTimeout(() => this.toast(text, { icon: icon("info"), ms: 5200 }), 1600);
   }
 
   /**
@@ -276,10 +332,13 @@ export class AppUI {
   select(hit, { recordUndo = true } = {}) {
     const v = this.viewer;
     if (recordUndo && hit !== this.selection && (hit || this.selection)) this.pushSelectionUndo();
-    this.cards?.push(this.selection, hit);
     this.selection = hit;
-    if (hit && this.narrow) this.setLayersOpen(false);
-    this.inspector.show(hit);
+    const skin = this.skinConfig;
+    if (hit && (this.narrow || skin.layout === "maps")) this.setLayersOpen(false);
+    // Callout styles open the inspector only on request (and keep it in step
+    // with the selection once it is open).
+    const detailsOpen = this.inspector.el.dataset.open === "true";
+    this.inspector.show(skin.selection === "panel" || (hit && detailsOpen) ? hit : null);
     const labels = v.labels;
     labels.removeDynamic("selection");
     this.clearMeasure();
@@ -436,10 +495,88 @@ export class AppUI {
   }
 
   setLayersOpen(open) {
+    // Studio keeps the layers in its sidebar: the layers button shows or
+    // hides the whole sidebar instead.
+    if (this.layout?.current?.layout === "studio" && !this.narrow) {
+      this.setSidebar(open);
+      open = true;
+    }
     if (open && this.narrow && this.selection) this.select(null);
     this.layersOpen = open;
     this.layers.el.dataset.open = String(open);
+    this.root.dataset.layers = String(open);
     this.layersBtn.setAttribute("aria-pressed", String(open));
+    if (open) this.anchorLayers();
+  }
+
+  /** Focus opens the layers as a popover above its button in the bar. */
+  anchorLayers() {
+    const el = this.layers.el;
+    if (this.layout?.current?.layout !== "focus" || this.narrow) {
+      el.style.removeProperty("--ov-anchor-x");
+      el.style.removeProperty("--ov-anchor-bottom");
+      return;
+    }
+    const b = this.layersBtn.getBoundingClientRect();
+    const rr = this.root.getBoundingClientRect();
+    el.style.setProperty("--ov-anchor-x", `${(b.left + b.width / 2 - rr.left).toFixed(0)}px`);
+    el.style.setProperty("--ov-anchor-bottom", `${(rr.bottom - b.top + 12).toFixed(0)}px`);
+  }
+
+  /** Studio: show or collapse the sidebar; the figure takes the room. */
+  setSidebar(open) {
+    this.root.dataset.sidebar = open ? "open" : "collapsed";
+    const label = open ? "Hide sidebar" : "Show sidebar";
+    this.sidebarBtn.setAttribute("aria-label", label);
+    this.sidebarBtn.dataset.tip = `${label}  ⇧L`;
+    this.refit();
+    clearTimeout(this._sideTimer);
+    this._sideTimer = setTimeout(() => this.refit(), 320);
+  }
+
+  /** Show the full details of the selection (callout styles). */
+  openDetails() {
+    if (this.selection) this.inspector.show(this.selection);
+  }
+
+  zoomBy(factor) {
+    const v = this.viewer;
+    const c = v.controls;
+    const p = clonePose(v.pose);
+    if (v.state.view.mode === "sky" || p.distance <= 1e-6) p.fov = clamp(p.fov * factor, c.minFov, c.maxFov);
+    else p.distance = clamp(p.distance * factor, c.minDistance, c.maxDistance);
+    v.animateTo(p, { duration: 420, ease: (x) => 1 - Math.pow(1 - x, 3) });
+  }
+
+  syncViewToggle() {
+    if (!this.viewToggle) return;
+    const sky = this.viewer.state.view.mode === "sky";
+    const label = sky ? "Back to 3D view" : "Sky view from the Sun";
+    this.viewToggle.replaceChildren(icon(sky ? "cube" : "globe"), h("span", { class: "ov-ibtn-label" }, sky ? "3D" : "Sky"));
+    this.viewToggle.setAttribute("aria-label", label);
+    this.viewToggle.dataset.tip = `${label}  V`;
+    this.viewToggle.hidden = !this.hasSky;
+  }
+
+  /** Everything the Focus bar does not show directly. */
+  moreMenu(anchor) {
+    const v = this.viewer;
+    const lasso = this.plugins.find((p) => p.name === "lasso");
+    this.menu(anchor, [
+      { label: "Search", icon: "search", shortcut: "/", run: () => this.palette.show() },
+      ...(!this.statesBtn.hidden ? [{ label: "Views & story", icon: "bookmark", shortcut: "Y", run: () => this.plugins.find((p) => p.name === "states")?.toggle() }] : []),
+      { label: "Reset view", icon: "home", shortcut: "Home", run: () => v.resetView() },
+      { label: `Playback speed · ${v.timeline.speed}×`, icon: "play", run: () => this.dock.speedMenu?.(anchor) },
+      "-",
+      { label: "Screenshot or video…", icon: "camera", shortcut: "I", run: () => this.captureMenu(anchor) },
+      { label: "Share & export…", icon: "share", run: () => this.shareMenu(anchor) },
+      { label: "Display settings…", icon: "sliders", run: () => this.settingsMenu(anchor) },
+      "-",
+      ...(lasso ? [{ label: "Lasso select", icon: "wand", shortcut: "L", run: () => lasso.arm(true) }] : []),
+      { label: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
+      { label: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
+      { label: "About this figure", icon: "info", run: () => this.showAbout() },
+    ], { align: "right", above: true });
   }
 
   setZen(on) {
@@ -610,13 +747,20 @@ export class AppUI {
     this._skinTimer = setTimeout(() => { delete root.dataset.entrance; }, 1700);
     this.viewer.emit("skin", { skin: this.skin });
     this.viewer.renderer.invalidate();
+    this.applyLayout();
+    if (!this.narrow) this.setLayersOpen(this.skinConfig.layersOpen);
+    if (this.selection) {
+      this.inspector.show(this.skinConfig.selection === "panel" ? this.selection : null);
+      this.reticle.onSelect();
+    }
+    this.idle.wake();
     const settle = () => {
       // Skins can reframe the stage (Atlas); do not wait on ResizeObserver,
       // which browsers defer for background tabs.
       this.refit();
       this.syncViewSeg();
       this.reticle.update();
-      this.island.refresh();
+      this.anchorLayers();
       this.inspector.track?.draw();
       this.updateScale();
     };
@@ -729,7 +873,7 @@ export class AppUI {
       { title: v.controls.autoOrbit ? "Stop auto-orbit" : "Auto-orbit camera", icon: "orbit", shortcut: "O", run: () => this.setAutoOrbit(!v.controls.autoOrbit) },
       ...(tl.count > 1 ? [{ title: v.state.global.trails > 0 ? "Hide motion trails" : "Show motion trails", icon: "trail", shortcut: "J", keywords: "streaks motion history comet", run: () => this.toggleTrails() }] : []),
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
-      { title: "Interface style…", icon: "sliders", shortcut: "U", keywords: "skin theme look spatial island cards observatory", run: () => this.showSkins() },
+      { title: "Interface style…", icon: "sliders", shortcut: "U", keywords: "skin theme look layout focus maps studio observatory", run: () => this.showSkins() },
       ...SKINS.filter((sk) => sk.id !== this.skin).map((sk) => ({ title: `Interface: ${sk.name}`, sub: sk.desc, icon: "sliders", keywords: "skin style theme", run: () => this.setSkin(sk.id) })),
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
       { title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
@@ -800,8 +944,6 @@ export class AppUI {
   }
 
   toast(text, opts) {
-    // In the Island skin short notices flow into the island itself.
-    if (!opts?.action && this.island?.flash(text, { ms: opts?.ms ? Math.max(opts.ms, 1200) : 1800 })) return () => {};
     return this.toasts.show(text, opts);
   }
 

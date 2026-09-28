@@ -77,6 +77,10 @@ const ICONS = {
   sun: '<circle cx="10" cy="10" r="3.2"/><path d="M10 2.8v1.6M10 15.6v1.6M2.8 10h1.6M15.6 10h1.6M4.9 4.9l1.1 1.1M14 14l1.1 1.1M15.1 4.9 14 6M6 14l-1.1 1.1"/>',
   stars: '<path d="m8 3.5 1.1 3.1 3.1 1.1-3.1 1.1L8 11.9 6.9 8.8 3.8 7.7l3.1-1.1L8 3.5Z"/><path d="m14.2 10.8.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6.6-1.6Z"/>',
   wand: '<path d="m4 16 8.5-8.5"/><path d="m11 6 1.5 1.5"/><path d="M14.5 2.5v2M13.5 3.5h2M16.5 7v1.4M15.8 7.7h1.4"/>',
+  more: '<circle cx="5" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.4" fill="currentColor" stroke="none"/>',
+  minus: '<path d="M4.5 10h11"/>',
+  menu: '<path d="M4 6h12"/><path d="M4 10h12"/><path d="M4 14h12"/>',
+  sidebar: '<rect x="3.5" y="4.5" width="13" height="11" rx="2"/><path d="M8 4.5v11"/>',
 };
 
 export function icon(name, cls = "") {

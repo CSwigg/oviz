@@ -1,0 +1,91 @@
+/* ================================================================ Focus
+   Just the figure and one quiet bar. The title sits in the corner, a key
+   of the data layers sits in the other, and every control lives in a
+   single compact bar at the bottom that fades away while you look (like a
+   video player). Clicking an object shows a small label beside it; the
+   full details open only when asked. */
+[data-oviz-skin="focus"] {
+  --ov-accent: #ffd27a;
+  --ov-accent-strong: #ffe2a6;
+  --ov-accent-soft: rgba(255, 210, 122, 0.14);
+  --ov-accent-line: rgba(255, 210, 122, 0.45);
+  --ov-sky: #9cc8ff;
+  --ov-sky-soft: rgba(156, 200, 255, 0.14);
+}
+
+/* ---- Top: the title and a search button, nothing else ---------------- */
+[data-oviz-skin="focus"] .ov-top { grid-template-columns: minmax(0, 1fr) auto; }
+[data-oviz-skin="focus"] .ov-toolbar { display: none; }
+[data-oviz-skin="focus"] .ov-brand {
+  height: 34px; padding: 0 6px 0 2px; gap: 8px;
+  background: transparent; border-color: transparent; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+[data-oviz-skin="focus"] .ov-brand-mark, [data-oviz-skin="focus"] .ov-brand-sep { display: none; }
+[data-oviz-skin="focus"] .ov-brand:has(.ov-brand-title) .ov-brand-name { display: none; }
+[data-oviz-skin="focus"] .ov-brand-title, [data-oviz-skin="focus"] .ov-brand-name {
+  font: 600 14px/1.2 var(--ov-font-display); color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.6);
+}
+[data-oviz-skin="focus"] .ov-brand button.ov-brand-info { opacity: 0; transition: opacity var(--ov-dur); }
+[data-oviz-skin="focus"] .ov-brand:hover button.ov-brand-info, [data-oviz-skin="focus"] .ov-brand button.ov-brand-info:focus-visible { opacity: 1; }
+[data-oviz-skin="focus"] .ov-search-trigger {
+  grid-column: 2; justify-self: end;
+  width: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 50%;
+}
+[data-oviz-skin="focus"] .ov-search-trigger > :not(.ov-icon) { display: none; }
+
+/* ---- Bottom: legend | bar ------------------------------------------- */
+[data-oviz-skin="focus"] .ov-bottom-right > :not(:first-child) { display: none; }
+[data-oviz-skin="focus"] .ov-bottom-left { gap: 12px; }
+[data-oviz-skin="focus"] .ov-scale, [data-oviz-skin="focus"] .ov-colorbar {
+  background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95);
+}
+[data-oviz-skin="focus"] .ov-scale { padding: 0 8px 0 6px; min-width: 0; }
+[data-oviz-skin="focus"] .ov-scale-sub { display: none; }
+[data-oviz-skin="focus"] .ov-scale-label { font-weight: 500; font-size: 11.5px; color: rgba(255, 255, 255, 0.8); }
+[data-oviz-skin="focus"] .ov-scale-bar { border-color: rgba(255, 255, 255, 0.7); height: 4px; }
+
+/* The bar. */
+[data-oviz-skin="focus"] .ov-dock { width: auto; min-width: 0; height: 50px; padding: 0 7px; gap: 2px; border-radius: 16px; }
+[data-oviz-skin="focus"] .ov-dock :is([aria-label="Previous frame"], [aria-label="Next frame"], [aria-label="Loop playback"], .ov-speed) { display: none; }
+[data-oviz-skin="focus"] .ov-play { width: 36px !important; height: 36px !important; background: #f3f4f6 !important; color: #0c0e13 !important; box-shadow: none !important; }
+[data-oviz-skin="focus"] .ov-play:hover { background: #fff !important; }
+[data-oviz-skin="focus"] .ov-time-read { min-width: 80px; padding: 0 6px 0 10px; }
+[data-oviz-skin="focus"] .ov-time-value { font: 600 15px/1 var(--ov-font); letter-spacing: 0; }
+[data-oviz-skin="focus"] .ov-time-value small { font-size: 11px; }
+[data-oviz-skin="focus"] .ov-time-caption { display: none; }
+[data-oviz-skin="focus"] .ov-scrub { flex: none; width: clamp(200px, 26vw, 380px); height: 40px; margin-right: 6px; }
+[data-oviz-skin="focus"] .ov-scrub-ticks { display: none; }
+[data-oviz-skin="focus"] .ov-scrub-track { height: 4px; margin-top: -2px; background: rgba(255, 255, 255, 0.14); }
+[data-oviz-skin="focus"] .ov-scrub-fill { background: rgba(255, 255, 255, 0.82); }
+[data-oviz-skin="focus"] .ov-scrub-thumb {
+  width: 14px; height: 14px; margin: -7px 0 0 -7px; background: #fff; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
+  transform: scale(0.55); transition: transform 160ms var(--ov-ease);
+}
+[data-oviz-skin="focus"] .ov-scrub:hover .ov-scrub-thumb, [data-oviz-skin="focus"] .ov-scrub[data-dragging="true"] .ov-scrub-thumb { transform: scale(1); }
+[data-oviz-skin="focus"] .ov-scrub-marker { width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; transform: none; background: var(--ov-accent); box-shadow: none; }
+[data-oviz-skin="focus"] .ov-scrub-zero { height: 8px; margin-top: -4px; }
+[data-oviz-skin="focus"] .ov-dock .ov-ibtn { width: 36px; height: 36px; border-radius: 10px; color: var(--ov-text-2); }
+[data-oviz-skin="focus"] .ov-dock .ov-ibtn:hover { color: var(--ov-text); background: var(--ov-hover); }
+[data-oviz-skin="focus"] .ov-dock .ov-ibtn[aria-pressed="true"], [data-oviz-skin="focus"] .ov-dock .ov-ibtn[aria-expanded="true"] { color: var(--ov-text); background: var(--ov-active); }
+[data-oviz-skin="focus"] .ov-bar-only { padding: 0 5px; }
+
+/* ---- Fade while looking --------------------------------------------- */
+[data-oviz-skin="focus"] :is(.ov-top, .ov-dock, .ov-bottom-right) { transition: opacity 600ms var(--ov-ease); }
+[data-oviz-skin="focus"] .ov-root[data-idle="true"] :is(.ov-top, .ov-dock, .ov-bottom-right) { opacity: 0; }
+[data-oviz-skin="focus"] .ov-root[data-idle="true"] .ov-canvas { cursor: none; }
+
+/* ---- Desktop: layers open as a popover above their button ------------ */
+@media (min-width: 721px) {
+  [data-oviz-skin="focus"] .ov-layers {
+    top: auto; bottom: var(--ov-anchor-bottom, 84px);
+    left: clamp(12px, calc(var(--ov-anchor-x, 50%) - 160px), calc(100% - 332px));
+    width: 320px; max-height: min(64vh, 620px);
+    transform-origin: 50% 100%;
+  }
+  [data-oviz-skin="focus"] .ov-layers[data-open="false"] { transform: translateY(8px) scale(0.98); }
+  [data-oviz-skin="focus"] .ov-inspector { top: calc(var(--ov-gutter) + 50px + var(--ov-safe-top)); width: 320px; }
+  [data-oviz-skin="focus"] .ov-story { bottom: calc(var(--ov-gutter) * 2 + 50px + var(--ov-safe-bottom)); }
+}

@@ -1,7 +1,8 @@
-// Fluid motion: physically based springs, shared-element reveals (a menu
-// grows out of the button that opened it), cascading items, pointer
-// parallax, a gaze highlight, and drag-to-dismiss with flick physics.
-// Everything collapses to instant changes under prefers-reduced-motion.
+// Motion: physically based springs, shared-element reveals (a menu grows
+// out of the button that opened it), gently cascading items and
+// drag-to-dismiss with flick physics. Springs are tuned to settle without
+// overshoot, and everything collapses to instant changes under
+// prefers-reduced-motion.
 
 const reduceQuery = typeof window !== "undefined" ? window.matchMedia?.("(prefers-reduced-motion: reduce)") : null;
 export const reducedMotion = () => !!reduceQuery?.matches;
@@ -47,11 +48,11 @@ export function springEasing({ stiffness = 320, damping = 26, mass = 1 } = {}) {
   return res;
 }
 
+// Near critical damping: quick, calm, no bounce.
 export const SPRINGS = {
-  pop: { stiffness: 380, damping: 26 },     // menus, palette
-  soft: { stiffness: 220, damping: 24 },    // sheets, cards
-  snappy: { stiffness: 520, damping: 34 },  // closing
-  wobble: { stiffness: 300, damping: 16 },  // playful settles
+  pop: { stiffness: 520, damping: 44 },     // menus, palette
+  soft: { stiffness: 340, damping: 36 },    // sheets
+  snappy: { stiffness: 620, damping: 48 },  // closing
 };
 
 function rectIn(el) {
@@ -118,56 +119,16 @@ export function conceal(el, from) {
 }
 
 /** Items fall into place one after another. */
-export function cascade(nodes, { step = 22, max = 14, from = "translateY(-6px) scale(0.98)" } = {}) {
+export function cascade(nodes, { step = 14, max = 10, from = "translateY(-3px)" } = {}) {
   if (reducedMotion()) return;
   const s = springEasing(SPRINGS.pop);
   let i = 0;
   for (const n of nodes) {
     if (i >= max) break;
     n.animate?.([{ opacity: 0, transform: from }, { opacity: 1, transform: "none" }],
-      { duration: s.duration, easing: s.easing, delay: 40 + i * step, fill: "backwards" });
+      { duration: s.duration, easing: s.easing, delay: 20 + i * step, fill: "backwards" });
     i++;
   }
-}
-
-/**
- * Pointer parallax: smoothed pointer position in [-1, 1] published as
- * --ov-px / --ov-py on the root, for skins that float chrome in depth.
- */
-export function installParallax(root) {
-  let tx = 0, ty = 0, x = 0, y = 0, raf = 0;
-  const step = () => {
-    x += (tx - x) * 0.12;
-    y += (ty - y) * 0.12;
-    root.style.setProperty("--ov-px", x.toFixed(4));
-    root.style.setProperty("--ov-py", y.toFixed(4));
-    raf = Math.abs(tx - x) + Math.abs(ty - y) > 0.001 ? requestAnimationFrame(step) : 0;
-  };
-  root.addEventListener("pointermove", (e) => {
-    if (e.pointerType !== "mouse" || reducedMotion()) return;
-    const r = root.getBoundingClientRect();
-    tx = ((e.clientX - r.left) / r.width) * 2 - 1;
-    ty = ((e.clientY - r.top) / r.height) * 2 - 1;
-    if (!raf) raf = requestAnimationFrame(step);
-  }, { passive: true });
-}
-
-/** Gaze highlight: interactive elements light up where the pointer is. */
-const GAZE = ".ov-ibtn, .ov-btn, .ov-row, .ov-pop-item, .ov-palette-item, .ov-card, .ov-skin-card, .ov-seg button, .ov-search-trigger";
-export function installGaze(root) {
-  let last = null;
-  root.addEventListener("pointermove", (e) => {
-    if (e.pointerType !== "mouse") return;
-    const el = e.target.closest?.(GAZE);
-    if (last && last !== el) last.removeAttribute("data-gaze");
-    last = el;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    el.style.setProperty("--gx", `${(e.clientX - r.left).toFixed(0)}px`);
-    el.style.setProperty("--gy", `${(e.clientY - r.top).toFixed(0)}px`);
-    el.dataset.gaze = "true";
-  }, { passive: true });
-  root.addEventListener("pointerleave", () => { last?.removeAttribute("data-gaze"); last = null; });
 }
 
 /**

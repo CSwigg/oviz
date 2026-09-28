@@ -64,15 +64,22 @@ export class Inspector {
     const kicker = h("div", { class: "ov-insp-kicker" }, h("span", { class: "ov-swatch", style: { color: d.color } }), d.traceName);
     const hero = h("div", { class: "ov-insp-hero" }, kicker, h("div", { class: "ov-insp-name" }, d.name));
     if (d.aliases.length) hero.append(h("div", { class: "ov-insp-aliases" }, `Also: ${d.aliases.slice(0, 6).join(", ")}`));
+    // Key facts up front; coordinates fold away until asked for.
     const facts = h("div", { class: "ov-facts" });
+    const coords = h("div", { class: "ov-facts ov-facts--coords" });
     this.dyn = { hit, facts: new Map() };
     for (const f of this.factList(d)) {
       const label = h("div", { class: "ov-fact-label" }, f.label);
       const value = h("div", { class: "ov-fact-value" });
-      facts.append(h("div", { class: `ov-fact${f.wide ? " ov-fact--wide" : ""}` }, label, value));
+      (f.wide ? coords : facts).append(h("div", { class: `ov-fact${f.wide ? " ov-fact--wide" : ""}` }, label, value));
       this.dyn.facts.set(f.key, { label, value });
       setFact(this.dyn.facts.get(f.key), f);
     }
+    const more = coords.childElementCount
+      ? h("details", { class: "ov-insp-more", open: this.coordsOpen ? true : null },
+        h("summary", null, h("span", null, "Coordinates"), icon("chevronDown")), coords)
+      : null;
+    more?.addEventListener("toggle", () => { this.coordsOpen = more.open; });
     this.track = DistanceTrack.create(this.ui, hit, d.color);
     const following = this.ui.following && this.ui.following.trace === hit.trace && this.ui.following.index === hit.index;
     const trailOn = this.ui.hasTrail(hit);
@@ -85,7 +92,9 @@ export class Inspector {
     );
     this.body.append(hero);
     if (this.track) this.body.append(this.track.el);
-    this.body.append(facts, actions);
+    this.body.append(facts);
+    if (more) this.body.append(more);
+    this.body.append(actions);
     if (d.ra != null && d.dec != null) {
       const coord = `${d.ra.toFixed(5)} ${d.dec >= 0 ? "+" : ""}${d.dec.toFixed(5)}`;
       const simbad = `https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${encodeURIComponent(coord)}&CooFrame=ICRS&Radius=10&Radius.unit=arcmin`;

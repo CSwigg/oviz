@@ -19,7 +19,7 @@ VIEWER_VERSION = "2.0.0"
 _PLACEHOLDER_RE = re.compile(r"__(?:TITLE|VERSION|THEME|SKIN|CSS|RUNTIME|MANIFEST|BLOBS)__")
 
 #: Interface styles the viewer ships with (see ``web/src/ui/skins.js``).
-VIEWER_STYLES = ("observatory", "spatial", "island", "cards")
+VIEWER_STYLES = ("observatory", "focus", "maps", "studio")
 
 
 def _check_style(style: str) -> str:

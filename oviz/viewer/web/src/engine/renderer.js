@@ -109,6 +109,9 @@ export class Renderer {
     this.canvas.style.height = `${h}px`;
     this.camera.setViewport(w, h);
     for (const layer of this.layers) layer.resize?.(this);
+    // Resizing clears the canvas: redraw at once so animated layout changes
+    // (a sidebar sliding open) never show a blank frame.
+    if (this._running && !this.contextLost) this.render();
     this.invalidate();
   }
 

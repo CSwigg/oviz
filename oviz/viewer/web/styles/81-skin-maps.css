@@ -1,0 +1,90 @@
+/* ================================================================= Maps
+   Works like a maps app. A search box sits at the top left; layers open
+   underneath it, and so do an object's details when you click it. Zoom,
+   3D/Sky, home and fullscreen are stacked on the right; time is a compact
+   slider along the bottom; the key and a map-style scale sit bottom left. */
+[data-oviz-skin="maps"] {
+  --ov-accent: #8ab4f8;
+  --ov-accent-strong: #aecbfa;
+  --ov-accent-soft: rgba(138, 180, 248, 0.16);
+  --ov-accent-line: rgba(138, 180, 248, 0.5);
+  --ov-sky: #8ab4f8;
+  --ov-sky-soft: rgba(138, 180, 248, 0.16);
+  --ov-surface: rgba(32, 33, 36, 0.96);
+  --ov-surface-strong: #202124;
+  --ov-surface-solid: #202124;
+  --ov-surface-raised: #2b2c30;
+  --ov-text: #e8eaed;
+  --ov-text-2: #9aa0a6;
+  --ov-text-3: #6f757c;
+  --ov-line: rgba(255, 255, 255, 0.1);
+  --ov-blur: none;
+  --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 10px rgba(0, 0, 0, 0.3);
+  --ov-radius-lg: 12px;
+}
+[data-oviz-skin="maps"] .ov-glass { border-color: transparent; }
+
+/* ---- Search box ----------------------------------------------------- */
+[data-oviz-skin="maps"] .ov-top { grid-template-columns: auto minmax(0, 1fr) auto; }
+[data-oviz-skin="maps"] .ov-brand { display: none; }
+.ov-searchbox { display: flex; align-items: center; gap: 2px; width: 380px; max-width: 100%; height: 48px; padding: 0 6px; border-radius: 12px; }
+[data-oviz-skin="maps"] .ov-searchbox .ov-ibtn { flex: none; width: 36px; height: 36px; color: var(--ov-text-2); }
+[data-oviz-skin="maps"] .ov-searchbox .ov-ibtn[aria-pressed="true"] { color: var(--ov-accent); background: var(--ov-accent-soft); }
+[data-oviz-skin="maps"] .ov-searchbox .ov-search-trigger {
+  flex: 1; width: auto; min-width: 0; height: 40px; padding: 0 6px 0 8px;
+  background: transparent; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+  font-size: 14px; color: var(--ov-text-2);
+}
+[data-oviz-skin="maps"] .ov-searchbox .ov-search-trigger:hover { color: var(--ov-text); }
+[data-oviz-skin="maps"] .ov-toolbar { height: 44px; border-radius: 12px; }
+[data-oviz-skin="maps"] .ov-toolbar-sep { background: var(--ov-line); }
+
+/* ---- Map controls on the right ------------------------------------- */
+.ov-mapctl {
+  position: absolute; z-index: 11; right: calc(var(--ov-gutter) + var(--ov-safe-right));
+  bottom: calc(var(--ov-gutter) * 2 + 56px + var(--ov-safe-bottom));
+  display: grid; justify-items: end; gap: 10px;
+}
+.ov-mapctl-group { display: grid; overflow: hidden; border-radius: 10px; }
+.ov-mapctl-group .ov-ibtn { width: 40px; height: 40px; border-radius: 0; color: var(--ov-text-2); background: transparent; }
+.ov-mapctl-group .ov-ibtn:hover { color: var(--ov-text); background: var(--ov-hover); }
+.ov-mapctl-group .ov-ibtn + .ov-ibtn { box-shadow: inset 0 1px 0 var(--ov-line); }
+.ov-mapctl .ov-view-toggle { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 56px; height: 56px; }
+.ov-mapctl .ov-view-toggle .ov-ibtn-label { display: block; font: 600 11px/1 var(--ov-font); color: var(--ov-text); }
+
+/* ---- Time along the bottom ------------------------------------------ */
+[data-oviz-skin="maps"] .ov-bottom-right > :not(:first-child) { display: none; }
+[data-oviz-skin="maps"] .ov-dock { width: min(560px, calc(100vw - 2 * var(--ov-gutter) - 520px)); min-width: 360px; height: 56px; border-radius: 12px; padding: 0 12px 0 8px; gap: 4px; }
+[data-oviz-skin="maps"] .ov-dock :is([aria-label="Previous frame"], [aria-label="Next frame"], [aria-label="Loop playback"]) { display: none; }
+[data-oviz-skin="maps"] .ov-play { width: 38px !important; height: 38px !important; background: var(--ov-accent) !important; color: #0b1a33 !important; box-shadow: none !important; }
+[data-oviz-skin="maps"] .ov-time-read { min-width: 96px; }
+[data-oviz-skin="maps"] .ov-time-value { font: 600 16px/1 var(--ov-font); letter-spacing: 0; }
+[data-oviz-skin="maps"] .ov-time-caption { text-transform: none; letter-spacing: 0; font-size: 11px; font-weight: 500; margin-top: 4px; }
+[data-oviz-skin="maps"] .ov-scrub-track { height: 4px; margin-top: -2px; }
+[data-oviz-skin="maps"] .ov-scrub-fill { background: var(--ov-accent); }
+[data-oviz-skin="maps"] .ov-scrub-thumb { width: 14px; height: 14px; margin: -7px 0 0 -7px; background: var(--ov-accent); box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.25); }
+[data-oviz-skin="maps"] .ov-scrub-marker { background: #fff; }
+[data-oviz-skin="maps"] .ov-speed { background: transparent; border: 1px solid var(--ov-line); }
+
+/* The key and a map-style scale. */
+[data-oviz-skin="maps"] .ov-bottom-left { gap: 10px; }
+[data-oviz-skin="maps"] .ov-scale, [data-oviz-skin="maps"] .ov-colorbar {
+  background: rgba(32, 33, 36, 0.72); box-shadow: none; border-radius: 6px;
+}
+[data-oviz-skin="maps"] .ov-scale { padding: 5px 8px 6px; min-width: 0; }
+[data-oviz-skin="maps"] .ov-scale-sub { display: none; }
+[data-oviz-skin="maps"] .ov-scale-label { font-size: 11px; font-weight: 500; }
+[data-oviz-skin="maps"] .ov-scale-bar { height: 4px; border-width: 1.5px; border-color: var(--ov-text); }
+
+/* ---- Desktop: the left column --------------------------------------- */
+@media (min-width: 721px) {
+  [data-oviz-skin="maps"] .ov-layers, [data-oviz-skin="maps"] .ov-inspector {
+    top: calc(var(--ov-gutter) + 58px + var(--ov-safe-top));
+    left: calc(var(--ov-gutter) + var(--ov-safe-left)); right: auto;
+    width: 380px;
+    max-height: calc(100% - 58px - 56px - 3 * var(--ov-gutter) - 40px - var(--ov-safe-top) - var(--ov-safe-bottom));
+  }
+  [data-oviz-skin="maps"] .ov-layers[data-open="false"], [data-oviz-skin="maps"] .ov-inspector[data-open="false"] { transform: translateY(-6px); }
+  /* Layers and details share the column: the layers take it while open. */
+  [data-oviz-skin="maps"] .ov-root[data-layers="true"] .ov-inspector { opacity: 0; pointer-events: none; transform: translateY(-6px); }
+}

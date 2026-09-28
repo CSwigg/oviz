@@ -87,12 +87,14 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
   each module gets its own scope, only named relative imports are allowed, and
   exported names must be unique. Styles live in `oviz/viewer/web/styles`
   (tokens in `00-tokens.css`).
-- Interface styles ("skins": observatory, spatial, island, cards) are CSS
-  layers keyed on `<html data-oviz-skin>` (`styles/8x-skin-*.css`, phones in
-  `85-skins-mobile.css`, registry in `src/ui/skins.js`, Python list in
-  `figure.VIEWER_STYLES`). Shared motion (springs, reveals, parallax, flick
-  to dismiss) lives in `src/ui/motion.js`; skin behaviour in `island.js` and
-  `cards.js`. Every skin wears
+- Interface styles ("skins": observatory, focus, maps, studio) are CSS layers
+  keyed on `<html data-oviz-skin>` (`styles/8x-skin-*.css`, phones in
+  `85-skins-mobile.css`) plus an optional layout in `src/ui/layout.js`, which
+  moves (never rebuilds) the shared components and undoes every move on a
+  style or breakpoint change. The registry with each style's behaviour flags
+  (selection panel vs. callout, legend, idle fade) is `src/ui/skins.js`; the
+  Python list is `figure.VIEWER_STYLES`. Motion helpers live in
+  `src/ui/motion.js`. Every skin wears
   the same components, so features must never depend on one skin; keep skin
   layout rules inside `@media (min-width: 721px)` so phones keep the mobile
   layout. Adding a skin means updating all three places.

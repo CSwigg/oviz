@@ -84,26 +84,25 @@ background is composited into both.
 URL hash. Opening the link restores that view.
 
 **Interface styles.** The same figure can wear four interface styles; press
-**U** to cycle them or pick one under *Display*. All of them share the same
-features and a physically based motion layer: menus and search grow out of
-the control that opened them, items cascade in, and the scene recedes behind
-whatever is open.
+**U** to cycle them or pick one under *Display*. The three newer styles share
+one calm design language and start with the figure uncovered (the layers
+panel stays closed until you ask for it):
 
-- *Observatory* (default): quiet glass instruments floating over the sky.
-- *Spatial*: thick frosted glass floating at different depths. Panels drift
-  with the pointer while their shadows swing the other way, a specular rim
-  catches the light, and controls glow where you point.
-- *Island*: a living capsule at the top stretches to show playback, the
-  object you picked and short notices, and flows open into search. Lists are
-  inset-grouped with green switches; context menus fan out of their buttons.
-- *Cards*: panels are physical cards with grabbers. Flick one away to dismiss
-  it; each new pick deals the previous inspector card into a stack you can
-  tap to return to; menus open as a small deck.
+- *Observatory*: the original floating glass panels.
+- *Focus*: just the figure, its key and one quiet bar with play, time, layers,
+  views, 3D/Sky and a "more" menu. The bar fades while the pointer rests.
+  Clicking an object shows a small label beside it; *Details* opens the full
+  inspector.
+- *Maps*: works like a maps app. Search sits at the top left and an object's
+  details open beneath it; zoom, 3D/Sky, home and fullscreen are stacked on
+  the right; time is a compact slider at the bottom.
+- *Studio*: one sidebar (title, search, selection, layers) and a timeline along
+  the bottom edge. The figure is inset into the remaining space so nothing
+  covers it; the sidebar collapses to a rail (**⇧L**).
 
-On phones every style uses bottom sheets that swipe down to dismiss (the
-Island becomes a true top-centre island). Choose the style a figure opens in
-with ``make_plot(..., viewer_style="island")`` (or
-``OvizFigure(..., style=...)``); ``?ui=cards`` in the URL overrides it.
+On phones every style uses bottom sheets that swipe down to dismiss. Choose
+the style a figure opens in with ``make_plot(..., viewer_style="focus")`` (or
+``OvizFigure(..., style=...)``); ``?ui=maps`` in the URL overrides it.
 
 **Motion.** Figures open with a short camera dolly into the home view, and
 panels swing in on a hinge. Everything animated respects the system

@@ -177,8 +177,8 @@ the result as an editable figure (**⌘S**) or as a present-only figure that
 opens straight into the first view. Press **?** in any figure for the full
 keyboard map; the classic keys (W A S D, Q E, R F, L, C, P, [ ]) work as
 before, **J** adds GPU motion trails during playback, and **U** cycles four
-interface styles (Observatory, Spatial, Island, Cards); pick the default with
-`make_plot(..., viewer_style="island")`.
+interface styles (Observatory, Focus, Maps, Studio); pick the default with
+`make_plot(..., viewer_style="focus")`.
 
 The export is a single HTML file containing the scientific scene and its saved
 States. It can be opened locally, placed on a static web host, or sent to a

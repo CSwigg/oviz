@@ -1,30 +1,35 @@
 /* -------------------------------------------------------- skins · phones
    Phone layouts for the interface styles. The shared mobile layout
-   (70-mobile) already turns panels into bottom sheets that swipe down to
-   dismiss; these rules adapt each style to it. */
+   (70-mobile) turns panels into bottom sheets that swipe down to dismiss;
+   these rules fit each style to it. */
 @media (max-width: 720px) {
   .ov-panel-head { touch-action: none; }
   .ov-panel[data-dragging="true"] { transition: none !important; }
 
-  /* Island: a real top-centre island above the brand and toolbar row. */
-  [data-oviz-skin="island"] .ov-top {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas: "island island island" "brand . tools";
-    row-gap: 10px;
+  /* Focus: the bar spans the screen; the label card docks above it. */
+  [data-oviz-skin="focus"] .ov-dock { width: 100%; height: 52px; padding: 0 6px; }
+  [data-oviz-skin="focus"] .ov-scrub { flex: 1; width: auto; min-width: 56px; margin-right: 2px; }
+  [data-oviz-skin="focus"] .ov-time-read { min-width: 62px; padding: 0 2px 0 8px; }
+  [data-oviz-skin="focus"] .ov-dock [aria-label="Views & story"] { display: none; }
+  [data-oviz-skin="focus"] .ov-dock .ov-ibtn { width: 36px; height: 36px; }
+  [data-oviz-skin="focus"] .ov-callout {
+    transform: none !important; left: 10px; right: 10px; top: auto;
+    bottom: calc(var(--ov-dock-h) + 24px + var(--ov-safe-bottom));
+    width: auto; max-width: none;
   }
-  [data-oviz-skin="island"] .ov-search-trigger { grid-area: island; justify-self: center; width: 118px; height: 36px; padding: 0 12px; justify-content: center; }
-  [data-oviz-skin="island"] .ov-search-trigger:not([data-island="idle"]):not([data-island=""]) { height: 40px; }
-  [data-oviz-skin="island"] .ov-island-text { max-width: 170px; }
-  [data-oviz-skin="island"] .ov-brand { grid-area: brand; }
-  [data-oviz-skin="island"] .ov-toolbar { grid-area: tools; }
-  [data-oviz-skin="island"] .ov-toasts, [data-oviz-skin="island"] .ov-rec-pill { top: calc(108px + var(--ov-safe-top)); }
-  [data-oviz-skin="island"] .ov-panel { background: rgba(0, 0, 0, 0.94); }
+  [data-oviz-skin="focus"] .ov-legend-item { height: 22px; font-size: 12px; }
 
-  /* Spatial: heavier glass so sheets read clearly over bright sky. */
-  [data-oviz-skin="spatial"] { --ov-surface-strong: rgba(46, 50, 62, 0.8); }
-  [data-oviz-skin="spatial"] .ov-panel { border-radius: 30px; }
+  /* Maps: search across the top, controls bottom right, time below. */
+  [data-oviz-skin="maps"] .ov-top { grid-template-columns: minmax(0, 1fr); }
+  [data-oviz-skin="maps"] .ov-toolbar { display: none; }
+  [data-oviz-skin="maps"] .ov-searchbox { width: 100%; height: 46px; }
+  [data-oviz-skin="maps"] .ov-searchbox .ov-search-trigger { width: auto; order: 0; justify-content: flex-start; padding: 0 6px 0 8px; }
+  [data-oviz-skin="maps"] .ov-searchbox .ov-search-trigger span.ov-grow { display: inline; }
+  [data-oviz-skin="maps"] .ov-mapctl { right: 10px; bottom: calc(var(--ov-dock-h) + 28px + var(--ov-safe-bottom)); gap: 8px; }
+  [data-oviz-skin="maps"] .ov-mapctl-group .ov-ibtn { width: 40px; height: 40px; }
+  [data-oviz-skin="maps"] .ov-mapctl .ov-view-toggle { width: 48px; height: 48px; }
+  [data-oviz-skin="maps"] .ov-dock { width: 100%; min-width: 0; }
 
-  /* Cards: sheets keep their grabbers; the dock is a white card. */
-  [data-oviz-skin="cards"] .ov-panel-head::before { top: 6px; }
-  [data-oviz-skin="cards"] .ov-dock { border-radius: 22px; }
+  /* Studio: phones use the standard sheets; keep the timeline tidy. */
+  [data-oviz-skin="studio"] .ov-dock { border-radius: 14px; }
 }
