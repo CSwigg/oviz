@@ -676,6 +676,36 @@ def _volume_bytes(layer: dict[str, Any]) -> tuple[np.ndarray, np.ndarray | None]
     return scalar, validity
 
 
+def occupancy_grid(vol: np.ndarray, max_blocks: int = 64) -> np.ndarray | None:
+    """Conservative block maxima of a (z, y, x) uint8 volume.
+
+    Matches the viewer's empty-space-skipping contract: at most
+    ``max_blocks`` blocks per axis, voxel ``i`` belongs to block
+    ``floor((i + 0.5) * g / n)``, and every voxel's value is spread to its
+    one-voxel neighbourhood first so trilinear tails at block borders are
+    always covered. Dilation and block reduction are separable max
+    operations, so each axis is dilated and reduced in turn (memory shrinks
+    as it goes).
+    """
+
+    if vol.size < (1 << 18) or not np.any(vol):
+        return None
+    out = vol
+    for axis in range(3):
+        n = out.shape[axis]
+        g = min(max_blocks, n)
+        dil = out.copy()
+        lo = [slice(None)] * 3
+        hi = [slice(None)] * 3
+        lo[axis], hi[axis] = slice(0, -1), slice(1, None)
+        np.maximum(dil[tuple(hi)], out[tuple(lo)], out=dil[tuple(hi)])
+        np.maximum(dil[tuple(lo)], out[tuple(hi)], out=dil[tuple(lo)])
+        block = np.minimum(g - 1, np.floor((np.arange(n) + 0.5) * g / n).astype(np.int64))
+        starts = np.searchsorted(block, np.arange(g))
+        out = np.maximum.reduceat(dil, starts, axis=axis)
+    return np.ascontiguousarray(out)
+
+
 def _compile_volume(builder: BundleBuilder, layer: dict[str, Any], colormaps: _ColormapRegistry,
                     presence: list[int] | None, co_rotation: float) -> dict[str, Any]:
     scalar, validity = _volume_bytes(layer)
@@ -714,6 +744,13 @@ def _compile_volume(builder: BundleBuilder, layer: dict[str, Any], colormaps: _C
         "renderOrder": _num(layer.get("render_order"), 0.0),
         "opticalModel": "legacy-texture-space",
     }
+    occ = occupancy_grid(scalar)
+    if occ is not None:
+        gz, gy, gx = occ.shape
+        out["occupancy"] = {
+            "blob": builder.array(occ, "u8", hint=f"vol-{layer.get('key')}-occ", priority=DEFERRED, shuffle=False),
+            "dims": [int(gx), int(gy), int(gz)],
+        }
     if validity is not None:
         out["validity"] = {
             "blob": builder.array(validity, "u8", hint=f"vol-{layer.get('key')}-valid", priority=DEFERRED, shuffle=False)

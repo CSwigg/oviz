@@ -130,21 +130,35 @@ export function isEditable(target) {
   return false;
 }
 
-/** Simple fuzzy score: consecutive and word-start matches rank higher. */
+/**
+ * Fuzzy score: substring matches rank highest (earlier and word-start
+ * better); otherwise a subsequence match must be compact — its span may be
+ * at most ~2.5× the query length — so scattered letters never match.
+ */
 export function fuzzyScore(query, text) {
   if (!query) return 1;
   const q = query.toLowerCase(), t = text.toLowerCase();
   const idx = t.indexOf(q);
   if (idx >= 0) return 100 - idx * 0.5 + (idx === 0 || /[\s_\-(]/.test(t[idx - 1]) ? 40 : 0) - t.length * 0.02;
-  let ti = 0, score = 0, streak = 0;
-  for (const ch of q) {
-    const j = t.indexOf(ch, ti);
-    if (j < 0) return 0;
-    streak = j === ti ? streak + 1 : 0;
-    score += 1 + streak * 2 + (j === 0 || /[\s_\-(]/.test(t[j - 1]) ? 3 : 0);
-    ti = j + 1;
+  if (q.length < 2) return 0;
+  let best = 0;
+  // Try each possible start of the first character for the tightest span.
+  for (let start = t.indexOf(q[0]); start >= 0; start = t.indexOf(q[0], start + 1)) {
+    let ti = start + 1, score = 3, streak = 0, ok = true;
+    for (let k = 1; k < q.length; k++) {
+      const j = t.indexOf(q[k], ti);
+      if (j < 0) { ok = false; break; }
+      streak = j === ti ? streak + 1 : 0;
+      score += 1 + streak * 2 + (/[\s_\-(]/.test(t[j - 1]) ? 3 : 0);
+      ti = j + 1;
+    }
+    if (!ok) break;
+    const span = ti - start;
+    if (span > Math.max(q.length * 2.5, q.length + 3)) continue;
+    const s = score - span * 0.3 + (start === 0 || /[\s_\-(]/.test(t[start - 1]) ? 4 : 0);
+    if (s > best) best = s;
   }
-  return score - t.length * 0.02;
+  return best > 0 ? best - t.length * 0.02 : 0;
 }
 
 export function copyText(text) {

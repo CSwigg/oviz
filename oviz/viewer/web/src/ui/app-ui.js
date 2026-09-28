@@ -198,7 +198,7 @@ export class AppUI {
       down = null;
       if (moved > 5 || !quick) return;
       const r = canvas.getBoundingClientRect();
-      const hit = v.pick(e.clientX - r.left, e.clientY - r.top);
+      const hit = v.pick(e.clientX - r.left, e.clientY - r.top, { radius: e.pointerType === "touch" ? 18 : 6 });
       if (e.shiftKey && hit && this.selection) this.measure(this.selection, hit);
       else this.select(hit);
     });
@@ -217,9 +217,14 @@ export class AppUI {
     if (l) this.hovercard.show(l.hit, l.cx, l.cy);
   }
 
+  get narrow() {
+    return this.root.clientWidth <= 720;
+  }
+
   select(hit) {
     const v = this.viewer;
     this.selection = hit;
+    if (hit && this.narrow) this.setLayersOpen(false);
     this.inspector.show(hit);
     const labels = v.labels;
     labels.removeDynamic("selection");
@@ -377,6 +382,7 @@ export class AppUI {
   }
 
   setLayersOpen(open) {
+    if (open && this.narrow && this.selection) this.select(null);
     this.layersOpen = open;
     this.layers.el.dataset.open = String(open);
     this.layersBtn.setAttribute("aria-pressed", String(open));

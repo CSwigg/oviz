@@ -34,9 +34,17 @@ async function boot() {
     const stage = document.createElement("div");
     stage.className = "ov-stage";
     root.prepend(stage);
+    const tv = performance.now();
     const viewer = new Viewer(stage, manifest, store);
+    timing.viewer = performance.now() - tv;
+    const ta = performance.now();
     await viewer.attachTraces();
+    timing.traces = performance.now() - ta;
     viewer.start();
+    const tr = performance.now();
+    viewer.renderer.render();
+    viewer.gl.finish();
+    timing.firstRender = performance.now() - tr;
     timing.firstFrame = performance.now() - t0;
     const ui = mountUI(root, viewer);
     installApi(root, viewer, ui);

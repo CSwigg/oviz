@@ -482,7 +482,7 @@ export class Viewer extends Emitter {
   // -------------------------------------------------------------- picking
 
   /** GPU pick at CSS pixel (x, y); returns {trace, index} or null. */
-  pick(x, y) {
+  pick(x, y, { radius = 6 } = {}) {
     const gl = this.gl;
     const r = this.renderer;
     const w = r.width, h = r.height;
@@ -502,7 +502,7 @@ export class Viewer extends Emitter {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       this._pickSig = sig;
     }
-    const R = 6;
+    const R = Math.max(1, Math.round(radius));
     const px = Math.round(x), py = Math.round(h - y);
     const x0 = clamp(px - R, 0, w - 1), y0 = clamp(py - R, 0, h - 1);
     const x1 = clamp(px + R, 0, w - 1), y1 = clamp(py + R, 0, h - 1);

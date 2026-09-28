@@ -214,37 +214,45 @@ void main() {
 }
 `;
 
-/** Point-spread functions matching the legacy Oviz star textures. */
+/** Radial profiles of the legacy Oviz star textures (r = 1 at the edge). */
+const PSF = {
+  halo: (r) => 0.82 * Math.exp(-0.5 * (r / 0.024) ** 2)
+    + 0.30 * (1 + (r / 0.060) ** 2) ** -2.25
+    + 0.050 * (1 + (r / 0.20) ** 2) ** -2.5
+    + 0.055 * Math.exp(-0.5 * ((r - 0.22) / 0.11) ** 2),
+  core: (r) => Math.exp(-0.5 * (r / 0.020) ** 2) + 0.28 * (1 + (r / 0.052) ** 2) ** -2.65,
+  "member-halo": (r) => 0.72 * Math.exp(-0.5 * (r / 0.075) ** 2)
+    + 0.24 * (1 + (r / 0.14) ** 2) ** -2.4
+    + 0.035 * (1 + (r / 0.32) ** 2) ** -3.0,
+  "member-core": (r) => Math.exp(-0.5 * (r / 0.055) ** 2) + 0.16 * (1 + (r / 0.12) ** 2) ** -2.8,
+};
+
 function psfTexture(gl, kind, size = 512) {
+  // Tabulate the radial profile once, then fill the image by lookup; the
+  // texture matches a direct evaluation to < 1/255.
+  const LUT = 4096;
+  const table = new Float32Array(LUT + 2);
+  const f = PSF[kind];
+  for (let i = 0; i <= LUT + 1; i++) {
+    const r = (i / LUT) * 1.5;
+    const t = Math.min(Math.max((r - 0.78) / 0.22, 0), 1);
+    const taper = 1 - t * t * (3 - 2 * t);
+    table[i] = Math.min(Math.max(f(r) * taper, 0), 1) * 255;
+  }
   const data = new Uint8Array(size * size);
   const c = (size - 1) * 0.5;
-  const R = size * 0.5;
-  const ss = (e0, e1, x) => {
-    const t = Math.min(Math.max((x - e0) / (e1 - e0), 0), 1);
-    return t * t * (3 - 2 * t);
-  };
+  const invR = 2 / size;
+  const k = LUT / 1.5;
   for (let y = 0; y < size; y++) {
-    const dy = (y - c) / R;
+    const dy = (y - c) * invR;
+    const dy2 = dy * dy;
+    const row = y * size;
     for (let x = 0; x < size; x++) {
-      const dx = (x - c) / R;
-      const r = Math.sqrt(dx * dx + dy * dy);
-      let v;
-      if (kind === "halo") {
-        v = 0.82 * Math.exp(-0.5 * (r / 0.024) ** 2)
-          + 0.30 * (1 + (r / 0.060) ** 2) ** -2.25
-          + 0.050 * (1 + (r / 0.20) ** 2) ** -2.5
-          + 0.055 * Math.exp(-0.5 * ((r - 0.22) / 0.11) ** 2);
-      } else if (kind === "member-halo") {
-        v = 0.72 * Math.exp(-0.5 * (r / 0.075) ** 2)
-          + 0.24 * (1 + (r / 0.14) ** 2) ** -2.4
-          + 0.035 * (1 + (r / 0.32) ** 2) ** -3.0;
-      } else if (kind === "member-core") {
-        v = Math.exp(-0.5 * (r / 0.055) ** 2) + 0.16 * (1 + (r / 0.12) ** 2) ** -2.8;
-      } else {
-        v = Math.exp(-0.5 * (r / 0.020) ** 2) + 0.28 * (1 + (r / 0.052) ** 2) ** -2.65;
-      }
-      v *= 1 - ss(0.78, 1.0, r);
-      data[y * size + x] = Math.round(Math.min(Math.max(v, 0), 1) * 255);
+      const dx = (x - c) * invR;
+      const fi = Math.sqrt(dx * dx + dy2) * k;
+      const i = fi | 0;
+      const v = i >= LUT ? 0 : table[i] + (table[i + 1] - table[i]) * (fi - i);
+      data[row + x] = v + 0.5;
     }
   }
   return createTexture2D(gl, {

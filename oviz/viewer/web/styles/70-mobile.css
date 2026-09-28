@@ -1,0 +1,80 @@
+/* --------------------------------------------------------------- mobile
+   Phones get the same instrument, re-laid out for one thumb: sheets rise
+   from the bottom, the timeline spans the width, targets are ≥ 40 px.
+   Desktop rules above are untouched. */
+@media (max-width: 720px) {
+  :root { --ov-gutter: 10px; --ov-dock-h: 56px; }
+
+  .ov-top { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .ov-brand { height: 40px; padding: 0 12px 0 10px; }
+  .ov-brand-name { display: none; }
+  .ov-brand-sep { display: none; }
+  .ov-search-trigger { width: 40px; padding: 0; justify-content: center; order: 3; }
+  .ov-search-trigger span.ov-grow, .ov-search-trigger .ov-kbd { display: none; }
+  .ov-top { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .ov-toolbar { order: 2; }
+  .ov-toolbar [aria-label="Screenshot"], .ov-toolbar [aria-label="Shortcuts & help"], .ov-toolbar .ov-toolbar-sep { display: none; }
+  .ov-ibtn { width: 36px; height: 36px; }
+
+  /* Panels become bottom sheets above the dock. */
+  .ov-layers, .ov-inspector {
+    top: auto;
+    left: var(--ov-gutter);
+    right: var(--ov-gutter);
+    width: auto;
+    bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom) + 52px);
+    max-height: min(58vh, 520px);
+    border-radius: 20px;
+  }
+  .ov-layers[data-open="false"], .ov-inspector[data-open="false"] { transform: translateY(24px); }
+  .ov-panel-head { min-height: 50px; }
+  .ov-panel-head::before {
+    content: ""; position: absolute; left: 50%; top: 6px; width: 36px; height: 4px; margin-left: -18px;
+    border-radius: 4px; background: var(--ov-line-strong);
+  }
+  .ov-row { min-height: 44px; }
+  .ov-row .ov-eye { opacity: 1; }
+
+  /* Bottom: corner controls stack above the full-width dock. */
+  .ov-bottom { grid-template-columns: 1fr; gap: 8px; }
+  .ov-bottom-left { position: absolute; left: 0; bottom: calc(var(--ov-dock-h) + 8px); }
+  .ov-bottom-right { position: absolute; right: 0; bottom: calc(var(--ov-dock-h) + 8px); }
+  .ov-colorbars { display: none; }
+  .ov-scale { padding: 7px 10px 8px; min-width: 76px; }
+  .ov-scale-sub { display: none; }
+  .ov-dock { width: 100%; min-width: 0; padding: 0 10px 0 6px; border-radius: 18px; gap: 4px; }
+  .ov-dock [aria-label="Previous frame"], .ov-dock [aria-label="Next frame"], .ov-dock [aria-label="Loop playback"] { display: none; }
+  .ov-time-read { min-width: 76px; }
+  .ov-time-value { font-size: 16px; }
+  .ov-scrub-tick-label:nth-of-type(even) { display: none; }
+  .ov-seg button { height: 34px; padding: 0 10px; }
+  .ov-corner-btns .ov-ibtn { width: 40px; height: 40px; }
+  .ov-corner-btns [aria-label="Fullscreen"] { display: none; }
+
+  .ov-story { width: calc(100vw - 2 * var(--ov-gutter)); bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom) + 52px); }
+  .ov-card { width: 132px; }
+  .ov-story-head .ov-btn span:not(.ov-icon) { display: none; }
+  .ov-present { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ov-present-exit { grid-column: 1 / -1; justify-self: center; }
+  .ov-palette { top: calc(10px + var(--ov-safe-top)); border-radius: 16px; }
+  .ov-palette-foot { display: none; }
+  .ov-toasts { top: calc(58px + var(--ov-safe-top)); }
+  .ov-hovercard { display: none; }
+  .ov-rec-pill { top: calc(58px + var(--ov-safe-top)); }
+}
+
+@media (pointer: coarse) {
+  .ov-range { height: 28px; }
+  .ov-range::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8px; }
+  .ov-switch-track { width: 40px; height: 24px; }
+  .ov-switch-track::after { width: 20px; height: 20px; }
+  .ov-switch input:checked + .ov-switch-track::after { transform: translateX(16px); }
+  .ov-scrub-thumb { width: 22px; height: 22px; margin: -11px 0 0 -11px; }
+  .ov-card-more { opacity: 1 !important; }
+}
+
+/* Short landscape phones: keep the dock, drop decoration. */
+@media (max-height: 460px) and (max-width: 960px) {
+  .ov-layers, .ov-inspector { max-height: calc(100vh - 140px); }
+  .ov-scale, .ov-colorbars, .ov-stream { display: none; }
+}
