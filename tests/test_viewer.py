@@ -151,6 +151,44 @@ class CompileTests(unittest.TestCase):
         self.assertEqual(self.m["states"]["items"][0]["name"], "Start")
 
 
+class CompileEdgeCaseTests(unittest.TestCase):
+    def test_descending_legacy_frames_remap_state_indices(self):
+        spec = _spec_with_rings()
+        spec["frames"] = list(reversed(spec["frames"]))  # legacy order 0, -1, -2
+        spec["initial_frame_index"] = 0
+        spec["initial_state"] = {"current_frame_index": 0}
+        spec["states"] = {"items": [
+            {"id": "a", "name": "t=-2", "snapshot": {"current_frame_index": 2, "current_frame_value": 2.0}},
+            {"id": "b", "name": "t=-0.5", "snapshot": {"current_frame_value": 0.5}},
+        ]}
+        m = compile_scene_spec(spec).manifest
+        self.assertEqual(m["time"]["values"], [-2.0, -1.0, 0.0])
+        self.assertEqual(m["time"]["initialIndex"], 2)
+        self.assertEqual(m["initialState"]["current_frame_index"], 2)
+        snaps = [it["snapshot"] for it in m["states"]["items"]]
+        self.assertEqual(snaps[0]["current_frame_index"], 0)  # t = -2 is first after sorting
+        self.assertAlmostEqual(snaps[0]["current_frame_value"], 0.0)
+        self.assertAlmostEqual(snaps[1]["current_frame_value"], 1.5)  # halfway between t=0 and t=-1
+
+    def test_points_never_collapse_to_rigid_offsets(self):
+        spec = _spec_with_rings()
+        for f, frame in enumerate(spec["frames"]):
+            for p in frame["traces"][0]["points"]:
+                p["x"] += 10.0 * f
+        bundle = compile_scene_spec(spec)
+        pts = next(t for t in bundle.manifest["traces"] if t["key"] == "trace-0")["points"]
+        self.assertNotIn("offset", pts["position"])
+        self.assertEqual(pts["position"]["frames"], 3)
+
+    def test_html_comment_markers_in_names_stay_valid_json(self):
+        spec = _spec_with_rings()
+        spec["title"] = "Clusters <!-- draft --> & </script>"
+        html = render_bundle_html(compile_scene_spec(spec))
+        text = re.search(r'<script type="application/json" id="oviz-manifest">(.*?)</script>', html, re.S).group(1)
+        self.assertNotIn("<", text)
+        self.assertEqual(json.loads(text)["title"], "Clusters <!-- draft --> & </script>")
+
+
 class HtmlTests(unittest.TestCase):
     def test_html_is_self_contained_and_script_safe(self):
         bundle = compile_scene_spec(_spec_with_rings())

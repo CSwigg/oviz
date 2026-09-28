@@ -180,42 +180,47 @@ export class Renderer {
     for (const overlay of this.overlays) overlay.update?.(frame);
   }
 
-  /** Render one frame into a PNG blob at `scale` × the current resolution. */
+  /**
+   * Render one frame into an image blob at `scale` × the current resolution.
+   * An async background (e.g. the Sky survey) is prepared first; the WebGL
+   * frame is then rendered and composited in the same task, before the
+   * browser presents (and clears) the drawing buffer.
+   */
   async capture({ scale = 1, background = null, type = "image/png", quality } = {}) {
-    const prevMax = this.maxDpr;
     const w = this.width, h = this.height;
-    const dpr = Math.min(window.devicePixelRatio || 1, prevMax) * scale;
-    this.canvas.width = Math.round(w * dpr);
-    this.canvas.height = Math.round(h * dpr);
     const prevDpr = this.dpr;
+    const dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr) * scale;
+    const W = Math.round(w * dpr), H = Math.round(h * dpr);
+    let off = null, ctx = null;
+    if (background) {
+      off = document.createElement("canvas");
+      off.width = W;
+      off.height = H;
+      ctx = off.getContext("2d");
+      if (typeof background === "string") {
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, W, H);
+      } else if (typeof background === "function") {
+        await background(ctx, W, H);
+      }
+    }
+    this.canvas.width = W;
+    this.canvas.height = H;
     this.dpr = dpr;
     for (const layer of this.layers) layer.resize?.(this);
     const prevInteracting = this.interacting;
     this.interacting = false;
     this.render();
-    let source = this.canvas;
-    if (background) {
-      const off = document.createElement("canvas");
-      off.width = this.canvas.width;
-      off.height = this.canvas.height;
-      const ctx = off.getContext("2d");
-      if (typeof background === "string") {
-        ctx.fillStyle = background;
-        ctx.fillRect(0, 0, off.width, off.height);
-      } else if (typeof background === "function") {
-        await background(ctx, off.width, off.height);
-      }
-      ctx.drawImage(this.canvas, 0, 0);
-      source = off;
-    }
-    const blob = await new Promise((resolve) => source.toBlob(resolve, type, quality));
+    if (ctx) ctx.drawImage(this.canvas, 0, 0);
+    const source = off || this.canvas;
+    const blobPromise = new Promise((resolve) => source.toBlob(resolve, type, quality));
     this.dpr = prevDpr;
     this.interacting = prevInteracting;
     this.canvas.width = Math.round(w * prevDpr);
     this.canvas.height = Math.round(h * prevDpr);
     for (const layer of this.layers) layer.resize?.(this);
     this.invalidate();
-    return blob;
+    return blobPromise;
   }
 
   fps() {

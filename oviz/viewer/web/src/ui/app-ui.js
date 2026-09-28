@@ -1,6 +1,6 @@
 // The application shell: wires panels, dock, overlays, shortcuts and modes.
 
-import { h, icon, iconButton, kbd, isEditable, MOD, downloadBlob, copyText, clear, localStorageGet, localStorageSet } from "./dom.js";
+import { h, icon, iconButton, kbd, isEditable, controlConsumesKey, MOD, downloadBlob, copyText, clear, localStorageGet, localStorageSet } from "./dom.js";
 import { slider, toggle, miniSeg, installTooltips, createToasts } from "./controls.js";
 import { LayersPanel } from "./layers.js";
 import { TimelineDock } from "./dock.js";
@@ -21,7 +21,7 @@ import { LassoPlugin } from "./lasso.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
-  ui.use(new SkyPlugin());
+  if (viewer.manifest.sky?.enabled) ui.use(new SkyPlugin());
   ui.use(new FilterPlugin());
   ui.use(new NotesPlugin());
   ui.use(new LassoPlugin());
@@ -230,7 +230,7 @@ export class AppUI {
     const v = this.viewer;
     const c = v.controls;
     const step = 0.045;
-    v.tween = null;
+    v._cancelTween();
     if (k === "q" || k === "e") {
       c.zoomAt(k === "e" ? 0.88 : 1 / 0.88, v.renderer.width / 2, v.renderer.height / 2);
     } else if (c.mode === "sky") {
@@ -766,8 +766,16 @@ export class AppUI {
   bindKeys() {
     const v = this.viewer;
     const tl = v.timeline;
+    // A mouse click should not leave a button focused (Space would then
+    // re-press it instead of playing time); keyboard activation keeps focus.
+    this.root.addEventListener("click", (e) => {
+      const b = e.target.closest?.("button");
+      if (b && e.detail > 0 && document.activeElement === b) b.blur();
+    });
     window.addEventListener("keydown", (e) => {
       if (isEditable(e.target)) return;
+      // Let focused sliders, buttons and switches handle their own keys.
+      if (controlConsumesKey(e)) return;
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key;
       if (mod && (k === "k" || k === "K")) { this.palette.toggle(); e.preventDefault(); return; }

@@ -290,6 +290,9 @@ export class StoryPlugin {
     r.off();
     r.transition.finish();
     this.viewer.renderer.release("state-transition");
+    // An interrupted transition still arrives: fire the same events so the
+    // view mode, panels and Sky layers reflect the applied State.
+    this.afterArrive(r.transition);
     r.resolve();
   }
 

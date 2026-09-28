@@ -128,7 +128,16 @@ def _bundle_cached(entry: str, fingerprint: tuple) -> str:
             )
         else:
             parts.append(f"// ---- {rel} ----\n(() => {{\n{body}\n}})();\n")
-    return '(() => {\n"use strict";\n' + "\n".join(parts) + "})();\n"
+    js = '(() => {\n"use strict";\n' + "\n".join(parts) + "})();\n"
+    # The runtime is inlined in a <script> element: these sequences would end
+    # it early (or switch the HTML tokenizer into its escaped states).
+    lowered = js.lower()
+    for bad in ("</script", "<!--"):
+        at = lowered.find(bad)
+        if at >= 0:
+            line = js.count("\n", 0, at) + 1
+            raise ViewerBuildError(f"Bundled runtime contains {bad!r} (bundle line {line}); build it from parts")
+    return js
 
 
 def _fingerprint() -> tuple:

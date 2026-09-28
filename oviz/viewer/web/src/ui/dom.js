@@ -131,6 +131,28 @@ export function isEditable(target) {
 }
 
 /**
+ * Does the focused control handle this key itself? Sliders own arrows,
+ * Home/End and paging; buttons, switches, options and links own Space and
+ * Enter; selects own navigation keys. Global shortcuts must yield to them.
+ */
+export function controlConsumesKey(e) {
+  const t = e.target;
+  if (!t || !(t instanceof Element)) return false;
+  const k = e.key;
+  const role = t.getAttribute("role") || "";
+  const type = t.tagName === "INPUT" ? (t.getAttribute("type") || "text").toLowerCase() : "";
+  if (type === "range" || role === "slider") {
+    return ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(k);
+  }
+  if (t.tagName === "SELECT") return ["ArrowUp", "ArrowDown", " ", "Enter"].includes(k);
+  const activatable = t.tagName === "BUTTON" || t.tagName === "A" || t.tagName === "SUMMARY"
+    || type === "checkbox" || type === "radio" || type === "color"
+    || ["button", "switch", "option", "menuitem", "tab", "listitem"].includes(role);
+  if (activatable) return k === " " || k === "Enter";
+  return false;
+}
+
+/**
  * Fuzzy score: substring matches rank highest (earlier and word-start
  * better); otherwise a subsequence match must be compact — its span may be
  * at most ~2.5× the query length — so scattered letters never match.

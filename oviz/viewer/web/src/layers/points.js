@@ -446,7 +446,7 @@ export class PointsLayer {
     prog.f("uPointScale", global.pointScale);
     prog.f("uSizeScale", style.sizeScale * global.pointSize);
     prog.f("uGlobalSize", global.pointSize);
-    prog.f("uOpacityScale", style.opacityScale * global.pointOpacity);
+    prog.f("uOpacityScale", style.opacityScale * global.pointOpacity * Math.min(1, style.presence ?? 1));
     prog.f("uGlow", global.glow);
     prog.v3("uFade", global.fadeTime, global.fadeInOut ? 1 : 0, global.fadeByOpacity ? 1 : 0);
     prog.f("uStarsExp", style.starsExp);

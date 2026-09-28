@@ -37,8 +37,9 @@ def _spec_fingerprint(spec: dict[str, Any]) -> str:
 
 def _json_for_script(obj: Any) -> str:
     text = json.dumps(obj, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-    # Never let data terminate the surrounding <script> element.
-    return text.replace("</", "<\\/").replace("<!--", "<\\!--")
+    # Never let data terminate the surrounding <script> element; \u003c is a
+    # valid JSON escape (unlike "<\\!--"), so JSON.parse still accepts it.
+    return text.replace("<", "\\u003c")
 
 
 def render_bundle_html(bundle: Bundle, *, title: str | None = None, theme: str = "dark") -> str:

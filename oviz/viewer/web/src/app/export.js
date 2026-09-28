@@ -6,8 +6,14 @@
 // Export swaps in a new manifest and reassembles the same skeleton the
 // Python writer produces.
 
+// The runtime itself is inlined in a script element, so its source must never
+// contain a literal closing tag or comment opener: build them from parts.
+const OPEN = "<" + "script";
+const CLOSE = "<" + "/script>";
+
 function jsonForScript(obj) {
-  return JSON.stringify(obj).replace(/<\//g, "<\\/").replace(/<!--/g, "<\\!--");
+  // \u003c keeps data from ending the element early and stays valid JSON.
+  return JSON.stringify(obj).replace(/</g, "\\u003c");
 }
 
 function escapeHtml(s) {
@@ -36,9 +42,9 @@ export function buildExportHtml(manifest, { title, theme = "dark" } = {}) {
     '<div id="oviz-root" class="ov-root" data-boot="loading">',
     '<div class="ov-boot" role="status" aria-live="polite"><div class="ov-boot-mark"><span></span><span></span><span></span></div><div class="ov-boot-text">Loading figure…</div><div class="ov-boot-bar"><i></i></div></div>',
     "</div>",
-    `<script type="application/json" id="oviz-manifest">${jsonForScript(manifest)}</script>`,
+    `${OPEN} type="application/json" id="oviz-manifest">${jsonForScript(manifest)}${CLOSE}`,
     blobs,
-    `<script id="oviz-runtime">\n${runtime.replace(/^\n/, "")}</script>`,
+    `${OPEN} id="oviz-runtime">\n${runtime.replace(/^\n/, "")}${CLOSE}`,
     "</body>",
     "</html>",
     "",

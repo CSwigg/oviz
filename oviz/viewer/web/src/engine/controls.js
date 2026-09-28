@@ -117,13 +117,13 @@ export class Controls {
       const k = 16 / dt;
       const perPx = this.pose.fov * DEG / this.camera.height;
       this.velocity.yaw = dx * perPx * k * 0.6;
-      this.velocity.pitch = -dy * perPx * k * 0.6;
+      this.velocity.pitch = dy * perPx * k * 0.6;
     } else {
       const s = (2 * Math.PI) / Math.max(this.camera.height, 400) * this.rotateSpeed * 0.9;
-      this.rotate(-dx * s, dy * s);
+      this.rotate(-dx * s, -dy * s);
       const k = 16 / dt;
       this.velocity.yaw = -dx * s * k * 0.55;
-      this.velocity.pitch = dy * s * k * 0.55;
+      this.velocity.pitch = -dy * s * k * 0.55;
     }
   }
 
@@ -163,7 +163,7 @@ export class Controls {
     const p = this.pose;
     const perPx = (p.fov * DEG) / this.camera.height;
     p.yaw += dx * perPx;
-    p.pitch = clamp(p.pitch - dy * perPx, -PITCH_LIMIT, PITCH_LIMIT);
+    p.pitch = clamp(p.pitch + dy * perPx, -PITCH_LIMIT, PITCH_LIMIT);
     this._changed();
   }
 

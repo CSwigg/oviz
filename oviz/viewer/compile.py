@@ -102,7 +102,7 @@ def _clean_json(value: Any) -> Any:
 # Position channels
 
 
-def _frames_equal(arr: np.ndarray, tol: float = 1e-4) -> bool:
+def _frames_equal(arr: np.ndarray, tol: float = 1e-6) -> bool:
     """True when every frame of a (F, ...) array equals frame 0 (NaN-aware)."""
 
     if arr.shape[0] <= 1:
@@ -165,12 +165,19 @@ def _fill_absent_frames(arr: np.ndarray, present: list[int] | None) -> np.ndarra
     return out
 
 
-def _position_channel(builder: BundleBuilder, pos: np.ndarray, hint: str, priority: int) -> dict[str, Any]:
-    """Encode (F, N, 3) positions as static / rigid / per-frame."""
+def _position_channel(builder: BundleBuilder, pos: np.ndarray, hint: str, priority: int,
+                      allow_rigid: bool = False) -> dict[str, Any]:
+    """Encode (F, N, 3) positions as static / rigid / per-frame.
+
+    Static collapse only happens when frames agree to float32 precision.
+    The rigid (base + per-frame offset) form reproduces positions to within
+    the spec's 0.01 pc rounding, so it is reserved for decorative geometry
+    (reference lines and labels) and never used for data points.
+    """
 
     if _frames_equal(pos):
         return {"blob": builder.array(pos[:1], "f32", hint=hint, priority=priority), "frames": 1}
-    offsets = _rigid_offsets(pos)
+    offsets = _rigid_offsets(pos) if allow_rigid else None
     if offsets is not None:
         return {
             "blob": builder.array(pos[:1], "f32", hint=hint, priority=priority),
@@ -412,13 +419,9 @@ class _TraceCompiler:
                 out["rgb"] = {"blob": b.array(rgb8, "u8", hint=f"{key}-rgb", priority=CRITICAL)}
             else:
                 spec["color"] = "#{:02x}{:02x}{:02x}".format(*[int(v) for v in rgb8[0]])
-            alpha = fill[:, 3]
-            if np.any(alpha < 0.999):
-                # Colour alpha multiplies opacity, as in the legacy runtime.
-                op = out["opacity"]
-                if "value" in op:
-                    arr = np.full(N, op["value"]) * alpha
-                    out["opacity"] = {"blob": b.array(arr, "f32", hint=f"{key}-opacity", priority=CRITICAL), "frames": 1}
+            # Colour alpha is deliberately ignored: the scene builder already
+            # folds it into each point's opacity, and the classic runtime
+            # never re-applied it.
         if np.any(symbol):
             out["symbol"] = {"blob": b.array(symbol, "u8", hint=f"{key}-symbol", priority=CRITICAL)}
             out["symbols"] = SYMBOLS
@@ -507,7 +510,7 @@ class _TraceCompiler:
         pos = _fill_absent_frames(pos, spec.get("presence"))
         return {
             "count": S,
-            "position": _position_channel(self.builder, pos, f"{key}-lines", CRITICAL),
+            "position": _position_channel(self.builder, pos, f"{key}-lines", CRITICAL, allow_rigid=True),
             "arc": {"blob": self.builder.array(arc, "f32", hint=f"{key}-arc", priority=CRITICAL)},
             "color": css_hex(color),
             "width": _num(line.get("width"), 1.0),
@@ -553,7 +556,7 @@ class _TraceCompiler:
         return {
             "count": L,
             "text": texts,
-            "position": _position_channel(self.builder, pos, f"{key}-labels", CRITICAL),
+            "position": _position_channel(self.builder, pos, f"{key}-labels", CRITICAL, allow_rigid=True),
             "color": [css_hex(s.get("color") or "#e2e8f0") for s in style_rows],
             "size": [_num(s.get("screen_px"), _num(s.get("size"), 14.0)) for s in style_rows],
             "screenStable": [bool(s.get("screen_stable", True)) for s in style_rows],
@@ -1102,8 +1105,8 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
         "volumes": volumes,
         "colormaps": colormaps.entries,
         "sky": sky,
-        "initialState": _clean_json(_strip_heavy(init)),
-        "states": _clean_json(states),
+        "initialState": _remap_frame_fields(_clean_json(_strip_heavy(init)), order),
+        "states": _remap_states_frames(_clean_json(states), order),
         "legacy": {
             "decorations": extra_decorations,
             "exportProfile": spec.get("export_profile"),
@@ -1113,6 +1116,46 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
     if isinstance(spec.get("provenance"), dict):
         manifest["provenance"] = _clean_json(_strip_heavy(spec["provenance"]))
     return Bundle(manifest=manifest, blobs=builder.blobs)
+
+
+def _remap_frame_value(value: Any, order: list[int]) -> Any:
+    """Map a legacy (spec-order) frame index/value to the time-sorted order.
+
+    The compiler sorts frames by time; legacy snapshots index frames in the
+    order the spec stored them, which can be descending. Fractional values
+    are mapped linearly between their neighbouring frames.
+    """
+
+    v = _num(value)
+    n = len(order)
+    if not math.isfinite(v) or n == 0:
+        return value
+    inverse = {old: new for new, old in enumerate(order)}
+    v = min(max(v, 0.0), float(n - 1))
+    lo = int(math.floor(v))
+    hi = min(lo + 1, n - 1)
+    t = v - lo
+    a, b = inverse[lo], inverse[hi]
+    out = a + (b - a) * t
+    return int(round(out)) if isinstance(value, int) else float(out)
+
+
+def _remap_frame_fields(snapshot: Any, order: list[int]) -> Any:
+    if not isinstance(snapshot, dict) or order == sorted(order):
+        return snapshot
+    for field in ("current_frame_index", "current_frame_value"):
+        if field in snapshot and snapshot[field] is not None:
+            snapshot[field] = _remap_frame_value(snapshot[field], order)
+    return snapshot
+
+
+def _remap_states_frames(states: Any, order: list[int]) -> Any:
+    if not isinstance(states, dict) or order == sorted(order):
+        return states
+    for item in states.get("items") or []:
+        if isinstance(item, dict) and isinstance(item.get("snapshot"), dict):
+            _remap_frame_fields(item["snapshot"], order)
+    return states
 
 
 def builder_blob_json(builder: BundleBuilder, blob_id: str) -> Any:

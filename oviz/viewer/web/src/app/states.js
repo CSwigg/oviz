@@ -126,10 +126,12 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
 
   function step(t) {
     const st = viewer.state;
-    // Camera
-    lerpPose(poseA, poseB, t, tmpPose);
-    if (lift > 0) tmpPose.distance += Math.sin(Math.PI * t) * lift;
-    Object.assign(viewer.renderer.camera.pose, clonePose(tmpPose));
+    // Camera ("keep" States leave the live camera alone entirely).
+    if (!keepCamera) {
+      lerpPose(poseA, poseB, t, tmpPose);
+      if (lift > 0) tmpPose.distance += Math.sin(Math.PI * t) * lift;
+      Object.assign(viewer.renderer.camera.pose, clonePose(tmpPose));
+    }
     // Time
     viewer.timeline.setFrame(lerp(frameA, frameB, t), { silent: t < 1 });
     // Traces: numeric lerps; visibility changes fade through opacity.
@@ -210,7 +212,7 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
     st.group = to.group ?? st.group;
     st.view.mode = to.view.mode;
     viewer.controls.mode = to.view.mode === "sky" ? "sky" : "galactic";
-    Object.assign(viewer.renderer.camera.pose, clonePose(poseB));
+    if (!keepCamera) Object.assign(viewer.renderer.camera.pose, clonePose(poseB));
     st.view.pose = viewer.renderer.camera.pose;
     viewer.timeline.setFrame(frameB);
     if (Number.isFinite(to.time?.speed)) viewer.timeline.speed = to.time.speed;

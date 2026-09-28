@@ -209,10 +209,10 @@ export class Viewer extends Emitter {
       Object.assign(this.renderer.camera.pose, clonePose(pose));
       this.renderer.markInteraction();
       if (done) {
-        const cb = this.tween.onDone;
+        const t = this.tween;
         this.tween = null;
         this.renderer.continuous.delete("tween");
-        cb?.();
+        t.settle?.(true);
       }
       this._onCameraChange(true);
     }
@@ -383,22 +383,33 @@ export class Viewer extends Emitter {
     this.emit("camera", { fromTween });
   }
 
+  /** Stop a running camera flight; its promise resolves with {done: false}. */
   _cancelTween() {
-    if (this.tween) {
-      this.tween = null;
-      this.renderer.continuous.delete("tween");
-    }
+    const t = this.tween;
+    if (!t) return;
+    this.tween = null;
+    this.renderer.continuous.delete("tween");
+    this.renderer.invalidate();
+    t.settle?.(false);
   }
 
+  /**
+   * Fly the camera to `pose`. Resolves {done: true} on arrival, or
+   * {done: false} if the flight was interrupted (user input, a new flight).
+   */
   animateTo(pose, { duration = 1100, onDone } = {}) {
+    this._cancelTween();
     this.controls.stop();
     const d = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : duration;
-    this.tween = poseTween(this.renderer.camera.pose, pose, d);
-    this.tween.onDone = onDone;
+    const tween = poseTween(this.renderer.camera.pose, pose, d);
+    this.tween = tween;
     this.renderer.hold("tween");
     return new Promise((resolve) => {
-      const prev = this.tween.onDone;
-      this.tween.onDone = () => { prev?.(); resolve(); };
+      tween.settle = (done) => {
+        tween.settle = null;
+        if (done) onDone?.();
+        resolve({ done });
+      };
     });
   }
 
@@ -464,13 +475,24 @@ export class Viewer extends Emitter {
       const a = anglesFromForward(f);
       const target = makePose({ target: this.skyEye(), distance: 0, yaw: a.yaw, pitch: a.pitch * 0.35, fov: SKY_FOV });
       this.controls.mode = "sky";
-      if (animate) await this.animateTo(target, { duration: 1400 });
-      else this.setPose(target);
+      const res = animate ? await this.animateTo(target, { duration: 1400 }) : null;
+      if (!res || !res.done) {
+        // Interrupted (or instant): land at the Sun, keeping the current
+        // gaze, so Sky registration and member stars always come up.
+        if (this.state.view.mode !== "sky") return;
+        const p = clonePose(this.pose);
+        p.target = this.skyEye();
+        p.distance = 0;
+        if (!animate) { p.yaw = target.yaw; p.pitch = target.pitch; p.fov = target.fov; }
+        this.setPose(p);
+      }
+      if (this.state.view.mode !== "sky") return;
     } else {
       const back = this.returnPose || this.homePose;
       this.controls.mode = "galactic";
       if (animate) await this.animateTo(back, { duration: 1300 });
       else this.setPose(back);
+      if (this.state.view.mode !== "3d") return;
     }
     this.emit("viewmode-settled", { mode });
     this.renderer.invalidate();
