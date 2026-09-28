@@ -203,6 +203,18 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 @media (prefers-reduced-motion: reduce) {
   .ov-root *, .ov-root *::before, .ov-root *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+.ov-label--note {
+  pointer-events: auto; cursor: pointer;
+  padding: 5px 10px 5px 18px; margin-top: -12px;
+  border-radius: 999px;
+  font: 600 12.5px/1 var(--ov-font);
+  background: rgba(8, 10, 15, 0.55);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  text-shadow: none;
+}
+.ov-label--note::before { left: 6px; width: 7px; height: 7px; top: calc(50% - 3.5px); border-radius: 50%; opacity: 1; }
+.ov-label--note:hover { box-shadow: inset 0 0 0 1px currentColor; }
 
 /* ---------------------------------------------------------------- chrome */
 .ov-glass {
@@ -634,6 +646,10 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-filter-foot { display: flex; align-items: center; gap: 8px; }
 .ov-filter-foot .ov-mini-seg { width: 104px; }
 .ov-hist-readout { font: 550 11px/1.3 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text-3); min-width: 0; }
+.ov-insp-links { display: flex; align-items: center; gap: 4px; padding: 0 12px 12px; }
+.ov-insp-links .ov-fact-label { margin-right: auto; }
+.ov-insp-links a { text-decoration: none; }
+.ov-insp-actions > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 
 /* ------------------------------------------------------- form controls */
 .ov-field { display: grid; gap: 6px; }
@@ -735,7 +751,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 /* ------------------------------------------------------------- overlays */
 .ov-scrim {
   position: absolute; inset: 0; z-index: 70;
-  background: rgba(3, 5, 9, 0.45);
+  background: rgba(3, 5, 9, 0.62);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   animation: ov-fade-in 180ms var(--ov-ease);
 }
@@ -859,6 +875,19 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   font: 650 12.5px/1 var(--ov-font);
 }
 .ov-rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 10px #ff5a4f; animation: ov-twinkle 1.2s infinite; }
+
+/* ---- Lasso --------------------------------------------------------- */
+.ov-lasso { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.ov-lasso path { fill: rgba(124, 196, 255, 0.10); stroke: var(--ov-sky); stroke-width: 1.5; stroke-dasharray: 5 4; stroke-linejoin: round; }
+.ov-root[data-lasso="true"] .ov-canvas { cursor: crosshair; }
+.ov-selbar {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom));
+  display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 14px; border-radius: 999px; z-index: 11;
+  animation: ov-toast-in 240ms var(--ov-ease);
+}
+.ov-selbar-count { display: inline-flex; align-items: center; gap: 6px; margin-right: 6px; font: 650 12.5px/1 var(--ov-font); color: var(--ov-sky); font-variant-numeric: tabular-nums; }
+.ov-root[data-story="true"] .ov-selbar { bottom: calc(var(--ov-gutter) * 3 + var(--ov-dock-h) + 200px + var(--ov-safe-bottom)); }
 
 /* --------------------------------------------------------------- story */
 .ov-story {
@@ -1026,6 +1055,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 }
 
 @media (pointer: coarse) {
+  .ov-kbd { display: none; }
   .ov-range { height: 28px; }
   .ov-range::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8px; }
   .ov-switch-track { width: 40px; height: 24px; }
@@ -1047,7 +1077,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 <div id="oviz-root" class="ov-root" data-boot="loading">
 <div class="ov-boot" role="status" aria-live="polite"><div class="ov-boot-mark"><span></span><span></span><span></span></div><div class="ov-boot-text">Loading figure…</div><div class="ov-boot-bar"><i></i></div></div>
 </div>
-<script type="application/json" id="oviz-manifest">{"format":"oviz-bundle/1","title":"","note":"","theme":{"paper_bgcolor":"black","scene_bgcolor":"black","text_color":"white","axis_color":"gray","panel_bg":"rgba(0,0,0,0.48)","panel_border":"rgba(110,110,110,0.60)","panel_solid":"#121212","footprint":"#6ec5ff"},"time":{"values":[-65.0,-64.0,-63.0,-62.0,-61.0,-60.0,-59.0,-58.0,-57.0,-56.0,-55.0,-54.0,-53.0,-52.0,-51.0,-50.0,-49.0,-48.0,-47.0,-46.0,-45.0,-44.0,-43.0,-42.0,-41.0,-40.0,-39.0,-38.0,-37.0,-36.0,-35.0,-34.0,-33.0,-32.0,-31.0,-30.0,-29.0,-28.0,-27.0,-26.0,-25.0,-24.0,-23.0,-22.0,-21.0,-20.0,-19.0,-18.0,-17.0,-16.0,-15.0,-14.0,-13.0,-12.0,-11.0,-10.0,-9.0,-8.0,-7.0,-6.0,-5.0,-4.0,-3.0,-2.0,-1.0,0.0],"initialIndex":65,"zeroIndex":65,"unit":"Myr","playbackIntervalMs":240,"enabled":true},"world":{"center":[0.0,0.0,0.0],"maxSpan":20000.0,"ranges":{"x":[-10000.0,10000.0],"y":[-10000.0,10000.0],"z":[-400.0,400.0]},"up":[0.0,0.0,1.0],"pointScale":10.256410256410255,"sunTrace":"trace-0","galacticCenter":[8122.0,0.0,0.0],"showAxes":false},"camera":{"position":[0.0,-800.0,6000.0],"target":[0.0,0.0,0.0],"fov":60.0},"groups":{"order":["All","Clusters","Cluster Families","Dust Structures","Dust Structures and Families"],"default":"Clusters","visibility":{"All":{"trace-0":true,"trace-1":true,"trace-2":true,"trace-3":true,"trace-4":true,"trace-5":true,"trace-6":true,"trace-7":true,"trace-8":true,"trace-9":true,"trace-10":true,"trace-11":true,"trace-12":true,"trace-13":true,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":"legendonly","trace-37":"legendonly","trace-38":"legendonly","trace-39":"legendonly","volume-0":"legendonly","mccallum-ne":"legendonly"},"Clusters":{"trace-0":true,"trace-1":false,"trace-2":true,"trace-3":true,"trace-4":false,"trace-5":false,"trace-6":false,"trace-7":false,"trace-8":false,"trace-9":false,"trace-10":false,"trace-11":false,"trace-12":false,"trace-13":false,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":false,"trace-37":false,"trace-38":false,"trace-39":false,"volume-0":"legendonly","mccallum-ne":"legendonly"},"Cluster Families":{"trace-0":true,"trace-1":false,"trace-2":false,"trace-3":false,"trace-4":true,"trace-5":true,"trace-6":true,"trace-7":true,"trace-8":true,"trace-9":true,"trace-10":false,"trace-11":false,"trace-12":false,"trace-13":false,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":false,"trace-37":false,"trace-38":false,"trace-39":false,"volume-0":"legendonly","mccallum-ne":"legendonly"},"Dust Structures":{"trace-0":true,"trace-1":false,"trace-2":false,"trace-3":false,"trace-4":false,"trace-5":false,"trace-6":false,"trace-7":false,"trace-8":false,"trace-9":false,"trace-10":true,"trace-11":true,"trace-12":true,"trace-13":true,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":"legendonly","trace-37":"legendonly","trace-38":"legendonly","trace-39":"legendonly","volume-0":"legendonly","mccallum-ne":"legendonly"},"Dust Structures and Families":{"trace-0":true,"trace-1":false,"trace-2":false,"trace-3":false,"trace-4":true,"trace-5":true,"trace-6":true,"trace-7":true,"trace-8":true,"trace-9":true,"trace-10":true,"trace-11":true,"trace-12":true,"trace-13":true,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":"legendonly","trace-37":"legendonly","trace-38":"legendonly","trace-39":"legendonly","volume-0":"legendonly","mccallum-ne":"legendonly"}}},"animation":{"fadeTimeMyr":8.0,"fadeInOut":false,"fadeByOpacity":true},"traces":[{"key":"trace-0","name":"Sun","showInLegend":true,"legendColor":"#ffff00","color":"#ffff00","opacity":1.0,"pointSize":5.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":8000.0,"cmax":8001.0,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":1,"position":{"blob":"b17-trace-0-pos","frames":66},"size":{"value":5.0},"opacity":{"value":1.0},"colorScalar":{"blob":"b18-trace-0-scalar","frames":66},"ageNow":{"blob":"b19-trace-0-age"},"nStars":{"blob":"b20-trace-0-nstars"},"starsFactor":{"blob":"b20-trace-0-nstars"},"meta":{"blob":"b21-trace-0-meta"}}},{"key":"trace-1","name":"Full Cluster Catalog","showInLegend":true,"legendColor":"#8f959d","color":"#8f959d","opacity":0.16,"pointSize":4.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.0,"cmax":496.39,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":1193,"position":{"blob":"b22-trace-1-pos","frames":66},"size":{"blob":"b23-trace-1-size","frames":66},"sizeMax":{"blob":"b24-trace-1-sizemax"},"opacity":{"value":0.16},"colorScalar":{"blob":"b25-trace-1-scalar","frames":66},"ageNow":{"blob":"b26-trace-1-age"},"nStars":{"blob":"b27-trace-1-nstars"},"starsFactor":{"blob":"b28-trace-1-stars"},"meta":{"blob":"b29-trace-1-meta"}}},{"key":"trace-2","name":"Clusters (< 60 Myr)","showInLegend":true,"legendColor":"#808080","color":"#808080","opacity":0.7,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.0,"cmax":59.82,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":482,"position":{"blob":"b30-trace-2-pos","frames":66},"size":{"blob":"b31-trace-2-size","frames":66},"sizeMax":{"blob":"b32-trace-2-sizemax"},"opacity":{"value":0.7},"colorScalar":{"blob":"b33-trace-2-scalar","frames":66},"ageNow":{"blob":"b34-trace-2-age"},"nStars":{"blob":"b35-trace-2-nstars"},"starsFactor":{"blob":"b36-trace-2-stars"},"meta":{"blob":"b37-trace-2-meta"}}},{"key":"trace-3","name":"Clusters (< 15 Myr)","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.0,"cmax":14.97,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":170,"position":{"blob":"b38-trace-3-pos","frames":66},"size":{"blob":"b39-trace-3-size","frames":66},"sizeMax":{"blob":"b40-trace-3-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b41-trace-3-scalar","frames":66},"ageNow":{"blob":"b42-trace-3-age"},"nStars":{"blob":"b43-trace-3-nstars"},"starsFactor":{"blob":"b44-trace-3-stars"},"meta":{"blob":"b45-trace-3-meta"}}},{"key":"trace-4","name":"Alpha Persei Family","showInLegend":true,"legendColor":"#ee82ee","color":"#ee82ee","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.51,"cmax":57.46,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":62,"position":{"blob":"b46-trace-4-pos","frames":66},"size":{"blob":"b47-trace-4-size","frames":66},"sizeMax":{"blob":"b48-trace-4-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b49-trace-4-scalar","frames":66},"ageNow":{"blob":"b50-trace-4-age"},"nStars":{"blob":"b51-trace-4-nstars"},"starsFactor":{"blob":"b52-trace-4-stars"},"meta":{"blob":"b53-trace-4-meta"}}},{"key":"trace-5","name":"Cr 135 Family","showInLegend":true,"legendColor":"#ffa500","color":"#ffa500","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":10.46,"cmax":43.54,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":37,"position":{"blob":"b54-trace-5-pos","frames":66},"size":{"blob":"b55-trace-5-size","frames":66},"sizeMax":{"blob":"b56-trace-5-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b57-trace-5-scalar","frames":66},"ageNow":{"blob":"b58-trace-5-age"},"nStars":{"blob":"b59-trace-5-nstars"},"starsFactor":{"blob":"b60-trace-5-stars"},"meta":{"blob":"b61-trace-5-meta"}}},{"key":"trace-6","name":"M6 Family","showInLegend":true,"legendColor":"#00ffff","color":"#00ffff","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":17.32,"cmax":57.69,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":33,"position":{"blob":"b62-trace-6-pos","frames":66},"size":{"blob":"b63-trace-6-size","frames":66},"sizeMax":{"blob":"b64-trace-6-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b65-trace-6-scalar","frames":66},"ageNow":{"blob":"b66-trace-6-age"},"nStars":{"blob":"b67-trace-6-nstars"},"starsFactor":{"blob":"b68-trace-6-stars"},"meta":{"blob":"b69-trace-6-meta"}}},{"key":"trace-7","name":"Lacerta Family","showInLegend":true,"legendColor":"#f0e68c","color":"#f0e68c","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":16.19,"cmax":42.59,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":12,"position":{"blob":"b70-trace-7-pos","frames":66},"size":{"blob":"b71-trace-7-size","frames":66},"sizeMax":{"blob":"b72-trace-7-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b73-trace-7-scalar","frames":66},"ageNow":{"blob":"b74-trace-7-age"},"nStars":{"blob":"b75-trace-7-nstars"},"starsFactor":{"blob":"b76-trace-7-stars"},"meta":{"blob":"b77-trace-7-meta"}}},{"key":"trace-8","name":"Trumpler 3 Family","showInLegend":true,"legendColor":"#00ced1","color":"#00ced1","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":10.34,"cmax":57.17,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":22,"position":{"blob":"b78-trace-8-pos","frames":66},"size":{"blob":"b79-trace-8-size","frames":66},"sizeMax":{"blob":"b80-trace-8-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b81-trace-8-scalar","frames":66},"ageNow":{"blob":"b82-trace-8-age"},"nStars":{"blob":"b83-trace-8-nstars"},"starsFactor":{"blob":"b84-trace-8-stars"},"meta":{"blob":"b85-trace-8-meta"}}},{"key":"trace-9","name":"Proto Orion Family","showInLegend":true,"legendColor":"#dcdcdc","color":"#dcdcdc","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":21.82,"cmax":36.1,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":6,"position":{"blob":"b86-trace-9-pos","frames":66},"size":{"blob":"b87-trace-9-size","frames":66},"sizeMax":{"blob":"b88-trace-9-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b89-trace-9-scalar","frames":66},"ageNow":{"blob":"b90-trace-9-age"},"nStars":{"blob":"b91-trace-9-nstars"},"starsFactor":{"blob":"b92-trace-9-stars"},"meta":{"blob":"b93-trace-9-meta"}}},{"key":"trace-10","name":"Radcliffe Wave Clusters","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.51,"cmax":14.88,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":42,"position":{"blob":"b94-trace-10-pos","frames":66},"size":{"blob":"b95-trace-10-size","frames":66},"sizeMax":{"blob":"b96-trace-10-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b97-trace-10-scalar","frames":66},"ageNow":{"blob":"b98-trace-10-age"},"nStars":{"blob":"b99-trace-10-nstars"},"starsFactor":{"blob":"b100-trace-10-stars"},"meta":{"blob":"b101-trace-10-meta"}}},{"key":"trace-11","name":"Split Selection Clusters","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":3.3,"cmax":14.31,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":10,"position":{"blob":"b102-trace-11-pos","frames":66},"size":{"blob":"b103-trace-11-size","frames":66},"sizeMax":{"blob":"b104-trace-11-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b105-trace-11-scalar","frames":66},"ageNow":{"blob":"b106-trace-11-age"},"nStars":{"blob":"b107-trace-11-nstars"},"starsFactor":{"blob":"b108-trace-11-stars"},"meta":{"blob":"b109-trace-11-meta"}}},{"key":"trace-12","name":"Cepheus Spur Clusters","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":4.46,"cmax":14.96,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":13,"position":{"blob":"b110-trace-12-pos","frames":66},"size":{"blob":"b111-trace-12-size","frames":66},"sizeMax":{"blob":"b112-trace-12-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b113-trace-12-scalar","frames":66},"ageNow":{"blob":"b114-trace-12-age"},"nStars":{"blob":"b115-trace-12-nstars"},"starsFactor":{"blob":"b116-trace-12-stars"},"meta":{"blob":"b117-trace-12-meta"}}},{"key":"trace-13","name":"Vela-Sagittarius Clusters","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":6.14,"cmax":14.45,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":10,"position":{"blob":"b118-trace-13-pos","frames":66},"size":{"blob":"b119-trace-13-size","frames":66},"sizeMax":{"blob":"b104-trace-11-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b120-trace-13-scalar","frames":66},"ageNow":{"blob":"b121-trace-13-age"},"nStars":{"blob":"b122-trace-13-nstars"},"starsFactor":{"blob":"b123-trace-13-stars"},"meta":{"blob":"b124-trace-13-meta"}}},{"key":"trace-36","name":"Radcliffe Wave Clusters Track","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":0.67,"pointSize":2.11,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"presence":[65],"points":{"count":746,"position":{"blob":"b125-trace-36-pos","frames":1},"size":{"blob":"b126-trace-36-size","frames":1},"opacity":{"value":0.67},"meta":{"blob":"b127-trace-36-meta"}}},{"key":"trace-37","name":"Split Selection Clusters Track","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":0.67,"pointSize":2.08,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"presence":[65],"points":{"count":171,"position":{"blob":"b128-trace-37-pos","frames":1},"size":{"blob":"b129-trace-37-size","frames":1},"opacity":{"value":0.67},"meta":{"blob":"b130-trace-37-meta"}}},{"key":"trace-38","name":"Cepheus Spur Clusters Track","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":0.67,"pointSize":2.12,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"presence":[65],"points":{"count":250,"position":{"blob":"b131-trace-38-pos","frames":1},"size":{"blob":"b132-trace-38-size","frames":1},"opacity":{"value":0.67},"meta":{"blob":"b133-trace-38-meta"}}},{"key":"trace-39","name":"Vela-Sagittarius Clusters Track","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":0.67,"pointSize":2.1,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"presence":[65],"points":{"count":186,"position":{"blob":"b134-trace-39-pos","frames":1},"size":{"blob":"b135-trace-39-size","frames":1},"opacity":{"value":0.67},"meta":{"blob":"b136-trace-39-meta"}}},{"key":"trace-14","name":"GC Ring","showInLegend":false,"legendColor":"#94a3b8","color":"#94a3b8","opacity":0.34,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"lines":{"count":95,"position":{"blob":"b137-trace-14-lines","frames":1,"offset":"b138-trace-14-lines-offset"},"arc":{"blob":"b139-trace-14-arc"},"color":"#94a3b8","width":1.0,"dash":"solid","opacity":0.34}},{"key":"trace-15","name":"GC","showInLegend":false,"legendColor":"#e2e8f0","color":"#e2e8f0","opacity":1.0,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"labels":{"count":1,"text":["GALACTIC CENTER"],"position":{"blob":"b140-trace-15-labels","frames":66},"color":["#e2e8f0"],"size":[18.0],"screenStable":[true],"family":"Inter, Helvetica Neue, Arial, sans-serif"}},{"key":"trace-16","name":"R = 4 kpc","showInLegend":false,"legendColor":"#94a3b8","color":"#94a3b8","opacity":0.34,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"lines":{"count":999,"position":{"blob":"b141-trace-16-lines","frames":1,"offset":"b142-trace-16-lines-offset"},"arc":{"blob":"b143-trace-16-arc"},"color":"#94a3b8","width":1.0,"dash":"solid","opacity":0.34}},{"key":"trace-17","name":"R = 4 kpc Label","showInLegend":false,"legendColor":"#e2e8f0","color":"#e2e8f0","opacity":1.0,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"labels":{"count":1,"text":["R = 4 kpc"],"position":{"blob":"b144-trace-17-labels","frames":66},"color":["#e2e8f0"],"size":[28.0],"screenStable":[true],"family":"Inter, Helvetica Neue, Arial, sans-serif"}},{"key":"trace-18","name":"R = 8.12 kpc","showInLegend":false,"legendColor":"#94a3b8","color":"#94a3b8","opacity":0.34,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"lines":{"count":999,"position":{"blob":"b145-trace-18-lines","frames":1,"offset":"b146-trace-18-lines-offset"},"arc":{"blob":"b147-trace-18-arc"},"color":"#94a3b8","width":1.0,"dash":"solid","opacity":0.34}},{"key":"trace-19","name":"R = 8.12 kpc Label","showInLegend":false,"legendColor":"#e2e8f0","color":"#e2e8f0","opacity":1.0,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"labels":{"count":1,"text":["R = 8.12 kpc"],"position":{"blob":"b148-trace-19-labels","frames":66},"color":["#e2e8f0"],"size":[28.0],"screenStable":[true],"family":"Inter, Helvetica Neue, Arial, sans-serif"}},{"key":"trace-20","name":"R = 12 kpc","showInLegend":false,"legendColor":"#94a3b8","color":"#94a3b8","opacity":0.34,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"lines":{"count":999,"position":{"blob":"b149-trace-20-lines","frames":1,"offset":"b150-trace-20-lines-offset"},"arc":{"blob":"b151-trace-20-arc"},"color":"#94a3b8","width":1.0,"dash":"solid","opacity":0.34}},{"key":"trace-21","name":"R = 12 kpc Label","showInLegend":false,"legendColor":"#e2e8f0","color":"#e2e8f0","opacity":1.0,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"labels":{"count":1,"text":["R = 12 kpc"],"position":{"blob":"b152-trace-21-labels","frames":66},"color":["#e2e8f0"],"size":[28.0],"screenStable":[true],"family":"Inter, Helvetica Neue, Arial, sans-serif"}}],"images":[{"key":"galaxy-image-overlay","image":{"blob":"b153-img-galaxy-image-overlay","mime":"image/jpeg"},"widthPc":40000.0,"heightPc":40000.0,"hideBelowScalePc":420.0,"fadeStartScalePc":700.0,"renderOrder":-20.0,"center":{"blob":"b154-img-galaxy-image-overlay-center"},"opacity":{"blob":"b155-img-galaxy-image-overlay-opacity"}}],"volumes":[{"key":"volume-0","stateKey":"volume-0","name":"Edenhofer+2024 Dust","dims":[512,512,401],"bounds":[[-1251.0,-1251.0,-400.0],[1251.0,1251.0,400.0]],"data":{"blob":"b156-vol-volume-0"},"dataRange":[0.0,0.24],"unit":"","legendColor":"#5a5a5a","colormaps":["Greys","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo","turbo_r","gist_heat","gist_heat_r","Greys_r"],"defaults":{"vmin":0.0,"vmax":0.0385,"opacity":1.0,"steps":200,"samples":200,"alpha_coef":200.0,"gradient_step":0.01,"stretch":"linear","colormap":"Greys","show_all_times":false,"lighting_mode":"standard","galactic_center":[8122.0,0.0,0.0],"galactic_light_intensity":1.35,"galactic_ambient":0.22,"galactic_extinction":2.4,"galactic_scattering":0.55,"galactic_anisotropy":0.45,"galactic_warmth":0.72},"visible":true,"timeMyr":null,"onlyAtT0":true,"supportsShowAllTimes":true,"coRotate":true,"coRotationRate":0.03,"referenceTimeMyr":0.0,"interpolation":true,"variantGroup":null,"exclusiveGroup":null,"renderOrder":0.0,"opticalModel":"legacy-texture-space","occupancy":{"blob":"b157-vol-volume-0-occ","dims":[64,64,64]}},{"key":"mccallum-ne","stateKey":"mccallum-ne","name":"McCallum+2025 electron density","dims":[512,512,327],"bounds":[[-1251.22,-1251.22,-400.0],[1248.78,1248.78,400.0]],"data":{"blob":"b158-vol-mccallum-ne"},"dataRange":[0.0,19.73],"unit":"cm^-3","legendColor":"#f68013","colormaps":["inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaults":{"vmin":0.1191,"vmax":1.7456,"opacity":0.12,"steps":200,"samples":200,"alpha_coef":200.0,"gradient_step":0.01,"stretch":"log10","colormap":"inferno","show_all_times":false,"lighting_mode":"standard","galactic_center":[8122.0,0.0,0.0],"galactic_light_intensity":1.35,"galactic_ambient":0.22,"galactic_extinction":2.4,"galactic_scattering":0.55,"galactic_anisotropy":0.45,"galactic_warmth":0.72},"visible":false,"timeMyr":null,"onlyAtT0":true,"supportsShowAllTimes":true,"coRotate":true,"coRotationRate":0.03,"referenceTimeMyr":0.0,"interpolation":true,"variantGroup":null,"exclusiveGroup":null,"renderOrder":0.0,"opticalModel":"legacy-texture-space","occupancy":{"blob":"b159-vol-mccallum-ne-occ","dims":[64,64,64]}}],"colormaps":{"turbo":{"blob":"b1-lut-turbo","width":1024,"label":"turbo","legendColor":"#fe962b"},"inferno":{"blob":"b2-lut-inferno","width":1024,"label":"inferno","legendColor":"#f68013"},"inferno_r":{"blob":"b3-lut-inferno_r","width":1024,"label":"inferno_r","legendColor":"#62146e"},"magma":{"blob":"b4-lut-magma","width":1024,"label":"magma","legendColor":"#f9795d"},"magma_r":{"blob":"b5-lut-magma_r","width":1024,"label":"magma_r","legendColor":"#5c167f"},"plasma":{"blob":"b6-lut-plasma","width":1024,"label":"plasma","legendColor":"#f58b47"},"plasma_r":{"blob":"b7-lut-plasma_r","width":1024,"label":"plasma_r","legendColor":"#8808a6"},"viridis":{"blob":"b8-lut-viridis","width":1024,"label":"viridis","legendColor":"#4ec36b"},"viridis_r":{"blob":"b9-lut-viridis_r","width":1024,"label":"viridis_r","legendColor":"#375a8c"},"cividis":{"blob":"b10-lut-cividis","width":1024,"label":"cividis","legendColor":"#b4a76f"},"cividis_r":{"blob":"b11-lut-cividis_r","width":1024,"label":"cividis_r","legendColor":"#4a536c"},"turbo_r":{"blob":"b12-lut-turbo_r","width":1024,"label":"turbo_r","legendColor":"#1ecbda"},"gist_heat":{"blob":"b13-lut-gist_heat","width":1024,"label":"gist_heat","legendColor":"#ff7100"},"gist_heat_r":{"blob":"b14-lut-gist_heat_r","width":1024,"label":"gist_heat_r","legendColor":"#6a0000"},"Greys":{"blob":"b15-lut-Greys","width":1024,"label":"Greys","legendColor":"#5a5a5a"},"Greys_r":{"blob":"b16-lut-Greys_r","width":1024,"label":"Greys_r","legendColor":"#d3d3d3"}},"sky":{"enabled":true,"survey":"P/DSS2/color","frame":"galactic","layers":[{"key":"P/Mellinger/color","label":"Mellinger Color","survey":"P/Mellinger/color","opacity":1.0,"visible":true},{"key":"P/PLANCK/R2/HFI/color","label":"Planck Dust Emission Color","survey":"P/PLANCK/R2/HFI/color","opacity":1.0,"visible":true}],"layerGroups":[],"activeLayerKey":"P/Mellinger/color","activeGroupKey":null,"memberPointSizeDenominator":30.0,"memberMinScreenPx":0.0,"showMembers":false,"fullOpacityScalePc":120.0,"fadeOutScalePc":360.0,"members":null},"initialState":{"click_selection_enabled":false,"lasso_volume_selection_enabled":true,"lasso_selection_filter_enabled":true,"current_group":"Clusters","compact_payload_enabled":true,"scene_float_precision":2,"active_volume_key":"volume-0","legend_state":{"volume-0":true,"mccallum-ne":false},"volume_state_by_key":{"volume-0":{"visible":true},"mccallum-ne":{"visible":false}},"galaxy_image":true,"galaxy_image_path":"/Users/swiggumc/Downloads/Top-down_view_of_the_Milky_Way.jpg","galaxy_image_size_pc":40000.0,"galaxy_image_opacity":0.35,"galaxy_image_hide_below_scale_bar_pc":420.0,"galaxy_image_fade_start_scale_bar_pc":700.0,"sky_dome_enabled":true,"sky_dome_background_mode":"live_aladin","sky_dome_source":"aladin","sky_dome_projection":"TAN","sky_dome_capture_width_px":4096,"sky_dome_capture_height_px":2048,"sky_dome_capture_format":"image/jpeg","sky_dome_capture_quality":0.94,"sky_dome_radius_pc":40000.0,"sky_dome_opacity":1.0,"sky_dome_force_visible":false,"sky_dome_full_opacity_scale_bar_pc":120.0,"sky_dome_fade_out_scale_bar_pc":360.0,"sky_layers":[{"key":"P/Mellinger/color","label":"Mellinger Color","survey":"P/Mellinger/color","opacity":1.0,"visible":true},{"key":"P/PLANCK/R2/HFI/color","label":"Planck Dust Emission Color","survey":"P/PLANCK/R2/HFI/color","opacity":1.0,"visible":true}],"active_sky_layer_key":"P/Mellinger/color"},"states":{},"legacy":{"decorations":[],"exportProfile":"full","mobile":false},"blobs":[{"id":"b1-lut-turbo","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1333,"rawBytes":4096},{"id":"b2-lut-inferno","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1281,"rawBytes":4096},{"id":"b3-lut-inferno_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1316,"rawBytes":4096},{"id":"b4-lut-magma","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1273,"rawBytes":4096},{"id":"b5-lut-magma_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1323,"rawBytes":4096},{"id":"b6-lut-plasma","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1238,"rawBytes":4096},{"id":"b7-lut-plasma_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1283,"rawBytes":4096},{"id":"b8-lut-viridis","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1280,"rawBytes":4096},{"id":"b9-lut-viridis_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1243,"rawBytes":4096},{"id":"b10-lut-cividis","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1266,"rawBytes":4096},{"id":"b11-lut-cividis_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1249,"rawBytes":4096},{"id":"b12-lut-turbo_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1324,"rawBytes":4096},{"id":"b13-lut-gist_heat","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1043,"rawBytes":4096},{"id":"b14-lut-gist_heat_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1077,"rawBytes":4096},{"id":"b15-lut-Greys","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1303,"rawBytes":4096},{"id":"b16-lut-Greys_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1271,"rawBytes":4096},{"id":"b17-trace-0-pos","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":672,"rawBytes":792},{"id":"b18-trace-0-scalar","dtype":"f32","shape":[66,1],"codec":"gzip+shuffle","priority":0,"bytes":70,"rawBytes":264},{"id":"b19-trace-0-age","dtype":"f32","shape":[1],"codec":"gzip","priority":0,"bytes":24,"rawBytes":4},{"id":"b20-trace-0-nstars","dtype":"f32","shape":[1],"codec":"gzip","priority":0,"bytes":24,"rawBytes":4},{"id":"b21-trace-0-meta","dtype":"json","shape":[94],"codec":"gzip","priority":1,"bytes":96,"rawBytes":94},{"id":"b22-trace-1-pos","dtype":"f32","shape":[66,1193,3],"codec":"gzip+shuffle","priority":0,"bytes":658177,"rawBytes":944856},{"id":"b23-trace-1-size","dtype":"f32","shape":[66,1193],"codec":"gzip+shuffle","priority":0,"bytes":25683,"rawBytes":314952},{"id":"b24-trace-1-sizemax","dtype":"f32","shape":[1193],"codec":"gzip+shuffle","priority":0,"bytes":46,"rawBytes":4772},{"id":"b25-trace-1-scalar","dtype":"f32","shape":[66,1193],"codec":"gzip+shuffle","priority":0,"bytes":128052,"rawBytes":314952},{"id":"b26-trace-1-age","dtype":"f32","shape":[1193],"codec":"gzip+shuffle","priority":0,"bytes":3831,"rawBytes":4772},{"id":"b27-trace-1-nstars","dtype":"f32","shape":[1193],"codec":"gzip+shuffle","priority":0,"bytes":1774,"rawBytes":4772},{"id":"b28-trace-1-stars","dtype":"f32","shape":[1193],"codec":"gzip+shuffle","priority":0,"bytes":3743,"rawBytes":4772},{"id":"b29-trace-1-meta","dtype":"json","shape":[96971],"codec":"gzip","priority":1,"bytes":39425,"rawBytes":96971},{"id":"b30-trace-2-pos","dtype":"f32","shape":[66,482,3],"codec":"gzip+shuffle","priority":0,"bytes":266768,"rawBytes":381744},{"id":"b31-trace-2-size","dtype":"f32","shape":[66,482],"codec":"gzip+shuffle","priority":0,"bytes":16175,"rawBytes":127248},{"id":"b32-trace-2-sizemax","dtype":"f32","shape":[482],"codec":"gzip+shuffle","priority":0,"bytes":39,"rawBytes":1928},{"id":"b33-trace-2-scalar","dtype":"f32","shape":[66,482],"codec":"gzip+shuffle","priority":0,"bytes":59614,"rawBytes":127248},{"id":"b34-trace-2-age","dtype":"f32","shape":[482],"codec":"gzip+shuffle","priority":0,"bytes":1515,"rawBytes":1928},{"id":"b35-trace-2-nstars","dtype":"f32","shape":[482],"codec":"gzip+shuffle","priority":0,"bytes":794,"rawBytes":1928},{"id":"b36-trace-2-stars","dtype":"f32","shape":[482],"codec":"gzip+shuffle","priority":0,"bytes":1568,"rawBytes":1928},{"id":"b37-trace-2-meta","dtype":"json","shape":[38020],"codec":"gzip","priority":1,"bytes":16427,"rawBytes":38020},{"id":"b38-trace-3-pos","dtype":"f32","shape":[66,170,3],"codec":"gzip+shuffle","priority":0,"bytes":95434,"rawBytes":134640},{"id":"b39-trace-3-size","dtype":"f32","shape":[66,170],"codec":"gzip+shuffle","priority":0,"bytes":4191,"rawBytes":44880},{"id":"b40-trace-3-sizemax","dtype":"f32","shape":[170],"codec":"gzip+shuffle","priority":0,"bytes":32,"rawBytes":680},{"id":"b41-trace-3-scalar","dtype":"f32","shape":[66,170],"codec":"gzip+shuffle","priority":0,"bytes":19209,"rawBytes":44880},{"id":"b42-trace-3-age","dtype":"f32","shape":[170],"codec":"gzip+shuffle","priority":0,"bytes":582,"rawBytes":680},{"id":"b43-trace-3-nstars","dtype":"f32","shape":[170],"codec":"gzip+shuffle","priority":0,"bytes":318,"rawBytes":680},{"id":"b44-trace-3-stars","dtype":"f32","shape":[170],"codec":"gzip+shuffle","priority":0,"bytes":590,"rawBytes":680},{"id":"b45-trace-3-meta","dtype":"json","shape":[13516],"codec":"gzip","priority":1,"bytes":6094,"rawBytes":13516},{"id":"b46-trace-4-pos","dtype":"f32","shape":[66,62,3],"codec":"gzip+shuffle","priority":0,"bytes":34463,"rawBytes":49104},{"id":"b47-trace-4-size","dtype":"f32","shape":[66,62],"codec":"gzip+shuffle","priority":0,"bytes":2129,"rawBytes":16368},{"id":"b48-trace-4-sizemax","dtype":"f32","shape":[62],"codec":"gzip","priority":0,"bytes":27,"rawBytes":248},{"id":"b49-trace-4-scalar","dtype":"f32","shape":[66,62],"codec":"gzip+shuffle","priority":0,"bytes":7909,"rawBytes":16368},{"id":"b50-trace-4-age","dtype":"f32","shape":[62],"codec":"gzip","priority":0,"bytes":250,"rawBytes":248},{"id":"b51-trace-4-nstars","dtype":"f32","shape":[62],"codec":"gzip","priority":0,"bytes":186,"rawBytes":248},{"id":"b52-trace-4-stars","dtype":"f32","shape":[62],"codec":"gzip","priority":0,"bytes":254,"rawBytes":248},{"id":"b53-trace-4-meta","dtype":"json","shape":[4679],"codec":"gzip","priority":1,"bytes":2280,"rawBytes":4679},{"id":"b54-trace-5-pos","dtype":"f32","shape":[66,37,3],"codec":"gzip+shuffle","priority":0,"bytes":21579,"rawBytes":29304},{"id":"b55-trace-5-size","dtype":"f32","shape":[66,37],"codec":"gzip+shuffle","priority":0,"bytes":1229,"rawBytes":9768},{"id":"b56-trace-5-sizemax","dtype":"f32","shape":[37],"codec":"gzip","priority":0,"bytes":27,"rawBytes":148},{"id":"b57-trace-5-scalar","dtype":"f32","shape":[66,37],"codec":"gzip+shuffle","priority":0,"bytes":4854,"rawBytes":9768},{"id":"b58-trace-5-age","dtype":"f32","shape":[37],"codec":"gzip","priority":0,"bytes":159,"rawBytes":148},{"id":"b59-trace-5-nstars","dtype":"f32","shape":[37],"codec":"gzip","priority":0,"bytes":123,"rawBytes":148},{"id":"b60-trace-5-stars","dtype":"f32","shape":[37],"codec":"gzip","priority":0,"bytes":164,"rawBytes":148},{"id":"b61-trace-5-meta","dtype":"json","shape":[3010],"codec":"gzip","priority":1,"bytes":1430,"rawBytes":3010},{"id":"b62-trace-6-pos","dtype":"f32","shape":[66,33,3],"codec":"gzip+shuffle","priority":0,"bytes":19449,"rawBytes":26136},{"id":"b63-trace-6-size","dtype":"f32","shape":[66,33],"codec":"gzip+shuffle","priority":0,"bytes":1137,"rawBytes":8712},{"id":"b64-trace-6-sizemax","dtype":"f32","shape":[33],"codec":"gzip","priority":0,"bytes":27,"rawBytes":132},{"id":"b65-trace-6-scalar","dtype":"f32","shape":[66,33],"codec":"gzip+shuffle","priority":0,"bytes":4411,"rawBytes":8712},{"id":"b66-trace-6-age","dtype":"f32","shape":[33],"codec":"gzip","priority":0,"bytes":141,"rawBytes":132},{"id":"b67-trace-6-nstars","dtype":"f32","shape":[33],"codec":"gzip","priority":0,"bytes":123,"rawBytes":132},{"id":"b68-trace-6-stars","dtype":"f32","shape":[33],"codec":"gzip","priority":0,"bytes":155,"rawBytes":132},{"id":"b69-trace-6-meta","dtype":"json","shape":[2748],"codec":"gzip","priority":1,"bytes":1358,"rawBytes":2748},{"id":"b70-trace-7-pos","dtype":"f32","shape":[66,12,3],"codec":"gzip+shuffle","priority":0,"bytes":7316,"rawBytes":9504},{"id":"b71-trace-7-size","dtype":"f32","shape":[66,12],"codec":"gzip+shuffle","priority":0,"bytes":419,"rawBytes":3168},{"id":"b72-trace-7-sizemax","dtype":"f32","shape":[12],"codec":"gzip","priority":0,"bytes":27,"rawBytes":48},{"id":"b73-trace-7-scalar","dtype":"f32","shape":[66,12],"codec":"gzip+shuffle","priority":0,"bytes":1591,"rawBytes":3168},{"id":"b74-trace-7-age","dtype":"f32","shape":[12],"codec":"gzip","priority":0,"bytes":69,"rawBytes":48},{"id":"b75-trace-7-nstars","dtype":"f32","shape":[12],"codec":"gzip","priority":0,"bytes":57,"rawBytes":48},{"id":"b76-trace-7-stars","dtype":"f32","shape":[12],"codec":"gzip","priority":0,"bytes":66,"rawBytes":48},{"id":"b77-trace-7-meta","dtype":"json","shape":[963],"codec":"gzip","priority":1,"bytes":512,"rawBytes":963},{"id":"b78-trace-8-pos","dtype":"f32","shape":[66,22,3],"codec":"gzip+shuffle","priority":0,"bytes":13185,"rawBytes":17424},{"id":"b79-trace-8-size","dtype":"f32","shape":[66,22],"codec":"gzip+shuffle","priority":0,"bytes":769,"rawBytes":5808},{"id":"b80-trace-8-sizemax","dtype":"f32","shape":[22],"codec":"gzip","priority":0,"bytes":27,"rawBytes":88},{"id":"b81-trace-8-scalar","dtype":"f32","shape":[66,22],"codec":"gzip+shuffle","priority":0,"bytes":2844,"rawBytes":5808},{"id":"b82-trace-8-age","dtype":"f32","shape":[22],"codec":"gzip","priority":0,"bytes":109,"rawBytes":88},{"id":"b83-trace-8-nstars","dtype":"f32","shape":[22],"codec":"gzip","priority":0,"bytes":88,"rawBytes":88},{"id":"b84-trace-8-stars","dtype":"f32","shape":[22],"codec":"gzip","priority":0,"bytes":111,"rawBytes":88},{"id":"b85-trace-8-meta","dtype":"json","shape":[1824],"codec":"gzip","priority":1,"bytes":925,"rawBytes":1824},{"id":"b86-trace-9-pos","dtype":"f32","shape":[66,6,3],"codec":"gzip+shuffle","priority":0,"bytes":3564,"rawBytes":4752},{"id":"b87-trace-9-size","dtype":"f32","shape":[66,6],"codec":"gzip+shuffle","priority":0,"bytes":232,"rawBytes":1584},{"id":"b88-trace-9-sizemax","dtype":"f32","shape":[6],"codec":"gzip","priority":0,"bytes":27,"rawBytes":24},{"id":"b89-trace-9-scalar","dtype":"f32","shape":[66,6],"codec":"gzip+shuffle","priority":0,"bytes":789,"rawBytes":1584},{"id":"b90-trace-9-age","dtype":"f32","shape":[6],"codec":"gzip","priority":0,"bytes":43,"rawBytes":24},{"id":"b91-trace-9-nstars","dtype":"f32","shape":[6],"codec":"gzip","priority":0,"bytes":41,"rawBytes":24},{"id":"b92-trace-9-stars","dtype":"f32","shape":[6],"codec":"gzip","priority":0,"bytes":45,"rawBytes":24},{"id":"b93-trace-9-meta","dtype":"json","shape":[516],"codec":"gzip","priority":1,"bytes":342,"rawBytes":516},{"id":"b94-trace-10-pos","dtype":"f32","shape":[66,42,3],"codec":"gzip+shuffle","priority":0,"bytes":24246,"rawBytes":33264},{"id":"b95-trace-10-size","dtype":"f32","shape":[66,42],"codec":"gzip+shuffle","priority":0,"bytes":1121,"rawBytes":11088},{"id":"b96-trace-10-sizemax","dtype":"f32","shape":[42],"codec":"gzip","priority":0,"bytes":27,"rawBytes":168},{"id":"b97-trace-10-scalar","dtype":"f32","shape":[66,42],"codec":"gzip+shuffle","priority":0,"bytes":5000,"rawBytes":11088},{"id":"b98-trace-10-age","dtype":"f32","shape":[42],"codec":"gzip","priority":0,"bytes":186,"rawBytes":168},{"id":"b99-trace-10-nstars","dtype":"f32","shape":[42],"codec":"gzip","priority":0,"bytes":140,"rawBytes":168},{"id":"b100-trace-10-stars","dtype":"f32","shape":[42],"codec":"gzip","priority":0,"bytes":191,"rawBytes":168},{"id":"b101-trace-10-meta","dtype":"json","shape":[3481],"codec":"gzip","priority":1,"bytes":1649,"rawBytes":3481},{"id":"b102-trace-11-pos","dtype":"f32","shape":[66,10,3],"codec":"gzip+shuffle","priority":0,"bytes":5950,"rawBytes":7920},{"id":"b103-trace-11-size","dtype":"f32","shape":[66,10],"codec":"gzip+shuffle","priority":0,"bytes":337,"rawBytes":2640},{"id":"b104-trace-11-sizemax","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":27,"rawBytes":40},{"id":"b105-trace-11-scalar","dtype":"f32","shape":[66,10],"codec":"gzip+shuffle","priority":0,"bytes":1224,"rawBytes":2640},{"id":"b106-trace-11-age","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":61,"rawBytes":40},{"id":"b107-trace-11-nstars","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":52,"rawBytes":40},{"id":"b108-trace-11-stars","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":61,"rawBytes":40},{"id":"b109-trace-11-meta","dtype":"json","shape":[753],"codec":"gzip","priority":1,"bytes":414,"rawBytes":753},{"id":"b110-trace-12-pos","dtype":"f32","shape":[66,13,3],"codec":"gzip+shuffle","priority":0,"bytes":7882,"rawBytes":10296},{"id":"b111-trace-12-size","dtype":"f32","shape":[66,13],"codec":"gzip+shuffle","priority":0,"bytes":391,"rawBytes":3432},{"id":"b112-trace-12-sizemax","dtype":"f32","shape":[13],"codec":"gzip","priority":0,"bytes":27,"rawBytes":52},{"id":"b113-trace-12-scalar","dtype":"f32","shape":[66,13],"codec":"gzip+shuffle","priority":0,"bytes":1558,"rawBytes":3432},{"id":"b114-trace-12-age","dtype":"f32","shape":[13],"codec":"gzip","priority":0,"bytes":68,"rawBytes":52},{"id":"b115-trace-12-nstars","dtype":"f32","shape":[13],"codec":"gzip","priority":0,"bytes":61,"rawBytes":52},{"id":"b116-trace-12-stars","dtype":"f32","shape":[13],"codec":"gzip","priority":0,"bytes":75,"rawBytes":52},{"id":"b117-trace-12-meta","dtype":"json","shape":[1084],"codec":"gzip","priority":1,"bytes":597,"rawBytes":1084},{"id":"b118-trace-13-pos","dtype":"f32","shape":[66,10,3],"codec":"gzip+shuffle","priority":0,"bytes":6048,"rawBytes":7920},{"id":"b119-trace-13-size","dtype":"f32","shape":[66,10],"codec":"gzip+shuffle","priority":0,"bytes":325,"rawBytes":2640},{"id":"b120-trace-13-scalar","dtype":"f32","shape":[66,10],"codec":"gzip+shuffle","priority":0,"bytes":1232,"rawBytes":2640},{"id":"b121-trace-13-age","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":58,"rawBytes":40},{"id":"b122-trace-13-nstars","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":48,"rawBytes":40},{"id":"b123-trace-13-stars","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":59,"rawBytes":40},{"id":"b124-trace-13-meta","dtype":"json","shape":[953],"codec":"gzip","priority":1,"bytes":563,"rawBytes":953},{"id":"b125-trace-36-pos","dtype":"f32","shape":[1,746,3],"codec":"gzip+shuffle","priority":0,"bytes":6700,"rawBytes":8952},{"id":"b126-trace-36-size","dtype":"f32","shape":[746],"codec":"gzip+shuffle","priority":0,"bytes":1835,"rawBytes":2984},{"id":"b127-trace-36-meta","dtype":"json","shape":[2248],"codec":"gzip","priority":1,"bytes":49,"rawBytes":2248},{"id":"b128-trace-37-pos","dtype":"f32","shape":[1,171,3],"codec":"gzip+shuffle","priority":0,"bytes":1606,"rawBytes":2052},{"id":"b129-trace-37-size","dtype":"f32","shape":[171],"codec":"gzip+shuffle","priority":0,"bytes":523,"rawBytes":684},{"id":"b130-trace-37-meta","dtype":"json","shape":[523],"codec":"gzip","priority":1,"bytes":38,"rawBytes":523},{"id":"b131-trace-38-pos","dtype":"f32","shape":[1,250,3],"codec":"gzip+shuffle","priority":0,"bytes":2313,"rawBytes":3000},{"id":"b132-trace-38-size","dtype":"f32","shape":[250],"codec":"gzip+shuffle","priority":0,"bytes":658,"rawBytes":1000},{"id":"b133-trace-38-meta","dtype":"json","shape":[760],"codec":"gzip","priority":1,"bytes":39,"rawBytes":760},{"id":"b134-trace-39-pos","dtype":"f32","shape":[1,186,3],"codec":"gzip+shuffle","priority":0,"bytes":1755,"rawBytes":2232},{"id":"b135-trace-39-size","dtype":"f32","shape":[186],"codec":"gzip+shuffle","priority":0,"bytes":491,"rawBytes":744},{"id":"b136-trace-39-meta","dtype":"json","shape":[568],"codec":"gzip","priority":1,"bytes":39,"rawBytes":568},{"id":"b137-trace-14-lines","dtype":"f32","shape":[1,190,3],"codec":"gzip+shuffle","priority":0,"bytes":683,"rawBytes":2280},{"id":"b138-trace-14-lines-offset","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":689,"rawBytes":792},{"id":"b139-trace-14-arc","dtype":"f32","shape":[190],"codec":"gzip+shuffle","priority":0,"bytes":615,"rawBytes":760},{"id":"b140-trace-15-labels","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":664,"rawBytes":792},{"id":"b141-trace-16-lines","dtype":"f32","shape":[1,1998,3],"codec":"gzip+shuffle","priority":0,"bytes":9203,"rawBytes":23976},{"id":"b142-trace-16-lines-offset","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":690,"rawBytes":792},{"id":"b143-trace-16-arc","dtype":"f32","shape":[1998],"codec":"gzip+shuffle","priority":0,"bytes":4878,"rawBytes":7992},{"id":"b144-trace-17-labels","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":672,"rawBytes":792},{"id":"b145-trace-18-lines","dtype":"f32","shape":[1,1998,3],"codec":"gzip+shuffle","priority":0,"bytes":9903,"rawBytes":23976},{"id":"b146-trace-18-lines-offset","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":690,"rawBytes":792},{"id":"b147-trace-18-arc","dtype":"f32","shape":[1998],"codec":"gzip+shuffle","priority":0,"bytes":4471,"rawBytes":7992},{"id":"b148-trace-19-labels","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":670,"rawBytes":792},{"id":"b149-trace-20-lines","dtype":"f32","shape":[1,1998,3],"codec":"gzip+shuffle","priority":0,"bytes":9986,"rawBytes":23976},{"id":"b150-trace-20-lines-offset","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":690,"rawBytes":792},{"id":"b151-trace-20-arc","dtype":"f32","shape":[1998],"codec":"gzip+shuffle","priority":0,"bytes":4603,"rawBytes":7992},{"id":"b152-trace-21-labels","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":677,"rawBytes":792},{"id":"b153-img-galaxy-image-overlay","dtype":"bytes","shape":[2917913],"codec":"raw","priority":1,"bytes":2917913,"rawBytes":2917913,"mime":"image/jpeg"},{"id":"b154-img-galaxy-image-overlay-center","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":548,"rawBytes":792},{"id":"b155-img-galaxy-image-overlay-opacity","dtype":"f32","shape":[66],"codec":"gzip+shuffle","priority":0,"bytes":33,"rawBytes":264},{"id":"b156-vol-volume-0","dtype":"u8","shape":[401,512,512],"codec":"gzip","priority":2,"bytes":1853723,"rawBytes":105119744},{"id":"b157-vol-volume-0-occ","dtype":"u8","shape":[64,64,64],"codec":"gzip","priority":2,"bytes":29632,"rawBytes":262144},{"id":"b158-vol-mccallum-ne","dtype":"u8","shape":[327,512,512],"codec":"gzip","priority":2,"bytes":3336800,"rawBytes":85721088},{"id":"b159-vol-mccallum-ne-occ","dtype":"u8","shape":[64,64,64],"codec":"gzip","priority":2,"bytes":45475,"rawBytes":262144}],"viewer":{"version":"2.0.0"}}</script>
+<script type="application/json" id="oviz-manifest">{"format":"oviz-bundle/1","title":"","note":"","theme":{"paper_bgcolor":"black","scene_bgcolor":"black","text_color":"white","axis_color":"gray","panel_bg":"rgba(0,0,0,0.48)","panel_border":"rgba(110,110,110,0.60)","panel_solid":"#121212","footprint":"#6ec5ff"},"time":{"values":[-65.0,-64.0,-63.0,-62.0,-61.0,-60.0,-59.0,-58.0,-57.0,-56.0,-55.0,-54.0,-53.0,-52.0,-51.0,-50.0,-49.0,-48.0,-47.0,-46.0,-45.0,-44.0,-43.0,-42.0,-41.0,-40.0,-39.0,-38.0,-37.0,-36.0,-35.0,-34.0,-33.0,-32.0,-31.0,-30.0,-29.0,-28.0,-27.0,-26.0,-25.0,-24.0,-23.0,-22.0,-21.0,-20.0,-19.0,-18.0,-17.0,-16.0,-15.0,-14.0,-13.0,-12.0,-11.0,-10.0,-9.0,-8.0,-7.0,-6.0,-5.0,-4.0,-3.0,-2.0,-1.0,0.0],"initialIndex":65,"zeroIndex":65,"unit":"Myr","playbackIntervalMs":240,"enabled":true},"world":{"center":[0.0,0.0,0.0],"maxSpan":20000.0,"ranges":{"x":[-10000.0,10000.0],"y":[-10000.0,10000.0],"z":[-400.0,400.0]},"up":[0.0,0.0,1.0],"pointScale":10.256410256410255,"sunTrace":"trace-0","galacticCenter":[8122.0,0.0,0.0],"showAxes":false},"camera":{"position":[0.0,-800.0,6000.0],"target":[0.0,0.0,0.0],"fov":60.0},"groups":{"order":["All","Clusters","Cluster Families","Dust Structures","Dust Structures and Families"],"default":"Clusters","visibility":{"All":{"trace-0":true,"trace-1":true,"trace-2":true,"trace-3":true,"trace-4":true,"trace-5":true,"trace-6":true,"trace-7":true,"trace-8":true,"trace-9":true,"trace-10":true,"trace-11":true,"trace-12":true,"trace-13":true,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":"legendonly","trace-37":"legendonly","trace-38":"legendonly","trace-39":"legendonly","volume-0":"legendonly","mccallum-ne":"legendonly"},"Clusters":{"trace-0":true,"trace-1":false,"trace-2":true,"trace-3":true,"trace-4":false,"trace-5":false,"trace-6":false,"trace-7":false,"trace-8":false,"trace-9":false,"trace-10":false,"trace-11":false,"trace-12":false,"trace-13":false,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":false,"trace-37":false,"trace-38":false,"trace-39":false,"volume-0":"legendonly","mccallum-ne":"legendonly"},"Cluster Families":{"trace-0":true,"trace-1":false,"trace-2":false,"trace-3":false,"trace-4":true,"trace-5":true,"trace-6":true,"trace-7":true,"trace-8":true,"trace-9":true,"trace-10":false,"trace-11":false,"trace-12":false,"trace-13":false,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":false,"trace-37":false,"trace-38":false,"trace-39":false,"volume-0":"legendonly","mccallum-ne":"legendonly"},"Dust Structures":{"trace-0":true,"trace-1":false,"trace-2":false,"trace-3":false,"trace-4":false,"trace-5":false,"trace-6":false,"trace-7":false,"trace-8":false,"trace-9":false,"trace-10":true,"trace-11":true,"trace-12":true,"trace-13":true,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":"legendonly","trace-37":"legendonly","trace-38":"legendonly","trace-39":"legendonly","volume-0":"legendonly","mccallum-ne":"legendonly"},"Dust Structures and Families":{"trace-0":true,"trace-1":false,"trace-2":false,"trace-3":false,"trace-4":true,"trace-5":true,"trace-6":true,"trace-7":true,"trace-8":true,"trace-9":true,"trace-10":true,"trace-11":true,"trace-12":true,"trace-13":true,"trace-14":true,"trace-15":true,"trace-16":true,"trace-17":true,"trace-18":true,"trace-19":true,"trace-20":true,"trace-21":true,"trace-36":"legendonly","trace-37":"legendonly","trace-38":"legendonly","trace-39":"legendonly","volume-0":"legendonly","mccallum-ne":"legendonly"}}},"animation":{"fadeTimeMyr":8.0,"fadeInOut":false,"fadeByOpacity":true},"traces":[{"key":"trace-0","name":"Sun","showInLegend":true,"legendColor":"#ffff00","color":"#ffff00","opacity":1.0,"pointSize":5.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":8000.0,"cmax":8001.0,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":1,"position":{"blob":"b17-trace-0-pos","frames":66},"size":{"value":5.0},"opacity":{"value":1.0},"colorScalar":{"blob":"b18-trace-0-scalar","frames":66},"ageNow":{"blob":"b19-trace-0-age"},"nStars":{"blob":"b20-trace-0-nstars"},"starsFactor":{"blob":"b20-trace-0-nstars"},"meta":{"blob":"b21-trace-0-meta"}}},{"key":"trace-1","name":"Full Cluster Catalog","showInLegend":true,"legendColor":"#8f959d","color":"#8f959d","opacity":0.16,"pointSize":4.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.0,"cmax":496.39,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":1193,"position":{"blob":"b22-trace-1-pos","frames":66},"size":{"blob":"b23-trace-1-size","frames":66},"sizeMax":{"blob":"b24-trace-1-sizemax"},"opacity":{"value":0.16},"colorScalar":{"blob":"b25-trace-1-scalar","frames":66},"ageNow":{"blob":"b26-trace-1-age"},"nStars":{"blob":"b27-trace-1-nstars"},"starsFactor":{"blob":"b28-trace-1-stars"},"meta":{"blob":"b29-trace-1-meta"}}},{"key":"trace-2","name":"Clusters (\u003c 60 Myr)","showInLegend":true,"legendColor":"#808080","color":"#808080","opacity":0.7,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.0,"cmax":59.82,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":482,"position":{"blob":"b30-trace-2-pos","frames":66},"size":{"blob":"b31-trace-2-size","frames":66},"sizeMax":{"blob":"b32-trace-2-sizemax"},"opacity":{"value":0.7},"colorScalar":{"blob":"b33-trace-2-scalar","frames":66},"ageNow":{"blob":"b34-trace-2-age"},"nStars":{"blob":"b35-trace-2-nstars"},"starsFactor":{"blob":"b36-trace-2-stars"},"meta":{"blob":"b37-trace-2-meta"}}},{"key":"trace-3","name":"Clusters (\u003c 15 Myr)","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.0,"cmax":14.97,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":170,"position":{"blob":"b38-trace-3-pos","frames":66},"size":{"blob":"b39-trace-3-size","frames":66},"sizeMax":{"blob":"b40-trace-3-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b41-trace-3-scalar","frames":66},"ageNow":{"blob":"b42-trace-3-age"},"nStars":{"blob":"b43-trace-3-nstars"},"starsFactor":{"blob":"b44-trace-3-stars"},"meta":{"blob":"b45-trace-3-meta"}}},{"key":"trace-4","name":"Alpha Persei Family","showInLegend":true,"legendColor":"#ee82ee","color":"#ee82ee","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.51,"cmax":57.46,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":62,"position":{"blob":"b46-trace-4-pos","frames":66},"size":{"blob":"b47-trace-4-size","frames":66},"sizeMax":{"blob":"b48-trace-4-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b49-trace-4-scalar","frames":66},"ageNow":{"blob":"b50-trace-4-age"},"nStars":{"blob":"b51-trace-4-nstars"},"starsFactor":{"blob":"b52-trace-4-stars"},"meta":{"blob":"b53-trace-4-meta"}}},{"key":"trace-5","name":"Cr 135 Family","showInLegend":true,"legendColor":"#ffa500","color":"#ffa500","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":10.46,"cmax":43.54,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":37,"position":{"blob":"b54-trace-5-pos","frames":66},"size":{"blob":"b55-trace-5-size","frames":66},"sizeMax":{"blob":"b56-trace-5-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b57-trace-5-scalar","frames":66},"ageNow":{"blob":"b58-trace-5-age"},"nStars":{"blob":"b59-trace-5-nstars"},"starsFactor":{"blob":"b60-trace-5-stars"},"meta":{"blob":"b61-trace-5-meta"}}},{"key":"trace-6","name":"M6 Family","showInLegend":true,"legendColor":"#00ffff","color":"#00ffff","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":17.32,"cmax":57.69,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":33,"position":{"blob":"b62-trace-6-pos","frames":66},"size":{"blob":"b63-trace-6-size","frames":66},"sizeMax":{"blob":"b64-trace-6-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b65-trace-6-scalar","frames":66},"ageNow":{"blob":"b66-trace-6-age"},"nStars":{"blob":"b67-trace-6-nstars"},"starsFactor":{"blob":"b68-trace-6-stars"},"meta":{"blob":"b69-trace-6-meta"}}},{"key":"trace-7","name":"Lacerta Family","showInLegend":true,"legendColor":"#f0e68c","color":"#f0e68c","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":16.19,"cmax":42.59,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":12,"position":{"blob":"b70-trace-7-pos","frames":66},"size":{"blob":"b71-trace-7-size","frames":66},"sizeMax":{"blob":"b72-trace-7-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b73-trace-7-scalar","frames":66},"ageNow":{"blob":"b74-trace-7-age"},"nStars":{"blob":"b75-trace-7-nstars"},"starsFactor":{"blob":"b76-trace-7-stars"},"meta":{"blob":"b77-trace-7-meta"}}},{"key":"trace-8","name":"Trumpler 3 Family","showInLegend":true,"legendColor":"#00ced1","color":"#00ced1","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":10.34,"cmax":57.17,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":22,"position":{"blob":"b78-trace-8-pos","frames":66},"size":{"blob":"b79-trace-8-size","frames":66},"sizeMax":{"blob":"b80-trace-8-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b81-trace-8-scalar","frames":66},"ageNow":{"blob":"b82-trace-8-age"},"nStars":{"blob":"b83-trace-8-nstars"},"starsFactor":{"blob":"b84-trace-8-stars"},"meta":{"blob":"b85-trace-8-meta"}}},{"key":"trace-9","name":"Proto Orion Family","showInLegend":true,"legendColor":"#dcdcdc","color":"#dcdcdc","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":21.82,"cmax":36.1,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":6,"position":{"blob":"b86-trace-9-pos","frames":66},"size":{"blob":"b87-trace-9-size","frames":66},"sizeMax":{"blob":"b88-trace-9-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b89-trace-9-scalar","frames":66},"ageNow":{"blob":"b90-trace-9-age"},"nStars":{"blob":"b91-trace-9-nstars"},"starsFactor":{"blob":"b92-trace-9-stars"},"meta":{"blob":"b93-trace-9-meta"}}},{"key":"trace-10","name":"Radcliffe Wave Clusters","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":1.51,"cmax":14.88,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":42,"position":{"blob":"b94-trace-10-pos","frames":66},"size":{"blob":"b95-trace-10-size","frames":66},"sizeMax":{"blob":"b96-trace-10-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b97-trace-10-scalar","frames":66},"ageNow":{"blob":"b98-trace-10-age"},"nStars":{"blob":"b99-trace-10-nstars"},"starsFactor":{"blob":"b100-trace-10-stars"},"meta":{"blob":"b101-trace-10-meta"}}},{"key":"trace-11","name":"Split Selection Clusters","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":3.3,"cmax":14.31,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":10,"position":{"blob":"b102-trace-11-pos","frames":66},"size":{"blob":"b103-trace-11-size","frames":66},"sizeMax":{"blob":"b104-trace-11-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b105-trace-11-scalar","frames":66},"ageNow":{"blob":"b106-trace-11-age"},"nStars":{"blob":"b107-trace-11-nstars"},"starsFactor":{"blob":"b108-trace-11-stars"},"meta":{"blob":"b109-trace-11-meta"}}},{"key":"trace-12","name":"Cepheus Spur Clusters","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":4.46,"cmax":14.96,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":13,"position":{"blob":"b110-trace-12-pos","frames":66},"size":{"blob":"b111-trace-12-size","frames":66},"sizeMax":{"blob":"b112-trace-12-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b113-trace-12-scalar","frames":66},"ageNow":{"blob":"b114-trace-12-age"},"nStars":{"blob":"b115-trace-12-nstars"},"starsFactor":{"blob":"b116-trace-12-stars"},"meta":{"blob":"b117-trace-12-meta"}}},{"key":"trace-13","name":"Vela-Sagittarius Clusters","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":1.0,"pointSize":7.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":true,"colorBy":{"mode":"age","label":"Age (Myr)","cmin":6.14,"cmax":14.45,"colormap":"turbo","colormaps":["turbo","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaultMode":"fixed"},"points":{"count":10,"position":{"blob":"b118-trace-13-pos","frames":66},"size":{"blob":"b119-trace-13-size","frames":66},"sizeMax":{"blob":"b104-trace-11-sizemax"},"opacity":{"value":1.0},"colorScalar":{"blob":"b120-trace-13-scalar","frames":66},"ageNow":{"blob":"b121-trace-13-age"},"nStars":{"blob":"b122-trace-13-nstars"},"starsFactor":{"blob":"b123-trace-13-stars"},"meta":{"blob":"b124-trace-13-meta"}}},{"key":"trace-36","name":"Radcliffe Wave Clusters Track","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":0.67,"pointSize":2.11,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"presence":[65],"points":{"count":746,"position":{"blob":"b125-trace-36-pos","frames":1},"size":{"blob":"b126-trace-36-size","frames":1},"opacity":{"value":0.67},"meta":{"blob":"b127-trace-36-meta"}}},{"key":"trace-37","name":"Split Selection Clusters Track","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":0.67,"pointSize":2.08,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"presence":[65],"points":{"count":171,"position":{"blob":"b128-trace-37-pos","frames":1},"size":{"blob":"b129-trace-37-size","frames":1},"opacity":{"value":0.67},"meta":{"blob":"b130-trace-37-meta"}}},{"key":"trace-38","name":"Cepheus Spur Clusters Track","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":0.67,"pointSize":2.12,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"presence":[65],"points":{"count":250,"position":{"blob":"b131-trace-38-pos","frames":1},"size":{"blob":"b132-trace-38-size","frames":1},"opacity":{"value":0.67},"meta":{"blob":"b133-trace-38-meta"}}},{"key":"trace-39","name":"Vela-Sagittarius Clusters Track","showInLegend":true,"legendColor":"#ff0000","color":"#ff0000","opacity":0.67,"pointSize":2.1,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"presence":[65],"points":{"count":186,"position":{"blob":"b134-trace-39-pos","frames":1},"size":{"blob":"b135-trace-39-size","frames":1},"opacity":{"value":0.67},"meta":{"blob":"b136-trace-39-meta"}}},{"key":"trace-14","name":"GC Ring","showInLegend":false,"legendColor":"#94a3b8","color":"#94a3b8","opacity":0.34,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"lines":{"count":95,"position":{"blob":"b137-trace-14-lines","frames":1,"offset":"b138-trace-14-lines-offset"},"arc":{"blob":"b139-trace-14-arc"},"color":"#94a3b8","width":1.0,"dash":"solid","opacity":0.34}},{"key":"trace-15","name":"GC","showInLegend":false,"legendColor":"#e2e8f0","color":"#e2e8f0","opacity":1.0,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"labels":{"count":1,"text":["GALACTIC CENTER"],"position":{"blob":"b140-trace-15-labels","frames":66},"color":["#e2e8f0"],"size":[18.0],"screenStable":[true],"family":"Inter, Helvetica Neue, Arial, sans-serif"}},{"key":"trace-16","name":"R = 4 kpc","showInLegend":false,"legendColor":"#94a3b8","color":"#94a3b8","opacity":0.34,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"lines":{"count":999,"position":{"blob":"b141-trace-16-lines","frames":1,"offset":"b142-trace-16-lines-offset"},"arc":{"blob":"b143-trace-16-arc"},"color":"#94a3b8","width":1.0,"dash":"solid","opacity":0.34}},{"key":"trace-17","name":"R = 4 kpc Label","showInLegend":false,"legendColor":"#e2e8f0","color":"#e2e8f0","opacity":1.0,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"labels":{"count":1,"text":["R = 4 kpc"],"position":{"blob":"b144-trace-17-labels","frames":66},"color":["#e2e8f0"],"size":[28.0],"screenStable":[true],"family":"Inter, Helvetica Neue, Arial, sans-serif"}},{"key":"trace-18","name":"R = 8.12 kpc","showInLegend":false,"legendColor":"#94a3b8","color":"#94a3b8","opacity":0.34,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"lines":{"count":999,"position":{"blob":"b145-trace-18-lines","frames":1,"offset":"b146-trace-18-lines-offset"},"arc":{"blob":"b147-trace-18-arc"},"color":"#94a3b8","width":1.0,"dash":"solid","opacity":0.34}},{"key":"trace-19","name":"R = 8.12 kpc Label","showInLegend":false,"legendColor":"#e2e8f0","color":"#e2e8f0","opacity":1.0,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"labels":{"count":1,"text":["R = 8.12 kpc"],"position":{"blob":"b148-trace-19-labels","frames":66},"color":["#e2e8f0"],"size":[28.0],"screenStable":[true],"family":"Inter, Helvetica Neue, Arial, sans-serif"}},{"key":"trace-20","name":"R = 12 kpc","showInLegend":false,"legendColor":"#94a3b8","color":"#94a3b8","opacity":0.34,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"lines":{"count":999,"position":{"blob":"b149-trace-20-lines","frames":1,"offset":"b150-trace-20-lines-offset"},"arc":{"blob":"b151-trace-20-arc"},"color":"#94a3b8","width":1.0,"dash":"solid","opacity":0.34}},{"key":"trace-21","name":"R = 12 kpc Label","showInLegend":false,"legendColor":"#e2e8f0","color":"#e2e8f0","opacity":1.0,"pointSize":0.0,"symbol":"circle","sizeByStarsDefault":false,"hasStars":false,"labels":{"count":1,"text":["R = 12 kpc"],"position":{"blob":"b152-trace-21-labels","frames":66},"color":["#e2e8f0"],"size":[28.0],"screenStable":[true],"family":"Inter, Helvetica Neue, Arial, sans-serif"}}],"images":[{"key":"galaxy-image-overlay","image":{"blob":"b153-img-galaxy-image-overlay","mime":"image/jpeg"},"widthPc":40000.0,"heightPc":40000.0,"hideBelowScalePc":420.0,"fadeStartScalePc":700.0,"renderOrder":-20.0,"center":{"blob":"b154-img-galaxy-image-overlay-center"},"opacity":{"blob":"b155-img-galaxy-image-overlay-opacity"}}],"volumes":[{"key":"volume-0","stateKey":"volume-0","name":"Edenhofer+2024 Dust","dims":[512,512,401],"bounds":[[-1251.0,-1251.0,-400.0],[1251.0,1251.0,400.0]],"data":{"blob":"b156-vol-volume-0"},"dataRange":[0.0,0.24],"unit":"","legendColor":"#5a5a5a","colormaps":["Greys","inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo","turbo_r","gist_heat","gist_heat_r","Greys_r"],"defaults":{"vmin":0.0,"vmax":0.0385,"opacity":1.0,"steps":200,"samples":200,"alpha_coef":200.0,"gradient_step":0.01,"stretch":"linear","colormap":"Greys","show_all_times":false,"lighting_mode":"standard","galactic_center":[8122.0,0.0,0.0],"galactic_light_intensity":1.35,"galactic_ambient":0.22,"galactic_extinction":2.4,"galactic_scattering":0.55,"galactic_anisotropy":0.45,"galactic_warmth":0.72},"visible":true,"timeMyr":null,"onlyAtT0":true,"supportsShowAllTimes":true,"coRotate":true,"coRotationRate":0.03,"referenceTimeMyr":0.0,"interpolation":true,"variantGroup":null,"exclusiveGroup":null,"renderOrder":0.0,"opticalModel":"legacy-texture-space","occupancy":{"blob":"b157-vol-volume-0-occ","dims":[64,64,64]}},{"key":"mccallum-ne","stateKey":"mccallum-ne","name":"McCallum+2025 electron density","dims":[512,512,327],"bounds":[[-1251.22,-1251.22,-400.0],[1248.78,1248.78,400.0]],"data":{"blob":"b158-vol-mccallum-ne"},"dataRange":[0.0,19.73],"unit":"cm^-3","legendColor":"#f68013","colormaps":["inferno","inferno_r","magma","magma_r","plasma","plasma_r","viridis","viridis_r","cividis","cividis_r","turbo","turbo_r","gist_heat","gist_heat_r","Greys","Greys_r"],"defaults":{"vmin":0.1191,"vmax":1.7456,"opacity":0.12,"steps":200,"samples":200,"alpha_coef":200.0,"gradient_step":0.01,"stretch":"log10","colormap":"inferno","show_all_times":false,"lighting_mode":"standard","galactic_center":[8122.0,0.0,0.0],"galactic_light_intensity":1.35,"galactic_ambient":0.22,"galactic_extinction":2.4,"galactic_scattering":0.55,"galactic_anisotropy":0.45,"galactic_warmth":0.72},"visible":false,"timeMyr":null,"onlyAtT0":true,"supportsShowAllTimes":true,"coRotate":true,"coRotationRate":0.03,"referenceTimeMyr":0.0,"interpolation":true,"variantGroup":null,"exclusiveGroup":null,"renderOrder":0.0,"opticalModel":"legacy-texture-space","occupancy":{"blob":"b159-vol-mccallum-ne-occ","dims":[64,64,64]}}],"colormaps":{"turbo":{"blob":"b1-lut-turbo","width":1024,"label":"turbo","legendColor":"#fe962b"},"inferno":{"blob":"b2-lut-inferno","width":1024,"label":"inferno","legendColor":"#f68013"},"inferno_r":{"blob":"b3-lut-inferno_r","width":1024,"label":"inferno_r","legendColor":"#62146e"},"magma":{"blob":"b4-lut-magma","width":1024,"label":"magma","legendColor":"#f9795d"},"magma_r":{"blob":"b5-lut-magma_r","width":1024,"label":"magma_r","legendColor":"#5c167f"},"plasma":{"blob":"b6-lut-plasma","width":1024,"label":"plasma","legendColor":"#f58b47"},"plasma_r":{"blob":"b7-lut-plasma_r","width":1024,"label":"plasma_r","legendColor":"#8808a6"},"viridis":{"blob":"b8-lut-viridis","width":1024,"label":"viridis","legendColor":"#4ec36b"},"viridis_r":{"blob":"b9-lut-viridis_r","width":1024,"label":"viridis_r","legendColor":"#375a8c"},"cividis":{"blob":"b10-lut-cividis","width":1024,"label":"cividis","legendColor":"#b4a76f"},"cividis_r":{"blob":"b11-lut-cividis_r","width":1024,"label":"cividis_r","legendColor":"#4a536c"},"turbo_r":{"blob":"b12-lut-turbo_r","width":1024,"label":"turbo_r","legendColor":"#1ecbda"},"gist_heat":{"blob":"b13-lut-gist_heat","width":1024,"label":"gist_heat","legendColor":"#ff7100"},"gist_heat_r":{"blob":"b14-lut-gist_heat_r","width":1024,"label":"gist_heat_r","legendColor":"#6a0000"},"Greys":{"blob":"b15-lut-Greys","width":1024,"label":"Greys","legendColor":"#5a5a5a"},"Greys_r":{"blob":"b16-lut-Greys_r","width":1024,"label":"Greys_r","legendColor":"#d3d3d3"}},"sky":{"enabled":true,"survey":"P/DSS2/color","frame":"galactic","layers":[{"key":"P/Mellinger/color","label":"Mellinger Color","survey":"P/Mellinger/color","opacity":1.0,"visible":true},{"key":"P/PLANCK/R2/HFI/color","label":"Planck Dust Emission Color","survey":"P/PLANCK/R2/HFI/color","opacity":1.0,"visible":true}],"layerGroups":[],"activeLayerKey":"P/Mellinger/color","activeGroupKey":null,"memberPointSizeDenominator":30.0,"memberMinScreenPx":0.0,"showMembers":false,"fullOpacityScalePc":120.0,"fadeOutScalePc":360.0,"members":null},"initialState":{"click_selection_enabled":false,"lasso_volume_selection_enabled":true,"lasso_selection_filter_enabled":true,"current_group":"Clusters","compact_payload_enabled":true,"scene_float_precision":2,"active_volume_key":"volume-0","legend_state":{"volume-0":true,"mccallum-ne":false},"volume_state_by_key":{"volume-0":{"visible":true},"mccallum-ne":{"visible":false}},"galaxy_image":true,"galaxy_image_path":"/Users/swiggumc/Downloads/Top-down_view_of_the_Milky_Way.jpg","galaxy_image_size_pc":40000.0,"galaxy_image_opacity":0.35,"galaxy_image_hide_below_scale_bar_pc":420.0,"galaxy_image_fade_start_scale_bar_pc":700.0,"sky_dome_enabled":true,"sky_dome_background_mode":"live_aladin","sky_dome_source":"aladin","sky_dome_projection":"TAN","sky_dome_capture_width_px":4096,"sky_dome_capture_height_px":2048,"sky_dome_capture_format":"image/jpeg","sky_dome_capture_quality":0.94,"sky_dome_radius_pc":40000.0,"sky_dome_opacity":1.0,"sky_dome_force_visible":false,"sky_dome_full_opacity_scale_bar_pc":120.0,"sky_dome_fade_out_scale_bar_pc":360.0,"sky_layers":[{"key":"P/Mellinger/color","label":"Mellinger Color","survey":"P/Mellinger/color","opacity":1.0,"visible":true},{"key":"P/PLANCK/R2/HFI/color","label":"Planck Dust Emission Color","survey":"P/PLANCK/R2/HFI/color","opacity":1.0,"visible":true}],"active_sky_layer_key":"P/Mellinger/color"},"states":{},"legacy":{"decorations":[],"exportProfile":"full","mobile":false},"blobs":[{"id":"b1-lut-turbo","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1333,"rawBytes":4096},{"id":"b2-lut-inferno","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1281,"rawBytes":4096},{"id":"b3-lut-inferno_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1316,"rawBytes":4096},{"id":"b4-lut-magma","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1273,"rawBytes":4096},{"id":"b5-lut-magma_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1323,"rawBytes":4096},{"id":"b6-lut-plasma","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1238,"rawBytes":4096},{"id":"b7-lut-plasma_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1283,"rawBytes":4096},{"id":"b8-lut-viridis","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1280,"rawBytes":4096},{"id":"b9-lut-viridis_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1243,"rawBytes":4096},{"id":"b10-lut-cividis","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1266,"rawBytes":4096},{"id":"b11-lut-cividis_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1249,"rawBytes":4096},{"id":"b12-lut-turbo_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1324,"rawBytes":4096},{"id":"b13-lut-gist_heat","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1043,"rawBytes":4096},{"id":"b14-lut-gist_heat_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1077,"rawBytes":4096},{"id":"b15-lut-Greys","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1303,"rawBytes":4096},{"id":"b16-lut-Greys_r","dtype":"u8","shape":[1024,4],"codec":"gzip","priority":0,"bytes":1271,"rawBytes":4096},{"id":"b17-trace-0-pos","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":672,"rawBytes":792},{"id":"b18-trace-0-scalar","dtype":"f32","shape":[66,1],"codec":"gzip+shuffle","priority":0,"bytes":70,"rawBytes":264},{"id":"b19-trace-0-age","dtype":"f32","shape":[1],"codec":"gzip","priority":0,"bytes":24,"rawBytes":4},{"id":"b20-trace-0-nstars","dtype":"f32","shape":[1],"codec":"gzip","priority":0,"bytes":24,"rawBytes":4},{"id":"b21-trace-0-meta","dtype":"json","shape":[94],"codec":"gzip","priority":1,"bytes":96,"rawBytes":94},{"id":"b22-trace-1-pos","dtype":"f32","shape":[66,1193,3],"codec":"gzip+shuffle","priority":0,"bytes":658177,"rawBytes":944856},{"id":"b23-trace-1-size","dtype":"f32","shape":[66,1193],"codec":"gzip+shuffle","priority":0,"bytes":25683,"rawBytes":314952},{"id":"b24-trace-1-sizemax","dtype":"f32","shape":[1193],"codec":"gzip+shuffle","priority":0,"bytes":46,"rawBytes":4772},{"id":"b25-trace-1-scalar","dtype":"f32","shape":[66,1193],"codec":"gzip+shuffle","priority":0,"bytes":128052,"rawBytes":314952},{"id":"b26-trace-1-age","dtype":"f32","shape":[1193],"codec":"gzip+shuffle","priority":0,"bytes":3831,"rawBytes":4772},{"id":"b27-trace-1-nstars","dtype":"f32","shape":[1193],"codec":"gzip+shuffle","priority":0,"bytes":1774,"rawBytes":4772},{"id":"b28-trace-1-stars","dtype":"f32","shape":[1193],"codec":"gzip+shuffle","priority":0,"bytes":3743,"rawBytes":4772},{"id":"b29-trace-1-meta","dtype":"json","shape":[96971],"codec":"gzip","priority":1,"bytes":39425,"rawBytes":96971},{"id":"b30-trace-2-pos","dtype":"f32","shape":[66,482,3],"codec":"gzip+shuffle","priority":0,"bytes":266768,"rawBytes":381744},{"id":"b31-trace-2-size","dtype":"f32","shape":[66,482],"codec":"gzip+shuffle","priority":0,"bytes":16175,"rawBytes":127248},{"id":"b32-trace-2-sizemax","dtype":"f32","shape":[482],"codec":"gzip+shuffle","priority":0,"bytes":39,"rawBytes":1928},{"id":"b33-trace-2-scalar","dtype":"f32","shape":[66,482],"codec":"gzip+shuffle","priority":0,"bytes":59614,"rawBytes":127248},{"id":"b34-trace-2-age","dtype":"f32","shape":[482],"codec":"gzip+shuffle","priority":0,"bytes":1515,"rawBytes":1928},{"id":"b35-trace-2-nstars","dtype":"f32","shape":[482],"codec":"gzip+shuffle","priority":0,"bytes":794,"rawBytes":1928},{"id":"b36-trace-2-stars","dtype":"f32","shape":[482],"codec":"gzip+shuffle","priority":0,"bytes":1568,"rawBytes":1928},{"id":"b37-trace-2-meta","dtype":"json","shape":[38020],"codec":"gzip","priority":1,"bytes":16427,"rawBytes":38020},{"id":"b38-trace-3-pos","dtype":"f32","shape":[66,170,3],"codec":"gzip+shuffle","priority":0,"bytes":95434,"rawBytes":134640},{"id":"b39-trace-3-size","dtype":"f32","shape":[66,170],"codec":"gzip+shuffle","priority":0,"bytes":4191,"rawBytes":44880},{"id":"b40-trace-3-sizemax","dtype":"f32","shape":[170],"codec":"gzip+shuffle","priority":0,"bytes":32,"rawBytes":680},{"id":"b41-trace-3-scalar","dtype":"f32","shape":[66,170],"codec":"gzip+shuffle","priority":0,"bytes":19209,"rawBytes":44880},{"id":"b42-trace-3-age","dtype":"f32","shape":[170],"codec":"gzip+shuffle","priority":0,"bytes":582,"rawBytes":680},{"id":"b43-trace-3-nstars","dtype":"f32","shape":[170],"codec":"gzip+shuffle","priority":0,"bytes":318,"rawBytes":680},{"id":"b44-trace-3-stars","dtype":"f32","shape":[170],"codec":"gzip+shuffle","priority":0,"bytes":590,"rawBytes":680},{"id":"b45-trace-3-meta","dtype":"json","shape":[13516],"codec":"gzip","priority":1,"bytes":6094,"rawBytes":13516},{"id":"b46-trace-4-pos","dtype":"f32","shape":[66,62,3],"codec":"gzip+shuffle","priority":0,"bytes":34463,"rawBytes":49104},{"id":"b47-trace-4-size","dtype":"f32","shape":[66,62],"codec":"gzip+shuffle","priority":0,"bytes":2129,"rawBytes":16368},{"id":"b48-trace-4-sizemax","dtype":"f32","shape":[62],"codec":"gzip","priority":0,"bytes":27,"rawBytes":248},{"id":"b49-trace-4-scalar","dtype":"f32","shape":[66,62],"codec":"gzip+shuffle","priority":0,"bytes":7909,"rawBytes":16368},{"id":"b50-trace-4-age","dtype":"f32","shape":[62],"codec":"gzip","priority":0,"bytes":250,"rawBytes":248},{"id":"b51-trace-4-nstars","dtype":"f32","shape":[62],"codec":"gzip","priority":0,"bytes":186,"rawBytes":248},{"id":"b52-trace-4-stars","dtype":"f32","shape":[62],"codec":"gzip","priority":0,"bytes":254,"rawBytes":248},{"id":"b53-trace-4-meta","dtype":"json","shape":[4679],"codec":"gzip","priority":1,"bytes":2280,"rawBytes":4679},{"id":"b54-trace-5-pos","dtype":"f32","shape":[66,37,3],"codec":"gzip+shuffle","priority":0,"bytes":21579,"rawBytes":29304},{"id":"b55-trace-5-size","dtype":"f32","shape":[66,37],"codec":"gzip+shuffle","priority":0,"bytes":1229,"rawBytes":9768},{"id":"b56-trace-5-sizemax","dtype":"f32","shape":[37],"codec":"gzip","priority":0,"bytes":27,"rawBytes":148},{"id":"b57-trace-5-scalar","dtype":"f32","shape":[66,37],"codec":"gzip+shuffle","priority":0,"bytes":4854,"rawBytes":9768},{"id":"b58-trace-5-age","dtype":"f32","shape":[37],"codec":"gzip","priority":0,"bytes":159,"rawBytes":148},{"id":"b59-trace-5-nstars","dtype":"f32","shape":[37],"codec":"gzip","priority":0,"bytes":123,"rawBytes":148},{"id":"b60-trace-5-stars","dtype":"f32","shape":[37],"codec":"gzip","priority":0,"bytes":164,"rawBytes":148},{"id":"b61-trace-5-meta","dtype":"json","shape":[3010],"codec":"gzip","priority":1,"bytes":1430,"rawBytes":3010},{"id":"b62-trace-6-pos","dtype":"f32","shape":[66,33,3],"codec":"gzip+shuffle","priority":0,"bytes":19449,"rawBytes":26136},{"id":"b63-trace-6-size","dtype":"f32","shape":[66,33],"codec":"gzip+shuffle","priority":0,"bytes":1137,"rawBytes":8712},{"id":"b64-trace-6-sizemax","dtype":"f32","shape":[33],"codec":"gzip","priority":0,"bytes":27,"rawBytes":132},{"id":"b65-trace-6-scalar","dtype":"f32","shape":[66,33],"codec":"gzip+shuffle","priority":0,"bytes":4411,"rawBytes":8712},{"id":"b66-trace-6-age","dtype":"f32","shape":[33],"codec":"gzip","priority":0,"bytes":141,"rawBytes":132},{"id":"b67-trace-6-nstars","dtype":"f32","shape":[33],"codec":"gzip","priority":0,"bytes":123,"rawBytes":132},{"id":"b68-trace-6-stars","dtype":"f32","shape":[33],"codec":"gzip","priority":0,"bytes":155,"rawBytes":132},{"id":"b69-trace-6-meta","dtype":"json","shape":[2748],"codec":"gzip","priority":1,"bytes":1358,"rawBytes":2748},{"id":"b70-trace-7-pos","dtype":"f32","shape":[66,12,3],"codec":"gzip+shuffle","priority":0,"bytes":7316,"rawBytes":9504},{"id":"b71-trace-7-size","dtype":"f32","shape":[66,12],"codec":"gzip+shuffle","priority":0,"bytes":419,"rawBytes":3168},{"id":"b72-trace-7-sizemax","dtype":"f32","shape":[12],"codec":"gzip","priority":0,"bytes":27,"rawBytes":48},{"id":"b73-trace-7-scalar","dtype":"f32","shape":[66,12],"codec":"gzip+shuffle","priority":0,"bytes":1591,"rawBytes":3168},{"id":"b74-trace-7-age","dtype":"f32","shape":[12],"codec":"gzip","priority":0,"bytes":69,"rawBytes":48},{"id":"b75-trace-7-nstars","dtype":"f32","shape":[12],"codec":"gzip","priority":0,"bytes":57,"rawBytes":48},{"id":"b76-trace-7-stars","dtype":"f32","shape":[12],"codec":"gzip","priority":0,"bytes":66,"rawBytes":48},{"id":"b77-trace-7-meta","dtype":"json","shape":[963],"codec":"gzip","priority":1,"bytes":512,"rawBytes":963},{"id":"b78-trace-8-pos","dtype":"f32","shape":[66,22,3],"codec":"gzip+shuffle","priority":0,"bytes":13185,"rawBytes":17424},{"id":"b79-trace-8-size","dtype":"f32","shape":[66,22],"codec":"gzip+shuffle","priority":0,"bytes":769,"rawBytes":5808},{"id":"b80-trace-8-sizemax","dtype":"f32","shape":[22],"codec":"gzip","priority":0,"bytes":27,"rawBytes":88},{"id":"b81-trace-8-scalar","dtype":"f32","shape":[66,22],"codec":"gzip+shuffle","priority":0,"bytes":2844,"rawBytes":5808},{"id":"b82-trace-8-age","dtype":"f32","shape":[22],"codec":"gzip","priority":0,"bytes":109,"rawBytes":88},{"id":"b83-trace-8-nstars","dtype":"f32","shape":[22],"codec":"gzip","priority":0,"bytes":88,"rawBytes":88},{"id":"b84-trace-8-stars","dtype":"f32","shape":[22],"codec":"gzip","priority":0,"bytes":111,"rawBytes":88},{"id":"b85-trace-8-meta","dtype":"json","shape":[1824],"codec":"gzip","priority":1,"bytes":925,"rawBytes":1824},{"id":"b86-trace-9-pos","dtype":"f32","shape":[66,6,3],"codec":"gzip+shuffle","priority":0,"bytes":3564,"rawBytes":4752},{"id":"b87-trace-9-size","dtype":"f32","shape":[66,6],"codec":"gzip+shuffle","priority":0,"bytes":232,"rawBytes":1584},{"id":"b88-trace-9-sizemax","dtype":"f32","shape":[6],"codec":"gzip","priority":0,"bytes":27,"rawBytes":24},{"id":"b89-trace-9-scalar","dtype":"f32","shape":[66,6],"codec":"gzip+shuffle","priority":0,"bytes":789,"rawBytes":1584},{"id":"b90-trace-9-age","dtype":"f32","shape":[6],"codec":"gzip","priority":0,"bytes":43,"rawBytes":24},{"id":"b91-trace-9-nstars","dtype":"f32","shape":[6],"codec":"gzip","priority":0,"bytes":41,"rawBytes":24},{"id":"b92-trace-9-stars","dtype":"f32","shape":[6],"codec":"gzip","priority":0,"bytes":45,"rawBytes":24},{"id":"b93-trace-9-meta","dtype":"json","shape":[516],"codec":"gzip","priority":1,"bytes":342,"rawBytes":516},{"id":"b94-trace-10-pos","dtype":"f32","shape":[66,42,3],"codec":"gzip+shuffle","priority":0,"bytes":24246,"rawBytes":33264},{"id":"b95-trace-10-size","dtype":"f32","shape":[66,42],"codec":"gzip+shuffle","priority":0,"bytes":1121,"rawBytes":11088},{"id":"b96-trace-10-sizemax","dtype":"f32","shape":[42],"codec":"gzip","priority":0,"bytes":27,"rawBytes":168},{"id":"b97-trace-10-scalar","dtype":"f32","shape":[66,42],"codec":"gzip+shuffle","priority":0,"bytes":5000,"rawBytes":11088},{"id":"b98-trace-10-age","dtype":"f32","shape":[42],"codec":"gzip","priority":0,"bytes":186,"rawBytes":168},{"id":"b99-trace-10-nstars","dtype":"f32","shape":[42],"codec":"gzip","priority":0,"bytes":140,"rawBytes":168},{"id":"b100-trace-10-stars","dtype":"f32","shape":[42],"codec":"gzip","priority":0,"bytes":191,"rawBytes":168},{"id":"b101-trace-10-meta","dtype":"json","shape":[3481],"codec":"gzip","priority":1,"bytes":1649,"rawBytes":3481},{"id":"b102-trace-11-pos","dtype":"f32","shape":[66,10,3],"codec":"gzip+shuffle","priority":0,"bytes":5950,"rawBytes":7920},{"id":"b103-trace-11-size","dtype":"f32","shape":[66,10],"codec":"gzip+shuffle","priority":0,"bytes":337,"rawBytes":2640},{"id":"b104-trace-11-sizemax","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":27,"rawBytes":40},{"id":"b105-trace-11-scalar","dtype":"f32","shape":[66,10],"codec":"gzip+shuffle","priority":0,"bytes":1224,"rawBytes":2640},{"id":"b106-trace-11-age","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":61,"rawBytes":40},{"id":"b107-trace-11-nstars","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":52,"rawBytes":40},{"id":"b108-trace-11-stars","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":61,"rawBytes":40},{"id":"b109-trace-11-meta","dtype":"json","shape":[753],"codec":"gzip","priority":1,"bytes":414,"rawBytes":753},{"id":"b110-trace-12-pos","dtype":"f32","shape":[66,13,3],"codec":"gzip+shuffle","priority":0,"bytes":7882,"rawBytes":10296},{"id":"b111-trace-12-size","dtype":"f32","shape":[66,13],"codec":"gzip+shuffle","priority":0,"bytes":391,"rawBytes":3432},{"id":"b112-trace-12-sizemax","dtype":"f32","shape":[13],"codec":"gzip","priority":0,"bytes":27,"rawBytes":52},{"id":"b113-trace-12-scalar","dtype":"f32","shape":[66,13],"codec":"gzip+shuffle","priority":0,"bytes":1558,"rawBytes":3432},{"id":"b114-trace-12-age","dtype":"f32","shape":[13],"codec":"gzip","priority":0,"bytes":68,"rawBytes":52},{"id":"b115-trace-12-nstars","dtype":"f32","shape":[13],"codec":"gzip","priority":0,"bytes":61,"rawBytes":52},{"id":"b116-trace-12-stars","dtype":"f32","shape":[13],"codec":"gzip","priority":0,"bytes":75,"rawBytes":52},{"id":"b117-trace-12-meta","dtype":"json","shape":[1084],"codec":"gzip","priority":1,"bytes":597,"rawBytes":1084},{"id":"b118-trace-13-pos","dtype":"f32","shape":[66,10,3],"codec":"gzip+shuffle","priority":0,"bytes":6048,"rawBytes":7920},{"id":"b119-trace-13-size","dtype":"f32","shape":[66,10],"codec":"gzip+shuffle","priority":0,"bytes":325,"rawBytes":2640},{"id":"b120-trace-13-scalar","dtype":"f32","shape":[66,10],"codec":"gzip+shuffle","priority":0,"bytes":1232,"rawBytes":2640},{"id":"b121-trace-13-age","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":58,"rawBytes":40},{"id":"b122-trace-13-nstars","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":48,"rawBytes":40},{"id":"b123-trace-13-stars","dtype":"f32","shape":[10],"codec":"gzip","priority":0,"bytes":59,"rawBytes":40},{"id":"b124-trace-13-meta","dtype":"json","shape":[953],"codec":"gzip","priority":1,"bytes":563,"rawBytes":953},{"id":"b125-trace-36-pos","dtype":"f32","shape":[1,746,3],"codec":"gzip+shuffle","priority":0,"bytes":6700,"rawBytes":8952},{"id":"b126-trace-36-size","dtype":"f32","shape":[746],"codec":"gzip+shuffle","priority":0,"bytes":1835,"rawBytes":2984},{"id":"b127-trace-36-meta","dtype":"json","shape":[2248],"codec":"gzip","priority":1,"bytes":49,"rawBytes":2248},{"id":"b128-trace-37-pos","dtype":"f32","shape":[1,171,3],"codec":"gzip+shuffle","priority":0,"bytes":1606,"rawBytes":2052},{"id":"b129-trace-37-size","dtype":"f32","shape":[171],"codec":"gzip+shuffle","priority":0,"bytes":523,"rawBytes":684},{"id":"b130-trace-37-meta","dtype":"json","shape":[523],"codec":"gzip","priority":1,"bytes":38,"rawBytes":523},{"id":"b131-trace-38-pos","dtype":"f32","shape":[1,250,3],"codec":"gzip+shuffle","priority":0,"bytes":2313,"rawBytes":3000},{"id":"b132-trace-38-size","dtype":"f32","shape":[250],"codec":"gzip+shuffle","priority":0,"bytes":658,"rawBytes":1000},{"id":"b133-trace-38-meta","dtype":"json","shape":[760],"codec":"gzip","priority":1,"bytes":39,"rawBytes":760},{"id":"b134-trace-39-pos","dtype":"f32","shape":[1,186,3],"codec":"gzip+shuffle","priority":0,"bytes":1755,"rawBytes":2232},{"id":"b135-trace-39-size","dtype":"f32","shape":[186],"codec":"gzip+shuffle","priority":0,"bytes":491,"rawBytes":744},{"id":"b136-trace-39-meta","dtype":"json","shape":[568],"codec":"gzip","priority":1,"bytes":39,"rawBytes":568},{"id":"b137-trace-14-lines","dtype":"f32","shape":[1,190,3],"codec":"gzip+shuffle","priority":0,"bytes":683,"rawBytes":2280},{"id":"b138-trace-14-lines-offset","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":689,"rawBytes":792},{"id":"b139-trace-14-arc","dtype":"f32","shape":[190],"codec":"gzip+shuffle","priority":0,"bytes":615,"rawBytes":760},{"id":"b140-trace-15-labels","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":664,"rawBytes":792},{"id":"b141-trace-16-lines","dtype":"f32","shape":[1,1998,3],"codec":"gzip+shuffle","priority":0,"bytes":9203,"rawBytes":23976},{"id":"b142-trace-16-lines-offset","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":690,"rawBytes":792},{"id":"b143-trace-16-arc","dtype":"f32","shape":[1998],"codec":"gzip+shuffle","priority":0,"bytes":4878,"rawBytes":7992},{"id":"b144-trace-17-labels","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":672,"rawBytes":792},{"id":"b145-trace-18-lines","dtype":"f32","shape":[1,1998,3],"codec":"gzip+shuffle","priority":0,"bytes":9903,"rawBytes":23976},{"id":"b146-trace-18-lines-offset","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":690,"rawBytes":792},{"id":"b147-trace-18-arc","dtype":"f32","shape":[1998],"codec":"gzip+shuffle","priority":0,"bytes":4471,"rawBytes":7992},{"id":"b148-trace-19-labels","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":670,"rawBytes":792},{"id":"b149-trace-20-lines","dtype":"f32","shape":[1,1998,3],"codec":"gzip+shuffle","priority":0,"bytes":9986,"rawBytes":23976},{"id":"b150-trace-20-lines-offset","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":690,"rawBytes":792},{"id":"b151-trace-20-arc","dtype":"f32","shape":[1998],"codec":"gzip+shuffle","priority":0,"bytes":4603,"rawBytes":7992},{"id":"b152-trace-21-labels","dtype":"f32","shape":[66,1,3],"codec":"gzip+shuffle","priority":0,"bytes":677,"rawBytes":792},{"id":"b153-img-galaxy-image-overlay","dtype":"bytes","shape":[2917913],"codec":"raw","priority":1,"bytes":2917913,"rawBytes":2917913,"mime":"image/jpeg"},{"id":"b154-img-galaxy-image-overlay-center","dtype":"f32","shape":[66,3],"codec":"gzip+shuffle","priority":0,"bytes":548,"rawBytes":792},{"id":"b155-img-galaxy-image-overlay-opacity","dtype":"f32","shape":[66],"codec":"gzip+shuffle","priority":0,"bytes":33,"rawBytes":264},{"id":"b156-vol-volume-0","dtype":"u8","shape":[401,512,512],"codec":"gzip","priority":2,"bytes":1853723,"rawBytes":105119744},{"id":"b157-vol-volume-0-occ","dtype":"u8","shape":[64,64,64],"codec":"gzip","priority":2,"bytes":29632,"rawBytes":262144},{"id":"b158-vol-mccallum-ne","dtype":"u8","shape":[327,512,512],"codec":"gzip","priority":2,"bytes":3336800,"rawBytes":85721088},{"id":"b159-vol-mccallum-ne-occ","dtype":"u8","shape":[64,64,64],"codec":"gzip","priority":2,"bytes":45475,"rawBytes":262144}],"viewer":{"version":"2.0.0"}}</script>
 <script type="application/octet-stream" data-oviz-blob="b1-lut-turbo">
 H4sIAAAAAAACE1XDCVgOdhwH8Lnv+3orSiWREvW+vUf39b6Lrbmnua+25hqNOZbFcqxcOcKyiCwRrUQiOVqKRCJJEh2S0qXjrd5jz///PL933z7P85k02P6LSf/vZDPMHXe2FUzBXYQG03FXkeFc3M3OeBHuLh7ji3tIzFfjnlILf9xLZrUZ97a3DsR9HGx24b6OohDcz0kSivs72x/DA5ydTuKBLi5n8CBX92g82FUei4e4ecXjoW5Tr+Jh7t438HCP6bfxCI9ZaVjgMScD63n6ZGF9z/lPsIHnwmd4pHzJCzxKvvwVNpT7FmEjud9bPFq+shQbK9a8xyaKdZXYVOFfhccoNtZgM8WmOjxWsbUBm8sDGvE4eWAzHi/focQW8p1teIJ8dzu29AxWYSvPvWo80eOABlu7h3Y4ye2IFk92DevQxuVEh7ZO4RosdIzoUGR/Wo3tZGdVWCw5144l4vNtWCq6qMQy20st2H5yXBN2sE5oxI4TExuwk2VSHXa2SK7BLuNSqrCreWoldjO7U4HdTdPKsIdJegn2HJ1RjOVGD4qwwjDrFf5yZPZL7GWQk4en6Ofm4qn6z3PwV3p52fhrQf5D7C0oyMTfCArT8TRB0T08XfDmDp4heHsLz9QruYln6ZUm49n6Zdc6HPk+cQ4eVZHwLTaqjJuLR3+M9cEmVRe+w2bV0fOweU3UfGxRG7kAW9ZFLMTW9eGLsE3D8cVY9PnIEixpDF2KHZr2L8POzcHLsXvL7hVYrgzyxVOUgd9j79aAH/CMti1+eHbbxh+xT7v/SrxAtXYVXqJatRqvUPutwX5q37V4tWbpT3idZtE6vEEzfz3erPHxxwHaOT/jQO3MDThIO30j3qP1/gWHaKduwge0XpvxIa1iCw7TeGzFJzRuv+KTGpcAfErtvA1Hqh1/w1Eqh0AcrZJtxzHt0h04tl3yO45rEwfh+Fa7nThRabcLJ7WIduPkZtEenNIk/AOnNgqD8d3PwhCcVi/ci+/XCffhzFrhfpz1SXgAZ1cLD+Kcj8JQnFspOoSfV4gO4/xy0RFcUGZ3FBeW2IXhorfiY7i4WHwcvysSn8ClhZI/cXmBJBxX5EtP4so86V+46pk0Alc/lZ3CNU9kp3FttiwS12fJzuCGB7KzuDFDFoWb0mXncHOa7G/cclcWjZWp0vO4NUUag9tuSC/g9usS9qLuNTEbS1VX7NhLuvH8Zaq+LGLjdGOF7D9UE2PLxutG27AJulGT2Su6kZPYRN0Ia/aqbrgVe033hCWbpBs2gb2ue9iCTdY9OJ69QdX7zNmbusFj2RSq2m3G3tINMmVTaft2E/a27jZj9g5t22rE3qWtmwzZe7obRrFpVLl+JPsvbVmrz6bT5lV67H3a5CdgM2ij7wg2k35eNox9QBsWD2Uf0voFQ9gsWjdvMPuI1s4dxGbTT7MHso9p9cwB7BNaNa0/m0M/evdjn9IPU/uyubTCi39GyxV92Oe0zLM3m0dL3PkX9J1rLzafFjv3ZF/SIke+gL6278G+oq+kfCF9Ke7OvqYvRHwRfW7bjX1DcyfzxTTHmn9LH1t1Zd/RRxP4EvrQgi+lmeO6sGU0fSxfTtPM+Pf0rmlntoKmGvMfaMpovpImG/IfadIovoomGnRiq2mCPv+Jxgn4Gho7gq+lMcP5Oho9lK+nUUP4Bho5mP9MIwbyjTR8AN9Ej/fnm+nRfnwLPdSHV9L9vflWGtKrM9tG9/Tk2+nOHryKbu/Oq+m2bryGbunahdXS/wCwXwbAABAAAA==
 </script>
@@ -2626,6 +2656,11 @@ class Camera {
 
   update(sceneRadius = 1e4) {
     const p = this.pose;
+    // Only rebuild (and bump `version`, which downstream caches key on) when
+    // the pose or viewport actually changed.
+    const sig = `${p.target[0]},${p.target[1]},${p.target[2]},${p.distance},${p.yaw},${p.pitch},${p.fov},${this.aspect},${this.height},${sceneRadius}`;
+    if (sig === this._sig) return false;
+    this._sig = sig;
     poseEye(p, this.eye);
     forwardFromAngles(p.yaw, p.pitch, this.forward);
     const tgt = p.distance > 1e-6
@@ -2646,6 +2681,7 @@ class Camera {
     m4invert(this.view, this.invView);
     m4invert(this.proj, this.invProj);
     this.version++;
+    return true;
   }
 
   /** World → CSS pixel coordinates. Returns null if behind the camera. */
@@ -2884,42 +2920,47 @@ class Renderer {
     for (const overlay of this.overlays) overlay.update?.(frame);
   }
 
-  /** Render one frame into a PNG blob at `scale` × the current resolution. */
+  /**
+   * Render one frame into an image blob at `scale` × the current resolution.
+   * An async background (e.g. the Sky survey) is prepared first; the WebGL
+   * frame is then rendered and composited in the same task, before the
+   * browser presents (and clears) the drawing buffer.
+   */
   async capture({ scale = 1, background = null, type = "image/png", quality } = {}) {
-    const prevMax = this.maxDpr;
     const w = this.width, h = this.height;
-    const dpr = Math.min(window.devicePixelRatio || 1, prevMax) * scale;
-    this.canvas.width = Math.round(w * dpr);
-    this.canvas.height = Math.round(h * dpr);
     const prevDpr = this.dpr;
+    const dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr) * scale;
+    const W = Math.round(w * dpr), H = Math.round(h * dpr);
+    let off = null, ctx = null;
+    if (background) {
+      off = document.createElement("canvas");
+      off.width = W;
+      off.height = H;
+      ctx = off.getContext("2d");
+      if (typeof background === "string") {
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, W, H);
+      } else if (typeof background === "function") {
+        await background(ctx, W, H);
+      }
+    }
+    this.canvas.width = W;
+    this.canvas.height = H;
     this.dpr = dpr;
     for (const layer of this.layers) layer.resize?.(this);
     const prevInteracting = this.interacting;
     this.interacting = false;
     this.render();
-    let source = this.canvas;
-    if (background) {
-      const off = document.createElement("canvas");
-      off.width = this.canvas.width;
-      off.height = this.canvas.height;
-      const ctx = off.getContext("2d");
-      if (typeof background === "string") {
-        ctx.fillStyle = background;
-        ctx.fillRect(0, 0, off.width, off.height);
-      } else if (typeof background === "function") {
-        await background(ctx, off.width, off.height);
-      }
-      ctx.drawImage(this.canvas, 0, 0);
-      source = off;
-    }
-    const blob = await new Promise((resolve) => source.toBlob(resolve, type, quality));
+    if (ctx) ctx.drawImage(this.canvas, 0, 0);
+    const source = off || this.canvas;
+    const blobPromise = new Promise((resolve) => source.toBlob(resolve, type, quality));
     this.dpr = prevDpr;
     this.interacting = prevInteracting;
     this.canvas.width = Math.round(w * prevDpr);
     this.canvas.height = Math.round(h * prevDpr);
     for (const layer of this.layers) layer.resize?.(this);
     this.invalidate();
-    return blob;
+    return blobPromise;
   }
 
   fps() {
@@ -3059,13 +3100,13 @@ class Controls {
       const k = 16 / dt;
       const perPx = this.pose.fov * DEG / this.camera.height;
       this.velocity.yaw = dx * perPx * k * 0.6;
-      this.velocity.pitch = -dy * perPx * k * 0.6;
+      this.velocity.pitch = dy * perPx * k * 0.6;
     } else {
       const s = (2 * Math.PI) / Math.max(this.camera.height, 400) * this.rotateSpeed * 0.9;
-      this.rotate(-dx * s, dy * s);
+      this.rotate(-dx * s, -dy * s);
       const k = 16 / dt;
       this.velocity.yaw = -dx * s * k * 0.55;
-      this.velocity.pitch = dy * s * k * 0.55;
+      this.velocity.pitch = -dy * s * k * 0.55;
     }
   }
 
@@ -3105,7 +3146,7 @@ class Controls {
     const p = this.pose;
     const perPx = (p.fov * DEG) / this.camera.height;
     p.yaw += dx * perPx;
-    p.pitch = clamp(p.pitch - dy * perPx, -PITCH_LIMIT, PITCH_LIMIT);
+    p.pitch = clamp(p.pitch + dy * perPx, -PITCH_LIMIT, PITCH_LIMIT);
     this._changed();
   }
 
@@ -3553,11 +3594,11 @@ void main() {
   }
   float stars = pow(max(aStatic.w, 1e-6), uStarsExp);
   float eff = opacity * uOpacityScale * p.w;
-  // State bits: 1 dimmed (filter), 2 hidden (filter), 4 replaced by member
-  // stars in Sky view.
+  // State bits: 1 dimmed / 2 hidden (distribution filter), 4 replaced by
+  // member stars in Sky view, 8 dimmed / 16 hidden (lasso selection).
   int st = int(aState + 0.5);
-  if ((st & 2) != 0) eff = 0.0;
-  else if ((st & 1) != 0) eff *= uDimOpacity;
+  if ((st & 18) != 0) eff = 0.0;
+  else if ((st & 9) != 0) eff *= uDimOpacity;
   if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
   vec4 center = uViewProj * vec4(p.xyz + uOffset, 1.0);
   if (size <= 0.0 || eff <= 0.001 || p.w <= 0.0 || center.w <= 0.0) {
@@ -3899,7 +3940,7 @@ class PointsLayer {
     prog.f("uPointScale", global.pointScale);
     prog.f("uSizeScale", style.sizeScale * global.pointSize);
     prog.f("uGlobalSize", global.pointSize);
-    prog.f("uOpacityScale", style.opacityScale * global.pointOpacity);
+    prog.f("uOpacityScale", style.opacityScale * global.pointOpacity * Math.min(1, style.presence ?? 1));
     prog.f("uGlow", global.glow);
     prog.v3("uFade", global.fadeTime, global.fadeInOut ? 1 : 0, global.fadeByOpacity ? 1 : 0);
     prog.f("uStarsExp", style.starsExp);
@@ -5123,6 +5164,9 @@ function legacySnapshotToState(snap, manifest, base) {
   if (gc.sky_member_display_mode) st.sky.members = gc.sky_member_display_mode === "clusters" ? "clusters" : "stars";
   if (gc.sky_background_hidden != null) st.sky.backgroundVisible = !gc.sky_background_hidden;
   if (Array.isArray(snap.sky_layers) && snap.sky_layers.length) st.sky.layers = cloneJson(snap.sky_layers);
+  if (Array.isArray(snap.manual_labels)) {
+    st.ext = { ...(st.ext || {}), notes: snap.manual_labels.map(legacyNote).filter(Boolean) };
+  }
   const fv = Number(snap.current_frame_value ?? snap.current_frame_index);
   if (Number.isFinite(fv)) st.time.frame = fv;
   const mode = gc.camera_view_mode === "earth" ? "sky" : "3d";
@@ -5163,6 +5207,13 @@ function num(v, fb) {
 
 function bool(v, fb) {
   return v === undefined || v === null ? !!fb : !!v;
+}
+
+function legacyNote(l, i) {
+  if (!l || typeof l !== "object") return null;
+  const x = Number(l.x ?? l.position?.x), y = Number(l.y ?? l.position?.y), z = Number(l.z ?? l.position?.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  return { id: String(l.id || `legacy-${i}`), text: String(l.text || "Note"), anchor: { pos: [x, y, z] }, color: String(l.color || "#ffffff") };
 }
 return { STATE_VERSION, defaultVolumeState, clampVolumeState, groupMode, initialViewerState, applyGroupDefaults, legacySnapshotToState, cloneState, cloneJson };
 })();
@@ -5380,10 +5431,10 @@ class Viewer extends Emitter {
       Object.assign(this.renderer.camera.pose, clonePose(pose));
       this.renderer.markInteraction();
       if (done) {
-        const cb = this.tween.onDone;
+        const t = this.tween;
         this.tween = null;
         this.renderer.continuous.delete("tween");
-        cb?.();
+        t.settle?.(true);
       }
       this._onCameraChange(true);
     }
@@ -5554,22 +5605,33 @@ class Viewer extends Emitter {
     this.emit("camera", { fromTween });
   }
 
+  /** Stop a running camera flight; its promise resolves with {done: false}. */
   _cancelTween() {
-    if (this.tween) {
-      this.tween = null;
-      this.renderer.continuous.delete("tween");
-    }
+    const t = this.tween;
+    if (!t) return;
+    this.tween = null;
+    this.renderer.continuous.delete("tween");
+    this.renderer.invalidate();
+    t.settle?.(false);
   }
 
+  /**
+   * Fly the camera to `pose`. Resolves {done: true} on arrival, or
+   * {done: false} if the flight was interrupted (user input, a new flight).
+   */
   animateTo(pose, { duration = 1100, onDone } = {}) {
+    this._cancelTween();
     this.controls.stop();
     const d = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : duration;
-    this.tween = poseTween(this.renderer.camera.pose, pose, d);
-    this.tween.onDone = onDone;
+    const tween = poseTween(this.renderer.camera.pose, pose, d);
+    this.tween = tween;
     this.renderer.hold("tween");
     return new Promise((resolve) => {
-      const prev = this.tween.onDone;
-      this.tween.onDone = () => { prev?.(); resolve(); };
+      tween.settle = (done) => {
+        tween.settle = null;
+        if (done) onDone?.();
+        resolve({ done });
+      };
     });
   }
 
@@ -5635,13 +5697,24 @@ class Viewer extends Emitter {
       const a = anglesFromForward(f);
       const target = makePose({ target: this.skyEye(), distance: 0, yaw: a.yaw, pitch: a.pitch * 0.35, fov: SKY_FOV });
       this.controls.mode = "sky";
-      if (animate) await this.animateTo(target, { duration: 1400 });
-      else this.setPose(target);
+      const res = animate ? await this.animateTo(target, { duration: 1400 }) : null;
+      if (!res || !res.done) {
+        // Interrupted (or instant): land at the Sun, keeping the current
+        // gaze, so Sky registration and member stars always come up.
+        if (this.state.view.mode !== "sky") return;
+        const p = clonePose(this.pose);
+        p.target = this.skyEye();
+        p.distance = 0;
+        if (!animate) { p.yaw = target.yaw; p.pitch = target.pitch; p.fov = target.fov; }
+        this.setPose(p);
+      }
+      if (this.state.view.mode !== "sky") return;
     } else {
       const back = this.returnPose || this.homePose;
       this.controls.mode = "galactic";
       if (animate) await this.animateTo(back, { duration: 1300 });
       else this.setPose(back);
+      if (this.state.view.mode !== "3d") return;
     }
     this.emit("viewmode-settled", { mode });
     this.renderer.invalidate();
@@ -5824,7 +5897,7 @@ return { Viewer, isMobile };
 })();
 
 // ---- ui/dom.js ----
-const { h, clear, icon, iconButton, fmt, fmtInt, kbd, isMac, MOD, isEditable, fuzzyScore, copyText, downloadBlob, localStorageGet, localStorageSet } = (() => {
+const { h, clear, icon, iconButton, fmt, fmtInt, kbd, isMac, MOD, isEditable, controlConsumesKey, fuzzyScore, copyText, downloadBlob, localStorageGet, localStorageSet } = (() => {
 // Tiny DOM helpers: hyperscript, icons, formatting, focus utilities.
 
 function h(tag, props, ...children) {
@@ -5958,6 +6031,28 @@ function isEditable(target) {
 }
 
 /**
+ * Does the focused control handle this key itself? Sliders own arrows,
+ * Home/End and paging; buttons, switches, options and links own Space and
+ * Enter; selects own navigation keys. Global shortcuts must yield to them.
+ */
+function controlConsumesKey(e) {
+  const t = e.target;
+  if (!t || !(t instanceof Element)) return false;
+  const k = e.key;
+  const role = t.getAttribute("role") || "";
+  const type = t.tagName === "INPUT" ? (t.getAttribute("type") || "text").toLowerCase() : "";
+  if (type === "range" || role === "slider") {
+    return ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(k);
+  }
+  if (t.tagName === "SELECT") return ["ArrowUp", "ArrowDown", " ", "Enter"].includes(k);
+  const activatable = t.tagName === "BUTTON" || t.tagName === "A" || t.tagName === "SUMMARY"
+    || type === "checkbox" || type === "radio" || type === "color"
+    || ["button", "switch", "option", "menuitem", "tab", "listitem"].includes(role);
+  if (activatable) return k === " " || k === "Enter";
+  return false;
+}
+
+/**
  * Fuzzy score: substring matches rank highest (earlier and word-start
  * better); otherwise a subsequence match must be compact — its span may be
  * at most ~2.5× the query length — so scattered letters never match.
@@ -6014,7 +6109,7 @@ function localStorageGet(k) {
 function localStorageSet(k, v) {
   try { localStorage.setItem(k, v); } catch (_) { /* private mode or quota */ }
 }
-return { h, clear, icon, iconButton, fmt, fmtInt, kbd, isMac, MOD, isEditable, fuzzyScore, copyText, downloadBlob, localStorageGet, localStorageSet };
+return { h, clear, icon, iconButton, fmt, fmtInt, kbd, isMac, MOD, isEditable, controlConsumesKey, fuzzyScore, copyText, downloadBlob, localStorageGet, localStorageSet };
 })();
 
 // ---- ui/controls.js ----
@@ -6806,8 +6901,18 @@ class Inspector {
       h("button", { class: "ov-btn", type: "button", "aria-pressed": String(!!following), onclick: () => { this.ui.toggleFollow(hit); this.refresh(); } }, icon("follow"), following ? "Following" : "Follow"),
       h("button", { class: "ov-btn", type: "button", "aria-pressed": String(trailOn), disabled: v.timeline.count <= 1 ? true : null, onclick: () => { this.ui.toggleTrail(hit); this.refresh(); } }, icon("trail"), "Orbit trail"),
       h("button", { class: "ov-btn", type: "button", onclick: () => this.copy(d) }, icon("copy"), "Copy"),
+      h("button", { class: "ov-btn", type: "button", onclick: () => this.ui.notes?.addForObject(hit) }, icon("edit"), "Add note"),
     );
     this.body.append(hero, facts, actions);
+    if (d.ra != null && d.dec != null) {
+      const coord = `${d.ra.toFixed(5)} ${d.dec >= 0 ? "+" : ""}${d.dec.toFixed(5)}`;
+      const simbad = `https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${encodeURIComponent(coord)}&CooFrame=ICRS&Radius=10&Radius.unit=arcmin`;
+      const aladin = `https://aladin.cds.unistra.fr/AladinLite/?target=${encodeURIComponent(coord)}&fov=1.5&survey=P%2FDSS2%2Fcolor`;
+      this.body.append(h("div", { class: "ov-insp-links" },
+        h("span", { class: "ov-fact-label" }, "Look up"),
+        h("a", { class: "ov-btn ov-btn--sm ov-btn--ghost", href: simbad, target: "_blank", rel: "noopener noreferrer" }, "SIMBAD ↗"),
+        h("a", { class: "ov-btn ov-btn--sm ov-btn--ghost", href: aladin, target: "_blank", rel: "noopener noreferrer" }, "Aladin ↗")));
+    }
     if (d.hover) {
       const legacy = h("div", { class: "ov-insp-legacy" });
       legacy.innerHTML = sanitize(d.hover);
@@ -7896,6 +8001,28 @@ class SkyPlugin {
     this.renderLayerList();
   }
 
+  /** Add a HiPS survey (CDS ID like "P/2MASS/color" or an https URL) on top. */
+  addSurvey(raw) {
+    const id = String(raw || "").trim();
+    if (!id) return;
+    if (!/^(https?:\/\/|[A-Za-z0-9_.-]+\/)/.test(id)) {
+      this.ui.toast("Enter a HiPS ID such as P/2MASS/color, or an https:// URL");
+      return;
+    }
+    const list = this.layers();
+    const existing = list.find((l) => l.key === id || l.survey === id);
+    if (existing) {
+      existing.visible = true;
+      existing.opacity = existing.opacity || 1;
+    } else {
+      const label = id.replace(/^https?:\/\/[^/]+\//, "").replace(/\//g, " ").trim();
+      list.unshift({ key: id, label, survey: id, opacity: 0.7, visible: true });
+    }
+    this.applyLayers();
+    this.renderLayerList();
+    this.ui.toast(`Added ${id}`, { icon: icon("globe") });
+  }
+
   moveLayer(key, dir) {
     const list = this.layers();
     const i = list.findIndex((x) => x.key === key);
@@ -7919,6 +8046,15 @@ class SkyPlugin {
     }
     this.listHost = h("div");
     sec.append(this.listHost);
+    const input = h("input", { class: "ov-input", type: "text", placeholder: "Add survey: HiPS ID or URL", spellcheck: "false", "aria-label": "Add a HiPS survey" });
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        this.addSurvey(input.value);
+        input.value = "";
+      }
+    });
+    sec.append(h("div", { style: { padding: "6px 12px 4px" } }, input));
     this.renderLayerList();
     return sec;
   }
@@ -8158,10 +8294,12 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
 
   function step(t) {
     const st = viewer.state;
-    // Camera
-    lerpPose(poseA, poseB, t, tmpPose);
-    if (lift > 0) tmpPose.distance += Math.sin(Math.PI * t) * lift;
-    Object.assign(viewer.renderer.camera.pose, clonePose(tmpPose));
+    // Camera ("keep" States leave the live camera alone entirely).
+    if (!keepCamera) {
+      lerpPose(poseA, poseB, t, tmpPose);
+      if (lift > 0) tmpPose.distance += Math.sin(Math.PI * t) * lift;
+      Object.assign(viewer.renderer.camera.pose, clonePose(tmpPose));
+    }
     // Time
     viewer.timeline.setFrame(lerp(frameA, frameB, t), { silent: t < 1 });
     // Traces: numeric lerps; visibility changes fade through opacity.
@@ -8242,7 +8380,7 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
     st.group = to.group ?? st.group;
     st.view.mode = to.view.mode;
     viewer.controls.mode = to.view.mode === "sky" ? "sky" : "galactic";
-    Object.assign(viewer.renderer.camera.pose, clonePose(poseB));
+    if (!keepCamera) Object.assign(viewer.renderer.camera.pose, clonePose(poseB));
     st.view.pose = viewer.renderer.camera.pose;
     viewer.timeline.setFrame(frameB);
     if (Number.isFinite(to.time?.speed)) viewer.timeline.speed = to.time.speed;
@@ -8291,8 +8429,14 @@ const { buildExportHtml, saveHtml } = (() => {
 // Export swaps in a new manifest and reassembles the same skeleton the
 // Python writer produces.
 
+// The runtime itself is inlined in a script element, so its source must never
+// contain a literal closing tag or comment opener: build them from parts.
+const OPEN = "<" + "script";
+const CLOSE = "<" + "/script>";
+
 function jsonForScript(obj) {
-  return JSON.stringify(obj).replace(/<\//g, "<\\/").replace(/<!--/g, "<\\!--");
+  // \u003c keeps data from ending the element early and stays valid JSON.
+  return JSON.stringify(obj).replace(/</g, "\\u003c");
 }
 
 function escapeHtml(s) {
@@ -8321,9 +8465,9 @@ function buildExportHtml(manifest, { title, theme = "dark" } = {}) {
     '<div id="oviz-root" class="ov-root" data-boot="loading">',
     '<div class="ov-boot" role="status" aria-live="polite"><div class="ov-boot-mark"><span></span><span></span><span></span></div><div class="ov-boot-text">Loading figure…</div><div class="ov-boot-bar"><i></i></div></div>',
     "</div>",
-    `<script type="application/json" id="oviz-manifest">${jsonForScript(manifest)}</script>`,
+    `${OPEN} type="application/json" id="oviz-manifest">${jsonForScript(manifest)}${CLOSE}`,
     blobs,
-    `<script id="oviz-runtime">\n${runtime.replace(/^\n/, "")}</script>`,
+    `${OPEN} id="oviz-runtime">\n${runtime.replace(/^\n/, "")}${CLOSE}`,
     "</body>",
     "</html>",
     "",
@@ -8445,7 +8589,7 @@ class StoryPlugin {
       h("span", { class: "ov-story-title" }, "Story"), this.count,
       h("span", { class: "ov-grow" }),
       this.readOnly ? null : this.addBtn, this.presentBtn, this.readOnly ? null : this.exportBtn, this.readOnly ? null : this.settingsBtn,
-      iconButton("close", "Close", () => this.toggle(false), { shortcut: "S" }));
+      iconButton("close", "Close", () => this.toggle(false), { shortcut: "⇧S" }));
     this.strip = h("div", { class: "ov-story-strip", role: "list" });
     this.status = h("div", { class: "ov-story-status" });
     this.el.append(head, this.strip, this.status);
@@ -8667,6 +8811,9 @@ class StoryPlugin {
     r.off();
     r.transition.finish();
     this.viewer.renderer.release("state-transition");
+    // An interrupted transition still arrives: fire the same events so the
+    // view mode, panels and Sky layers reflect the applied State.
+    this.afterArrive(r.transition);
     r.resolve();
   }
 
@@ -8817,7 +8964,7 @@ class StoryPlugin {
     }
     if (e.key === "P" && e.shiftKey) { this.present(true); return true; }
     if ((e.key === "n" || e.key === "N") && !this.readOnly) { this.add(); return true; }
-    if (e.key === "s" || e.key === "S") { this.toggle(); return true; }
+    if (e.key === "S" && e.shiftKey) { this.toggle(); return true; }
     if (e.key === "]") { this.next(); return true; }
     if (e.key === "[") { this.previous(); return true; }
     return false;
@@ -8838,7 +8985,7 @@ class StoryPlugin {
   commands() {
     const list = [
       { title: "Present story", icon: "present", shortcut: "⇧ P", run: () => this.present(true) },
-      { title: "Open views & story", icon: "bookmark", shortcut: "S", run: () => this.toggle(true) },
+      { title: "Open views & story", icon: "bookmark", shortcut: "⇧ S", run: () => this.toggle(true) },
     ];
     if (!this.readOnly) {
       list.unshift({ title: "Save current view", icon: "plus", shortcut: "N", pinned: true, run: () => this.add() });
@@ -9432,6 +9579,347 @@ class FilterPlugin {
 return { FilterPlugin };
 })();
 
+// ---- ui/notes.js ----
+const { NotesPlugin } = (() => {
+// Notes: text annotations pinned to an object (they follow its orbit through
+// time) or to a fixed point. Captured in saved views; editable in place.
+
+
+
+
+
+class NotesPlugin {
+  constructor() {
+    this.name = "notes";
+    this.notes = [];
+  }
+
+  attach(ui) {
+    this.ui = ui;
+    const v = (this.viewer = ui.viewer);
+    v.stateExtensions.set("notes", { capture: () => cloneJson(this.notes), apply: (n) => this.setNotes(n || []) });
+    ui.notes = this;
+    // Classic manual labels in the initial state become notes.
+    const legacy = v.manifest.initialState?.manual_labels;
+    if (Array.isArray(legacy)) this.setNotes(legacy.map(fromLegacy).filter(Boolean));
+    v.labels.el.addEventListener("click", (e) => {
+      const el = e.target.closest?.(".ov-label--note");
+      if (el) this.edit(el.dataset.noteId, el);
+    });
+  }
+
+  commands() {
+    return [
+      { title: "Add note at view centre", icon: "edit", keywords: "annotate label text", run: () => this.addAt(this.viewer.pose.target.slice()) },
+      ...(this.notes.length ? [{ title: "Remove all notes", icon: "trash", run: () => this.setNotes([]) }] : []),
+    ];
+  }
+
+  addForObject(hit) {
+    const d = this.viewer.describeObject(hit.trace, hit.index);
+    this.add({ id: uid(), text: d?.name || "Note", anchor: { trace: hit.trace, index: hit.index }, color: "#ffffff" });
+  }
+
+  addAt(pos) {
+    this.add({ id: uid(), text: "Note", anchor: { pos }, color: "#ffffff" }, true);
+  }
+
+  add(note, editNow = false) {
+    this.notes.push(note);
+    this.sync();
+    this.ui.toast("Note added — click it to edit", { icon: icon("edit"), ms: 1800 });
+    if (editNow) requestAnimationFrame(() => this.edit(note.id));
+  }
+
+  setNotes(list) {
+    for (const n of this.notes) this.viewer.labels.removeDynamic(`note:${n.id}`);
+    this.notes = cloneJson(list);
+    this.sync();
+  }
+
+  sync() {
+    const v = this.viewer;
+    const labels = v.labels;
+    for (const n of this.notes) {
+      const id = `note:${n.id}`;
+      const get = n.anchor.pos
+        ? () => n.anchor.pos
+        : () => v.objectPosition(n.anchor.trace, n.anchor.index);
+      labels.setDynamic(id, n.text, get, "ov-label--note");
+      const el = labels.dynamic.get(id).el;
+      el.dataset.noteId = n.id;
+      el.style.color = n.color || "#ffffff";
+      el._w = 0;
+    }
+    v.renderer.invalidate();
+  }
+
+  edit(id, anchorEl) {
+    const n = this.notes.find((x) => x.id === id);
+    if (!n) return;
+    const el = anchorEl || this.viewer.labels.dynamic.get(`note:${id}`)?.el;
+    if (!el) return;
+    const input = h("input", { class: "ov-input", value: n.text, "aria-label": "Note text" });
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { commit(); this.ui.closeMenu(); }
+      if (e.key === "Escape") this.ui.closeMenu();
+    });
+    const commit = () => {
+      const t = input.value.trim();
+      if (t && t !== n.text) { n.text = t; this.sync(); }
+    };
+    const colors = ["#ffffff", "#f4c46a", "#7cc4ff", "#ff7a70", "#6fdc9b"].map((c) =>
+      h("button", { class: "ov-chip", type: "button", style: { background: c }, "aria-label": c, "aria-pressed": String(n.color === c), onclick: () => { n.color = c; this.sync(); } }));
+    const body = h("div", { class: "ov-pop-body" }, input, h("div", { class: "ov-colors" }, colors));
+    this.ui.menu(el, [
+      { body },
+      { label: "Delete note", icon: "trash", run: () => { this.notes = this.notes.filter((x) => x !== n); this.viewer.labels.removeDynamic(`note:${n.id}`); this.sync(); } },
+    ], { title: "Note", align: "left" });
+    input.addEventListener("blur", commit);
+    requestAnimationFrame(() => { input.focus(); input.select(); });
+  }
+}
+
+function fromLegacy(l) {
+  if (!l || typeof l !== "object") return null;
+  const x = Number(l.x ?? l.position?.x), y = Number(l.y ?? l.position?.y), z = Number(l.z ?? l.position?.z);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  return { id: String(l.id || uid()), text: String(l.text || "Note"), anchor: { pos: [x, y, z] }, color: String(l.color || "#ffffff") };
+}
+return { NotesPlugin };
+})();
+
+// ---- ui/lasso.js ----
+const { LassoPlugin } = (() => {
+// Lasso selection: draw around objects to select them; everything else dims.
+// The selection bar offers framing, isolating and a CSV export.
+
+
+
+
+const LASSO_BIT = 8;
+
+class LassoPlugin {
+  constructor() {
+    this.name = "lasso";
+    this.armed = false;
+    this.selection = null; // Map traceKey → Uint32Array of indices
+    this.isolate = false;
+  }
+
+  attach(ui) {
+    this.ui = ui;
+    const v = (this.viewer = ui.viewer);
+    this.svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    this.svg.setAttribute("class", "ov-lasso");
+    this.path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    this.svg.append(this.path);
+    v.container.append(this.svg);
+    this.btn = iconButton("wand", "Lasso select", () => this.arm(!this.armed), { cls: "ov-glass", shortcut: "X", pressed: false });
+    ui.skyExtras.parentElement.querySelector(".ov-corner-btns:last-child")?.prepend(this.btn);
+    this.bar = h("div", { class: "ov-selbar ov-glass", hidden: true, role: "region", "aria-label": "Lasso selection" });
+    ui.ui.append(this.bar);
+    v.stateExtensions.set("lasso", { capture: () => this.capture(), apply: (s) => this.restore(s) });
+    v.on("gpu-restored", () => this.applyBits());
+    this.bindPointer();
+  }
+
+  commands() {
+    const list = [{ title: "Lasso select objects", icon: "wand", shortcut: "X", keywords: "select region polygon", run: () => this.arm(true) }];
+    if (this.selection) {
+      list.push(
+        { title: "Export selection as CSV", icon: "download", run: () => this.exportCsv() },
+        { title: "Clear lasso selection", icon: "close", run: () => this.clear() },
+      );
+    }
+    return list;
+  }
+
+  onKey(e) {
+    if ((e.key === "x" || e.key === "X") && !e.metaKey && !e.ctrlKey) { this.arm(!this.armed); return true; }
+    if (e.key === "Escape" && this.armed) { this.arm(false); return true; }
+    return false;
+  }
+
+  arm(on) {
+    this.armed = on;
+    this.btn.setAttribute("aria-pressed", String(on));
+    this.ui.root.dataset.lasso = String(on);
+    this.viewer.controls.enabled = !on;
+    if (on) this.ui.toast("Draw around the objects to select", { icon: icon("wand"), ms: 1600 });
+  }
+
+  bindPointer() {
+    const canvas = this.viewer.canvas;
+    let pts = null;
+    const local = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
+    canvas.addEventListener("pointerdown", (e) => {
+      if (!this.armed || e.button !== 0) return;
+      e.stopPropagation();
+      canvas.setPointerCapture(e.pointerId);
+      pts = [local(e)];
+    }, true);
+    canvas.addEventListener("pointermove", (e) => {
+      if (!pts) return;
+      const p = local(e);
+      const last = pts[pts.length - 1];
+      if (Math.hypot(p[0] - last[0], p[1] - last[1]) > 3) pts.push(p);
+      this.path.setAttribute("d", `M${pts.map((q) => q.join(",")).join("L")}Z`);
+    });
+    const end = () => {
+      if (!pts) return;
+      const poly = pts;
+      pts = null;
+      this.path.setAttribute("d", "");
+      this.arm(false);
+      if (poly.length > 3) this.select(poly);
+    };
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", end);
+  }
+
+  select(poly) {
+    const v = this.viewer;
+    const cam = v.renderer.camera;
+    const sel = new Map();
+    let total = 0;
+    const scr = [0, 0, 0];
+    for (const trace of v.traces) {
+      if (!trace.points || !v.state.traces[trace.key]?.visible) continue;
+      const batch = v.points.byKey.get(trace.key);
+      if (!batch) continue;
+      const hits = [];
+      for (let i = 0; i < trace.points.count; i++) {
+        if (batch.state[i] & 2) continue; // hidden by the filter
+        const p = v.objectPosition(trace.key, i);
+        const s = p && cam.project(p, scr);
+        if (s && inside(s[0], s[1], poly)) hits.push(i);
+      }
+      if (hits.length) { sel.set(trace.key, Uint32Array.from(hits)); total += hits.length; }
+    }
+    if (!total) {
+      this.ui.toast("Nothing inside the lasso");
+      return;
+    }
+    this.selection = sel;
+    this.isolate = false;
+    this.applyBits();
+    this.renderBar();
+  }
+
+  clear() {
+    this.selection = null;
+    this.applyBits();
+    this.renderBar();
+  }
+
+  applyBits() {
+    const v = this.viewer;
+    for (const batch of v.points.batches) {
+      if (!this.selection) { batch.setStateBits(LASSO_BIT | 16, null); continue; }
+      const bits = new Uint8Array(batch.count).fill(this.isolate ? 16 : LASSO_BIT);
+      const idx = this.selection.get(batch.key);
+      if (idx) for (const i of idx) bits[i] = 0;
+      batch.setStateBits(LASSO_BIT | 16, bits);
+    }
+    v.invalidatePick();
+    v.renderer.invalidate();
+  }
+
+  count() {
+    let n = 0;
+    for (const idx of this.selection?.values() || []) n += idx.length;
+    return n;
+  }
+
+  renderBar() {
+    const bar = this.bar;
+    bar.replaceChildren();
+    bar.hidden = !this.selection;
+    if (!this.selection) return;
+    bar.append(
+      h("span", { class: "ov-selbar-count" }, icon("wand"), `${this.count().toLocaleString()} selected`),
+      h("button", { class: "ov-btn ov-btn--sm", type: "button", onclick: () => this.frame() }, icon("target"), "Frame"),
+      h("button", { class: "ov-btn ov-btn--sm", type: "button", "aria-pressed": String(this.isolate), onclick: () => { this.isolate = !this.isolate; this.applyBits(); this.renderBar(); } }, "Isolate"),
+      h("button", { class: "ov-btn ov-btn--sm", type: "button", onclick: () => this.exportCsv() }, icon("download"), "CSV"),
+      iconButton("close", "Clear selection", () => this.clear()),
+    );
+  }
+
+  frame() {
+    const v = this.viewer;
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const [key, idx] of this.selection) {
+      for (const i of idx) {
+        const p = v.objectPosition(key, i);
+        if (!p) continue;
+        for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], p[k]); hi[k] = Math.max(hi[k], p[k]); }
+      }
+    }
+    if (!Number.isFinite(lo[0])) return;
+    const pose = clonePose(v.pose);
+    if (v.state.view.mode === "sky") return;
+    pose.target = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
+    const r = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2;
+    pose.distance = Math.max(40, r / Math.tan((pose.fov * Math.PI) / 360) * 1.3);
+    v.animateTo(pose, { duration: 1000 });
+  }
+
+  async exportCsv() {
+    const v = this.viewer;
+    const t = v.timeline.time;
+    const rows = [["name", "layer", "age_now_myr", "age_at_t_myr", "n_stars", "l_deg", "b_deg", "dist_pc", "ra_deg", "dec_deg", `x_pc_at_t${t}`, `y_pc_at_t${t}`, `z_pc_at_t${t}`]];
+    for (const [key, idx] of this.selection) {
+      await v.objectMeta(key);
+      for (const i of idx) {
+        const d = v.describeObject(key, i);
+        const p = d.position || [NaN, NaN, NaN];
+        rows.push([d.name, d.traceName, d.ageNow, d.ageAt, d.nStars, d.l, d.b, d.dist, d.ra, d.dec, p[0], p[1], p[2]]);
+      }
+    }
+    const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n") + "\n";
+    downloadBlob(new Blob([csv], { type: "text/csv" }), `oviz-selection-${rows.length - 1}.csv`);
+    this.ui.toast(`Exported ${rows.length - 1} objects`, { icon: icon("download") });
+  }
+
+  capture() {
+    if (!this.selection) return null;
+    const out = {};
+    for (const [k, idx] of this.selection) out[k] = Array.from(idx);
+    return { selection: out, isolate: this.isolate };
+  }
+
+  restore(s) {
+    if (!s || !s.selection) { if (this.selection) this.clear(); return; }
+    this.selection = new Map(Object.entries(s.selection).map(([k, v]) => [k, Uint32Array.from(v)]));
+    this.isolate = !!s.isolate;
+    this.applyBits();
+    this.renderBar();
+  }
+}
+
+function inside(x, y, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+
+function csvCell(v) {
+  if (v == null || (typeof v === "number" && !Number.isFinite(v))) return "";
+  if (typeof v === "number") return String(+v.toPrecision(10));
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+return { LassoPlugin };
+})();
+
 // ---- ui/app-ui.js ----
 const { mountUI, AppUI } = (() => {
 // The application shell: wires panels, dock, overlays, shortcuts and modes.
@@ -9453,10 +9941,14 @@ const { mountUI, AppUI } = (() => {
 
 
 
+
+
 function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
-  ui.use(new SkyPlugin());
+  if (viewer.manifest.sky?.enabled) ui.use(new SkyPlugin());
   ui.use(new FilterPlugin());
+  ui.use(new NotesPlugin());
+  ui.use(new LassoPlugin());
   ui.use(new StoryPlugin());
   ui.use(new RecorderPlugin());
   ui.layers.render();
@@ -9512,7 +10004,7 @@ class AppUI {
     this.search = h("button", { class: "ov-search-trigger ov-glass", type: "button", "aria-label": "Search", onclick: () => this.palette.show() },
       icon("search"), h("span", { class: "ov-grow" }, "Search clusters, layers, actions…"), kbd(`${MOD === "⌘" ? "⌘" : "Ctrl"}`), kbd("K"));
     this.layersBtn = iconButton("layers", "Layers", () => this.setLayersOpen(!this.layersOpen), { shortcut: "L" });
-    this.statesBtn = iconButton("bookmark", "Views & story", () => this.plugins.find((p) => p.name === "states")?.toggle(), { shortcut: "S" });
+    this.statesBtn = iconButton("bookmark", "Views & story", () => this.plugins.find((p) => p.name === "states")?.toggle(), { shortcut: "⇧S" });
     this.shotBtn = iconButton("camera", "Screenshot", (e) => this.captureMenu(e.currentTarget), { shortcut: "P" });
     this.shareBtn = iconButton("share", "Share & export", (e) => this.shareMenu(e.currentTarget));
     this.settingsBtn = iconButton("sliders", "Display settings", (e) => this.settingsMenu(e.currentTarget));
@@ -9655,6 +10147,30 @@ class AppUI {
         v.flyToObject(hit.trace, hit.index);
       }
     });
+  }
+
+  /** W/A/S/D orbit (look around in Sky), Q/E zoom. */
+  flyKey(k) {
+    const v = this.viewer;
+    const c = v.controls;
+    const step = 0.045;
+    v._cancelTween();
+    if (k === "q" || k === "e") {
+      c.zoomAt(k === "e" ? 0.88 : 1 / 0.88, v.renderer.width / 2, v.renderer.height / 2);
+    } else if (c.mode === "sky") {
+      const px = v.renderer.height * 0.04;
+      if (k === "a") c.lookDrag(px, 0);
+      if (k === "d") c.lookDrag(-px, 0);
+      if (k === "w") c.lookDrag(0, px);
+      if (k === "s") c.lookDrag(0, -px);
+    } else {
+      if (k === "a") c.rotate(step, 0);
+      if (k === "d") c.rotate(-step, 0);
+      if (k === "w") c.rotate(0, step);
+      if (k === "s") c.rotate(0, -step);
+    }
+    v.renderer.markInteraction();
+    return true;
   }
 
   refreshHover() {
@@ -10124,11 +10640,11 @@ class AppUI {
 
   showHelp() {
     const groups = [
-      ["Navigate", [["Orbit", "Drag"], ["Pan", "⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Fly to object", "Double-click"], ["Reset view", "R"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
+      ["Navigate", [["Orbit", "Drag"], ["Pan", "⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / zoom by key", "W A S D Q E"], ["Fly to object", "Double-click"], ["Reset view", "R"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
       ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
-      ["Inspect", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Measure separation", "⇧ Click"], ["Clear selection", "Esc"]]],
+      ["Inspect", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Measure separation", "⇧ Click"], ["Lasso select", "X"], ["Clear selection", "Esc"]]],
       ["Layers", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Layers panel", "L"], ["Galactic grid", "G"]]],
-      ["Views & story", [["Views panel", "S"], ["Save current view", "N"], ["Present", "⇧ P"], ["Next / previous view", "] ["]]],
+      ["Views & story", [["Views panel", "⇧ S"], ["Save current view", "N"], ["Present", "⇧ P"], ["Next / previous view", "] ["]]],
       ["Capture", [["Screenshot", "P"], ["Hide interface", "Z"], ["Fullscreen", "F"], ["This help", "?"]]],
     ];
     const grid = h("div", { class: "ov-help-grid" }, groups.map(([title, rows]) => h("div", { class: "ov-help-group" },
@@ -10174,8 +10690,16 @@ class AppUI {
   bindKeys() {
     const v = this.viewer;
     const tl = v.timeline;
+    // A mouse click should not leave a button focused (Space would then
+    // re-press it instead of playing time); keyboard activation keeps focus.
+    this.root.addEventListener("click", (e) => {
+      const b = e.target.closest?.("button");
+      if (b && e.detail > 0 && document.activeElement === b) b.blur();
+    });
     window.addEventListener("keydown", (e) => {
       if (isEditable(e.target)) return;
+      // Let focused sliders, buttons and switches handle their own keys.
+      if (controlConsumesKey(e)) return;
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key;
       if (mod && (k === "k" || k === "K")) { this.palette.toggle(); e.preventDefault(); return; }
@@ -10192,6 +10716,9 @@ class AppUI {
         case "ArrowLeft": tl.pause(); tl.step(e.shiftKey ? -5 : -1); break;
         case "ArrowRight": tl.pause(); tl.step(e.shiftKey ? 5 : 1); break;
         case "0": tl.setTime(0); break;
+        case "w": case "W": case "s": case "S": case "a": case "A": case "d": case "D": case "q": case "Q": case "e": case "E":
+          if (e.shiftKey || !this.flyKey(k.toLowerCase())) handled = false;
+          break;
         case "<": case ",": this.dock.cycleSpeed(-1); break;
         case ">": case ".": this.dock.cycleSpeed(1); break;
         case "/": this.palette.show(); break;
