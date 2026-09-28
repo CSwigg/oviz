@@ -7,9 +7,17 @@ publishes an Oviz figure.
 
 Oviz builds interactive HTML figures for Galactic 3D data. The normal scientific
 workflow combines Gaia cluster or association data, galpy orbit integration,
-Three.js rendering, Aladin Lite sky backgrounds, optional member stars, and
+the Oviz WebGL2 viewer, Aladin Lite sky backgrounds, optional member stars, and
 optional 3D ISM volumes. Preserve the established visual style and the registered
 3D/Sky behavior unless the user explicitly asks to change them.
+
+Two runtimes exist:
+
+- **Oviz viewer** (`oviz/viewer/`, the default). A custom WebGL2 engine and UI
+  that read a compact binary bundle compiled from the scene spec.
+- **Classic viewer** (`oviz/threejs_*.py`, `viewer="classic"`). The previous
+  Three.js runtime. Keep it byte-for-byte stable: tests pin its exact source
+  strings and function-body hashes. It alone provides Slides, Paper, and AR.
 
 ## Start with the public API
 
@@ -59,9 +67,49 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
 
 ## Scene and runtime rules
 
-- Three.js is the maintained renderer. Plotly paths exist for compatibility.
-- Change Python builders or `oviz/threejs_runtime_*.py`; do not hand-edit a
+- The Oviz viewer is the maintained runtime. Plotly paths exist for
+  compatibility.
+- Change the Python builders, the viewer sources in `oviz/viewer/web/`, or
+  `oviz/threejs_runtime_*.py` for the classic runtime. Do not hand-edit a
   generated HTML artifact as the source of truth.
+
+## Oviz viewer architecture
+
+- `oviz/viewer/compile.py` turns the scene spec into a `Bundle`: a JSON
+  manifest plus gzip (+ byte-shuffle) binary blobs.
+  - Positions over time are stored static, rigid (base + per-frame offset), or
+    per-frame.
+  - Per-object attributes are stored once.
+  - Volumes keep raw uint8 voxels plus a precomputed occupancy grid.
+  - Nothing scientific is recomputed.
+- `oviz/viewer/web/src` holds real ES modules (`core/`, `engine/`, `layers/`,
+  `sky/`, `app/`, `ui/`). `oviz/viewer/build.py` bundles them into one script:
+  each module gets its own scope, only named relative imports are allowed, and
+  exported names must be unique. Styles live in `oviz/viewer/web/styles`
+  (tokens in `00-tokens.css`).
+- `src/app/export.js` mirrors `web/template.html` for in-browser self-export.
+  Keep the two in sync; `tests/test_viewer.py` checks this.
+- Time is continuous: the vertex shader interpolates frame textures, so
+  scrubbing must never re-upload geometry. Rendering is demand-driven: call
+  `renderer.invalidate()` after state changes.
+- Volume optics reproduce the classic model exactly: texture-space steps and
+  the legacy composite. Do not "fix" the blend without the user's agreement;
+  it changes tuned figures.
+- Sky registration relies on a TAN projection with the same centre,
+  horizontal FOV, and Galactic-north-up orientation. The camera sits at the
+  origin in Sky view.
+- Per-object GPU state is a bitfield: 1 = dimmed, 2 = hidden, 4 = replaced by
+  member stars.
+- A lost WebGL context must be recoverable. New GPU resources must be
+  recreated in `Viewer._restoreGPU` or on the `gpu-restored` event.
+
+Fast UI iteration: upgrade an existing figure and serve it over HTTP. There is
+no need to rebuild the science.
+
+```bash
+python -m oviz.viewer.upgrade tests/main_figure_july25.html /tmp/july25.html
+python -m http.server 8812 --bind 127.0.0.1 --directory /tmp
+```
 - Preserve States, Actions, Sky controls, presentation mode, mobile controls,
   lasso/selection behavior, and exact final-state restoration.
 - A State captures the whole viewer. A State whose camera behavior is `keep`
@@ -86,7 +134,9 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
 
 ## Verification
 
-Run focused tests while iterating, then the maintained tracked suite:
+Run focused tests while iterating (`tests/test_viewer.py` and
+`node --test tests/viewer_js/*.test.mjs` for the viewer), then the maintained
+tracked suite:
 
 ```bash
 git ls-files -z 'tests/test*.py' \

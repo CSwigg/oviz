@@ -40,8 +40,15 @@ Viewer profiles
    :members:
 
 
-HTML figure
------------
+HTML figures
+------------
+
+.. autoclass:: oviz.OvizFigure
+   :members: to_dict, to_html, write_html, show, size_report, bundle
+
+.. autofunction:: oviz.upgrade_html
+
+.. autofunction:: oviz.viewer.compile_scene_spec
 
 .. autoclass:: oviz.threejs_figure.ThreeJSFigure
    :members: to_dict, to_html, write_html, show

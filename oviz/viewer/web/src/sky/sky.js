@@ -373,8 +373,7 @@ export class SkyPlugin {
 
   async captureBackground(ctx, w, h) {
     const v = this.viewer;
-    const light = document.documentElement.dataset.ovizTheme === "light";
-    ctx.fillStyle = light ? "#eef1f5" : "#04060a";
+    ctx.fillStyle = "#04060a";
     ctx.fillRect(0, 0, w, h);
     if (v.state.view.mode === "sky" && this.sky.ready && v.state.sky.backgroundVisible) {
       await this.sky.drawInto(ctx, w, h);

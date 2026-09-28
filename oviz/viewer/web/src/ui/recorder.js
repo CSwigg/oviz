@@ -66,8 +66,7 @@ export class RecorderPlugin {
     const recorder = new MediaRecorder(stream, { mimeType: mime || undefined, videoBitsPerSecond: 16_000_000 });
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
-    const light = document.documentElement.dataset.ovizTheme === "light";
-    const bg = light ? "#eef1f5" : "#04060a";
+    const bg = "#04060a";
     const sky = this.ui.plugins.find((p) => p.name === "sky");
     const draw = () => {
       if (comp.width !== src.width - (src.width % 2)) return;

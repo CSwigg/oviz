@@ -261,8 +261,7 @@ export class StoryPlugin {
       const c = document.createElement("canvas");
       c.width = W; c.height = H;
       const ctx = c.getContext("2d");
-      const light = document.documentElement.dataset.ovizTheme === "light";
-      ctx.fillStyle = light ? "#e9edf3" : "#05070b";
+      ctx.fillStyle = "#05070b";
       ctx.fillRect(0, 0, W, H);
       const src = r.canvas;
       const scale = Math.max(W / src.width, H / src.height);

@@ -9,9 +9,11 @@ authoritative build, verification, artifact, and publishing rules.
    `U`, `V`, `W` in km/s; plus `name` and `age_myr`).
 2. Combine traces in `TraceCollection` and pass them to `Scene3D` or
    `Animate3D`.
-3. Call `make_plot()` with a time array containing zero, the Three.js renderer,
-   and an explicit initial-state profile.
-4. Write the returned `ThreeJSFigure` to one compact HTML file.
+3. Call `make_plot()` with a time array containing zero and an explicit
+   initial-state profile. It returns an `OvizFigure` (the WebGL2 Oviz viewer);
+   pass `viewer="classic"` only when Slides, Paper, or AR are required.
+4. Write the returned figure to one HTML file. Legacy figures can be upgraded
+   with `python -m oviz.viewer.upgrade old.html new.html`.
 
 ```python
 from oviz import Scene3D, Trace, TraceCollection, build_threejs_profile
@@ -44,6 +46,10 @@ integrated. Member-star tables need a cluster-name field plus `l`/`b` or
   order.
 - Desktop appearance stays unchanged when mobile behavior is added.
 - Generated HTML is an artifact, not the primary implementation.
+- The classic runtime stays byte-for-byte stable; new viewer work goes in
+  `oviz/viewer/` (see AGENTS.md, "Oviz viewer architecture").
+- Scrubbing time never re-uploads geometry, idle figures render nothing, and a
+  lost WebGL context recovers without a reload.
 
 Prefer narrow changes, focused regression tests, a regenerated canonical
 artifact when runtime output changes, and the full maintained test suite before

@@ -1,5 +1,8 @@
-Browser API
-===========
+Browser API (classic viewer)
+============================
+
+This page documents figures written with ``viewer="classic"``. The default
+Oviz viewer exposes ``window.Oviz.viewer``; see :doc:`viewer`.
 
 Every initialized viewer registers itself under ``window.Oviz``. Give
 ``window.Oviz.get`` the root element ID written into the HTML:

@@ -10,6 +10,9 @@
 
   --ov-bg: #04060a;
   --ov-bg-glow: radial-gradient(120% 90% at 50% 40%, #0b1120 0%, #05070c 55%, #020305 100%);
+  /* The data stage stays a night sky in every theme: additive starlight
+     and emission volumes are calibrated against a dark background. */
+  --ov-stage: radial-gradient(120% 90% at 50% 40%, #0b1120 0%, #05070c 55%, #020305 100%);
   --ov-surface: rgba(13, 16, 23, 0.74);
   --ov-surface-strong: rgba(15, 18, 26, 0.9);
   --ov-surface-solid: #0e1118;

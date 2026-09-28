@@ -12,11 +12,37 @@ registered view of the sky, and inspect the data directly.
 
 The viewer uses:
 
-- [Three.js](https://threejs.org/) to draw the 3D scene
+- a purpose-built WebGL2 engine (no runtime dependencies) to draw the 3D
+  scene, interpolating every orbit on the GPU
 - [Aladin Lite](https://aladin.cds.unistra.fr/AladinLite/doc/) for registered
   all-sky HiPS images
 - [galpy](https://docs.galpy.org/en/latest/) to integrate Galactic orbits
 - Astropy, NumPy, and pandas for coordinates and tables
+
+### The viewer at a glance
+
+- **Fast.** Figures store compact binary data rather than JSON. The July 25
+  example shrinks from 48 MB to 24 MB, draws its first frame in about 70 ms,
+  and has its 3D dust resident in about 0.2 s. Scrubbing time costs no CPU
+  work, and an idle figure costs nothing.
+- **Smooth time.** Cluster positions are interpolated between the stored
+  frames, so playback and scrubbing are continuous at any speed.
+- **Find anything.** Press ⌘K to search every cluster (including catalogue
+  aliases), layer, saved view and action.
+- **Inspect.** Click an object for its age today and at time *t*, member count,
+  distance, and Galactic and ICRS coordinates. Follow it through time, draw its
+  orbit trail, or Shift-click a second object to measure separations.
+- **Distribution filter.** A live histogram of age, members, distance or height
+  for the visible layers. Brush a range to dim or hide everything else.
+- **Sky view.** The scene is registered exactly to Aladin Lite, and cluster
+  markers crossfade into their member stars.
+- **Views & story.** Save views with thumbnails and captions. Present them with
+  smooth transitions that end in an exact restore, and export an editable or
+  present-only file.
+- **Capture.** Save PNGs at up to 4× resolution, or record MP4/WebM videos of
+  the timeline or a story tour. Share a link that reopens the current view.
+- **Everywhere.** Light and dark interface themes, and a thumb-friendly phone
+  layout.
 
 ## Example figure
 
@@ -130,6 +156,10 @@ figure = scene.make_plot(
 figure.write_html("young_clusters.html")
 ```
 
+`make_plot` writes the Oviz viewer by default. Pass `viewer="classic"` for
+the previous Three.js runtime, which also provides Slides, Paper, and AR
+exports.
+
 For a static XYZ catalogue, use `Layer(..., assume_stationary=True)`. You can
 also pass volume layers and optional cluster-member catalogues to
 `Animate3D.make_plot()`. The [Python API](docs/source/python_api.rst) lists the
@@ -137,21 +167,33 @@ available arguments.
 
 ## Save and share views with States
 
-A State records the complete viewer at one moment. This includes the camera,
-time, 3D or Sky mode, trace and volume settings, Aladin layers, selections,
-panels, and presentation settings.
+A State (a *view* in the viewer's story panel) records the complete viewer at
+one moment. That covers the camera, time, 3D or Sky mode, trace and volume
+settings, Aladin layers, filters, and display settings.
 
-Open the States panel in the viewer and save the views you want to show. You
-can reorder them, move between them, and export the result as either an
-editable figure or a present-only figure with forward and back controls.
+Press **N** to save a view and **S** to open the story. There you can rename,
+caption, and reorder views, and present them in order with **Shift P**. Export
+the result as an editable figure (**⌘S**) or as a present-only figure that
+opens straight into the first view.
 
 The export is a single HTML file containing the scientific scene and its saved
 States. It can be opened locally, placed on a static web host, or sent to a
 collaborator. The recipient does not need Python or a copy of the original
 analysis.
 
-Three.js and Aladin Lite load from public CDNs. HiPS backgrounds come from
-their survey servers. Those parts of the viewer need an internet connection.
+The 3D scene needs no network connection. Aladin Lite loads from the CDS CDN,
+and HiPS backgrounds stream from their survey servers, so Sky view needs an
+internet connection.
+
+## Upgrade existing figures
+
+Figures written by earlier Oviz releases carry their full scene, so they can be
+moved to the new viewer without re-running the analysis. Their saved States are
+migrated too:
+
+```bash
+python -m oviz.viewer.upgrade old_figure.html new_figure.html
+```
 
 ## Data conventions
 
@@ -168,7 +210,10 @@ their survey servers. Those parts of the viewer need an internet connection.
 
 - [Overview](docs/source/overview.rst)
 - [Python API](docs/source/python_api.rst)
-- [Browser API](docs/source/browser_api.rst), for maintainers and hosts
+- [The Oviz viewer](docs/source/viewer.rst): using figures, the browser API,
+  and how the engine works
+- [Classic browser API](docs/source/browser_api.rst), for figures written with
+  `viewer="classic"`
 - [Guide for coding agents](AGENTS.md)
 
 Most figure authors only need the Python API.
@@ -177,4 +222,11 @@ Run the maintained test suite with:
 
 ```bash
 pytest -q tests
+```
+
+The viewer's JavaScript unit tests run with Node (they are also invoked from
+`tests/test_viewer.py`):
+
+```bash
+node --test tests/viewer_js/*.test.mjs
 ```

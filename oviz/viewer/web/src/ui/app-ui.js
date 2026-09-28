@@ -554,7 +554,7 @@ export class AppUI {
     try {
       const blob = await v.renderer.capture({
         scale,
-        background: sky?.captureBackground ? (ctx, w, h) => sky.captureBackground(ctx, w, h) : this.theme === "light" ? "#eef1f5" : "#04060a",
+        background: sky?.captureBackground ? (ctx, w, h) => sky.captureBackground(ctx, w, h) : "#04060a",
       });
       if (clipboard && navigator.clipboard?.write) {
         await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);

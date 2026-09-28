@@ -22,7 +22,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-root :focus-visible { outline: 2px solid var(--ov-accent-line); outline-offset: 2px; }
 .ov-root [hidden] { display: none !important; }
 
-.ov-stage { position: absolute; inset: 0; }
+.ov-stage { position: absolute; inset: 0; background: var(--ov-stage); }
 .ov-canvas { position: absolute; inset: 0; display: block; z-index: 1; cursor: grab; touch-action: none; }
 .ov-canvas:active { cursor: grabbing; }
 .ov-root[data-hovering="true"] .ov-canvas { cursor: pointer; }
