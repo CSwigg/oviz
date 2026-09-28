@@ -13,6 +13,8 @@ setup(
     include_package_data=True,  # Includes files specified in MANIFEST.in
     package_data={
         "oviz.themes" : ["*.yaml"],
+        # The viewer runtime is bundled from these sources at write time.
+        "oviz.viewer": ["web/template.html", "web/styles/*.css", "web/src/*/*.js"],
     },
     install_requires=[
         "numpy",
