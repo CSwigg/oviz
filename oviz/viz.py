@@ -305,6 +305,7 @@ class Animate3D:
         compress_scene_spec="auto",
         scene_spec_compression_threshold_bytes=None,
         viewer=None,
+        viewer_style=None,
     ):
         """Integrate the data, build timeline frames, and return a figure.
 
@@ -336,6 +337,10 @@ class Animate3D:
             binary payloads, GPU time interpolation, Views & story, video
             capture. ``"classic"`` writes the previous Three.js runtime
             byte-for-byte (Slides, Paper and AR remain classic-only).
+        viewer_style : {"observatory", "orbit", "instrument", "atlas"}, optional
+            Oviz viewer only: the interface style the figure opens in
+            (default ``"observatory"``). Readers can switch styles at any
+            time with **U** or the Display menu.
         show : bool
             Display the figure after construction.
         save_name : path-like, optional
@@ -348,6 +353,7 @@ class Animate3D:
         """
         renderer_name = _normalize_renderer_name(renderer)
         self.viewer_name = _normalize_viewer_name(viewer)
+        self.viewer_style = viewer_style
 
         time = orbit_maker.normalize_time_grid(time)
 
@@ -1891,7 +1897,7 @@ class Animate3D:
         if getattr(self, "viewer_name", DEFAULT_VIEWER) == "oviz":
             from .viewer.figure import OvizFigure
 
-            self.figure = OvizFigure(scene_spec)
+            self.figure = OvizFigure(scene_spec, style=getattr(self, "viewer_style", None) or "observatory")
             return
         self.figure = ThreeJSFigure(
             scene_spec,

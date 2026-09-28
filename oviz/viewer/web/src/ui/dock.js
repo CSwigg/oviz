@@ -143,6 +143,7 @@ export class TimelineDock {
     const [num, unit] = splitTime(t);
     this.timeValue.replaceChildren(num, h("small", null, unit));
     this.timeCaption.textContent = Math.abs(t) < 1e-6 ? "Present day" : t < 0 ? "Before present" : "After present";
+    this.ui.root.dataset.playing = String(tl.playing);
     this.playBtn.replaceChildren(icon(tl.playing ? "pause" : "play"));
     this.playBtn.setAttribute("aria-label", tl.playing ? "Pause" : "Play");
     this.playBtn.dataset.tip = `${tl.playing ? "Pause" : "Play"}  Space`;

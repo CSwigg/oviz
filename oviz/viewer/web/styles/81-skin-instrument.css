@@ -1,0 +1,191 @@
+/* ============================================================ Instrument
+   Mission control. Phosphor type on black, panels docked flush to the
+   screen edges with hairline corner brackets, a centre crosshair with live
+   target readouts, panels that wipe open like a terminal, a blinking run
+   light while time plays, and a faint scanline raster. */
+[data-oviz-skin="instrument"] {
+  --ov-font: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --ov-font-display: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --ov-bg: #000;
+  --ov-bg-glow: #010302;
+  --ov-stage: radial-gradient(120% 90% at 50% 45%, #03100a 0%, #010403 60%, #000 100%);
+  --ov-surface: rgba(2, 9, 6, 0.88);
+  --ov-surface-strong: rgba(2, 10, 7, 0.96);
+  --ov-surface-solid: #030a06;
+  --ov-surface-raised: rgba(5, 20, 13, 0.98);
+  --ov-hover: rgba(110, 255, 192, 0.07);
+  --ov-active: rgba(110, 255, 192, 0.14);
+  --ov-line: rgba(110, 255, 192, 0.17);
+  --ov-line-strong: rgba(110, 255, 192, 0.34);
+  --ov-highlight: inset 0 0 0 0 transparent;
+  --ov-text: #d6ffe8;
+  --ov-text-2: #87c9a6;
+  --ov-text-3: #4f8a6b;
+  --ov-text-inverse: #021008;
+  --ov-accent: #6effc0;
+  --ov-accent-strong: #a8ffd9;
+  --ov-accent-soft: rgba(110, 255, 192, 0.12);
+  --ov-accent-line: rgba(110, 255, 192, 0.55);
+  --ov-sky: #ffb547;
+  --ov-sky-soft: rgba(255, 181, 71, 0.14);
+  --ov-danger: #ff5a4f;
+  --ov-radius-lg: 2px;
+  --ov-radius: 2px;
+  --ov-radius-sm: 2px;
+  --ov-pill: 2px;
+  --ov-blur: none;
+  --ov-shadow: 0 0 0 0 transparent;
+  --ov-shadow-sm: 0 0 0 1px rgba(110, 255, 192, 0.2);
+  --ov-bracket: linear-gradient(var(--ov-accent), var(--ov-accent));
+  color-scheme: dark;
+}
+[data-oviz-skin="instrument"] .ov-root { font-size: 12px; letter-spacing: 0.01em; font-feature-settings: normal; }
+
+/* Scanline raster over the whole instrument (the canvas capture is clean). */
+[data-oviz-skin="instrument"] .ov-root::after {
+  content: ""; position: absolute; inset: 0; z-index: 90; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0 1px, transparent 1px 3px);
+  opacity: 0.35;
+}
+
+/* Flat panels with hairline corner brackets. */
+[data-oviz-skin="instrument"] .ov-glass {
+  border: 1px solid var(--ov-line);
+  box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  background:
+    var(--ov-bracket) top left / 9px 1px no-repeat, var(--ov-bracket) top left / 1px 9px no-repeat,
+    var(--ov-bracket) top right / 9px 1px no-repeat, var(--ov-bracket) top right / 1px 9px no-repeat,
+    var(--ov-bracket) bottom left / 9px 1px no-repeat, var(--ov-bracket) bottom left / 1px 9px no-repeat,
+    var(--ov-bracket) bottom right / 9px 1px no-repeat, var(--ov-bracket) bottom right / 1px 9px no-repeat,
+    var(--ov-surface);
+}
+[data-oviz-skin="instrument"] .ov-panel-title, [data-oviz-skin="instrument"] .ov-section-head,
+[data-oviz-skin="instrument"] .ov-fact-label, [data-oviz-skin="instrument"] .ov-time-caption,
+[data-oviz-skin="instrument"] .ov-brand-name, [data-oviz-skin="instrument"] .ov-seg button,
+[data-oviz-skin="instrument"] .ov-btn, [data-oviz-skin="instrument"] .ov-toast,
+[data-oviz-skin="instrument"] .ov-insp-kicker, [data-oviz-skin="instrument"] .ov-pop-title,
+[data-oviz-skin="instrument"] .ov-palette-group, [data-oviz-skin="instrument"] .ov-story-title {
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+[data-oviz-skin="instrument"] .ov-panel-title { font-size: 11px; font-weight: 600; color: var(--ov-accent); }
+[data-oviz-skin="instrument"] .ov-insp-name { font-size: 17px; font-weight: 600; letter-spacing: 0; }
+[data-oviz-skin="instrument"] .ov-fact-value { font-size: 13px; font-weight: 500; }
+[data-oviz-skin="instrument"] .ov-btn { border-radius: 2px; font-size: 10.5px; font-weight: 600; }
+[data-oviz-skin="instrument"] .ov-btn--primary { background: var(--ov-accent); color: var(--ov-text-inverse); }
+[data-oviz-skin="instrument"] .ov-row { border-radius: 0; }
+[data-oviz-skin="instrument"] .ov-row:hover { box-shadow: inset 2px 0 0 var(--ov-accent); }
+[data-oviz-skin="instrument"] .ov-swatch { border-radius: 1px; }
+[data-oviz-skin="instrument"] .ov-group, [data-oviz-skin="instrument"] .ov-hist { border-radius: 0; }
+[data-oviz-skin="instrument"] .ov-kbd { border-radius: 1px; }
+
+/* Brand: a status light. */
+[data-oviz-skin="instrument"] .ov-brand-mark::before { border-radius: 0; transform: none; inset: 2px; border-color: var(--ov-accent); opacity: 0.6; }
+[data-oviz-skin="instrument"] .ov-brand-mark::after { border-radius: 0; inset: 6px; animation: hud-pulse 1.8s ease-in-out infinite; }
+@keyframes hud-pulse { 50% { opacity: 0.25; } }
+@keyframes hud-blink { to { visibility: hidden; } }
+[data-oviz-skin="instrument"] .ov-search-trigger span.ov-grow::after { content: "▍"; margin-left: 3px; color: var(--ov-accent); animation: hud-blink 1.1s steps(2, start) infinite; }
+
+/* Transport: square play key, a run light, a vertical cursor. */
+[data-oviz-skin="instrument"] .ov-play { background: var(--ov-accent) !important; color: var(--ov-text-inverse) !important; box-shadow: 0 0 18px -6px var(--ov-accent) !important; }
+[data-oviz-skin="instrument"] .ov-root[data-playing="true"] .ov-time-caption::before { content: "● "; color: var(--ov-danger); animation: hud-blink 1s steps(2, start) infinite; }
+[data-oviz-skin="instrument"] .ov-time-value { font-weight: 500; font-size: 20px; color: var(--ov-accent); text-shadow: 0 0 12px rgba(110, 255, 192, 0.35); }
+[data-oviz-skin="instrument"] .ov-scrub-track { height: 2px; margin-top: -1px; border-radius: 0; }
+[data-oviz-skin="instrument"] .ov-scrub-fill { background: var(--ov-accent); border-radius: 0; }
+[data-oviz-skin="instrument"] .ov-scrub-tick { background: var(--ov-text-3); }
+[data-oviz-skin="instrument"] .ov-scrub-tick--major { height: 8px; background: var(--ov-text-2); }
+[data-oviz-skin="instrument"] .ov-scrub-thumb {
+  width: 3px; height: 24px; margin: -12px 0 0 -1.5px; border-radius: 0;
+  background: var(--ov-accent); box-shadow: 0 0 12px var(--ov-accent);
+}
+[data-oviz-skin="instrument"] .ov-scrub:hover .ov-scrub-thumb, [data-oviz-skin="instrument"] .ov-scrub[data-dragging="true"] .ov-scrub-thumb { transform: scaleY(1.2); }
+[data-oviz-skin="instrument"] .ov-scrub-marker { background: var(--ov-sky); border-radius: 0; }
+
+/* Stage labels read like callouts. */
+[data-oviz-skin="instrument"] .ov-label { font-family: var(--ov-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* Overlays are hard-edged. */
+[data-oviz-skin="instrument"] .ov-pop, [data-oviz-skin="instrument"] .ov-palette, [data-oviz-skin="instrument"] .ov-sheet,
+[data-oviz-skin="instrument"] .ov-hovercard, [data-oviz-skin="instrument"] .ov-toast, [data-oviz-skin="instrument"] .ov-card,
+[data-oviz-skin="instrument"] .ov-reel-card, [data-oviz-skin="instrument"] .ov-present, [data-oviz-skin="instrument"] .ov-story,
+[data-oviz-skin="instrument"] .ov-scale, [data-oviz-skin="instrument"] .ov-colorbar, [data-oviz-skin="instrument"] .ov-palette-item,
+[data-oviz-skin="instrument"] .ov-pop-item, [data-oviz-skin="instrument"] .ov-tip { border-radius: 2px; }
+[data-oviz-skin="instrument"] .ov-toast { font-size: 11px; }
+[data-oviz-skin="instrument"] .ov-scrim { background: rgba(0, 0, 0, 0.72); -webkit-backdrop-filter: none; backdrop-filter: none; }
+[data-oviz-skin="instrument"] .ov-inspector::after { display: none; }
+
+/* HUD crosshair and readout on the orbit target. */
+[data-oviz-skin="instrument"] .ov-hud-cross { position: absolute; left: var(--hud-x, 50%); top: var(--hud-y, 50%); width: 0; height: 0; }
+[data-oviz-skin="instrument"] .ov-hud-cross i { position: absolute; background: var(--ov-accent); opacity: 0.7; }
+[data-oviz-skin="instrument"] .ov-hud-cross i:nth-child(1) {
+  left: -26px; top: 0; width: 52px; height: 1px;
+  -webkit-mask: linear-gradient(90deg, #000 0 16px, transparent 16px 36px, #000 36px);
+  mask: linear-gradient(90deg, #000 0 16px, transparent 16px 36px, #000 36px);
+}
+[data-oviz-skin="instrument"] .ov-hud-cross i:nth-child(2) {
+  top: -26px; left: 0; width: 1px; height: 52px;
+  -webkit-mask: linear-gradient(180deg, #000 0 16px, transparent 16px 36px, #000 36px);
+  mask: linear-gradient(180deg, #000 0 16px, transparent 16px 36px, #000 36px);
+}
+[data-oviz-skin="instrument"] .ov-hud-cross b {
+  position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid rgba(110, 255, 192, 0.5); border-left-color: transparent; border-right-color: transparent;
+  animation: ov-spin 6s linear infinite;
+}
+/* The readout is a small console in the lower-left of the sky, clear of
+   whatever is selected at the crosshair. */
+[data-oviz-skin="instrument"] .ov-hud-read {
+  position: absolute; left: 16px; bottom: 72px; padding: 7px 10px 7px 9px;
+  font: 500 10.5px/1.6 var(--ov-mono); letter-spacing: 0.04em; white-space: pre;
+  color: var(--ov-accent); text-shadow: 0 0 8px rgba(110, 255, 192, 0.4);
+  background: rgba(2, 10, 7, 0.55); border-left: 2px solid var(--ov-accent);
+  transition: left 460ms cubic-bezier(0.7, 0, 0.2, 1);
+}
+@media (max-width: 720px) { [data-oviz-skin="instrument"] .ov-hud-read { display: none; } }
+
+/* Desktop: dock the chrome flush to the edges, like a console. */
+@media (min-width: 721px) {
+  [data-oviz-skin="instrument"] { --ov-dock-h: 56px; }
+  [data-oviz-skin="instrument"] .ov-top {
+    top: 0; left: 0; right: 0; height: 44px; padding: 0 8px; gap: 8px;
+    background: var(--ov-surface-strong); border-bottom: 1px solid var(--ov-line);
+  }
+  [data-oviz-skin="instrument"] .ov-top > .ov-glass { background: transparent; border-color: transparent; }
+  [data-oviz-skin="instrument"] .ov-top > .ov-search-trigger { height: 30px; border-color: var(--ov-line); background: rgba(110, 255, 192, 0.03); }
+  [data-oviz-skin="instrument"] .ov-top > .ov-toolbar { height: 44px; border-left-color: var(--ov-line); }
+
+  [data-oviz-skin="instrument"] .ov-layers, [data-oviz-skin="instrument"] .ov-inspector {
+    top: 44px; bottom: 56px; max-height: none; border-radius: 0;
+    transform: none !important; clip-path: inset(0 0 0 0);
+    transition: clip-path 460ms cubic-bezier(0.7, 0, 0.2, 1), opacity 260ms linear;
+  }
+  [data-oviz-skin="instrument"] .ov-layers { left: 0; width: 290px; border-width: 0 1px 0 0; }
+  [data-oviz-skin="instrument"] .ov-inspector { right: 0; border-width: 0 0 0 1px; }
+  [data-oviz-skin="instrument"] .ov-layers[data-open="false"] { clip-path: inset(0 100% 0 0); }
+  [data-oviz-skin="instrument"] .ov-inspector[data-open="false"] { clip-path: inset(0 0 0 100%); }
+  [data-oviz-skin="instrument"] .ov-root[data-story="true"] .ov-layers,
+  [data-oviz-skin="instrument"] .ov-root[data-story="true"] .ov-inspector { bottom: 250px; }
+
+  [data-oviz-skin="instrument"] .ov-bottom {
+    left: 0; right: 0; bottom: 0; height: 56px; padding: 0 8px; gap: 8px; align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    background: var(--ov-surface-strong); border-top: 1px solid var(--ov-line);
+  }
+  [data-oviz-skin="instrument"] .ov-bottom .ov-glass { background: transparent; }
+  [data-oviz-skin="instrument"] .ov-bottom-left { flex-direction: row; align-items: center; }
+  [data-oviz-skin="instrument"] .ov-bottom-right { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+  [data-oviz-skin="instrument"] .ov-colorbars { flex-direction: row; }
+  [data-oviz-skin="instrument"] .ov-colorbar { min-width: 0; max-width: 200px; padding: 4px 8px; }
+  [data-oviz-skin="instrument"] .ov-scale { padding: 6px 8px; min-width: 90px; }
+  [data-oviz-skin="instrument"] .ov-dock {
+    width: auto; min-width: 0; height: 56px; padding: 0 10px; border-radius: 0;
+    border-color: transparent var(--ov-line); border-width: 0 1px;
+  }
+  [data-oviz-skin="instrument"] .ov-story { left: 0; bottom: 56px; width: 100%; border-radius: 0; border-width: 1px 0 0; transform: none; }
+  [data-oviz-skin="instrument"] .ov-story[data-open="false"] { transform: translateY(10px); }
+  [data-oviz-skin="instrument"] .ov-present { left: 0; bottom: 0; width: 100%; border-radius: 0; border-width: 1px 0 0; transform: none; }
+  [data-oviz-skin="instrument"] .ov-present[data-open="false"] { transform: translateY(20px); }
+  [data-oviz-skin="instrument"] .ov-toasts { top: 58px; }
+  [data-oviz-skin="instrument"] .ov-hud-read { bottom: 72px; }
+  [data-oviz-skin="instrument"] .ov-root:has(.ov-layers[data-open="true"]) .ov-hud-read { left: 306px; }
+}

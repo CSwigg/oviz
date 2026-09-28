@@ -83,6 +83,21 @@ background is composited into both.
 **Share.** *Copy link to this view* encodes time, mode, group and camera in the
 URL hash. Opening the link restores that view.
 
+**Interface styles.** The same figure can wear four interface styles; press
+**U** to cycle them or pick one under *Display*:
+
+- *Observatory* (default): quiet glass instruments floating over the sky.
+- *Orbit*: soft and playful, with rounded pills, a breathing play orb, a
+  ringed-planet scrub thumb and springy panels.
+- *Instrument*: a mission-control HUD with edge-docked panels, phosphor type,
+  a crosshair on the orbit target and a live target/range/azimuth readout.
+- *Atlas*: an editorial page where the sky is a framed plate on graph paper,
+  with serif captions and a ruler timeline.
+
+Choose the style a figure opens in with
+``make_plot(..., viewer_style="atlas")`` (or ``OvizFigure(..., style=...)``);
+``?ui=orbit`` in the URL overrides it.
+
 **Motion.** Figures open with a short camera dolly into the home view, and
 panels swing in on a hinge. Everything animated respects the system
 *reduce motion* setting.

@@ -16,7 +16,17 @@ from .bundle import Bundle, encode_base64_lines
 from .compile import compile_scene_spec
 
 VIEWER_VERSION = "2.0.0"
-_PLACEHOLDER_RE = re.compile(r"__(?:TITLE|VERSION|THEME|CSS|RUNTIME|MANIFEST|BLOBS)__")
+_PLACEHOLDER_RE = re.compile(r"__(?:TITLE|VERSION|THEME|SKIN|CSS|RUNTIME|MANIFEST|BLOBS)__")
+
+#: Interface styles the viewer ships with (see ``web/src/ui/skins.js``).
+VIEWER_STYLES = ("observatory", "orbit", "instrument", "atlas")
+
+
+def _check_style(style: str) -> str:
+    style = str(style or "observatory").strip().lower()
+    if style not in VIEWER_STYLES:
+        raise ValueError(f"viewer style must be one of {VIEWER_STYLES}, got {style!r}")
+    return style
 
 
 def _spec_fingerprint(spec: dict[str, Any]) -> str:
@@ -42,10 +52,12 @@ def _json_for_script(obj: Any) -> str:
     return text.replace("<", "\\u003c")
 
 
-def render_bundle_html(bundle: Bundle, *, title: str | None = None, theme: str = "dark") -> str:
+def render_bundle_html(bundle: Bundle, *, title: str | None = None, theme: str = "dark",
+                       style: str = "observatory") -> str:
+    style = _check_style(style)
     manifest = dict(bundle.manifest)
     manifest["blobs"] = [b.descriptor() for b in bundle.blobs]
-    manifest["viewer"] = {"version": VIEWER_VERSION}
+    manifest["viewer"] = {"version": VIEWER_VERSION, "style": style}
     blob_html = []
     for b in sorted(bundle.blobs, key=lambda b: (b.priority, b.id)):
         attrs = (
@@ -57,6 +69,7 @@ def render_bundle_html(bundle: Bundle, *, title: str | None = None, theme: str =
         "__TITLE__": html.escape(str(page_title)),
         "__VERSION__": VIEWER_VERSION,
         "__THEME__": html.escape(theme, quote=True),
+        "__SKIN__": style,
         "__CSS__": bundle_css(),
         "__MANIFEST__": _json_for_script(manifest),
         "__BLOBS__": "\n".join(blob_html),
@@ -77,9 +90,12 @@ class OvizFigure:
     """
 
     def __init__(self, scene_spec: dict[str, Any] | None = None, *, bundle: Bundle | None = None,
-                 theme: str = "dark", title: str | None = None, **_legacy_options: Any):
+                 theme: str = "dark", title: str | None = None, style: str = "observatory",
+                 **_legacy_options: Any):
         if bundle is None and scene_spec is None:
             raise ValueError("OvizFigure needs a scene_spec or a bundle")
+        #: Interface style the figure opens in: one of :data:`VIEWER_STYLES`.
+        self.style = _check_style(style)
         self.scene_spec = scene_spec
         self._bundle = bundle
         self._bundle_key: str | None = None
@@ -102,8 +118,8 @@ class OvizFigure:
     def to_dict(self) -> dict[str, Any]:
         return self.scene_spec if self.scene_spec is not None else self.bundle.manifest
 
-    def to_html(self, **_: Any) -> str:
-        return render_bundle_html(self.bundle, title=self.title, theme=self.theme)
+    def to_html(self, *, style: str | None = None, **_: Any) -> str:
+        return render_bundle_html(self.bundle, title=self.title, theme=self.theme, style=style or self.style)
 
     def write_html(self, file: str | Path, **kwargs: Any) -> Path:
         path = Path(file)

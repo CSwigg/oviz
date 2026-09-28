@@ -256,7 +256,8 @@ class DistanceTrack {
       c.height = Math.round(hgt * dpr);
     }
     const ctx = c.getContext("2d");
-    const theme = document.documentElement.dataset.ovizTheme || "dark";
+    const de = document.documentElement.dataset;
+    const theme = `${de.ovizTheme || "dark"}/${de.ovizSkin || ""}`;
     if (this._theme !== theme) {
       const css = getComputedStyle(this.ui.root);
       const get = (name, fb) => css.getPropertyValue(name).trim() || fb;

@@ -1,0 +1,61 @@
+/* ---------------------------------------------------------------- skins
+   Shared pieces for the interface styles: the picker (Display menu and the
+   "Interface style" sheet) and the Instrument HUD, which stays hidden in
+   the other skins. Each skin lives in its own 8x-skin-*.css layer, keyed on
+   <html data-oviz-skin>. Skin layout changes are scoped to desktop widths so
+   the phone layout (70-mobile) keeps working in every style. */
+
+.ov-skin-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.ov-skin-chip {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  height: 34px; padding: 0 10px;
+  border: 1px solid var(--ov-line); border-radius: 10px;
+  background: var(--ov-hover); color: var(--ov-text-2);
+  font: 600 12px/1 var(--ov-font); text-align: left; white-space: nowrap;
+  transition: border-color var(--ov-dur), background var(--ov-dur), color var(--ov-dur), transform 120ms;
+}
+.ov-skin-chip:hover { color: var(--ov-text); border-color: var(--ov-line-strong); }
+.ov-skin-chip:active { transform: scale(0.97); }
+.ov-skin-chip[aria-pressed="true"] { color: var(--ov-text); border-color: var(--ov-accent-line); background: var(--ov-accent-soft); }
+.ov-skin-dots { display: inline-flex; flex: none; }
+.ov-skin-dots i { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--ov-surface-solid); }
+.ov-skin-dots i + i { margin-left: -3px; }
+
+/* Picker cards with a tiny sketch of each layout, drawn from its swatches
+   (accent, secondary, base). */
+.ov-skin-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.ov-skin-card { display: grid; gap: 8px; align-content: start; text-align: left; }
+.ov-skin-card[aria-pressed="true"] { border-color: var(--ov-accent-line); box-shadow: 0 0 0 1px var(--ov-accent-line); }
+.ov-skin-preview {
+  position: relative; display: block; height: 84px; overflow: hidden;
+  border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.25);
+  transition: transform 400ms var(--ov-ease);
+}
+.ov-skin-card:hover .ov-skin-preview { transform: perspective(500px) rotateX(8deg) translateY(-2px); }
+.ov-skin-preview i { position: absolute; display: block; }
+.ov-skin-preview i:nth-child(3) { inset: 0; z-index: 0; }
+.ov-skin-preview i:nth-child(1), .ov-skin-preview i:nth-child(2) { z-index: 2; }
+.ov-skin-preview::after {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background-image:
+    radial-gradient(1.2px 1.2px at 32% 38%, #fff, transparent),
+    radial-gradient(1px 1px at 58% 30%, #fff, transparent),
+    radial-gradient(1.4px 1.4px at 66% 58%, #ffd9a8, transparent),
+    radial-gradient(1px 1px at 44% 64%, #cfe0ff, transparent),
+    radial-gradient(1px 1px at 76% 42%, #fff, transparent),
+    radial-gradient(1.2px 1.2px at 52% 48%, #ffb3a1, transparent);
+}
+.ov-skin-preview[data-preview="observatory"] i:nth-child(1) { left: 34%; right: 34%; bottom: 8px; height: 9px; border-radius: 5px; }
+.ov-skin-preview[data-preview="observatory"] i:nth-child(2) { left: 7px; top: 9px; width: 26%; height: 58%; border-radius: 6px; }
+.ov-skin-preview[data-preview="orbit"] i:nth-child(1) { left: 30%; right: 30%; bottom: 8px; height: 13px; border-radius: 99px; background-image: linear-gradient(90deg, #a78bff, #ff8fd0) !important; }
+.ov-skin-preview[data-preview="orbit"] i:nth-child(2) { left: calc(30% + 2px); bottom: 9px; width: 11px; height: 11px; border-radius: 50%; background: #fff !important; }
+.ov-skin-preview[data-preview="instrument"] i:nth-child(1) { left: 0; right: 0; top: 0; height: 9px; border-bottom: 1px solid; opacity: 0.35; }
+.ov-skin-preview[data-preview="instrument"] i:nth-child(2) { left: calc(50% - 7px); top: calc(50% - 7px); width: 14px; height: 14px; border-radius: 50%; background: transparent !important; box-shadow: inset 0 0 0 1px #6effc0; }
+.ov-skin-preview[data-preview="atlas"] i:nth-child(1) { left: 10px; right: 10px; bottom: 7px; height: 2px; }
+.ov-skin-preview[data-preview="atlas"] i:nth-child(2) { left: 8px; right: 8px; top: 12px; bottom: 16px; border-radius: 5px; z-index: 1; }
+.ov-skin-preview[data-preview="atlas"]::after { inset: 12px 8px 16px; z-index: 2; }
+
+/* Instrument HUD: hidden unless that skin is active. */
+.ov-ui > .ov-hud { position: absolute; inset: 0; z-index: 0; display: none; pointer-events: none; }
+[data-oviz-skin="instrument"] .ov-ui > .ov-hud { display: block; }
+.ov-root[data-presenting="true"] .ov-ui > .ov-hud { display: none; }

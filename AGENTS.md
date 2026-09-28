@@ -87,6 +87,12 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
   each module gets its own scope, only named relative imports are allowed, and
   exported names must be unique. Styles live in `oviz/viewer/web/styles`
   (tokens in `00-tokens.css`).
+- Interface styles ("skins": observatory, orbit, instrument, atlas) are CSS
+  layers keyed on `<html data-oviz-skin>` (`styles/8x-skin-*.css`, registry in
+  `src/ui/skins.js`, Python list in `figure.VIEWER_STYLES`). Every skin wears
+  the same components, so features must never depend on one skin; keep skin
+  layout rules inside `@media (min-width: 721px)` so phones keep the mobile
+  layout. Adding a skin means updating all three places.
 - `src/app/export.js` mirrors `web/template.html` for in-browser self-export.
   Keep the two in sync; `tests/test_viewer.py` checks this.
 - Time is continuous: the vertex shader interpolates frame textures, so

@@ -85,7 +85,11 @@ export class SelectionReticle {
     const s = p && cam.project(p, this.scr);
     const W = cam.width, H = cam.height;
     if (!s || s[0] < -40 || s[1] < -40 || s[0] > W + 40 || s[1] > H + 40) return this.hide();
-    const [x, y] = s;
+    // The canvas may be inset in the page (the Atlas frame): work in page space.
+    const cr = v.canvas.getBoundingClientRect();
+    const rr = this.ui.root.getBoundingClientRect();
+    const x = s[0] + cr.left - rr.left;
+    const y = s[1] + cr.top - rr.top;
     this.mark.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
     this.mark.setAttribute("opacity", "1");
     this.visible = true;

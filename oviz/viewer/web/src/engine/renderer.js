@@ -94,10 +94,11 @@ export class Renderer {
 
   resize() {
     const el = this.canvas.parentElement || this.canvas;
-    const rect = el.getBoundingClientRect();
+    // Layout size, not the painted box: a transform on the stage (the
+    // entrance zoom) must not change the drawing buffer.
     const dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr);
-    const w = Math.max(1, Math.round(rect.width));
-    const h = Math.max(1, Math.round(rect.height));
+    const w = Math.max(1, el.clientWidth);
+    const h = Math.max(1, el.clientHeight);
     if (w === this.width && h === this.height && dpr === this.dpr) return;
     this.width = w;
     this.height = h;
