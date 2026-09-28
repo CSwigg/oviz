@@ -64,6 +64,7 @@
 }
 
 @media (pointer: coarse) {
+  .ov-kbd { display: none; }
   .ov-range { height: 28px; }
   .ov-range::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8px; }
   .ov-switch-track { width: 40px; height: 24px; }
