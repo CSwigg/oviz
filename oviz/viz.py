@@ -3,6 +3,7 @@
 import base64
 import json
 import copy
+import functools
 import io
 from pathlib import Path
 
@@ -619,28 +620,16 @@ class Animate3D:
         z_sub=0.0
     ):
         """Create a galactocentric radius circle trace in the selected coordinate system."""
-        n_marks = 1000
-        R = -float(radius_kpc) * np.ones(n_marks)
-        phi = np.linspace(-180, 180, n_marks)
-        radius_circle = SkyCoord(
-            rho=R * u.kpc,
-            phi=phi * u.deg,
-            z=[0.] * len(R) * u.pc,
-            frame='galactocentric',
-            representation_type='cylindrical'
-        )
-
         if coord_system == 'rot':
-            x_gc_pc = radius_circle.galactocentric.cartesian.x.value * 1000.0
-            y_gc_pc = radius_circle.galactocentric.cartesian.y.value * 1000.0
-            z_gc_pc = radius_circle.galactocentric.cartesian.z.value * 1000.0
+            x_gc_pc, y_gc_pc, z_gc_pc = _radius_circle_xyz_pc(float(radius_kpc), 'galactocentric')
             x_vals, y_vals, z_vals = self._coordFIX_to_coordROT(
                 x_gc_pc, y_gc_pc, z_gc_pc, float(t_myr)
             )
         else:
-            x_vals = radius_circle.galactic.cartesian.x.value * 1000.0 - float(x_sub)
-            y_vals = radius_circle.galactic.cartesian.y.value * 1000.0 - float(y_sub)
-            z_vals = radius_circle.galactic.cartesian.z.value * 1000.0 - float(z_sub)
+            x_gal, y_gal, z_gal = _radius_circle_xyz_pc(float(radius_kpc), 'galactic')
+            x_vals = x_gal - float(x_sub)
+            y_vals = y_gal - float(y_sub)
+            z_vals = z_gal - float(z_sub)
 
         line_color = self._reference_line_color()
         return _scatter3d(
@@ -1642,15 +1631,14 @@ class Animate3D:
             if df_int.empty:
                 continue
 
-            # Use isclose to avoid float equality pitfalls (e.g. -10.0 vs -10).
-            time_mask = np.isclose(df_int['time'].to_numpy(dtype=float), float(t), rtol=0.0, atol=1e-9)
-            df_t = df_int[time_mask]
+            # Rows per time step, indexed once per integrated table instead of
+            # rescanning every row for every frame (isclose semantics kept).
+            df_t = _rows_at_time(df_int, float(t))
             if df_t.empty:
                 continue
 
             # Build present-day (t=0) sky quantities for click->sky-panel callbacks.
-            t0_mask = np.isclose(df_int['time'].to_numpy(dtype=float), 0.0, rtol=0.0, atol=1e-9)
-            df_t0 = df_int[t0_mask]
+            df_t0 = _rows_at_time(df_int, 0.0)
             if len(df_t0) != len(df_t):
                 # Fallback for any unexpected ordering/shape mismatch.
                 df_t0 = df_t
@@ -3103,6 +3091,90 @@ def _line_segments_from_trace(trace_json):
     return segments
 
 
+_TIME_INDEX_CACHE: "dict[int, tuple]" = {}
+
+
+def _rows_at_time(df_int, t):
+    """``df_int[np.isclose(df_int['time'], t, atol=1e-9)]`` in O(rows at t).
+
+    The index is rebuilt whenever the table object or its time column
+    changes, so re-integrated traces never see stale rows.
+    """
+
+    times = df_int['time'].to_numpy(dtype=float)
+    key = id(df_int)
+    cached = _TIME_INDEX_CACHE.get(key)
+    if cached is None or cached[0] is not df_int or cached[1] != len(times) or not np.array_equal(cached[2], times):
+        order = np.argsort(times, kind='stable')
+        sorted_times = times[order]
+        cached = (df_int, len(times), times.copy(), order, sorted_times)
+        if len(_TIME_INDEX_CACHE) >= 64:
+            _TIME_INDEX_CACHE.clear()
+        _TIME_INDEX_CACHE[key] = cached
+    _, _, _, order, sorted_times = cached
+    lo = np.searchsorted(sorted_times, t - 1e-9, side='left')
+    hi = np.searchsorted(sorted_times, t + 1e-9, side='right')
+    rows = np.sort(order[lo:hi])
+    return df_int.iloc[rows]
+
+
+@functools.lru_cache(maxsize=32)
+def _radius_circle_xyz_pc(radius_kpc, frame):
+    """Cartesian pc of a 1000-point galactocentric circle, in ``frame``.
+
+    The geometry is identical for every timeline frame (only the per-frame
+    recentring differs), so the astropy transform runs once per radius.
+    """
+
+    n_marks = 1000
+    R = -float(radius_kpc) * np.ones(n_marks)
+    phi = np.linspace(-180, 180, n_marks)
+    circle = SkyCoord(
+        rho=R * u.kpc,
+        phi=phi * u.deg,
+        z=[0.] * len(R) * u.pc,
+        frame='galactocentric',
+        representation_type='cylindrical'
+    )
+    target = circle.galactocentric if frame == 'galactocentric' else circle.galactic
+    xyz = [np.asarray(c.value, dtype=float) * 1000.0 for c in (target.cartesian.x, target.cartesian.y, target.cartesian.z)]
+    for arr in xyz:
+        arr.setflags(write=False)
+    return tuple(xyz)
+
+
+@functools.lru_cache(maxsize=1)
+def _galactic_to_icrs_matrix():
+    """Astropy's Galactic → ICRS rotation, evaluated once.
+
+    The chain (Galactic → FK5 J2000 → ICRS) is a fixed rotation, so
+    transforming the three basis vectors reproduces astropy to ~1e-15
+    without building a SkyCoord per point (which dominated make_plot).
+    """
+
+    # Images of the Galactic x, y, z unit vectors are the matrix columns.
+    basis = SkyCoord(l=[0.0, 90.0, 0.0] * u.deg, b=[0.0, 0.0, 90.0] * u.deg, frame='galactic')
+    return np.asarray(basis.icrs.cartesian.xyz.value, dtype=float)
+
+
+@functools.lru_cache(maxsize=1 << 16)
+def _galactic_to_icrs_deg(l_deg, b_deg):
+    """(l, b) → (ra, dec) in degrees; NaN pair when the input is invalid."""
+
+    if not (np.isfinite(l_deg) and np.isfinite(b_deg)):
+        return (np.nan, np.nan)
+    try:
+        matrix = _galactic_to_icrs_matrix()
+    except Exception:
+        return (np.nan, np.nan)
+    l_rad, b_rad = np.radians(l_deg), np.radians(b_deg)
+    cb = np.cos(b_rad)
+    v = matrix @ np.array([cb * np.cos(l_rad), cb * np.sin(l_rad), np.sin(b_rad)])
+    ra = float(np.degrees(np.arctan2(v[1], v[0])) % 360.0)
+    dec = float(np.degrees(np.arcsin(np.clip(v[2], -1.0, 1.0))))
+    return (ra, dec)
+
+
 def _selection_from_customdata_row(row):
     if row is None:
         return None
@@ -3125,14 +3197,7 @@ def _selection_from_customdata_row(row):
     click_time_myr = np.nan
     if np.isfinite(age_now) and np.isfinite(age_at_t):
         click_time_myr = float(age_at_t - age_now)
-    ra_deg = np.nan
-    dec_deg = np.nan
-    try:
-        icrs = SkyCoord(l=[l_deg] * u.deg, b=[b_deg] * u.deg, frame='galactic').icrs
-        ra_deg = float(icrs.ra.deg[0])
-        dec_deg = float(icrs.dec.deg[0])
-    except Exception:
-        pass
+    ra_deg, dec_deg = _galactic_to_icrs_deg(l_deg, b_deg)
 
     cluster_name = None
     if len(values) > CUSTOMDATA_IDX_CLUSTER_NAME and values[CUSTOMDATA_IDX_CLUSTER_NAME] not in (None, ''):
