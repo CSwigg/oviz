@@ -116,6 +116,11 @@ export class Camera {
 
   update(sceneRadius = 1e4) {
     const p = this.pose;
+    // Only rebuild (and bump `version`, which downstream caches key on) when
+    // the pose or viewport actually changed.
+    const sig = `${p.target[0]},${p.target[1]},${p.target[2]},${p.distance},${p.yaw},${p.pitch},${p.fov},${this.aspect},${this.height},${sceneRadius}`;
+    if (sig === this._sig) return false;
+    this._sig = sig;
     poseEye(p, this.eye);
     forwardFromAngles(p.yaw, p.pitch, this.forward);
     const tgt = p.distance > 1e-6
@@ -136,6 +141,7 @@ export class Camera {
     m4invert(this.view, this.invView);
     m4invert(this.proj, this.invProj);
     this.version++;
+    return true;
   }
 
   /** World → CSS pixel coordinates. Returns null if behind the camera. */
