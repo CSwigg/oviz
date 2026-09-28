@@ -17,12 +17,14 @@ import { StoryPlugin } from "./story.js";
 import { RecorderPlugin } from "./recorder.js";
 import { FilterPlugin } from "./filter.js";
 import { NotesPlugin } from "./notes.js";
+import { LassoPlugin } from "./lasso.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
   ui.use(new SkyPlugin());
   ui.use(new FilterPlugin());
   ui.use(new NotesPlugin());
+  ui.use(new LassoPlugin());
   ui.use(new StoryPlugin());
   ui.use(new RecorderPlugin());
   ui.layers.render();
@@ -716,7 +718,7 @@ export class AppUI {
     const groups = [
       ["Navigate", [["Orbit", "Drag"], ["Pan", "⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / zoom by key", "W A S D Q E"], ["Fly to object", "Double-click"], ["Reset view", "R"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
       ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
-      ["Inspect", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Measure separation", "⇧ Click"], ["Clear selection", "Esc"]]],
+      ["Inspect", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Measure separation", "⇧ Click"], ["Lasso select", "X"], ["Clear selection", "Esc"]]],
       ["Layers", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Layers panel", "L"], ["Galactic grid", "G"]]],
       ["Views & story", [["Views panel", "⇧ S"], ["Save current view", "N"], ["Present", "⇧ P"], ["Next / previous view", "] ["]]],
       ["Capture", [["Screenshot", "P"], ["Hide interface", "Z"], ["Fullscreen", "F"], ["This help", "?"]]],

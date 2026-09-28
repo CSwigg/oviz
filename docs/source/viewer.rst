@@ -30,6 +30,10 @@ you can fly to it, *follow* it through time, draw its full *orbit trail*, or
 copy its coordinates. Shift-click a second object to measure the 3D separation
 and the angular separation seen from the Sun.
 
+**Select.** Press **X** to lasso objects; the rest dims. Frame, isolate or
+export the selection as CSV (names, ages, members, coordinates and positions at
+time t).
+
 **Search.** Press **⌘K** (Ctrl K), or **/**, to search every object, including
 catalogue aliases, as well as layers, saved views and actions.
 

@@ -100,11 +100,11 @@ void main() {
   }
   float stars = pow(max(aStatic.w, 1e-6), uStarsExp);
   float eff = opacity * uOpacityScale * p.w;
-  // State bits: 1 dimmed (filter), 2 hidden (filter), 4 replaced by member
-  // stars in Sky view.
+  // State bits: 1 dimmed / 2 hidden (distribution filter), 4 replaced by
+  // member stars in Sky view, 8 dimmed / 16 hidden (lasso selection).
   int st = int(aState + 0.5);
-  if ((st & 2) != 0) eff = 0.0;
-  else if ((st & 1) != 0) eff *= uDimOpacity;
+  if ((st & 18) != 0) eff = 0.0;
+  else if ((st & 9) != 0) eff *= uDimOpacity;
   if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
   vec4 center = uViewProj * vec4(p.xyz + uOffset, 1.0);
   if (size <= 0.0 || eff <= 0.001 || p.w <= 0.0 || center.w <= 0.0) {
