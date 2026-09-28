@@ -15,8 +15,9 @@ Using a figure
 --------------
 
 **Navigate.** Drag to orbit, Shift-drag or right-drag to pan, scroll to zoom
-toward the cursor. Double-click an object to fly to it. **R** resets the view
-and **O** auto-orbits.
+toward the cursor, or use **W A S D** and **Q E** from the keyboard.
+Double-click an object to fly to it. **R** resets the view and **O**
+auto-orbits.
 
 **Time.** Time is continuous: positions are interpolated between the stored
 frames on the GPU, so playback is smooth at any speed. Use **Space** to play,
@@ -44,7 +45,7 @@ centre, horizontal field and Galactic-north-up orientation). Cluster markers
 crossfade into their member stars, which inherit the parent's orbit, birth time,
 visibility and colour. Survey layers can be shown, faded and reordered.
 
-**Views & story (S).** Save the complete viewer as a view with **N**. That
+**Views & story (Shift S).** Save the complete viewer as a view with **N**. That
 includes camera and 3D/Sky mode, time, layer styles, volumes, Sky layers,
 filters and display settings. Transitions animate every continuous property
 together and then assign the saved values exactly. Views get thumbnails and

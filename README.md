@@ -171,7 +171,7 @@ A State (a *view* in the viewer's story panel) records the complete viewer at
 one moment. That covers the camera, time, 3D or Sky mode, trace and volume
 settings, Aladin layers, filters, and display settings.
 
-Press **N** to save a view and **S** to open the story. There you can rename,
+Press **N** to save a view and **Shift S** to open the story. There you can rename,
 caption, and reorder views, and present them in order with **Shift P**. Export
 the result as an editable figure (**⌘S**) or as a present-only figure that
 opens straight into the first view.

@@ -162,3 +162,6 @@
 .ov-filter-foot { display: flex; align-items: center; gap: 8px; }
 .ov-filter-foot .ov-mini-seg { width: 104px; }
 .ov-hist-readout { font: 550 11px/1.3 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text-3); min-width: 0; }
+.ov-insp-links { display: flex; align-items: center; gap: 4px; padding: 0 12px 12px; }
+.ov-insp-links .ov-fact-label { margin-right: auto; }
+.ov-insp-links a { text-decoration: none; }

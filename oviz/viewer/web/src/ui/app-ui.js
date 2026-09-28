@@ -76,7 +76,7 @@ export class AppUI {
     this.search = h("button", { class: "ov-search-trigger ov-glass", type: "button", "aria-label": "Search", onclick: () => this.palette.show() },
       icon("search"), h("span", { class: "ov-grow" }, "Search clusters, layers, actions…"), kbd(`${MOD === "⌘" ? "⌘" : "Ctrl"}`), kbd("K"));
     this.layersBtn = iconButton("layers", "Layers", () => this.setLayersOpen(!this.layersOpen), { shortcut: "L" });
-    this.statesBtn = iconButton("bookmark", "Views & story", () => this.plugins.find((p) => p.name === "states")?.toggle(), { shortcut: "S" });
+    this.statesBtn = iconButton("bookmark", "Views & story", () => this.plugins.find((p) => p.name === "states")?.toggle(), { shortcut: "⇧S" });
     this.shotBtn = iconButton("camera", "Screenshot", (e) => this.captureMenu(e.currentTarget), { shortcut: "P" });
     this.shareBtn = iconButton("share", "Share & export", (e) => this.shareMenu(e.currentTarget));
     this.settingsBtn = iconButton("sliders", "Display settings", (e) => this.settingsMenu(e.currentTarget));
@@ -219,6 +219,30 @@ export class AppUI {
         v.flyToObject(hit.trace, hit.index);
       }
     });
+  }
+
+  /** W/A/S/D orbit (look around in Sky), Q/E zoom. */
+  flyKey(k) {
+    const v = this.viewer;
+    const c = v.controls;
+    const step = 0.045;
+    v.tween = null;
+    if (k === "q" || k === "e") {
+      c.zoomAt(k === "e" ? 0.88 : 1 / 0.88, v.renderer.width / 2, v.renderer.height / 2);
+    } else if (c.mode === "sky") {
+      const px = v.renderer.height * 0.04;
+      if (k === "a") c.lookDrag(px, 0);
+      if (k === "d") c.lookDrag(-px, 0);
+      if (k === "w") c.lookDrag(0, px);
+      if (k === "s") c.lookDrag(0, -px);
+    } else {
+      if (k === "a") c.rotate(step, 0);
+      if (k === "d") c.rotate(-step, 0);
+      if (k === "w") c.rotate(0, step);
+      if (k === "s") c.rotate(0, -step);
+    }
+    v.renderer.markInteraction();
+    return true;
   }
 
   refreshHover() {
@@ -688,11 +712,11 @@ export class AppUI {
 
   showHelp() {
     const groups = [
-      ["Navigate", [["Orbit", "Drag"], ["Pan", "⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Fly to object", "Double-click"], ["Reset view", "R"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
+      ["Navigate", [["Orbit", "Drag"], ["Pan", "⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / zoom by key", "W A S D Q E"], ["Fly to object", "Double-click"], ["Reset view", "R"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
       ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
       ["Inspect", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Measure separation", "⇧ Click"], ["Clear selection", "Esc"]]],
       ["Layers", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Layers panel", "L"], ["Galactic grid", "G"]]],
-      ["Views & story", [["Views panel", "S"], ["Save current view", "N"], ["Present", "⇧ P"], ["Next / previous view", "] ["]]],
+      ["Views & story", [["Views panel", "⇧ S"], ["Save current view", "N"], ["Present", "⇧ P"], ["Next / previous view", "] ["]]],
       ["Capture", [["Screenshot", "P"], ["Hide interface", "Z"], ["Fullscreen", "F"], ["This help", "?"]]],
     ];
     const grid = h("div", { class: "ov-help-grid" }, groups.map(([title, rows]) => h("div", { class: "ov-help-group" },
@@ -756,6 +780,9 @@ export class AppUI {
         case "ArrowLeft": tl.pause(); tl.step(e.shiftKey ? -5 : -1); break;
         case "ArrowRight": tl.pause(); tl.step(e.shiftKey ? 5 : 1); break;
         case "0": tl.setTime(0); break;
+        case "w": case "W": case "s": case "S": case "a": case "A": case "d": case "D": case "q": case "Q": case "e": case "E":
+          if (e.shiftKey || !this.flyKey(k.toLowerCase())) handled = false;
+          break;
         case "<": case ",": this.dock.cycleSpeed(-1); break;
         case ">": case ".": this.dock.cycleSpeed(1); break;
         case "/": this.palette.show(); break;

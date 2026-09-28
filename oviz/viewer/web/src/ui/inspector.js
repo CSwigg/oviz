@@ -63,6 +63,15 @@ export class Inspector {
       h("button", { class: "ov-btn", type: "button", onclick: () => this.copy(d) }, icon("copy"), "Copy"),
     );
     this.body.append(hero, facts, actions);
+    if (d.ra != null && d.dec != null) {
+      const coord = `${d.ra.toFixed(5)} ${d.dec >= 0 ? "+" : ""}${d.dec.toFixed(5)}`;
+      const simbad = `https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${encodeURIComponent(coord)}&CooFrame=ICRS&Radius=10&Radius.unit=arcmin`;
+      const aladin = `https://aladin.cds.unistra.fr/AladinLite/?target=${encodeURIComponent(coord)}&fov=1.5&survey=P%2FDSS2%2Fcolor`;
+      this.body.append(h("div", { class: "ov-insp-links" },
+        h("span", { class: "ov-fact-label" }, "Look up"),
+        h("a", { class: "ov-btn ov-btn--sm ov-btn--ghost", href: simbad, target: "_blank", rel: "noopener noreferrer" }, "SIMBAD ↗"),
+        h("a", { class: "ov-btn ov-btn--sm ov-btn--ghost", href: aladin, target: "_blank", rel: "noopener noreferrer" }, "Aladin ↗")));
+    }
     if (d.hover) {
       const legacy = h("div", { class: "ov-insp-legacy" });
       legacy.innerHTML = sanitize(d.hover);

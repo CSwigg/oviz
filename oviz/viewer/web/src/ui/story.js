@@ -68,7 +68,7 @@ export class StoryPlugin {
       h("span", { class: "ov-story-title" }, "Story"), this.count,
       h("span", { class: "ov-grow" }),
       this.readOnly ? null : this.addBtn, this.presentBtn, this.readOnly ? null : this.exportBtn, this.readOnly ? null : this.settingsBtn,
-      iconButton("close", "Close", () => this.toggle(false), { shortcut: "S" }));
+      iconButton("close", "Close", () => this.toggle(false), { shortcut: "⇧S" }));
     this.strip = h("div", { class: "ov-story-strip", role: "list" });
     this.status = h("div", { class: "ov-story-status" });
     this.el.append(head, this.strip, this.status);
@@ -440,7 +440,7 @@ export class StoryPlugin {
     }
     if (e.key === "P" && e.shiftKey) { this.present(true); return true; }
     if ((e.key === "n" || e.key === "N") && !this.readOnly) { this.add(); return true; }
-    if (e.key === "s" || e.key === "S") { this.toggle(); return true; }
+    if (e.key === "S" && e.shiftKey) { this.toggle(); return true; }
     if (e.key === "]") { this.next(); return true; }
     if (e.key === "[") { this.previous(); return true; }
     return false;
@@ -461,7 +461,7 @@ export class StoryPlugin {
   commands() {
     const list = [
       { title: "Present story", icon: "present", shortcut: "⇧ P", run: () => this.present(true) },
-      { title: "Open views & story", icon: "bookmark", shortcut: "S", run: () => this.toggle(true) },
+      { title: "Open views & story", icon: "bookmark", shortcut: "⇧ S", run: () => this.toggle(true) },
     ];
     if (!this.readOnly) {
       list.unshift({ title: "Save current view", icon: "plus", shortcut: "N", pinned: true, run: () => this.add() });
