@@ -309,6 +309,28 @@ export class SkyPlugin {
     this.renderLayerList();
   }
 
+  /** Add a HiPS survey (CDS ID like "P/2MASS/color" or an https URL) on top. */
+  addSurvey(raw) {
+    const id = String(raw || "").trim();
+    if (!id) return;
+    if (!/^(https?:\/\/|[A-Za-z0-9_.-]+\/)/.test(id)) {
+      this.ui.toast("Enter a HiPS ID such as P/2MASS/color, or an https:// URL");
+      return;
+    }
+    const list = this.layers();
+    const existing = list.find((l) => l.key === id || l.survey === id);
+    if (existing) {
+      existing.visible = true;
+      existing.opacity = existing.opacity || 1;
+    } else {
+      const label = id.replace(/^https?:\/\/[^/]+\//, "").replace(/\//g, " ").trim();
+      list.unshift({ key: id, label, survey: id, opacity: 0.7, visible: true });
+    }
+    this.applyLayers();
+    this.renderLayerList();
+    this.ui.toast(`Added ${id}`, { icon: icon("globe") });
+  }
+
   moveLayer(key, dir) {
     const list = this.layers();
     const i = list.findIndex((x) => x.key === key);
@@ -332,6 +354,15 @@ export class SkyPlugin {
     }
     this.listHost = h("div");
     sec.append(this.listHost);
+    const input = h("input", { class: "ov-input", type: "text", placeholder: "Add survey: HiPS ID or URL", spellcheck: "false", "aria-label": "Add a HiPS survey" });
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        this.addSurvey(input.value);
+        input.value = "";
+      }
+    });
+    sec.append(h("div", { style: { padding: "6px 12px 4px" } }, input));
     this.renderLayerList();
     return sec;
   }

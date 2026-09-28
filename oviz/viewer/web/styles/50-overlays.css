@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------- overlays */
 .ov-scrim {
   position: absolute; inset: 0; z-index: 70;
-  background: rgba(3, 5, 9, 0.45);
+  background: rgba(3, 5, 9, 0.62);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   animation: ov-fade-in 180ms var(--ov-ease);
 }
