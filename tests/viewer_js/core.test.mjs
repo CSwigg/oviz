@@ -146,3 +146,12 @@ test("motion trails point back along playback and respect the time axis", async 
   assert.equal(trailParams([0], 1, 5), null);
   assert.equal(trailParams([3, 3, 3], 1, 5), null);
 });
+
+test("spring easings settle, and livelier springs overshoot", async () => {
+  const { springEasing, SPRINGS } = await import("../../oviz/viewer/web/src/ui/motion.js");
+  const pop = springEasing(SPRINGS.pop);
+  assert.ok(pop.duration > 150 && pop.duration < 2500, `duration ${pop.duration}`);
+  assert.equal(springEasing(SPRINGS.pop), pop); // cached
+  const stiff = springEasing({ stiffness: 900, damping: 60 });
+  assert.ok(stiff.duration < springEasing({ stiffness: 120, damping: 14 }).duration);
+});

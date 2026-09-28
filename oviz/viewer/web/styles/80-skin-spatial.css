@@ -1,0 +1,140 @@
+/* ============================================================== Spatial
+   Glass in space, in the spirit of a headset UI. Thick frosted panels
+   float at different depths and drift with the pointer (their shadows
+   swing the other way), a specular rim catches the light, controls glow
+   where you point, and when a menu opens it grows out of its button while
+   the sky recedes and softens behind it. */
+[data-oviz-skin="spatial"] {
+  --ov-font: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --ov-font-display: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --ov-surface: rgba(66, 70, 84, 0.34);
+  --ov-surface-strong: rgba(58, 62, 76, 0.62);
+  --ov-surface-solid: #2b2f3a;
+  --ov-surface-raised: rgba(74, 78, 94, 0.78);
+  --ov-hover: rgba(255, 255, 255, 0.1);
+  --ov-active: rgba(255, 255, 255, 0.17);
+  --ov-line: rgba(255, 255, 255, 0.12);
+  --ov-line-strong: rgba(255, 255, 255, 0.24);
+  --ov-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  --ov-text: #ffffff;
+  --ov-text-2: rgba(255, 255, 255, 0.74);
+  --ov-text-3: rgba(255, 255, 255, 0.5);
+  --ov-text-inverse: #10131b;
+  --ov-accent: #ffffff;
+  --ov-accent-strong: #ffffff;
+  --ov-accent-soft: rgba(255, 255, 255, 0.2);
+  --ov-accent-line: rgba(255, 255, 255, 0.55);
+  --ov-sky: #9fc6ff;
+  --ov-sky-soft: rgba(159, 198, 255, 0.2);
+  --ov-radius-lg: 30px;
+  --ov-radius: 20px;
+  --ov-radius-sm: 14px;
+  --ov-blur: blur(42px) saturate(210%) brightness(1.06);
+  --ov-rim: linear-gradient(calc(150deg + var(--ov-px, 0) * 40deg), rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.1) 34%, rgba(255, 255, 255, 0.03) 62%, rgba(255, 255, 255, 0.34));
+  /* Shadows swing against the pointer: the light source feels fixed. */
+  --ov-shadow:
+    calc(var(--ov-px, 0) * -18px) calc(34px + var(--ov-py, 0) * -14px) 80px -30px rgba(0, 0, 0, 0.85),
+    calc(var(--ov-px, 0) * -6px) calc(10px + var(--ov-py, 0) * -4px) 24px -12px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+[data-oviz-skin="spatial"] .ov-root { letter-spacing: 0; font-feature-settings: normal; }
+
+/* ---- Material: frosted glass with a specular rim -------------------- */
+[data-oviz-skin="spatial"] .ov-glass {
+  border: 1px solid transparent;
+  background: linear-gradient(var(--ov-surface), var(--ov-surface)) padding-box, var(--ov-rim) border-box;
+}
+[data-oviz-skin="spatial"] .ov-panel, [data-oviz-skin="spatial"] .ov-pop, [data-oviz-skin="spatial"] .ov-palette,
+[data-oviz-skin="spatial"] .ov-sheet, [data-oviz-skin="spatial"] .ov-story, [data-oviz-skin="spatial"] .ov-present {
+  background: linear-gradient(var(--ov-surface-strong), var(--ov-surface-strong)) padding-box, var(--ov-rim) border-box;
+}
+[data-oviz-skin="spatial"] .ov-panel { border-radius: 30px; }
+[data-oviz-skin="spatial"] .ov-panel-head { border-bottom-color: transparent; min-height: 54px; padding-left: 20px; }
+[data-oviz-skin="spatial"] .ov-panel-title { font: 600 17px/1.1 var(--ov-font-display); letter-spacing: -0.01em; }
+[data-oviz-skin="spatial"] .ov-section + .ov-section { border-top-color: transparent; }
+[data-oviz-skin="spatial"] .ov-facts { background: transparent; gap: 6px; padding: 0 12px 12px; border: 0; }
+[data-oviz-skin="spatial"] .ov-fact { background: rgba(255, 255, 255, 0.07); border-radius: 16px; }
+[data-oviz-skin="spatial"] .ov-insp-hero { border-bottom: 0; padding: 16px 20px 14px; }
+[data-oviz-skin="spatial"] .ov-insp-name { font: 700 24px/1.12 var(--ov-font-display); letter-spacing: -0.02em; }
+[data-oviz-skin="spatial"] .ov-insp-track { border-bottom: 0; margin: 0 12px 10px; padding: 12px 14px; background: rgba(255, 255, 255, 0.07); border-radius: 18px; }
+
+/* ---- Depth: every layer drifts with the pointer by its own amount ---- */
+[data-oviz-skin="spatial"] .ov-top { translate: calc(var(--ov-px, 0) * 4px) calc(var(--ov-py, 0) * 3px); }
+[data-oviz-skin="spatial"] .ov-bottom { translate: calc(var(--ov-px, 0) * 5px) calc(var(--ov-py, 0) * 3px); }
+[data-oviz-skin="spatial"] .ov-layers, [data-oviz-skin="spatial"] .ov-inspector, [data-oviz-skin="spatial"] .ov-story {
+  translate: calc(var(--ov-px, 0) * 10px) calc(var(--ov-py, 0) * 7px);
+}
+[data-oviz-skin="spatial"] .ov-pop, [data-oviz-skin="spatial"] .ov-palette, [data-oviz-skin="spatial"] .ov-sheet {
+  translate: calc(var(--ov-px, 0) * 16px) calc(var(--ov-py, 0) * 11px);
+}
+
+/* ---- Pointer glow on anything you can press ------------------------- */
+[data-oviz-skin="spatial"] :is(.ov-btn, .ov-pop-item, .ov-palette-item, .ov-search-trigger) { position: relative; }
+[data-oviz-skin="spatial"] :is(.ov-ibtn, .ov-btn, .ov-row, .ov-pop-item, .ov-palette-item, .ov-seg button, .ov-search-trigger, .ov-card, .ov-skin-card)::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(110px circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, 0.2), transparent 70%);
+  opacity: 0; transition: opacity 260ms var(--ov-ease);
+}
+[data-oviz-skin="spatial"] :is(.ov-ibtn, .ov-btn, .ov-row, .ov-pop-item, .ov-palette-item, .ov-seg button, .ov-search-trigger, .ov-card, .ov-skin-card)[data-gaze="true"]::after { opacity: 1; }
+
+/* ---- Controls: soft capsules that swell under the pointer ------------ */
+[data-oviz-skin="spatial"] .ov-ibtn { transition: background 200ms, color 200ms, transform var(--ov-spring-bouncy-ms) var(--ov-spring-bouncy); }
+[data-oviz-skin="spatial"] .ov-ibtn:hover { transform: scale(1.1); }
+[data-oviz-skin="spatial"] .ov-ibtn:active { transform: scale(0.9); transition-duration: 90ms; }
+[data-oviz-skin="spatial"] .ov-ibtn[aria-pressed="true"], [data-oviz-skin="spatial"] .ov-ibtn[aria-expanded="true"] { background: rgba(255, 255, 255, 0.92); color: var(--ov-text-inverse); }
+[data-oviz-skin="spatial"] .ov-btn { border-radius: 999px; border-color: transparent; background: rgba(255, 255, 255, 0.12); transition: background 200ms, transform var(--ov-spring-bouncy-ms) var(--ov-spring-bouncy); }
+[data-oviz-skin="spatial"] .ov-btn:hover { background: rgba(255, 255, 255, 0.18); transform: scale(1.03); }
+[data-oviz-skin="spatial"] .ov-btn:active { transform: scale(0.95); transition-duration: 90ms; }
+[data-oviz-skin="spatial"] .ov-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.9); color: var(--ov-text-inverse); border-color: transparent; }
+[data-oviz-skin="spatial"] .ov-btn--primary { background: #fff; color: var(--ov-text-inverse); }
+[data-oviz-skin="spatial"] .ov-row { border-radius: 16px; }
+[data-oviz-skin="spatial"] .ov-group, [data-oviz-skin="spatial"] .ov-hist { border-radius: 16px; border-color: transparent; background: rgba(255, 255, 255, 0.08); }
+[data-oviz-skin="spatial"] .ov-corner-btns .ov-ibtn { border-radius: 50%; width: 44px; height: 44px; }
+
+/* Dock: a floating ornament with a white play key. */
+[data-oviz-skin="spatial"] .ov-dock { border-radius: 999px; padding: 0 18px 0 11px; }
+[data-oviz-skin="spatial"] .ov-play { background: #fff !important; color: var(--ov-text-inverse) !important; box-shadow: 0 10px 30px -10px rgba(255, 255, 255, 0.6) !important; }
+[data-oviz-skin="spatial"] .ov-time-value { font: 600 21px/1 var(--ov-font-display); }
+[data-oviz-skin="spatial"] .ov-time-caption { text-transform: none; letter-spacing: 0; font-size: 11px; }
+[data-oviz-skin="spatial"] .ov-scrub-track { height: 6px; margin-top: -3px; background: rgba(255, 255, 255, 0.16); }
+[data-oviz-skin="spatial"] .ov-scrub-fill { background: rgba(255, 255, 255, 0.85); }
+[data-oviz-skin="spatial"] .ov-scrub-thumb { width: 20px; height: 20px; margin: -10px 0 0 -10px; background: #fff; box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.14), 0 6px 16px rgba(0, 0, 0, 0.5); transition: transform var(--ov-spring-bouncy-ms) var(--ov-spring-bouncy); }
+[data-oviz-skin="spatial"] .ov-scrub:hover .ov-scrub-thumb { transform: scale(1.3); }
+[data-oviz-skin="spatial"] .ov-root .ov-seg--view .ov-seg-thumb { background: rgba(255, 255, 255, 0.92); box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.6); }
+[data-oviz-skin="spatial"] .ov-seg--view button[aria-pressed="true"] { color: var(--ov-text-inverse) !important; }
+[data-oviz-skin="spatial"] .ov-switch input:checked + .ov-switch-track { background: #fff; }
+[data-oviz-skin="spatial"] .ov-switch input:checked + .ov-switch-track::after { background: var(--ov-text-inverse); }
+
+/* Menus: rounded glass trays. */
+[data-oviz-skin="spatial"] .ov-pop { border-radius: 24px; padding: 8px; }
+[data-oviz-skin="spatial"] .ov-pop-item { border-radius: 14px; height: 40px; }
+[data-oviz-skin="spatial"] .ov-palette { border-radius: 28px; }
+[data-oviz-skin="spatial"] .ov-palette-item { border-radius: 16px; }
+[data-oviz-skin="spatial"] .ov-sheet { border-radius: 30px; }
+[data-oviz-skin="spatial"] .ov-hovercard { border-radius: 16px; }
+[data-oviz-skin="spatial"] .ov-toast { border-radius: 999px; }
+[data-oviz-skin="spatial"] .ov-card, [data-oviz-skin="spatial"] .ov-reel-card { border-radius: 18px; }
+[data-oviz-skin="spatial"] .ov-present { border-radius: 30px; }
+[data-oviz-skin="spatial"] .ov-scrim { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* ---- Focus: the scene recedes behind whatever is open ---------------- */
+[data-oviz-skin="spatial"] .ov-stage,
+[data-oviz-skin="spatial"] .ov-top, [data-oviz-skin="spatial"] .ov-bottom,
+[data-oviz-skin="spatial"] .ov-layers, [data-oviz-skin="spatial"] .ov-inspector {
+  transition-property: filter, scale, opacity, transform, translate;
+  transition-duration: 480ms, var(--ov-spring-smooth-ms), 260ms, 300ms, 120ms;
+  transition-timing-function: var(--ov-ease), var(--ov-spring-smooth), var(--ov-ease), var(--ov-ease), linear;
+}
+[data-oviz-skin="spatial"] .ov-root[data-overlay] .ov-stage { filter: blur(7px) brightness(0.62) saturate(0.85); scale: 0.975; }
+[data-oviz-skin="spatial"] .ov-root[data-overlay] :is(.ov-top, .ov-bottom, .ov-layers, .ov-inspector) { filter: brightness(0.7); scale: 0.985; }
+
+/* ---- Entrance: panels materialise out of the haze -------------------- */
+@keyframes spatial-materialise { from { opacity: 0; scale: 0.92; filter: blur(12px); } }
+[data-oviz-skin="spatial"] .ov-root[data-entrance="true"] .ov-top > *,
+[data-oviz-skin="spatial"] .ov-root[data-entrance="true"] .ov-bottom > * { animation-name: spatial-materialise; animation-timing-function: var(--ov-spring-smooth); animation-duration: 900ms; }
+[data-oviz-skin="spatial"] .ov-root[data-entrance="true"] .ov-layers[data-open="true"] { animation-name: spatial-materialise; animation-duration: 1000ms; }
+@media (min-width: 721px) {
+  [data-oviz-skin="spatial"] .ov-layers[data-open="false"] { transform: perspective(1200px) translateX(-10px) rotateY(14deg) scale(0.94); filter: blur(8px); }
+  [data-oviz-skin="spatial"] .ov-inspector[data-open="false"] { transform: perspective(1200px) translateX(10px) rotateY(-14deg) scale(0.94); filter: blur(8px); }
+  [data-oviz-skin="spatial"] .ov-layers, [data-oviz-skin="spatial"] .ov-inspector { transition: opacity 300ms var(--ov-ease), transform var(--ov-spring-bouncy-ms) var(--ov-spring-bouncy), filter 400ms var(--ov-ease), scale var(--ov-spring-smooth-ms) var(--ov-spring-smooth), translate 120ms linear; }
+}

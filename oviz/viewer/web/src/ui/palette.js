@@ -1,6 +1,7 @@
 // Command palette (⌘K / "/"): fuzzy search over objects, layers, States and actions.
 
 import { h, icon, kbd, fuzzyScore, clear } from "./dom.js";
+import { reveal, conceal, SPRINGS } from "./motion.js";
 
 export class Palette {
   constructor(ui) {
@@ -57,6 +58,9 @@ export class Palette {
         h("span", null, kbd("⇧↵"), "select without flying")),
     );
     ui.root.append(this.scrim, this.el);
+    // Search flows out of the search capsule (the island, in that skin).
+    reveal(this.el, ui.search?.getBoundingClientRect(), { spring: SPRINGS.pop });
+    ui.setOverlay?.("palette", true);
     this.input.value = initial;
     this.input.addEventListener("input", () => this.update());
     this.input.addEventListener("keydown", (e) => this.onKey(e));
@@ -68,8 +72,10 @@ export class Palette {
   close() {
     if (!this.open) return;
     this.open = false;
-    this.scrim?.remove();
-    this.el?.remove();
+    const { scrim, el } = this;
+    this.ui.setOverlay?.("palette", false);
+    if (scrim) { scrim.style.transition = "opacity 200ms"; scrim.style.opacity = "0"; }
+    conceal(el, this.ui.search?.getBoundingClientRect()).then(() => { el?.remove(); scrim?.remove(); });
     this.ui.focusCanvas();
   }
 

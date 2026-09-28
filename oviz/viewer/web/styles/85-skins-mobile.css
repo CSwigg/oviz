@@ -1,0 +1,30 @@
+/* -------------------------------------------------------- skins · phones
+   Phone layouts for the interface styles. The shared mobile layout
+   (70-mobile) already turns panels into bottom sheets that swipe down to
+   dismiss; these rules adapt each style to it. */
+@media (max-width: 720px) {
+  .ov-panel-head { touch-action: none; }
+  .ov-panel[data-dragging="true"] { transition: none !important; }
+
+  /* Island: a real top-centre island above the brand and toolbar row. */
+  [data-oviz-skin="island"] .ov-top {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "island island island" "brand . tools";
+    row-gap: 10px;
+  }
+  [data-oviz-skin="island"] .ov-search-trigger { grid-area: island; justify-self: center; width: 118px; height: 36px; padding: 0 12px; justify-content: center; }
+  [data-oviz-skin="island"] .ov-search-trigger:not([data-island="idle"]):not([data-island=""]) { height: 40px; }
+  [data-oviz-skin="island"] .ov-island-text { max-width: 170px; }
+  [data-oviz-skin="island"] .ov-brand { grid-area: brand; }
+  [data-oviz-skin="island"] .ov-toolbar { grid-area: tools; }
+  [data-oviz-skin="island"] .ov-toasts, [data-oviz-skin="island"] .ov-rec-pill { top: calc(108px + var(--ov-safe-top)); }
+  [data-oviz-skin="island"] .ov-panel { background: rgba(0, 0, 0, 0.94); }
+
+  /* Spatial: heavier glass so sheets read clearly over bright sky. */
+  [data-oviz-skin="spatial"] { --ov-surface-strong: rgba(46, 50, 62, 0.8); }
+  [data-oviz-skin="spatial"] .ov-panel { border-radius: 30px; }
+
+  /* Cards: sheets keep their grabbers; the dock is a white card. */
+  [data-oviz-skin="cards"] .ov-panel-head::before { top: 6px; }
+  [data-oviz-skin="cards"] .ov-dock { border-radius: 22px; }
+}

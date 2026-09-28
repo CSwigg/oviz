@@ -21,7 +21,9 @@ import { NotesPlugin } from "./notes.js";
 import { LassoPlugin } from "./lasso.js";
 import { SelectionReticle } from "./reticle.js";
 import { SKINS, skinById, initialSkin, applySkin } from "./skins.js";
-import { InstrumentHud } from "./hud.js";
+import { reveal, conceal, SPRINGS, installParallax, installGaze, flickToDismiss } from "./motion.js";
+import { Island } from "./island.js";
+import { CardStack } from "./cards.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
@@ -64,7 +66,15 @@ export class AppUI {
     this.buildBottom();
     this.ui.append(this.layers.el, this.inspector.el, this.hovercard.el);
     this.reticle = new SelectionReticle(this);
-    this.hud = new InstrumentHud(this);
+    this.island = new Island(this);
+    this.cards = new CardStack(this);
+    installParallax(root);
+    installGaze(root);
+    this.overlays = new Set();
+    // Phones: every bottom sheet swipes down to dismiss.
+    const sheetHead = (el) => el.querySelector(".ov-panel-head");
+    flickToDismiss(this.inspector.el, sheetHead(this.inspector.el), { axis: "y", sign: 1, enabled: () => this.narrow, onDismiss: () => this.select(null) });
+    flickToDismiss(this.layers.el, sheetHead(this.layers.el), { axis: "y", sign: 1, enabled: () => this.narrow, onDismiss: () => this.setLayersOpen(false) });
     this.bindPointer();
     this.bindKeys();
     this.bindViewer();
@@ -266,6 +276,7 @@ export class AppUI {
   select(hit, { recordUndo = true } = {}) {
     const v = this.viewer;
     if (recordUndo && hit !== this.selection && (hit || this.selection)) this.pushSelectionUndo();
+    this.cards?.push(this.selection, hit);
     this.selection = hit;
     if (hit && this.narrow) this.setLayersOpen(false);
     this.inspector.show(hit);
@@ -534,17 +545,29 @@ export class AppUI {
     setTimeout(() => this.root.addEventListener("pointerdown", onDown, true), 0);
     this._menu = { pop, anchor, onDown };
     pop.querySelector("button, input, select")?.focus({ preventScroll: true });
+    // The menu grows out of its button while the scene pulls back.
+    reveal(pop, r, { items: ".ov-pop-title, .ov-pop-item, .ov-pop-sep, .ov-pop-body > *" });
+    this.setOverlay("menu", true);
     return pop;
   }
 
   closeMenu() {
     const m = this._menu;
     if (!m) return false;
-    m.pop.remove();
+    this._menu = null;
     m.anchor.setAttribute("aria-expanded", "false");
     this.root.removeEventListener("pointerdown", m.onDown, true);
-    this._menu = null;
+    this.setOverlay("menu", false);
+    conceal(m.pop, m.anchor.isConnected ? m.anchor.getBoundingClientRect() : null).then(() => m.pop.remove());
     return true;
+  }
+
+  /** Track open overlays; skins use data-overlay to push the scene back. */
+  setOverlay(kind, on) {
+    if (on) this.overlays.add(kind);
+    else this.overlays.delete(kind);
+    if (this.overlays.size) this.root.dataset.overlay = [...this.overlays].join(" ");
+    else delete this.root.dataset.overlay;
   }
 
   settingsMenu(anchor) {
@@ -593,7 +616,7 @@ export class AppUI {
       this.refit();
       this.syncViewSeg();
       this.reticle.update();
-      this.hud.update();
+      this.island.refresh();
       this.inspector.track?.draw();
       this.updateScale();
     };
@@ -706,7 +729,7 @@ export class AppUI {
       { title: v.controls.autoOrbit ? "Stop auto-orbit" : "Auto-orbit camera", icon: "orbit", shortcut: "O", run: () => this.setAutoOrbit(!v.controls.autoOrbit) },
       ...(tl.count > 1 ? [{ title: v.state.global.trails > 0 ? "Hide motion trails" : "Show motion trails", icon: "trail", shortcut: "J", keywords: "streaks motion history comet", run: () => this.toggleTrails() }] : []),
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
-      { title: "Interface style…", icon: "sliders", shortcut: "U", keywords: "skin theme look orbit instrument atlas observatory", run: () => this.showSkins() },
+      { title: "Interface style…", icon: "sliders", shortcut: "U", keywords: "skin theme look spatial island cards observatory", run: () => this.showSkins() },
       ...SKINS.filter((sk) => sk.id !== this.skin).map((sk) => ({ title: `Interface: ${sk.name}`, sub: sk.desc, icon: "sliders", keywords: "skin style theme", run: () => this.setSkin(sk.id) })),
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
       { title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
@@ -777,6 +800,8 @@ export class AppUI {
   }
 
   toast(text, opts) {
+    // In the Island skin short notices flow into the island itself.
+    if (!opts?.action && this.island?.flash(text, { ms: opts?.ms ? Math.max(opts.ms, 1200) : 1800 })) return () => {};
     return this.toasts.show(text, opts);
   }
 
@@ -791,14 +816,19 @@ export class AppUI {
     this.ui.append(scrim, el);
     this._sheet = { scrim, el };
     el.querySelector("button")?.focus({ preventScroll: true });
+    reveal(el, null, { spring: SPRINGS.soft, items: ".ov-sheet-body > * > *" });
+    this.setOverlay("sheet", true);
     return el;
   }
 
   closeSheet() {
     if (!this._sheet) return false;
-    this._sheet.scrim.remove();
-    this._sheet.el.remove();
+    const { scrim, el } = this._sheet;
     this._sheet = null;
+    this.setOverlay("sheet", false);
+    scrim.style.transition = "opacity 200ms";
+    scrim.style.opacity = "0";
+    conceal(el, null).then(() => { el.remove(); scrim.remove(); });
     this.focusCanvas();
     return true;
   }

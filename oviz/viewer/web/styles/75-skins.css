@@ -1,10 +1,22 @@
 /* ---------------------------------------------------------------- skins
-   Shared pieces for the interface styles: the picker (Display menu and the
-   "Interface style" sheet) and the Instrument HUD, which stays hidden in
-   the other skins. Each skin lives in its own 8x-skin-*.css layer, keyed on
-   <html data-oviz-skin>. Skin layout changes are scoped to desktop widths so
-   the phone layout (70-mobile) keeps working in every style. */
+   Shared pieces for the interface styles: spring timing curves, the style
+   picker, the island's live content and the card stack. Each skin lives in
+   its own 8x-skin-*.css layer keyed on <html data-oviz-skin>; layout
+   changes stay inside desktop media queries so phones keep the mobile
+   layout (70-mobile). */
 
+:root {
+  /* Sampled from real spring simulations (see ui/motion.js). */
+  --ov-spring-bouncy: linear(0, 0.095, 0.256, 0.487, 0.675, 0.867, 1.008, 1.084, 1.131, 1.141, 1.128, 1.101, 1.074, 1.042, 1.02, 1, 0.987, 0.982, 0.98, 0.982, 0.986, 0.989, 0.994, 0.998, 1, 1.002, 1.003, 1.003, 1.003, 1.002, 1.001, 1.001, 1);
+  --ov-spring-bouncy-ms: 740ms;
+  --ov-spring-smooth: linear(0, 0.025, 0.077, 0.146, 0.225, 0.307, 0.388, 0.466, 0.539, 0.606, 0.666, 0.72, 0.767, 0.808, 0.843, 0.872, 0.898, 0.919, 0.936, 0.95, 0.962, 0.971, 0.979, 0.985, 0.989, 0.993, 0.996, 0.998, 0.999, 1, 1.001, 1.001, 1);
+  --ov-spring-smooth-ms: 420ms;
+}
+@supports not (transition-timing-function: linear(0, 1)) {
+  :root { --ov-spring-bouncy: cubic-bezier(0.34, 1.45, 0.64, 1); --ov-spring-smooth: cubic-bezier(0.2, 0.9, 0.3, 1); }
+}
+
+/* ---- Picker ---------------------------------------------------------- */
 .ov-skin-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .ov-skin-chip {
   display: flex; align-items: center; gap: 8px; min-width: 0;
@@ -15,47 +27,57 @@
   transition: border-color var(--ov-dur), background var(--ov-dur), color var(--ov-dur), transform 120ms;
 }
 .ov-skin-chip:hover { color: var(--ov-text); border-color: var(--ov-line-strong); }
-.ov-skin-chip:active { transform: scale(0.97); }
+.ov-skin-chip:active { transform: scale(0.96); }
 .ov-skin-chip[aria-pressed="true"] { color: var(--ov-text); border-color: var(--ov-accent-line); background: var(--ov-accent-soft); }
 .ov-skin-dots { display: inline-flex; flex: none; }
 .ov-skin-dots i { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--ov-surface-solid); }
 .ov-skin-dots i + i { margin-left: -3px; }
 
-/* Picker cards with a tiny sketch of each layout, drawn from its swatches
-   (accent, secondary, base). */
+/* Picker cards with a tiny moving sketch of each style: (accent,
+   secondary, base) swatches become its signature element. */
 .ov-skin-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
-.ov-skin-card { display: grid; gap: 8px; align-content: start; text-align: left; }
+.ov-skin-card { position: relative; display: grid; gap: 8px; align-content: start; text-align: left; transition: transform var(--ov-spring-bouncy-ms) var(--ov-spring-bouncy), border-color var(--ov-dur); }
+.ov-skin-card:hover { transform: translateY(-3px); }
+.ov-skin-card:active { transform: scale(0.97); }
 .ov-skin-card[aria-pressed="true"] { border-color: var(--ov-accent-line); box-shadow: 0 0 0 1px var(--ov-accent-line); }
 .ov-skin-preview {
-  position: relative; display: block; height: 84px; overflow: hidden;
-  border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.25);
-  transition: transform 400ms var(--ov-ease);
+  position: relative; display: block; height: 88px; overflow: hidden;
+  border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.25);
+  perspective: 400px;
 }
-.ov-skin-card:hover .ov-skin-preview { transform: perspective(500px) rotateX(8deg) translateY(-2px); }
 .ov-skin-preview i { position: absolute; display: block; }
 .ov-skin-preview i:nth-child(3) { inset: 0; z-index: 0; }
 .ov-skin-preview i:nth-child(1), .ov-skin-preview i:nth-child(2) { z-index: 2; }
 .ov-skin-preview::after {
   content: ""; position: absolute; inset: 0; z-index: 1;
   background-image:
-    radial-gradient(1.2px 1.2px at 32% 38%, #fff, transparent),
-    radial-gradient(1px 1px at 58% 30%, #fff, transparent),
-    radial-gradient(1.4px 1.4px at 66% 58%, #ffd9a8, transparent),
-    radial-gradient(1px 1px at 44% 64%, #cfe0ff, transparent),
-    radial-gradient(1px 1px at 76% 42%, #fff, transparent),
-    radial-gradient(1.2px 1.2px at 52% 48%, #ffb3a1, transparent);
+    radial-gradient(1.2px 1.2px at 32% 38%, #fff, transparent), radial-gradient(1px 1px at 58% 30%, #fff, transparent),
+    radial-gradient(1.4px 1.4px at 66% 58%, #ffd9a8, transparent), radial-gradient(1px 1px at 44% 64%, #cfe0ff, transparent),
+    radial-gradient(1px 1px at 76% 42%, #fff, transparent), radial-gradient(1.2px 1.2px at 52% 48%, #ffb3a1, transparent);
 }
-.ov-skin-preview[data-preview="observatory"] i:nth-child(1) { left: 34%; right: 34%; bottom: 8px; height: 9px; border-radius: 5px; }
-.ov-skin-preview[data-preview="observatory"] i:nth-child(2) { left: 7px; top: 9px; width: 26%; height: 58%; border-radius: 6px; }
-.ov-skin-preview[data-preview="orbit"] i:nth-child(1) { left: 30%; right: 30%; bottom: 8px; height: 13px; border-radius: 99px; background-image: linear-gradient(90deg, #a78bff, #ff8fd0) !important; }
-.ov-skin-preview[data-preview="orbit"] i:nth-child(2) { left: calc(30% + 2px); bottom: 9px; width: 11px; height: 11px; border-radius: 50%; background: #fff !important; }
-.ov-skin-preview[data-preview="instrument"] i:nth-child(1) { left: 0; right: 0; top: 0; height: 9px; border-bottom: 1px solid; opacity: 0.35; }
-.ov-skin-preview[data-preview="instrument"] i:nth-child(2) { left: calc(50% - 7px); top: calc(50% - 7px); width: 14px; height: 14px; border-radius: 50%; background: transparent !important; box-shadow: inset 0 0 0 1px #6effc0; }
-.ov-skin-preview[data-preview="atlas"] i:nth-child(1) { left: 10px; right: 10px; bottom: 7px; height: 2px; }
-.ov-skin-preview[data-preview="atlas"] i:nth-child(2) { left: 8px; right: 8px; top: 12px; bottom: 16px; border-radius: 5px; z-index: 1; }
-.ov-skin-preview[data-preview="atlas"]::after { inset: 12px 8px 16px; z-index: 2; }
+.ov-skin-preview[data-preview="observatory"] i:nth-child(1) { left: 34%; right: 34%; bottom: 9px; height: 9px; border-radius: 5px; }
+.ov-skin-preview[data-preview="observatory"] i:nth-child(2) { left: 8px; top: 10px; width: 26%; height: 58%; border-radius: 6px; }
+.ov-skin-preview[data-preview="spatial"] i:nth-child(1) { left: 30%; right: 30%; bottom: 9px; height: 12px; border-radius: 99px; opacity: 0.55; }
+.ov-skin-preview[data-preview="spatial"] i:nth-child(2) {
+  left: 12px; top: 12px; width: 34%; height: 56%; border-radius: 10px; opacity: 0.5;
+  box-shadow: 8px 12px 18px -6px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  animation: ov-preview-float 3.6s ease-in-out infinite alternate;
+}
+.ov-skin-preview[data-preview="island"] i:nth-child(2) { left: 50%; top: 9px; width: 34%; height: 13px; margin-left: -17%; border-radius: 99px; animation: ov-preview-island 3.2s var(--ov-spring-bouncy) infinite alternate; }
+.ov-skin-preview[data-preview="island"] i:nth-child(1) { left: calc(33% + 4px); top: 13px; width: 5px; height: 5px; border-radius: 50%; z-index: 3; }
+.ov-skin-preview[data-preview="cards"] i:nth-child(2) {
+  right: 12px; top: 18px; width: 38%; height: 58%; border-radius: 9px;
+  box-shadow: 0 -6px 0 -2px rgba(255, 255, 255, 0.7), 0 -12px 0 -4px rgba(255, 255, 255, 0.45), 0 10px 18px -8px rgba(0, 0, 0, 0.7);
+  animation: ov-preview-deal 3s ease-in-out infinite alternate;
+}
+.ov-skin-preview[data-preview="cards"] i:nth-child(1) { right: calc(12px + 38% - 26px); top: 26px; width: 14px; height: 4px; border-radius: 2px; z-index: 3; }
+@keyframes ov-preview-float { to { transform: translate(4px, -3px) rotateY(10deg); } }
+@keyframes ov-preview-island { to { width: 62%; margin-left: -31%; height: 17px; } }
+@keyframes ov-preview-deal { to { transform: translateY(-4px) rotate(-2deg); } }
 
-/* Instrument HUD: hidden unless that skin is active. */
-.ov-ui > .ov-hud { position: absolute; inset: 0; z-index: 0; display: none; pointer-events: none; }
-[data-oviz-skin="instrument"] .ov-ui > .ov-hud { display: block; }
-.ov-root[data-presenting="true"] .ov-ui > .ov-hud { display: none; }
+/* ---- Island live content (only shown in the Island skin) ------------- */
+.ov-island-live { display: none; }
+
+/* ---- Card stack ghosts (only created in the Cards skin) -------------- */
+.ov-card-ghost * { pointer-events: none !important; }
+.ov-card-ghost { cursor: pointer; }

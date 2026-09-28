@@ -84,19 +84,26 @@ background is composited into both.
 URL hash. Opening the link restores that view.
 
 **Interface styles.** The same figure can wear four interface styles; press
-**U** to cycle them or pick one under *Display*:
+**U** to cycle them or pick one under *Display*. All of them share the same
+features and a physically based motion layer: menus and search grow out of
+the control that opened them, items cascade in, and the scene recedes behind
+whatever is open.
 
 - *Observatory* (default): quiet glass instruments floating over the sky.
-- *Orbit*: soft and playful, with rounded pills, a breathing play orb, a
-  ringed-planet scrub thumb and springy panels.
-- *Instrument*: a mission-control HUD with edge-docked panels, phosphor type,
-  a crosshair on the orbit target and a live target/range/azimuth readout.
-- *Atlas*: an editorial page where the sky is a framed plate on graph paper,
-  with serif captions and a ruler timeline.
+- *Spatial*: thick frosted glass floating at different depths. Panels drift
+  with the pointer while their shadows swing the other way, a specular rim
+  catches the light, and controls glow where you point.
+- *Island*: a living capsule at the top stretches to show playback, the
+  object you picked and short notices, and flows open into search. Lists are
+  inset-grouped with green switches; context menus fan out of their buttons.
+- *Cards*: panels are physical cards with grabbers. Flick one away to dismiss
+  it; each new pick deals the previous inspector card into a stack you can
+  tap to return to; menus open as a small deck.
 
-Choose the style a figure opens in with
-``make_plot(..., viewer_style="atlas")`` (or ``OvizFigure(..., style=...)``);
-``?ui=orbit`` in the URL overrides it.
+On phones every style uses bottom sheets that swipe down to dismiss (the
+Island becomes a true top-centre island). Choose the style a figure opens in
+with ``make_plot(..., viewer_style="island")`` (or
+``OvizFigure(..., style=...)``); ``?ui=cards`` in the URL overrides it.
 
 **Motion.** Figures open with a short camera dolly into the home view, and
 panels swing in on a hinge. Everything animated respects the system

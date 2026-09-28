@@ -282,13 +282,13 @@ class IntegrationTests(unittest.TestCase):
 
     def test_interface_style_is_written_and_validated(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
-        fig = viz.make_plot(time=np.array([0.0, -1.0, -2.0]), show=False, viewer_style="atlas")
-        self.assertEqual(fig.style, "atlas")
+        fig = viz.make_plot(time=np.array([0.0, -1.0, -2.0]), show=False, viewer_style="island")
+        self.assertEqual(fig.style, "island")
         html = fig.to_html()
-        self.assertIn('data-oviz-skin="atlas"', html)
+        self.assertIn('data-oviz-skin="island"', html)
         manifest = json.loads(re.search(r'id="oviz-manifest">(.*?)</script>', html, re.S).group(1))
-        self.assertEqual(manifest["viewer"]["style"], "atlas")
-        self.assertIn('data-oviz-skin="orbit"', fig.to_html(style="orbit"))
+        self.assertEqual(manifest["viewer"]["style"], "island")
+        self.assertIn('data-oviz-skin="cards"', fig.to_html(style="cards"))
         self.assertIn('data-oviz-skin="observatory"', OvizFigure(bundle=fig.bundle).to_html())
         with self.assertRaises(ValueError):
             OvizFigure(bundle=fig.bundle, style="neon")
