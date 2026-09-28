@@ -119,7 +119,8 @@ export class Controls {
       this.velocity.yaw = dx * perPx * k * 0.6;
       this.velocity.pitch = dy * perPx * k * 0.6;
     } else {
-      const s = (2 * Math.PI) / Math.max(this.camera.height, 400) * this.rotateSpeed * 0.9;
+      // Same sensitivity as the classic viewer (OrbitControls rotateSpeed 0.7).
+      const s = (2 * Math.PI) / Math.max(this.camera.height, 400) * this.rotateSpeed * 0.7;
       this.rotate(-dx * s, -dy * s);
       const k = 16 / dt;
       this.velocity.yaw = -dx * s * k * 0.55;
@@ -256,4 +257,48 @@ export class Controls {
     this.renderer.invalidate();
     this.onChange();
   }
+}
+
+/**
+ * Held-key camera motion with the classic viewer's directions and speeds,
+ * applied to `pose` for `dt` seconds. `keys` holds lower-case letters.
+ *
+ * 3D: A/D orbit, W/S tilt toward / away from overhead, Shift+W/A/S/D fly the
+ * target along the view, Q/E zoom out / in, R/F move along Galactic z.
+ * Sky: W/A/S/D turn the gaze (slower when zoomed in), Q/E widen / narrow the
+ * field of view. Shift is 4× faster (3× for turning in Sky view).
+ */
+export function keyMotion(pose, keys, { dt, fast = false, sky = false, maxSpan = 1, minDistance = 1, maxDistance = 2e5, minFov = 0.2, maxFov = 130 } = {}) {
+  if (sky) {
+    const turn = Math.min(1, pose.fov / 60) * (fast ? 3 : 1);
+    if (keys.has("a")) pose.yaw += 1.4 * dt * turn;
+    if (keys.has("d")) pose.yaw -= 1.4 * dt * turn;
+    if (keys.has("w")) pose.pitch = Math.max(-PITCH_LIMIT, pose.pitch - 1.15 * dt * turn);
+    if (keys.has("s")) pose.pitch = Math.min(PITCH_LIMIT, pose.pitch + 1.15 * dt * turn);
+    if (keys.has("q")) pose.fov = Math.min(maxFov, pose.fov * Math.exp(1.8 * dt));
+    if (keys.has("e")) pose.fov = Math.max(minFov, pose.fov * Math.exp(-1.8 * dt));
+    return pose;
+  }
+  const travel = clamp(Math.max(pose.distance, 1) * 0.01, 1, Math.max(maxSpan * 0.03, 1)) * (fast ? 4 : 1);
+  if (fast) {
+    const f = forwardFromAngles(pose.yaw, pose.pitch);
+    const rl = Math.hypot(f[0], f[1]) || 1;
+    const r = [f[1] / rl, -f[0] / rl, 0]; // forward × Galactic up
+    const d = travel * dt * 6;
+    const fly = (vec, sgn) => { for (let i = 0; i < 3; i++) pose.target[i] += vec[i] * sgn * d; };
+    if (keys.has("w")) fly(f, 1);
+    if (keys.has("s")) fly(f, -1);
+    if (keys.has("a")) fly(r, -1);
+    if (keys.has("d")) fly(r, 1);
+  } else {
+    if (keys.has("a")) pose.yaw += 1.4 * dt;
+    if (keys.has("d")) pose.yaw -= 1.4 * dt;
+    if (keys.has("w")) pose.pitch = Math.max(-PITCH_LIMIT, pose.pitch - 1.15 * dt);
+    if (keys.has("s")) pose.pitch = Math.min(PITCH_LIMIT, pose.pitch + 1.15 * dt);
+  }
+  if (keys.has("q")) pose.distance = Math.min(maxDistance, pose.distance * Math.exp(1.8 * dt));
+  if (keys.has("e")) pose.distance = Math.max(minDistance, pose.distance * Math.exp(-1.8 * dt));
+  if (keys.has("r")) pose.target[2] += travel * dt * 5;
+  if (keys.has("f")) pose.target[2] -= travel * dt * 5;
+  return pose;
 }

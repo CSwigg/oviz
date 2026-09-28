@@ -125,7 +125,25 @@ export class Renderer {
 
   _schedule() {
     if (!this._running || this._raf) return;
+    // While an external loop drives us (Aladin in Sky view) it calls
+    // externalTick every frame; fall back to our own rAF if it stalls.
+    if (this.externalDriver?.() && performance.now() - (this._lastExternal || 0) < 120) return;
     this._raf = requestAnimationFrame((t) => this._tick(t));
+  }
+
+  /**
+   * Run one frame from an external animation loop. Aladin Lite calls this
+   * right before drawing its survey, so the camera pose pushed to Aladin,
+   * the WebGL data and the survey image are all produced in the same frame.
+   */
+  externalTick(now) {
+    if (!this._running || !this.externalDriver?.()) return;
+    this._lastExternal = performance.now();
+    if (this._raf) {
+      cancelAnimationFrame(this._raf);
+      this._raf = 0;
+    }
+    this._tick(now);
   }
 
   _tick(now) {

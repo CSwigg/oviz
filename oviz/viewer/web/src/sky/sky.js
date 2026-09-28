@@ -33,7 +33,8 @@ export class SkyPlugin {
       if (this.members && v.state.view.mode === "sky") this.members.drawPick(frame);
     };
     v.skyPickResolve = (best) => this.resolveMemberPick(best);
-    v.renderer.beforeRender.push(() => this.tick());
+    v.renderer.beforeRender.push((now) => this.tick(now));
+    this.bgFade = 0;
     v.on("viewmode", ({ mode }) => this.onViewMode(mode));
     v.on("viewmode-settled", ({ mode }) => { if (mode === "sky") this.revealMembers(true); });
     v.on("gpu-restored", () => {
@@ -89,6 +90,10 @@ export class SkyPlugin {
   async ensureSky() {
     if (this.sky.ready) return;
     await this.sky.init({ survey: this.spec.survey, fov: 60 });
+    const r = this.viewer.renderer;
+    // In Sky view the viewer renders inside Aladin's frame (see AladinSky).
+    this.sky.onBeforeDraw = (t) => r.externalTick(t);
+    r.externalDriver = () => this.sky.synchronized && this.viewer.state.view.mode === "sky";
     this.applyLayers();
   }
 
@@ -181,19 +186,32 @@ export class SkyPlugin {
 
   // ------------------------------------------------------------ per frame
 
-  tick() {
+  tick(now = performance.now()) {
     const v = this.viewer;
-    const cam = v.renderer.camera;
+    const r = v.renderer;
+    const cam = r.camera;
     const pose = cam.pose;
     const inSky = v.state.view.mode === "sky";
-    // Registration only holds once the eye sits at the Sun; fade the
-    // background in over the last few parsecs of the flight.
-    const eye = cam.eye;
-    const eyeDist = Math.hypot(eye[0], eye[1], eye[2]);
-    const fade = inSky ? 1 - smoothstep(2, 40, eyeDist) : 0;
-    const op = fade.toFixed(3);
+    // The survey is registered to the data only when the eye is at the Sun
+    // (any offset is parallax against the sky). Show it only after the
+    // camera has arrived, and hide it as soon as the camera leaves.
+    const atSun = pose.distance < 1e-3 && Math.hypot(pose.target[0], pose.target[1], pose.target[2]) < 1e-3;
+    const target = inSky && atSun && this.sky.ready ? 1 : 0;
+    const dt = this._lastTick ? Math.min(now - this._lastTick, 100) : 16;
+    this._lastTick = now;
+    if (this.bgFade !== target) {
+      const rate = target > this.bgFade ? dt / 350 : dt / 120;
+      this.bgFade = target > this.bgFade ? Math.min(target, this.bgFade + rate) : Math.max(target, this.bgFade - rate);
+      r.hold("sky-fade");
+    } else {
+      r.continuous.delete("sky-fade");
+    }
+    const op = smoothstep(0, 1, this.bgFade).toFixed(3);
     if (this.host.style.opacity !== op) this.host.style.opacity = op;
-    if (fade > 0 && this.sky.ready) {
+    if (inSky && this.sky.ready) {
+      // Push the pose every frame the camera is in Sky view; with the
+      // Aladin loop hook this lands in the same frame as the WebGL render.
+      cam.update(r.sceneRadius);
       this.sky.setView(pose.yaw * DEG, pose.pitch * DEG, cam.hfov);
     }
     if (this.members) this.updateMembers();

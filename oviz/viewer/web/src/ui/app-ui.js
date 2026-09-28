@@ -10,6 +10,7 @@ import { lutGradient } from "../core/color.js";
 import { rafThrottle } from "../core/emitter.js";
 import { formatAngle, formatDistance, clamp } from "../core/math.js";
 import { clonePose } from "../engine/camera.js";
+import { keyMotion } from "../engine/controls.js";
 import { cpuFramePosition, frameOffset } from "../engine/frames.js";
 import { SkyPlugin } from "../sky/sky.js";
 import { encodeViewHash, decodeViewHash } from "../app/viewhash.js";
@@ -79,9 +80,9 @@ export class AppUI {
     );
     this.search = h("button", { class: "ov-search-trigger ov-glass", type: "button", "aria-label": "Search", onclick: () => this.palette.show() },
       icon("search"), h("span", { class: "ov-grow" }, "Search clusters, layers, actions…"), kbd(`${MOD === "⌘" ? "⌘" : "Ctrl"}`), kbd("K"));
-    this.layersBtn = iconButton("layers", "Layers", () => this.setLayersOpen(!this.layersOpen), { shortcut: "L" });
-    this.statesBtn = iconButton("bookmark", "Views & story", () => this.plugins.find((p) => p.name === "states")?.toggle(), { shortcut: "⇧S" });
-    this.shotBtn = iconButton("camera", "Screenshot", (e) => this.captureMenu(e.currentTarget), { shortcut: "P" });
+    this.layersBtn = iconButton("layers", "Layers", () => this.setLayersOpen(!this.layersOpen), { shortcut: "⇧L" });
+    this.statesBtn = iconButton("bookmark", "Views & story", () => this.plugins.find((p) => p.name === "states")?.toggle(), { shortcut: "Y" });
+    this.shotBtn = iconButton("camera", "Screenshot", (e) => this.captureMenu(e.currentTarget), { shortcut: "I" });
     this.shareBtn = iconButton("share", "Share & export", (e) => this.shareMenu(e.currentTarget));
     this.settingsBtn = iconButton("sliders", "Display settings", (e) => this.settingsMenu(e.currentTarget));
     this.helpBtn = iconButton("help", "Shortcuts & help", () => this.showHelp(), { shortcut: "?" });
@@ -110,8 +111,8 @@ export class AppUI {
     this.viewSky.addEventListener("click", () => this.setViewMode("sky"));
     this.viewSeg.append(this.viewThumb, this.view3d, this.viewSky);
     if (!hasSky) this.viewSeg.hidden = true;
-    this.homeBtn = iconButton("home", "Reset view", () => v.resetView(), { shortcut: "R", cls: "ov-glass" });
-    this.fsBtn = iconButton("expand", "Fullscreen", () => this.toggleFullscreen(), { shortcut: "F", cls: "ov-glass" });
+    this.homeBtn = iconButton("home", "Reset view", () => v.resetView(), { shortcut: "Home", cls: "ov-glass" });
+    this.fsBtn = iconButton("expand", "Fullscreen", () => this.toggleFullscreen(), { shortcut: "M", cls: "ov-glass" });
     this.skyExtras = h("div", { class: "ov-corner-btns" });
     const right = h("div", { class: "ov-bottom-right" }, this.skyExtras, this.viewSeg, h("div", { class: "ov-corner-btns" }, this.homeBtn, this.fsBtn));
     this.bottom = h("footer", { class: "ov-bottom ov-chrome" }, left, this.dock.el, right);
@@ -221,32 +222,10 @@ export class AppUI {
       if (hit && hit.kind !== "member") {
         this.select(hit);
         v.flyToObject(hit.trace, hit.index);
+      } else if (!hit) {
+        v.resetView();
       }
     });
-  }
-
-  /** W/A/S/D orbit (look around in Sky), Q/E zoom. */
-  flyKey(k) {
-    const v = this.viewer;
-    const c = v.controls;
-    const step = 0.045;
-    v._cancelTween();
-    if (k === "q" || k === "e") {
-      c.zoomAt(k === "e" ? 0.88 : 1 / 0.88, v.renderer.width / 2, v.renderer.height / 2);
-    } else if (c.mode === "sky") {
-      const px = v.renderer.height * 0.04;
-      if (k === "a") c.lookDrag(px, 0);
-      if (k === "d") c.lookDrag(-px, 0);
-      if (k === "w") c.lookDrag(0, px);
-      if (k === "s") c.lookDrag(0, -px);
-    } else {
-      if (k === "a") c.rotate(step, 0);
-      if (k === "d") c.rotate(-step, 0);
-      if (k === "w") c.rotate(0, step);
-      if (k === "s") c.rotate(0, -step);
-    }
-    v.renderer.markInteraction();
-    return true;
   }
 
   refreshHover() {
@@ -258,8 +237,9 @@ export class AppUI {
     return this.root.clientWidth <= 720;
   }
 
-  select(hit) {
+  select(hit, { recordUndo = true } = {}) {
     const v = this.viewer;
+    if (recordUndo && hit !== this.selection && (hit || this.selection)) this.pushSelectionUndo();
     this.selection = hit;
     if (hit && this.narrow) this.setLayersOpen(false);
     this.inspector.show(hit);
@@ -556,7 +536,7 @@ export class AppUI {
 
   captureMenu(anchor) {
     const items = [
-      { label: "Save PNG", icon: "camera", shortcut: "P", run: () => this.screenshot(1) },
+      { label: "Save PNG", icon: "camera", shortcut: "I", run: () => this.screenshot(1) },
       { label: "Save PNG at 2× resolution", icon: "camera", run: () => this.screenshot(2) },
       { label: "Save PNG at 4× resolution", icon: "camera", run: () => this.screenshot(4) },
       { label: "Copy image to clipboard", icon: "copy", run: () => this.screenshot(1, { clipboard: true }) },
@@ -610,17 +590,17 @@ export class AppUI {
     const tl = v.timeline;
     const list = [
       { title: tl.playing ? "Pause" : "Play time", icon: tl.playing ? "pause" : "play", shortcut: "Space", pinned: true, run: () => this.dock.togglePlay() },
-      { title: "Reset view", icon: "home", shortcut: "R", pinned: true, run: () => v.resetView() },
+      { title: "Reset view", icon: "home", shortcut: "Home", pinned: true, run: () => v.resetView() },
       { title: "Go to present day (t = 0)", icon: "target", keywords: "now zero", run: () => tl.setTime(0) },
-      { title: this.layersOpen ? "Hide layers panel" : "Show layers panel", icon: "layers", shortcut: "L", run: () => this.setLayersOpen(!this.layersOpen) },
+      { title: this.layersOpen ? "Hide layers panel" : "Show layers panel", icon: "layers", shortcut: "⇧ L", run: () => this.setLayersOpen(!this.layersOpen) },
       { title: v.state.global.grid ? "Hide Galactic grid" : "Show Galactic grid", icon: "grid", shortcut: "G", run: () => v.setGlobal({ grid: !v.state.global.grid }) },
-      { title: "Save screenshot", icon: "camera", shortcut: "P", run: () => this.screenshot(1) },
+      { title: "Save screenshot", icon: "camera", shortcut: "I", run: () => this.screenshot(1) },
       { title: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
       { title: this.theme === "dark" ? "Switch to light theme" : "Switch to dark theme", icon: this.theme === "dark" ? "sun" : "moon", run: () => this.applyTheme(this.theme === "dark" ? "light" : "dark") },
       { title: v.controls.autoOrbit ? "Stop auto-orbit" : "Auto-orbit camera", icon: "orbit", shortcut: "O", run: () => this.setAutoOrbit(!v.controls.autoOrbit) },
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
-      { title: "Fullscreen", icon: "expand", shortcut: "F", run: () => this.toggleFullscreen() },
+      { title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
     ];
     if (this.manifest.sky?.enabled) {
       list.splice(2, 0, { title: v.state.view.mode === "sky" ? "Switch to Galactic 3D" : "Switch to Sky view", icon: v.state.view.mode === "sky" ? "cube" : "globe", shortcut: "V", pinned: true, run: () => this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky") });
@@ -716,12 +696,12 @@ export class AppUI {
 
   showHelp() {
     const groups = [
-      ["Navigate", [["Orbit", "Drag"], ["Pan", "⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / zoom by key", "W A S D Q E"], ["Fly to object", "Double-click"], ["Reset view", "R"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
+      ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
       ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
-      ["Inspect", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Measure separation", "⇧ Click"], ["Lasso select", "X"], ["Clear selection", "Esc"]]],
-      ["Layers", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Layers panel", "L"], ["Galactic grid", "G"]]],
-      ["Views & story", [["Views panel", "⇧ S"], ["Save current view", "N"], ["Present", "⇧ P"], ["Next / previous view", "] ["]]],
-      ["Capture", [["Screenshot", "P"], ["Hide interface", "Z"], ["Fullscreen", "F"], ["This help", "?"]]],
+      ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
+      ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Fly to object", "Double-click"], ["Measure separation", "⇧ Click"], ["Lasso", "L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
+      ["Views & presenting", [["Save current view", "N"], ["Present", "P"], ["Next / previous view", "→ ←"], ["Views panel", "Y"], ["Save figure", `${MOD} S`]]],
+      ["Capture", [["Screenshot", "I"], ["Hide interface", "Z"], ["Fullscreen", "M"], ["This help", "?"]]],
     ];
     const grid = h("div", { class: "ov-help-grid" }, groups.map(([title, rows]) => h("div", { class: "ov-help-group" },
       h("h4", null, title),
@@ -772,51 +752,96 @@ export class AppUI {
       const b = e.target.closest?.("button");
       if (b && e.detail > 0 && document.activeElement === b) b.blur();
     });
+    // Held movement keys, applied every frame (classic Oviz semantics).
+    this.keysDown = new Set();
+    this.shiftDown = false;
+    v.renderer.beforeRender.push((now) => this.applyKeyMotion(now));
+    const clearKeys = () => { this.keysDown.clear(); this.shiftDown = false; v.renderer.release("keys"); };
+    window.addEventListener("blur", clearKeys);
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "Shift") this.shiftDown = false;
+      this.keysDown.delete(e.key.toLowerCase());
+      if (!this.keysDown.size) v.renderer.release("keys");
+    });
     window.addEventListener("keydown", (e) => {
       if (isEditable(e.target)) return;
       // Let focused sliders, buttons and switches handle their own keys.
       if (controlConsumesKey(e)) return;
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key;
-      if (mod && (k === "k" || k === "K")) { this.palette.toggle(); e.preventDefault(); return; }
+      const lower = k.length === 1 ? k.toLowerCase() : k;
+      if (mod && lower === "k") { this.palette.toggle(); e.preventDefault(); return; }
+      if (mod && !e.altKey && lower === "z" && !e.shiftKey) {
+        if (this.undoSelection()) e.preventDefault();
+        return;
+      }
       if (mod) {
         for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
         return;
       }
       if (e.altKey) return;
       if (this.palette.open) return;
+      if (k === "Shift") { this.shiftDown = true; return; }
+      if ("wasdqerf".includes(lower) && lower.length === 1) {
+        // Movement keys are held, not pressed: see applyKeyMotion.
+        this.shiftDown = e.shiftKey;
+        if (!this.keysDown.has(lower)) {
+          this.keysDown.add(lower);
+          this._lastKeyMotion = 0;
+          v._cancelTween();
+          v.controls.stop();
+          v.renderer.hold("keys");
+        }
+        e.preventDefault();
+        return;
+      }
       for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
+      if (e.repeat && !["ArrowLeft", "ArrowRight", "[", "]", "{", "}", "<", ">", ",", "."].includes(k)) {
+        e.preventDefault();
+        return;
+      }
       let handled = true;
-      switch (k) {
+      switch (lower) {
+        // ---- classic Oviz keys
         case " ": this.dock.togglePlay(); break;
         case "ArrowLeft": tl.pause(); tl.step(e.shiftKey ? -5 : -1); break;
         case "ArrowRight": tl.pause(); tl.step(e.shiftKey ? 5 : 1); break;
-        case "0": tl.setTime(0); break;
-        case "w": case "W": case "s": case "S": case "a": case "A": case "d": case "D": case "q": case "Q": case "e": case "E":
-          if (e.shiftKey || !this.flyKey(k.toLowerCase())) handled = false;
-          break;
-        case "<": case ",": this.dock.cycleSpeed(-1); break;
-        case ">": case ".": this.dock.cycleSpeed(1); break;
-        case "/": this.palette.show(); break;
         case "?": this.showHelp(); break;
-        case "r": case "R": v.resetView(); break;
-        case "v": case "V": this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky"); break;
-        case "l": case "L": this.setLayersOpen(!this.layersOpen); break;
-        case "g": case "G": v.setGlobal({ grid: !v.state.global.grid }); break;
-        case "o": case "O": this.setAutoOrbit(!v.controls.autoOrbit); break;
-        case "z": case "Z": this.setZen(this.root.dataset.zen !== "true"); break;
-        case "f": case "F": this.toggleFullscreen(); break;
-        case "p": this.screenshot(1); break;
-        case "t": case "T": this.layers.toggleAll(this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false)); break;
+        case "v": this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky"); break;
+        case "g": v.setGlobal({ grid: !v.state.global.grid }); break;
+        case "o": this.setAutoOrbit(!v.controls.autoOrbit); break;
+        case "z": this.setZen(this.root.dataset.zen !== "true"); break;
+        case "t": this.layers.toggleAll(this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false)); break;
+        case "[": case "{": case "]": case "}": {
+          const dir = k === "]" || k === "}" ? 1 : -1;
+          const step = e.shiftKey ? 0.25 : 0.1;
+          v.setGlobal({ pointSize: Math.min(4, Math.max(0.1, +(v.state.global.pointSize + dir * step).toFixed(2))) });
+          this.toast(`Point size ${v.state.global.pointSize.toFixed(2)}×`, { ms: 900 });
+          break;
+        }
         case "Escape":
           if (this.closeMenu() || this.closeSheet()) break;
           if (this.root.dataset.zen === "true") { this.setZen(false); break; }
-          if (this.selection) { this.select(null); break; }
+          if (this.selection || this.plugins.find((p) => p.name === "lasso")?.selection) {
+            this.pushSelectionUndo();
+            this.select(null);
+            this.plugins.find((p) => p.name === "lasso")?.clear();
+            break;
+          }
           handled = false;
           break;
+        // ---- additions (keys the classic viewer did not use)
+        case "/": this.palette.show(); break;
+        case "0": tl.setTime(0); break;
+        case "<": case ",": this.dock.cycleSpeed(-1); break;
+        case ">": case ".": this.dock.cycleSpeed(1); break;
+        case "i": this.screenshot(1); break;
+        case "m": this.toggleFullscreen(); break;
+        case "Home": v.resetView(); break;
+        case "l": if (e.shiftKey) this.setLayersOpen(!this.layersOpen); else handled = false; break;
         default:
-          if (/^[1-9]$/.test(k) || /^Digit[1-9]$/.test(e.code)) {
-            const n = Number(e.code.startsWith("Digit") ? e.code.slice(5) : k) - 1;
+          if (/^Digit[1-9]$/.test(e.code)) {
+            const n = Number(e.code.slice(5)) - 1;
             const traces = this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false);
             const t = traces[n];
             if (t) {
@@ -827,6 +852,48 @@ export class AppUI {
       }
       if (handled) e.preventDefault();
     });
+  }
+
+  /**
+   * Classic Oviz keyboard flight, applied per frame while keys are held:
+   * A/D orbit, W/S tilt (W toward overhead), Shift+W/A/S/D fly the camera
+   * and target, Q/E zoom out/in, R/F move up/down; Shift is 4× faster.
+   * In Sky view W/A/S/D turn the gaze and Q/E change the field of view.
+   */
+  applyKeyMotion(now) {
+    const keys = this.keysDown;
+    if (!keys || !keys.size) { this._lastKeyMotion = 0; return; }
+    const v = this.viewer;
+    const pose = v.renderer.camera.pose;
+    const dt = this._lastKeyMotion ? Math.min(Math.max((now - this._lastKeyMotion) / 1000, 0), 0.1) : 1 / 60;
+    this._lastKeyMotion = now;
+    const c = v.controls;
+    keyMotion(pose, keys, {
+      dt,
+      fast: this.shiftDown,
+      sky: v.state.view.mode === "sky",
+      maxSpan: v.world.maxSpan,
+      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFov,
+    });
+    v.renderer.markInteraction();
+    v._onCameraChange();
+  }
+
+  // ------------------------------------------------------------- selection undo
+
+  pushSelectionUndo() {
+    const lasso = this.plugins.find((p) => p.name === "lasso");
+    (this._undo ||= []).push({ selection: this.selection, lasso: lasso?.capture() ?? null });
+    if (this._undo.length > 32) this._undo.shift();
+  }
+
+  undoSelection() {
+    const entry = this._undo?.pop();
+    if (!entry) return false;
+    this.select(entry.selection, { recordUndo: false });
+    this.plugins.find((p) => p.name === "lasso")?.restore(entry.lasso);
+    this.toast("Selection restored", { ms: 1000 });
+    return true;
   }
 }
 

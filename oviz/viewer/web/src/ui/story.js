@@ -68,7 +68,7 @@ export class StoryPlugin {
       h("span", { class: "ov-story-title" }, "Story"), this.count,
       h("span", { class: "ov-grow" }),
       this.readOnly ? null : this.addBtn, this.presentBtn, this.readOnly ? null : this.exportBtn, this.readOnly ? null : this.settingsBtn,
-      iconButton("close", "Close", () => this.toggle(false), { shortcut: "⇧S" }));
+      iconButton("close", "Close", () => this.toggle(false), { shortcut: "Y" }));
     this.strip = h("div", { class: "ov-story-strip", role: "list" });
     this.status = h("div", { class: "ov-story-status" });
     this.el.append(head, this.strip, this.status);
@@ -433,19 +433,24 @@ export class StoryPlugin {
     const mod = e.metaKey || e.ctrlKey;
     if (mod && (e.key === "s" || e.key === "S")) { this.saveDocument(); return true; }
     if (mod) return false;
+    const k = e.key;
     if (this.presenting) {
-      if (["ArrowRight", "PageDown", " ", "Enter"].includes(e.key)) { this.next(); return true; }
-      if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) { this.previous(); return true; }
-      if (e.key === "Home") { this.goTo(0); return true; }
-      if (e.key === "End") { this.goTo(this.project.items.length - 1); return true; }
-      if (e.key === "Escape") { this.present(false); return true; }
+      // Classic presentation keys: arrows move between views; Space still
+      // plays time; Esc or P leaves.
+      if (k === "ArrowRight" || k === "PageDown") { if (!e.repeat) this.next(); return true; }
+      if (k === "ArrowLeft" || k === "PageUp") { if (!e.repeat) this.previous(); return true; }
+      if (k === "Home") { this.goTo(0); return true; }
+      if (k === "End") { this.goTo(this.project.items.length - 1); return true; }
+      if (k === "Escape" || k === "p" || k === "P") { this.present(false); return true; }
       return false;
     }
-    if (e.key === "P" && e.shiftKey) { this.present(true); return true; }
-    if ((e.key === "n" || e.key === "N") && !this.readOnly) { this.add(); return true; }
-    if (e.key === "S" && e.shiftKey) { this.toggle(); return true; }
-    if (e.key === "]") { this.next(); return true; }
-    if (e.key === "[") { this.previous(); return true; }
+    if (k === "p" || k === "P") {
+      if (!this.project.items.length) this.ui.toast("Save a view with N first, then press P to present");
+      else this.present(true);
+      return true;
+    }
+    if ((k === "n" || k === "N") && !this.readOnly) { this.add(); return true; }
+    if (k === "y" || k === "Y") { this.toggle(); return true; }
     return false;
   }
 
@@ -463,8 +468,8 @@ export class StoryPlugin {
 
   commands() {
     const list = [
-      { title: "Present story", icon: "present", shortcut: "⇧ P", run: () => this.present(true) },
-      { title: "Open views & story", icon: "bookmark", shortcut: "⇧ S", run: () => this.toggle(true) },
+      { title: "Present story", icon: "present", shortcut: "P", run: () => this.present(true) },
+      { title: "Open views & story", icon: "bookmark", shortcut: "Y", run: () => this.toggle(true) },
     ];
     if (!this.readOnly) {
       list.unshift({ title: "Save current view", icon: "plus", shortcut: "N", pinned: true, run: () => this.add() });

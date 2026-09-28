@@ -14,10 +14,12 @@ Slides, Paper, AR and the dendrogram widget remain classic-only.
 Using a figure
 --------------
 
-**Navigate.** Drag to orbit, Shift-drag or right-drag to pan, scroll to zoom
-toward the cursor, or use **W A S D** and **Q E** from the keyboard.
-Double-click an object to fly to it. **R** resets the view and **O**
-auto-orbits.
+**Navigate.** Drag to orbit, Shift-drag or right-drag to pan, and scroll to
+zoom toward the cursor. The classic keyboard controls are kept: hold
+**W A S D** to orbit and tilt, **Shift + W A S D** to fly, **Q E** to zoom out
+and in, and **R F** to move up and down. In Sky view the same keys look around
+and **Q E** change the field of view. Double-click an object to fly to it, or
+empty space to reset the view (also **Home**). **O** auto-orbits.
 
 **Time.** Time is continuous: positions are interpolated between the stored
 frames on the GPU, so playback is smooth at any speed. Use **Space** to play,
@@ -30,15 +32,18 @@ you can fly to it, *follow* it through time, draw its full *orbit trail*, or
 copy its coordinates. Shift-click a second object to measure the 3D separation
 and the angular separation seen from the Sun.
 
-**Select.** Press **X** to lasso objects; the rest dims. Frame, isolate or
-export the selection as CSV (names, ages, members, coordinates and positions at
-time t).
+**Select.** Press **L** (or **X**) to lasso objects; the rest dims. **C**
+turns the dimming off and on while keeping the selection, and **⌘Z** undoes
+the last selection change. Frame, isolate or export the selection as CSV
+(names, ages, members, coordinates and positions at time t).
 
 **Search.** Press **⌘K** (Ctrl K), or **/**, to search every object, including
 catalogue aliases, as well as layers, saved views and actions.
 
-**Layers.** Toggle layers, solo them with a double-click (or Shift + 1–9), and
-edit their colour, colour-by-value colormap, opacity and size. Volumes expose
+**Layers.** Toggle layers (**1–9**), solo them with a double-click (or
+Shift + 1–9), show or hide everything with **T**, and edit their colour,
+colour-by-value colormap, opacity and size. **[ ]** shrink and grow every
+point; **Shift + L** opens the layers panel. Volumes expose
 colormap, stretch, data window, opacity, density gain and samples. The
 *Distribution* section shows a live histogram of age, members, distance or
 height; brush a range to dim or hide everything else.
@@ -49,24 +54,28 @@ centre, horizontal field and Galactic-north-up orientation). Cluster markers
 crossfade into their member stars, which inherit the parent's orbit, birth time,
 visibility and colour. Survey layers can be shown, faded and reordered.
 
-**Views & story (Shift S).** Save the complete viewer as a view with **N**. That
+**Views & story (Y).** Save the complete viewer as a view with **N**. That
 includes camera and 3D/Sky mode, time, layer styles, volumes, Sky layers,
 filters and display settings. Transitions animate every continuous property
 together and then assign the saved values exactly. Views get thumbnails and
 captions, can be reordered by dragging, and play as a presentation
-(**Shift P**, arrows to navigate).
+(**P**, arrows to navigate, **Esc** or **P** to exit).
 
 Your unsaved edits autosave in the browser. **⌘S** saves the figure as a new
 HTML file. *Export presentation* writes a present-only file that opens
 straight into view 1.
 
-**Capture.** **P** saves a PNG, at 1×, 2× or 4× resolution, or copies it to
+**Capture.** **I** saves a PNG, at 1×, 2× or 4× resolution, or copies it to
 the clipboard. The capture menu records video to MP4 or WebM: live, a
 time-lapse of the whole timeline, or a tour of your saved views. The Sky
 background is composited into both.
 
 **Share.** *Copy link to this view* encodes time, mode, group and camera in the
 URL hash. Opening the link restores that view.
+
+**Display.** **G** toggles the Galactic grid, **B** the Sky background,
+**Z** hides the interface and **M** goes fullscreen. **?** lists every
+shortcut.
 
 **Themes and devices.** A light theme restyles the interface; the data stage
 stays a night sky because starlight and emission volumes are calibrated against

@@ -114,6 +114,18 @@ export class AladinSky {
       realFullscreen: false,
     });
     try { this.aladin.setProjection?.("TAN"); } catch (_) { /* older API */ }
+    // Hook Aladin's animation loop: `redraw` re-requests `this.redrawClbk`
+    // every frame, so wrapping that property lets Oviz render in the same
+    // callback, immediately before Aladin draws.
+    const view = this.aladin.view;
+    const loop = view && view.redrawClbk;
+    if (typeof loop === "function") {
+      view.redrawClbk = (t) => {
+        try { this.onBeforeDraw?.(t); } catch (err) { console.error(err); }
+        return loop(t);
+      };
+      this.synchronized = true;
+    }
     this.base = resolveSurvey(survey);
     this.ready = true;
     this.host.dataset.ready = "true";

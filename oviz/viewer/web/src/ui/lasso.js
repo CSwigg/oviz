@@ -22,7 +22,7 @@ export class LassoPlugin {
     this.path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     this.svg.append(this.path);
     v.container.append(this.svg);
-    this.btn = iconButton("wand", "Lasso select", () => this.arm(!this.armed), { cls: "ov-glass", shortcut: "X", pressed: false });
+    this.btn = iconButton("wand", "Lasso select", () => this.arm(!this.armed), { cls: "ov-glass", shortcut: "L", pressed: false });
     ui.skyExtras.parentElement.querySelector(".ov-corner-btns:last-child")?.prepend(this.btn);
     this.bar = h("div", { class: "ov-selbar ov-glass", hidden: true, role: "region", "aria-label": "Lasso selection" });
     ui.ui.append(this.bar);
@@ -32,7 +32,7 @@ export class LassoPlugin {
   }
 
   commands() {
-    const list = [{ title: "Lasso select objects", icon: "wand", shortcut: "X", keywords: "select region polygon", run: () => this.arm(true) }];
+    const list = [{ title: "Lasso select objects", icon: "wand", shortcut: "L", keywords: "select region polygon", run: () => this.arm(true) }];
     if (this.selection) {
       list.push(
         { title: "Export selection as CSV", icon: "download", run: () => this.exportCsv() },
@@ -43,9 +43,22 @@ export class LassoPlugin {
   }
 
   onKey(e) {
-    if ((e.key === "x" || e.key === "X") && !e.metaKey && !e.ctrlKey) { this.arm(!this.armed); return true; }
+    if (e.metaKey || e.ctrlKey) return false;
+    const k = e.key.toLowerCase();
+    // L arms the lasso (classic key; X is an alias), C toggles its filter.
+    if ((k === "l" && !e.shiftKey) || k === "x") { this.arm(!this.armed); return true; }
+    if (k === "c" && !e.shiftKey && this.selection) { this.toggleFilter(); return true; }
     if (e.key === "Escape" && this.armed) { this.arm(false); return true; }
     return false;
+  }
+
+  /** Show or hide the dimming while keeping the selection (classic "C"). */
+  toggleFilter() {
+    this.ui.pushSelectionUndo?.();
+    this.filterOff = !this.filterOff;
+    this.applyBits();
+    this.renderBar();
+    this.ui.toast(`Selection filter: ${this.filterOff ? "off" : "on"}`, { ms: 1100 });
   }
 
   arm(on) {
@@ -111,8 +124,10 @@ export class LassoPlugin {
       this.ui.toast("Nothing inside the lasso");
       return;
     }
+    this.ui.pushSelectionUndo?.();
     this.selection = sel;
     this.isolate = false;
+    this.filterOff = false;
     this.applyBits();
     this.renderBar();
   }
@@ -126,7 +141,7 @@ export class LassoPlugin {
   applyBits() {
     const v = this.viewer;
     for (const batch of v.points.batches) {
-      if (!this.selection) { batch.setStateBits(LASSO_BIT | 16, null); continue; }
+      if (!this.selection || this.filterOff) { batch.setStateBits(LASSO_BIT | 16, null); continue; }
       const bits = new Uint8Array(batch.count).fill(this.isolate ? 16 : LASSO_BIT);
       const idx = this.selection.get(batch.key);
       if (idx) for (const i of idx) bits[i] = 0;
