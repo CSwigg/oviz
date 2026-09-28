@@ -2865,7 +2865,25 @@ class Renderer {
 
   _schedule() {
     if (!this._running || this._raf) return;
+    // While an external loop drives us (Aladin in Sky view) it calls
+    // externalTick every frame; fall back to our own rAF if it stalls.
+    if (this.externalDriver?.() && performance.now() - (this._lastExternal || 0) < 120) return;
     this._raf = requestAnimationFrame((t) => this._tick(t));
+  }
+
+  /**
+   * Run one frame from an external animation loop. Aladin Lite calls this
+   * right before drawing its survey, so the camera pose pushed to Aladin,
+   * the WebGL data and the survey image are all produced in the same frame.
+   */
+  externalTick(now) {
+    if (!this._running || !this.externalDriver?.()) return;
+    this._lastExternal = performance.now();
+    if (this._raf) {
+      cancelAnimationFrame(this._raf);
+      this._raf = 0;
+    }
+    this._tick(now);
   }
 
   _tick(now) {
@@ -2980,7 +2998,7 @@ return { Renderer };
 })();
 
 // ---- engine/controls.js ----
-const { Controls } = (() => {
+const { Controls, keyMotion } = (() => {
 // Pointer, wheel, touch and keyboard navigation with inertia.
 //
 // Galactic mode: drag orbits, right/shift/two-finger drag pans, wheel and
@@ -3102,7 +3120,8 @@ class Controls {
       this.velocity.yaw = dx * perPx * k * 0.6;
       this.velocity.pitch = dy * perPx * k * 0.6;
     } else {
-      const s = (2 * Math.PI) / Math.max(this.camera.height, 400) * this.rotateSpeed * 0.9;
+      // Same sensitivity as the classic viewer (OrbitControls rotateSpeed 0.7).
+      const s = (2 * Math.PI) / Math.max(this.camera.height, 400) * this.rotateSpeed * 0.7;
       this.rotate(-dx * s, -dy * s);
       const k = 16 / dt;
       this.velocity.yaw = -dx * s * k * 0.55;
@@ -3240,7 +3259,51 @@ class Controls {
     this.onChange();
   }
 }
-return { Controls };
+
+/**
+ * Held-key camera motion with the classic viewer's directions and speeds,
+ * applied to `pose` for `dt` seconds. `keys` holds lower-case letters.
+ *
+ * 3D: A/D orbit, W/S tilt toward / away from overhead, Shift+W/A/S/D fly the
+ * target along the view, Q/E zoom out / in, R/F move along Galactic z.
+ * Sky: W/A/S/D turn the gaze (slower when zoomed in), Q/E widen / narrow the
+ * field of view. Shift is 4× faster (3× for turning in Sky view).
+ */
+function keyMotion(pose, keys, { dt, fast = false, sky = false, maxSpan = 1, minDistance = 1, maxDistance = 2e5, minFov = 0.2, maxFov = 130 } = {}) {
+  if (sky) {
+    const turn = Math.min(1, pose.fov / 60) * (fast ? 3 : 1);
+    if (keys.has("a")) pose.yaw += 1.4 * dt * turn;
+    if (keys.has("d")) pose.yaw -= 1.4 * dt * turn;
+    if (keys.has("w")) pose.pitch = Math.max(-PITCH_LIMIT, pose.pitch - 1.15 * dt * turn);
+    if (keys.has("s")) pose.pitch = Math.min(PITCH_LIMIT, pose.pitch + 1.15 * dt * turn);
+    if (keys.has("q")) pose.fov = Math.min(maxFov, pose.fov * Math.exp(1.8 * dt));
+    if (keys.has("e")) pose.fov = Math.max(minFov, pose.fov * Math.exp(-1.8 * dt));
+    return pose;
+  }
+  const travel = clamp(Math.max(pose.distance, 1) * 0.01, 1, Math.max(maxSpan * 0.03, 1)) * (fast ? 4 : 1);
+  if (fast) {
+    const f = forwardFromAngles(pose.yaw, pose.pitch);
+    const rl = Math.hypot(f[0], f[1]) || 1;
+    const r = [f[1] / rl, -f[0] / rl, 0]; // forward × Galactic up
+    const d = travel * dt * 6;
+    const fly = (vec, sgn) => { for (let i = 0; i < 3; i++) pose.target[i] += vec[i] * sgn * d; };
+    if (keys.has("w")) fly(f, 1);
+    if (keys.has("s")) fly(f, -1);
+    if (keys.has("a")) fly(r, -1);
+    if (keys.has("d")) fly(r, 1);
+  } else {
+    if (keys.has("a")) pose.yaw += 1.4 * dt;
+    if (keys.has("d")) pose.yaw -= 1.4 * dt;
+    if (keys.has("w")) pose.pitch = Math.max(-PITCH_LIMIT, pose.pitch - 1.15 * dt);
+    if (keys.has("s")) pose.pitch = Math.min(PITCH_LIMIT, pose.pitch + 1.15 * dt);
+  }
+  if (keys.has("q")) pose.distance = Math.min(maxDistance, pose.distance * Math.exp(1.8 * dt));
+  if (keys.has("e")) pose.distance = Math.max(minDistance, pose.distance * Math.exp(-1.8 * dt));
+  if (keys.has("r")) pose.target[2] += travel * dt * 5;
+  if (keys.has("f")) pose.target[2] -= travel * dt * 5;
+  return pose;
+}
+return { Controls, keyMotion };
 })();
 
 // ---- engine/frames.js ----
@@ -7327,6 +7390,18 @@ class AladinSky {
       realFullscreen: false,
     });
     try { this.aladin.setProjection?.("TAN"); } catch (_) { /* older API */ }
+    // Hook Aladin's animation loop: `redraw` re-requests `this.redrawClbk`
+    // every frame, so wrapping that property lets Oviz render in the same
+    // callback, immediately before Aladin draws.
+    const view = this.aladin.view;
+    const loop = view && view.redrawClbk;
+    if (typeof loop === "function") {
+      view.redrawClbk = (t) => {
+        try { this.onBeforeDraw?.(t); } catch (err) { console.error(err); }
+        return loop(t);
+      };
+      this.synchronized = true;
+    }
     this.base = resolveSurvey(survey);
     this.ready = true;
     this.host.dataset.ready = "true";
@@ -7725,7 +7800,8 @@ class SkyPlugin {
       if (this.members && v.state.view.mode === "sky") this.members.drawPick(frame);
     };
     v.skyPickResolve = (best) => this.resolveMemberPick(best);
-    v.renderer.beforeRender.push(() => this.tick());
+    v.renderer.beforeRender.push((now) => this.tick(now));
+    this.bgFade = 0;
     v.on("viewmode", ({ mode }) => this.onViewMode(mode));
     v.on("viewmode-settled", ({ mode }) => { if (mode === "sky") this.revealMembers(true); });
     v.on("gpu-restored", () => {
@@ -7781,6 +7857,10 @@ class SkyPlugin {
   async ensureSky() {
     if (this.sky.ready) return;
     await this.sky.init({ survey: this.spec.survey, fov: 60 });
+    const r = this.viewer.renderer;
+    // In Sky view the viewer renders inside Aladin's frame (see AladinSky).
+    this.sky.onBeforeDraw = (t) => r.externalTick(t);
+    r.externalDriver = () => this.sky.synchronized && this.viewer.state.view.mode === "sky";
     this.applyLayers();
   }
 
@@ -7873,19 +7953,32 @@ class SkyPlugin {
 
   // ------------------------------------------------------------ per frame
 
-  tick() {
+  tick(now = performance.now()) {
     const v = this.viewer;
-    const cam = v.renderer.camera;
+    const r = v.renderer;
+    const cam = r.camera;
     const pose = cam.pose;
     const inSky = v.state.view.mode === "sky";
-    // Registration only holds once the eye sits at the Sun; fade the
-    // background in over the last few parsecs of the flight.
-    const eye = cam.eye;
-    const eyeDist = Math.hypot(eye[0], eye[1], eye[2]);
-    const fade = inSky ? 1 - smoothstep(2, 40, eyeDist) : 0;
-    const op = fade.toFixed(3);
+    // The survey is registered to the data only when the eye is at the Sun
+    // (any offset is parallax against the sky). Show it only after the
+    // camera has arrived, and hide it as soon as the camera leaves.
+    const atSun = pose.distance < 1e-3 && Math.hypot(pose.target[0], pose.target[1], pose.target[2]) < 1e-3;
+    const target = inSky && atSun && this.sky.ready ? 1 : 0;
+    const dt = this._lastTick ? Math.min(now - this._lastTick, 100) : 16;
+    this._lastTick = now;
+    if (this.bgFade !== target) {
+      const rate = target > this.bgFade ? dt / 350 : dt / 120;
+      this.bgFade = target > this.bgFade ? Math.min(target, this.bgFade + rate) : Math.max(target, this.bgFade - rate);
+      r.hold("sky-fade");
+    } else {
+      r.continuous.delete("sky-fade");
+    }
+    const op = smoothstep(0, 1, this.bgFade).toFixed(3);
     if (this.host.style.opacity !== op) this.host.style.opacity = op;
-    if (fade > 0 && this.sky.ready) {
+    if (inSky && this.sky.ready) {
+      // Push the pose every frame the camera is in Sky view; with the
+      // Aladin loop hook this lands in the same frame as the WebGL render.
+      cam.update(r.sceneRadius);
       this.sky.setView(pose.yaw * DEG, pose.pitch * DEG, cam.hfov);
     }
     if (this.members) this.updateMembers();
@@ -8589,7 +8682,7 @@ class StoryPlugin {
       h("span", { class: "ov-story-title" }, "Story"), this.count,
       h("span", { class: "ov-grow" }),
       this.readOnly ? null : this.addBtn, this.presentBtn, this.readOnly ? null : this.exportBtn, this.readOnly ? null : this.settingsBtn,
-      iconButton("close", "Close", () => this.toggle(false), { shortcut: "⇧S" }));
+      iconButton("close", "Close", () => this.toggle(false), { shortcut: "Y" }));
     this.strip = h("div", { class: "ov-story-strip", role: "list" });
     this.status = h("div", { class: "ov-story-status" });
     this.el.append(head, this.strip, this.status);
@@ -8954,19 +9047,24 @@ class StoryPlugin {
     const mod = e.metaKey || e.ctrlKey;
     if (mod && (e.key === "s" || e.key === "S")) { this.saveDocument(); return true; }
     if (mod) return false;
+    const k = e.key;
     if (this.presenting) {
-      if (["ArrowRight", "PageDown", " ", "Enter"].includes(e.key)) { this.next(); return true; }
-      if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) { this.previous(); return true; }
-      if (e.key === "Home") { this.goTo(0); return true; }
-      if (e.key === "End") { this.goTo(this.project.items.length - 1); return true; }
-      if (e.key === "Escape") { this.present(false); return true; }
+      // Classic presentation keys: arrows move between views; Space still
+      // plays time; Esc or P leaves.
+      if (k === "ArrowRight" || k === "PageDown") { if (!e.repeat) this.next(); return true; }
+      if (k === "ArrowLeft" || k === "PageUp") { if (!e.repeat) this.previous(); return true; }
+      if (k === "Home") { this.goTo(0); return true; }
+      if (k === "End") { this.goTo(this.project.items.length - 1); return true; }
+      if (k === "Escape" || k === "p" || k === "P") { this.present(false); return true; }
       return false;
     }
-    if (e.key === "P" && e.shiftKey) { this.present(true); return true; }
-    if ((e.key === "n" || e.key === "N") && !this.readOnly) { this.add(); return true; }
-    if (e.key === "S" && e.shiftKey) { this.toggle(); return true; }
-    if (e.key === "]") { this.next(); return true; }
-    if (e.key === "[") { this.previous(); return true; }
+    if (k === "p" || k === "P") {
+      if (!this.project.items.length) this.ui.toast("Save a view with N first, then press P to present");
+      else this.present(true);
+      return true;
+    }
+    if ((k === "n" || k === "N") && !this.readOnly) { this.add(); return true; }
+    if (k === "y" || k === "Y") { this.toggle(); return true; }
     return false;
   }
 
@@ -8984,8 +9082,8 @@ class StoryPlugin {
 
   commands() {
     const list = [
-      { title: "Present story", icon: "present", shortcut: "⇧ P", run: () => this.present(true) },
-      { title: "Open views & story", icon: "bookmark", shortcut: "⇧ S", run: () => this.toggle(true) },
+      { title: "Present story", icon: "present", shortcut: "P", run: () => this.present(true) },
+      { title: "Open views & story", icon: "bookmark", shortcut: "Y", run: () => this.toggle(true) },
     ];
     if (!this.readOnly) {
       list.unshift({ title: "Save current view", icon: "plus", shortcut: "N", pinned: true, run: () => this.add() });
@@ -9716,7 +9814,7 @@ class LassoPlugin {
     this.path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     this.svg.append(this.path);
     v.container.append(this.svg);
-    this.btn = iconButton("wand", "Lasso select", () => this.arm(!this.armed), { cls: "ov-glass", shortcut: "X", pressed: false });
+    this.btn = iconButton("wand", "Lasso select", () => this.arm(!this.armed), { cls: "ov-glass", shortcut: "L", pressed: false });
     ui.skyExtras.parentElement.querySelector(".ov-corner-btns:last-child")?.prepend(this.btn);
     this.bar = h("div", { class: "ov-selbar ov-glass", hidden: true, role: "region", "aria-label": "Lasso selection" });
     ui.ui.append(this.bar);
@@ -9726,7 +9824,7 @@ class LassoPlugin {
   }
 
   commands() {
-    const list = [{ title: "Lasso select objects", icon: "wand", shortcut: "X", keywords: "select region polygon", run: () => this.arm(true) }];
+    const list = [{ title: "Lasso select objects", icon: "wand", shortcut: "L", keywords: "select region polygon", run: () => this.arm(true) }];
     if (this.selection) {
       list.push(
         { title: "Export selection as CSV", icon: "download", run: () => this.exportCsv() },
@@ -9737,9 +9835,22 @@ class LassoPlugin {
   }
 
   onKey(e) {
-    if ((e.key === "x" || e.key === "X") && !e.metaKey && !e.ctrlKey) { this.arm(!this.armed); return true; }
+    if (e.metaKey || e.ctrlKey) return false;
+    const k = e.key.toLowerCase();
+    // L arms the lasso (classic key; X is an alias), C toggles its filter.
+    if ((k === "l" && !e.shiftKey) || k === "x") { this.arm(!this.armed); return true; }
+    if (k === "c" && !e.shiftKey && this.selection) { this.toggleFilter(); return true; }
     if (e.key === "Escape" && this.armed) { this.arm(false); return true; }
     return false;
+  }
+
+  /** Show or hide the dimming while keeping the selection (classic "C"). */
+  toggleFilter() {
+    this.ui.pushSelectionUndo?.();
+    this.filterOff = !this.filterOff;
+    this.applyBits();
+    this.renderBar();
+    this.ui.toast(`Selection filter: ${this.filterOff ? "off" : "on"}`, { ms: 1100 });
   }
 
   arm(on) {
@@ -9805,8 +9916,10 @@ class LassoPlugin {
       this.ui.toast("Nothing inside the lasso");
       return;
     }
+    this.ui.pushSelectionUndo?.();
     this.selection = sel;
     this.isolate = false;
+    this.filterOff = false;
     this.applyBits();
     this.renderBar();
   }
@@ -9820,7 +9933,7 @@ class LassoPlugin {
   applyBits() {
     const v = this.viewer;
     for (const batch of v.points.batches) {
-      if (!this.selection) { batch.setStateBits(LASSO_BIT | 16, null); continue; }
+      if (!this.selection || this.filterOff) { batch.setStateBits(LASSO_BIT | 16, null); continue; }
       const bits = new Uint8Array(batch.count).fill(this.isolate ? 16 : LASSO_BIT);
       const idx = this.selection.get(batch.key);
       if (idx) for (const i of idx) bits[i] = 0;
@@ -9943,6 +10056,7 @@ const { mountUI, AppUI } = (() => {
 
 
 
+
 function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
   if (viewer.manifest.sky?.enabled) ui.use(new SkyPlugin());
@@ -10003,9 +10117,9 @@ class AppUI {
     );
     this.search = h("button", { class: "ov-search-trigger ov-glass", type: "button", "aria-label": "Search", onclick: () => this.palette.show() },
       icon("search"), h("span", { class: "ov-grow" }, "Search clusters, layers, actions…"), kbd(`${MOD === "⌘" ? "⌘" : "Ctrl"}`), kbd("K"));
-    this.layersBtn = iconButton("layers", "Layers", () => this.setLayersOpen(!this.layersOpen), { shortcut: "L" });
-    this.statesBtn = iconButton("bookmark", "Views & story", () => this.plugins.find((p) => p.name === "states")?.toggle(), { shortcut: "⇧S" });
-    this.shotBtn = iconButton("camera", "Screenshot", (e) => this.captureMenu(e.currentTarget), { shortcut: "P" });
+    this.layersBtn = iconButton("layers", "Layers", () => this.setLayersOpen(!this.layersOpen), { shortcut: "⇧L" });
+    this.statesBtn = iconButton("bookmark", "Views & story", () => this.plugins.find((p) => p.name === "states")?.toggle(), { shortcut: "Y" });
+    this.shotBtn = iconButton("camera", "Screenshot", (e) => this.captureMenu(e.currentTarget), { shortcut: "I" });
     this.shareBtn = iconButton("share", "Share & export", (e) => this.shareMenu(e.currentTarget));
     this.settingsBtn = iconButton("sliders", "Display settings", (e) => this.settingsMenu(e.currentTarget));
     this.helpBtn = iconButton("help", "Shortcuts & help", () => this.showHelp(), { shortcut: "?" });
@@ -10034,8 +10148,8 @@ class AppUI {
     this.viewSky.addEventListener("click", () => this.setViewMode("sky"));
     this.viewSeg.append(this.viewThumb, this.view3d, this.viewSky);
     if (!hasSky) this.viewSeg.hidden = true;
-    this.homeBtn = iconButton("home", "Reset view", () => v.resetView(), { shortcut: "R", cls: "ov-glass" });
-    this.fsBtn = iconButton("expand", "Fullscreen", () => this.toggleFullscreen(), { shortcut: "F", cls: "ov-glass" });
+    this.homeBtn = iconButton("home", "Reset view", () => v.resetView(), { shortcut: "Home", cls: "ov-glass" });
+    this.fsBtn = iconButton("expand", "Fullscreen", () => this.toggleFullscreen(), { shortcut: "M", cls: "ov-glass" });
     this.skyExtras = h("div", { class: "ov-corner-btns" });
     const right = h("div", { class: "ov-bottom-right" }, this.skyExtras, this.viewSeg, h("div", { class: "ov-corner-btns" }, this.homeBtn, this.fsBtn));
     this.bottom = h("footer", { class: "ov-bottom ov-chrome" }, left, this.dock.el, right);
@@ -10145,32 +10259,10 @@ class AppUI {
       if (hit && hit.kind !== "member") {
         this.select(hit);
         v.flyToObject(hit.trace, hit.index);
+      } else if (!hit) {
+        v.resetView();
       }
     });
-  }
-
-  /** W/A/S/D orbit (look around in Sky), Q/E zoom. */
-  flyKey(k) {
-    const v = this.viewer;
-    const c = v.controls;
-    const step = 0.045;
-    v._cancelTween();
-    if (k === "q" || k === "e") {
-      c.zoomAt(k === "e" ? 0.88 : 1 / 0.88, v.renderer.width / 2, v.renderer.height / 2);
-    } else if (c.mode === "sky") {
-      const px = v.renderer.height * 0.04;
-      if (k === "a") c.lookDrag(px, 0);
-      if (k === "d") c.lookDrag(-px, 0);
-      if (k === "w") c.lookDrag(0, px);
-      if (k === "s") c.lookDrag(0, -px);
-    } else {
-      if (k === "a") c.rotate(step, 0);
-      if (k === "d") c.rotate(-step, 0);
-      if (k === "w") c.rotate(0, step);
-      if (k === "s") c.rotate(0, -step);
-    }
-    v.renderer.markInteraction();
-    return true;
   }
 
   refreshHover() {
@@ -10182,8 +10274,9 @@ class AppUI {
     return this.root.clientWidth <= 720;
   }
 
-  select(hit) {
+  select(hit, { recordUndo = true } = {}) {
     const v = this.viewer;
+    if (recordUndo && hit !== this.selection && (hit || this.selection)) this.pushSelectionUndo();
     this.selection = hit;
     if (hit && this.narrow) this.setLayersOpen(false);
     this.inspector.show(hit);
@@ -10480,7 +10573,7 @@ class AppUI {
 
   captureMenu(anchor) {
     const items = [
-      { label: "Save PNG", icon: "camera", shortcut: "P", run: () => this.screenshot(1) },
+      { label: "Save PNG", icon: "camera", shortcut: "I", run: () => this.screenshot(1) },
       { label: "Save PNG at 2× resolution", icon: "camera", run: () => this.screenshot(2) },
       { label: "Save PNG at 4× resolution", icon: "camera", run: () => this.screenshot(4) },
       { label: "Copy image to clipboard", icon: "copy", run: () => this.screenshot(1, { clipboard: true }) },
@@ -10534,17 +10627,17 @@ class AppUI {
     const tl = v.timeline;
     const list = [
       { title: tl.playing ? "Pause" : "Play time", icon: tl.playing ? "pause" : "play", shortcut: "Space", pinned: true, run: () => this.dock.togglePlay() },
-      { title: "Reset view", icon: "home", shortcut: "R", pinned: true, run: () => v.resetView() },
+      { title: "Reset view", icon: "home", shortcut: "Home", pinned: true, run: () => v.resetView() },
       { title: "Go to present day (t = 0)", icon: "target", keywords: "now zero", run: () => tl.setTime(0) },
-      { title: this.layersOpen ? "Hide layers panel" : "Show layers panel", icon: "layers", shortcut: "L", run: () => this.setLayersOpen(!this.layersOpen) },
+      { title: this.layersOpen ? "Hide layers panel" : "Show layers panel", icon: "layers", shortcut: "⇧ L", run: () => this.setLayersOpen(!this.layersOpen) },
       { title: v.state.global.grid ? "Hide Galactic grid" : "Show Galactic grid", icon: "grid", shortcut: "G", run: () => v.setGlobal({ grid: !v.state.global.grid }) },
-      { title: "Save screenshot", icon: "camera", shortcut: "P", run: () => this.screenshot(1) },
+      { title: "Save screenshot", icon: "camera", shortcut: "I", run: () => this.screenshot(1) },
       { title: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
       { title: this.theme === "dark" ? "Switch to light theme" : "Switch to dark theme", icon: this.theme === "dark" ? "sun" : "moon", run: () => this.applyTheme(this.theme === "dark" ? "light" : "dark") },
       { title: v.controls.autoOrbit ? "Stop auto-orbit" : "Auto-orbit camera", icon: "orbit", shortcut: "O", run: () => this.setAutoOrbit(!v.controls.autoOrbit) },
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
-      { title: "Fullscreen", icon: "expand", shortcut: "F", run: () => this.toggleFullscreen() },
+      { title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
     ];
     if (this.manifest.sky?.enabled) {
       list.splice(2, 0, { title: v.state.view.mode === "sky" ? "Switch to Galactic 3D" : "Switch to Sky view", icon: v.state.view.mode === "sky" ? "cube" : "globe", shortcut: "V", pinned: true, run: () => this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky") });
@@ -10640,12 +10733,12 @@ class AppUI {
 
   showHelp() {
     const groups = [
-      ["Navigate", [["Orbit", "Drag"], ["Pan", "⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / zoom by key", "W A S D Q E"], ["Fly to object", "Double-click"], ["Reset view", "R"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
+      ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
       ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
-      ["Inspect", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Measure separation", "⇧ Click"], ["Lasso select", "X"], ["Clear selection", "Esc"]]],
-      ["Layers", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Layers panel", "L"], ["Galactic grid", "G"]]],
-      ["Views & story", [["Views panel", "⇧ S"], ["Save current view", "N"], ["Present", "⇧ P"], ["Next / previous view", "] ["]]],
-      ["Capture", [["Screenshot", "P"], ["Hide interface", "Z"], ["Fullscreen", "F"], ["This help", "?"]]],
+      ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
+      ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Fly to object", "Double-click"], ["Measure separation", "⇧ Click"], ["Lasso", "L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
+      ["Views & presenting", [["Save current view", "N"], ["Present", "P"], ["Next / previous view", "→ ←"], ["Views panel", "Y"], ["Save figure", `${MOD} S`]]],
+      ["Capture", [["Screenshot", "I"], ["Hide interface", "Z"], ["Fullscreen", "M"], ["This help", "?"]]],
     ];
     const grid = h("div", { class: "ov-help-grid" }, groups.map(([title, rows]) => h("div", { class: "ov-help-group" },
       h("h4", null, title),
@@ -10696,51 +10789,96 @@ class AppUI {
       const b = e.target.closest?.("button");
       if (b && e.detail > 0 && document.activeElement === b) b.blur();
     });
+    // Held movement keys, applied every frame (classic Oviz semantics).
+    this.keysDown = new Set();
+    this.shiftDown = false;
+    v.renderer.beforeRender.push((now) => this.applyKeyMotion(now));
+    const clearKeys = () => { this.keysDown.clear(); this.shiftDown = false; v.renderer.release("keys"); };
+    window.addEventListener("blur", clearKeys);
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "Shift") this.shiftDown = false;
+      this.keysDown.delete(e.key.toLowerCase());
+      if (!this.keysDown.size) v.renderer.release("keys");
+    });
     window.addEventListener("keydown", (e) => {
       if (isEditable(e.target)) return;
       // Let focused sliders, buttons and switches handle their own keys.
       if (controlConsumesKey(e)) return;
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key;
-      if (mod && (k === "k" || k === "K")) { this.palette.toggle(); e.preventDefault(); return; }
+      const lower = k.length === 1 ? k.toLowerCase() : k;
+      if (mod && lower === "k") { this.palette.toggle(); e.preventDefault(); return; }
+      if (mod && !e.altKey && lower === "z" && !e.shiftKey) {
+        if (this.undoSelection()) e.preventDefault();
+        return;
+      }
       if (mod) {
         for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
         return;
       }
       if (e.altKey) return;
       if (this.palette.open) return;
+      if (k === "Shift") { this.shiftDown = true; return; }
+      if ("wasdqerf".includes(lower) && lower.length === 1) {
+        // Movement keys are held, not pressed: see applyKeyMotion.
+        this.shiftDown = e.shiftKey;
+        if (!this.keysDown.has(lower)) {
+          this.keysDown.add(lower);
+          this._lastKeyMotion = 0;
+          v._cancelTween();
+          v.controls.stop();
+          v.renderer.hold("keys");
+        }
+        e.preventDefault();
+        return;
+      }
       for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
+      if (e.repeat && !["ArrowLeft", "ArrowRight", "[", "]", "{", "}", "<", ">", ",", "."].includes(k)) {
+        e.preventDefault();
+        return;
+      }
       let handled = true;
-      switch (k) {
+      switch (lower) {
+        // ---- classic Oviz keys
         case " ": this.dock.togglePlay(); break;
         case "ArrowLeft": tl.pause(); tl.step(e.shiftKey ? -5 : -1); break;
         case "ArrowRight": tl.pause(); tl.step(e.shiftKey ? 5 : 1); break;
-        case "0": tl.setTime(0); break;
-        case "w": case "W": case "s": case "S": case "a": case "A": case "d": case "D": case "q": case "Q": case "e": case "E":
-          if (e.shiftKey || !this.flyKey(k.toLowerCase())) handled = false;
-          break;
-        case "<": case ",": this.dock.cycleSpeed(-1); break;
-        case ">": case ".": this.dock.cycleSpeed(1); break;
-        case "/": this.palette.show(); break;
         case "?": this.showHelp(); break;
-        case "r": case "R": v.resetView(); break;
-        case "v": case "V": this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky"); break;
-        case "l": case "L": this.setLayersOpen(!this.layersOpen); break;
-        case "g": case "G": v.setGlobal({ grid: !v.state.global.grid }); break;
-        case "o": case "O": this.setAutoOrbit(!v.controls.autoOrbit); break;
-        case "z": case "Z": this.setZen(this.root.dataset.zen !== "true"); break;
-        case "f": case "F": this.toggleFullscreen(); break;
-        case "p": this.screenshot(1); break;
-        case "t": case "T": this.layers.toggleAll(this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false)); break;
+        case "v": this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky"); break;
+        case "g": v.setGlobal({ grid: !v.state.global.grid }); break;
+        case "o": this.setAutoOrbit(!v.controls.autoOrbit); break;
+        case "z": this.setZen(this.root.dataset.zen !== "true"); break;
+        case "t": this.layers.toggleAll(this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false)); break;
+        case "[": case "{": case "]": case "}": {
+          const dir = k === "]" || k === "}" ? 1 : -1;
+          const step = e.shiftKey ? 0.25 : 0.1;
+          v.setGlobal({ pointSize: Math.min(4, Math.max(0.1, +(v.state.global.pointSize + dir * step).toFixed(2))) });
+          this.toast(`Point size ${v.state.global.pointSize.toFixed(2)}×`, { ms: 900 });
+          break;
+        }
         case "Escape":
           if (this.closeMenu() || this.closeSheet()) break;
           if (this.root.dataset.zen === "true") { this.setZen(false); break; }
-          if (this.selection) { this.select(null); break; }
+          if (this.selection || this.plugins.find((p) => p.name === "lasso")?.selection) {
+            this.pushSelectionUndo();
+            this.select(null);
+            this.plugins.find((p) => p.name === "lasso")?.clear();
+            break;
+          }
           handled = false;
           break;
+        // ---- additions (keys the classic viewer did not use)
+        case "/": this.palette.show(); break;
+        case "0": tl.setTime(0); break;
+        case "<": case ",": this.dock.cycleSpeed(-1); break;
+        case ">": case ".": this.dock.cycleSpeed(1); break;
+        case "i": this.screenshot(1); break;
+        case "m": this.toggleFullscreen(); break;
+        case "Home": v.resetView(); break;
+        case "l": if (e.shiftKey) this.setLayersOpen(!this.layersOpen); else handled = false; break;
         default:
-          if (/^[1-9]$/.test(k) || /^Digit[1-9]$/.test(e.code)) {
-            const n = Number(e.code.startsWith("Digit") ? e.code.slice(5) : k) - 1;
+          if (/^Digit[1-9]$/.test(e.code)) {
+            const n = Number(e.code.slice(5)) - 1;
             const traces = this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false);
             const t = traces[n];
             if (t) {
@@ -10751,6 +10889,48 @@ class AppUI {
       }
       if (handled) e.preventDefault();
     });
+  }
+
+  /**
+   * Classic Oviz keyboard flight, applied per frame while keys are held:
+   * A/D orbit, W/S tilt (W toward overhead), Shift+W/A/S/D fly the camera
+   * and target, Q/E zoom out/in, R/F move up/down; Shift is 4× faster.
+   * In Sky view W/A/S/D turn the gaze and Q/E change the field of view.
+   */
+  applyKeyMotion(now) {
+    const keys = this.keysDown;
+    if (!keys || !keys.size) { this._lastKeyMotion = 0; return; }
+    const v = this.viewer;
+    const pose = v.renderer.camera.pose;
+    const dt = this._lastKeyMotion ? Math.min(Math.max((now - this._lastKeyMotion) / 1000, 0), 0.1) : 1 / 60;
+    this._lastKeyMotion = now;
+    const c = v.controls;
+    keyMotion(pose, keys, {
+      dt,
+      fast: this.shiftDown,
+      sky: v.state.view.mode === "sky",
+      maxSpan: v.world.maxSpan,
+      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFov,
+    });
+    v.renderer.markInteraction();
+    v._onCameraChange();
+  }
+
+  // ------------------------------------------------------------- selection undo
+
+  pushSelectionUndo() {
+    const lasso = this.plugins.find((p) => p.name === "lasso");
+    (this._undo ||= []).push({ selection: this.selection, lasso: lasso?.capture() ?? null });
+    if (this._undo.length > 32) this._undo.shift();
+  }
+
+  undoSelection() {
+    const entry = this._undo?.pop();
+    if (!entry) return false;
+    this.select(entry.selection, { recordUndo: false });
+    this.plugins.find((p) => p.name === "lasso")?.restore(entry.lasso);
+    this.toast("Selection restored", { ms: 1000 });
+    return true;
   }
 }
 
