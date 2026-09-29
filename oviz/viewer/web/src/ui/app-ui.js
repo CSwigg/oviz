@@ -25,6 +25,7 @@ import { reveal, conceal, SPRINGS, flickToDismiss } from "./motion.js";
 import { LayoutManager } from "./layout.js";
 import { CompactLegend } from "./legend.js";
 import { IdleFade } from "./idle.js";
+import { buildArModel } from "../ar/model.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
@@ -635,6 +636,7 @@ export class AppUI {
       { label: "Search", icon: "search", shortcut: "/", run: () => this.palette.show() },
       ...(!this.statesBtn.hidden ? [{ label: "Views & story", icon: "bookmark", shortcut: "Y", run: () => this.plugins.find((p) => p.name === "states")?.toggle() }] : []),
       { label: "Reset view", icon: "home", shortcut: "Home", run: () => v.resetView() },
+      ...(this.canQuickLook ? [{ label: "View in AR", icon: "ar", run: () => this.viewInAr() }] : []),
       ...(hasTime ? [{ label: `Playback speed · ${v.timeline.speed}×`, icon: "play", run: () => this.dock.speedMenu?.(anchor) }] : []),
       "-",
       { label: "Screenshot or video…", icon: "camera", shortcut: "I", run: () => this.captureMenu(anchor) },
@@ -657,6 +659,64 @@ export class AppUI {
   refit() {
     this.viewer.renderer.resize();
     try { this.plugins.find((p) => p.name === "sky")?.sky?.aladin?.view?.fixLayoutDimensions?.(); } catch (_) { /* Aladin not ready */ }
+  }
+
+  // ------------------------------------------------------------- AR
+
+  /** Apple's AR Quick Look (iPhone and iPad Safari) can open USDZ links. */
+  get canQuickLook() {
+    try { return document.createElement("a").relList.supports("ar"); } catch (_) { return false; }
+  }
+
+  /** Build the AR model of what is on screen now. */
+  async arModel() {
+    if (this._arBuilding) return this._arBuilding;
+    this._arBuilding = buildArModel(this.viewer, this).finally(() => { this._arBuilding = null; });
+    return this._arBuilding;
+  }
+
+  /**
+   * Open the figure in AR Quick Look. A model shipped next to the page
+   * (figure option `ar_model`) opens as is; otherwise the current view is
+   * built into a USDZ on the spot.
+   */
+  async viewInAr() {
+    const hosted = this.manifest.viewer?.arModel;
+    let href = null, objectUrl = null;
+    if (hosted) {
+      try { href = new URL(hosted, location.href).href; } catch (_) { href = null; }
+    }
+    if (!href) {
+      this.toast("Preparing the AR model…", { icon: icon("ar"), ms: 1600 });
+      try {
+        const { blob } = await this.arModel();
+        objectUrl = href = URL.createObjectURL(blob);
+      } catch (err) {
+        console.error(err);
+        this.toast(err.message || "The AR model could not be built");
+        return;
+      }
+    }
+    // Quick Look opens links with rel="ar" that wrap an image.
+    const a = h("a", { rel: "ar", href: `${href}#allowsContentScaling=1`, style: { display: "none" } }, h("img", { alt: "" }));
+    if (objectUrl) a.download = `${slug(this.manifest.title || "oviz-figure")}.usdz`;
+    this.ui.append(a);
+    a.click();
+    a.remove();
+    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 120000);
+  }
+
+  /** Download the current view as a USDZ (open it on an iPhone or iPad for AR). */
+  async saveArModel() {
+    this.toast("Building the 3D model…", { icon: icon("ar"), ms: 1400 });
+    try {
+      const { blob, summary } = await this.arModel();
+      downloadBlob(blob, `${slug(this.manifest.title || "oviz-figure")}.usdz`);
+      this.toast(`Saved USDZ · ${summary.objects.toLocaleString()} objects${summary.clouds ? `, ${summary.clouds.toLocaleString()} dust cloudlets` : ""}`, { icon: icon("ar") });
+    } catch (err) {
+      console.error(err);
+      this.toast(err.message || "The 3D model could not be built");
+    }
   }
 
   /** Whether this page may go fullscreen (not iPhone Safari, not a locked iframe). */
@@ -897,6 +957,8 @@ export class AppUI {
   shareMenu(anchor) {
     const items = [
       { label: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
+      ...(this.canQuickLook ? [{ label: "View in AR", icon: "ar", run: () => this.viewInAr() }] : []),
+      { label: "Save 3D model for AR (USDZ)", icon: "ar", run: () => this.saveArModel() },
     ];
     const states = this.plugins.find((p) => p.name === "states");
     if (states) items.push("-", ...states.exportMenuItems());
@@ -950,6 +1012,8 @@ export class AppUI {
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: this.mode === "focus" ? "Detailed mode" : "Focus mode", sub: this.mode === "focus" ? MODES[1].desc : MODES[0].desc, icon: "sidebar", shortcut: "U", keywords: "mode layout panels simple minimal focus detailed", run: () => this.toggleMode() },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
+      ...(this.canQuickLook ? [{ title: "View in AR", icon: "ar", keywords: "augmented reality iphone quick look table 3d", run: () => this.viewInAr() }] : []),
+      { title: "Save 3D model for AR (USDZ)", icon: "ar", keywords: "augmented reality iphone quick look usdz export 3d", run: () => this.saveArModel() },
       ...(this.canFullscreen ? [{ title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() }] : []),
     ];
     if (this.manifest.sky?.enabled) {

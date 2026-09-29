@@ -17,7 +17,8 @@ Two runtimes exist:
   that read a compact binary bundle compiled from the scene spec.
 - **Classic viewer** (`oviz/threejs_*.py`, `viewer="classic"`). The previous
   Three.js runtime. Keep it byte-for-byte stable: tests pin its exact source
-  strings and function-body hashes. It alone provides Slides, Paper, and AR.
+  strings and function-body hashes. It alone provides Slides and Paper.
+  AR (Apple Quick Look, USDZ) lives in the Oviz viewer: `web/src/ar/`.
 
 ## Start with the public API
 

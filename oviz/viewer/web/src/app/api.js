@@ -14,6 +14,9 @@ export function installApi(root, viewer, ui) {
     getState: () => ui.plugins.find((p) => p.name === "states")?.api().capture() ?? null,
     applyState: (s, opts) => ui.plugins.find((p) => p.name === "states")?.applyState(s, opts) ?? Promise.resolve(),
     screenshot: (opts) => viewer.renderer.capture(opts),
+    // The current view as a USDZ for AR Quick Look: {blob, summary}.
+    arModel: () => ui.arModel(),
+    viewInAr: () => ui.viewInAr(),
     get states() { return ui.plugins.find((p) => p.name === "states")?.api(); },
     stats: () => ({
       frames: viewer.renderer.frameCount,

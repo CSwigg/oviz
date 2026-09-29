@@ -11,7 +11,7 @@ authoritative build, verification, artifact, and publishing rules.
    `Animate3D`.
 3. Call `make_plot()` with a time array containing zero and an explicit
    initial-state profile. It returns an `OvizFigure` (the WebGL2 Oviz viewer);
-   pass `viewer="classic"` only when Slides, Paper, or AR are required.
+   pass `viewer="classic"` only when Slides or Paper are required.
 4. Write the returned figure to one HTML file. Legacy figures can be upgraded
    with `python -m oviz.viewer.upgrade old.html new.html`.
 

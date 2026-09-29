@@ -463,6 +463,21 @@ class IntegrationTests(unittest.TestCase):
             self.assertIn(f'id: "{mode}"', runtime)
             self.assertIn(f'[data-oviz-mode="{mode}"]', css)
 
+    def test_ar_model_option_points_view_in_ar_at_a_hosted_usdz(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(time=np.array([0.0, -1.0, -2.0]), show=False)
+        manifest_of = lambda html: json.loads(re.search(r'id="oviz-manifest">(.*?)</script>', html, re.S).group(1))
+        # Without a hosted model, "View in AR" builds one from the live view.
+        self.assertNotIn("arModel", manifest_of(fig.to_html())["viewer"])
+        hosted = OvizFigure(bundle=fig.bundle, ar_model="figure.usdz")
+        self.assertEqual(manifest_of(hosted.to_html())["viewer"]["arModel"], "figure.usdz")
+        self.assertEqual(manifest_of(fig.to_html(ar_model="m.usdz"))["viewer"]["arModel"], "m.usdz")
+        # The runtime carries the Quick Look hand-off and the USDZ writer.
+        runtime = build.bundle_js()
+        self.assertIn('relList.supports("ar")', runtime)
+        self.assertIn('rel: "ar"', runtime)
+        self.assertIn("#usda 1.0", runtime)
+
     def test_upgrade_reads_compressed_and_inline_legacy_figures(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         classic = viz.make_plot(time=np.array([0.0, -1.0]), show=False, viewer="classic")

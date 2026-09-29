@@ -8,7 +8,8 @@ Aladin Lite.
 
 ``Animate3D.make_plot`` writes this viewer by default. Pass
 ``viewer="classic"`` to get the previous Three.js runtime byte-for-byte.
-Slides, Paper, AR and the dendrogram widget remain classic-only.
+Slides, Paper and the dendrogram widget remain classic-only. AR has moved to
+the new viewer (see *AR on iPhone and iPad* below).
 
 
 Using a figure
@@ -130,6 +131,32 @@ re-running its pipeline. Saved States are migrated too.
    oviz.upgrade_html("old_figure.html", "new_figure.html")
 
 
+AR on iPhone and iPad
+---------------------
+
+On an iPhone or iPad, **View in AR** (in the ⋯ and Share menus, and in
+search) opens the figure in Apple's AR Quick Look as a tabletop model. On any
+device, **Save 3D model for AR (USDZ)** downloads the same model.
+
+The model is what is on screen: every visible object at the current time, as
+a small glowing sphere in its displayed colour and size, the Sun, and each
+visible dust volume as soft, layered cloudlets where it is dense. It is
+centred on the figure, with most objects inside a radius of 0.4 m, Galactic
+north up, resting just above the table. Pinch in AR to scale it.
+
+For a published page, ship a prebuilt model next to it so Quick Look opens a
+plain file instead of one generated in the browser:
+
+.. code-block:: python
+
+   figure = OvizFigure(bundle=bundle, ar_model="figure.usdz")
+   figure.write_html("figure.html")
+   # Save figure.usdz next to it: Share → "Save 3D model for AR (USDZ)",
+   # or window.Oviz.viewer.arModel() in the browser.
+
+Serve ``.usdz`` files as ``model/vnd.usdz+zip`` (GitHub Pages does).
+
+
 Browser API
 -----------
 
@@ -141,6 +168,9 @@ Browser API
     Fly between Galactic 3D and Sky.
 ``screenshot({scale})``
     A PNG ``Blob`` of the WebGL layer.
+``arModel()``, ``viewInAr()``
+    The current view as a USDZ (``{blob, summary}``), and the AR Quick Look
+    hand-off.
 ``getState()``, ``applyState(state, {instant, duration_ms, easing, keepCamera})``
     Capture the whole viewer as a State, and restore one exactly (animated
     unless ``instant``; returns a promise that resolves on arrival).

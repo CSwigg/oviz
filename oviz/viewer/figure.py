@@ -88,11 +88,15 @@ def _json_for_script(obj: Any) -> str:
 
 
 def render_bundle_html(bundle: Bundle, *, title: str | None = None, theme: str = "dark",
-                       mode: str = "focus") -> str:
+                       mode: str = "focus", ar_model: str | None = None) -> str:
     mode = _check_mode(mode)
     manifest = dict(bundle.manifest)
     manifest["blobs"] = [b.descriptor() for b in bundle.blobs]
     manifest["viewer"] = {"version": VIEWER_VERSION, "mode": mode}
+    if ar_model:
+        # A prebuilt USDZ (URL relative to the page) that "View in AR" opens
+        # on iPhone and iPad instead of building one from the live view.
+        manifest["viewer"]["arModel"] = str(ar_model)
     blob_html = []
     for b in sorted(bundle.blobs, key=lambda b: (b.priority, b.id)):
         attrs = (
@@ -126,11 +130,14 @@ class OvizFigure:
 
     def __init__(self, scene_spec: dict[str, Any] | None = None, *, bundle: Bundle | None = None,
                  theme: str = "dark", title: str | None = None, mode: str = "focus",
-                 **_legacy_options: Any):
+                 ar_model: str | None = None, **_legacy_options: Any):
         if bundle is None and scene_spec is None:
             raise ValueError("OvizFigure needs a scene_spec or a bundle")
         #: Mode the figure opens in: one of :data:`VIEWER_MODES`.
         self.mode = _check_mode(mode)
+        #: Optional URL (relative to the page) of a prebuilt USDZ for AR Quick
+        #: Look; without it "View in AR" builds one from the live view.
+        self.ar_model = ar_model
         self.scene_spec = scene_spec
         self._bundle = bundle
         self._bundle_key: str | None = None
@@ -153,8 +160,9 @@ class OvizFigure:
     def to_dict(self) -> dict[str, Any]:
         return self.scene_spec if self.scene_spec is not None else self.bundle.manifest
 
-    def to_html(self, *, mode: str | None = None, **_: Any) -> str:
-        return render_bundle_html(self.bundle, title=self.title, theme=self.theme, mode=mode or self.mode)
+    def to_html(self, *, mode: str | None = None, ar_model: str | None = None, **_: Any) -> str:
+        return render_bundle_html(self.bundle, title=self.title, theme=self.theme, mode=mode or self.mode,
+                                  ar_model=ar_model or self.ar_model)
 
     def write_html(self, file: str | Path, **kwargs: Any) -> Path:
         path = Path(file)

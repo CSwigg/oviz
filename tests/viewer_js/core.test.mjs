@@ -229,3 +229,56 @@ test("a straight-down eye keeps +x to the right and stays inside the orbit limit
   const up = poseFromEyeTarget([0, 0, -10], [0, 0, 0], 60);
   close(up.pitch, PITCH_LIMIT);
 });
+
+test("USDZ packages are aligned, stored ZIPs with the scene first", async () => {
+  const { usdzPackage, usdaScene } = await import("../../oviz/viewer/web/src/ar/usdz.js");
+  const scene = {
+    name: "Test \"figure\"",
+    materials: [{ name: "Points_0", diffuse: [0.3, 0.2, 0.1], emissive: [1, 0.5, 0] },
+      { name: "Dust_1", texture: "textures/cloud.png", diffuse: [1, 1, 1] }],
+    meshes: [{ name: "Points_0", material: "Points_0", points: Float32Array.from([0, 0, 0, 1, 0, 0, 0, 1, 0]), normals: Float32Array.from([0, 0, 1, 0, 0, 1, 0, 0, 1]), indices: Uint32Array.from([0, 1, 2]) }],
+  };
+  const text = usdaScene(scene);
+  assert.match(text, /^#usda 1\.0/);
+  assert.match(text, /defaultPrim = "Root"/);
+  assert.match(text, /upAxis = "Y"/);
+  assert.match(text, /rel material:binding = <\/Root\/Materials\/Points_0>/);
+  assert.match(text, /asset inputs:file = @textures\/cloud\.png@/);
+  assert.ok(!text.includes('Test "figure"'), "quotes are stripped from the scene name");
+  const png = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
+  const zip = usdzPackage(scene, { "textures/cloud.png": png });
+  const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  // Walk the local headers: stored, every data start on a 64-byte boundary.
+  const names = [];
+  let p = 0;
+  while (dv.getUint32(p, true) === 0x04034b50) {
+    assert.equal(dv.getUint16(p + 8, true), 0, "stored, not deflated");
+    const size = dv.getUint32(p + 18, true);
+    const nameLen = dv.getUint16(p + 26, true), extra = dv.getUint16(p + 28, true);
+    names.push(new TextDecoder().decode(zip.subarray(p + 30, p + 30 + nameLen)));
+    const data = p + 30 + nameLen + extra;
+    assert.equal(data % 64, 0, `${names.at(-1)} data is 64-byte aligned`);
+    p = data + size;
+  }
+  assert.deepEqual(names, ["scene.usda", "textures/cloud.png"]);
+  assert.equal(dv.getUint32(p, true), 0x02014b50, "central directory follows");
+  const eocd = zip.length - 22;
+  assert.equal(dv.getUint32(eocd, true), 0x06054b50);
+  assert.equal(dv.getUint16(eocd + 10, true), 2);
+  assert.equal(dv.getUint32(eocd + 16, true), p, "central directory offset");
+});
+
+test("AR spheres are closed, outward-facing icospheres", async () => {
+  const { icosphere } = await import("../../oviz/viewer/web/src/ar/model.js");
+  for (const level of [0, 2]) {
+    const { verts, faces } = icosphere(level);
+    assert.equal(faces.length / 3, 20 * 4 ** level);
+    for (let f = 0; f < faces.length; f += 3) {
+      const [a, b, c] = [faces[f], faces[f + 1], faces[f + 2]].map((i) => [verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2]]);
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+      const centre = [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3];
+      assert.ok(n[0] * centre[0] + n[1] * centre[1] + n[2] * centre[2] > 0, "counter-clockwise from outside");
+    }
+  }
+});

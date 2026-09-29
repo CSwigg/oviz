@@ -157,8 +157,9 @@ figure.write_html("young_clusters.html")
 ```
 
 `make_plot` writes the Oviz viewer by default. Pass `viewer="classic"` for
-the previous Three.js runtime, which also provides Slides, Paper, and AR
-exports.
+the previous Three.js runtime, which also provides Slides and Paper exports.
+On an iPhone or iPad, the Oviz viewer's **View in AR** places the figure on a
+table with Apple's AR Quick Look.
 
 For a static XYZ catalogue, use `Layer(..., assume_stationary=True)`. You can
 also pass volume layers and optional cluster-member catalogues to
