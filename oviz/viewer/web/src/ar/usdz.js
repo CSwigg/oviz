@@ -1,11 +1,13 @@
 // USDZ writer for Apple's AR Quick Look.
 //
 // A USDZ file is an uncompressed ZIP whose first entry is a USD layer and
-// whose file data start on 64-byte boundaries. The layer here is plain-text
+// whose file data start on 64-byte boundaries. Layers here are plain-text
 // USDA using only what AR Quick Look (RealityKit) renders reliably: meshes
-// with UsdPreviewSurface materials, optionally textured through UsdUVTexture,
-// under a scene anchored to a horizontal plane. Structure follows the
-// MIT-licensed three.js USDZExporter (as the classic Oviz exporter did).
+// with UsdPreviewSurface materials (optionally textured through
+// UsdUVTexture), shared geometry pulled in by reference, and time-sampled
+// translate/scale animation, all under a scene anchored to a horizontal
+// plane. Structure follows the MIT-licensed three.js USDZExporter (as the
+// classic Oviz exporter did).
 
 const enc = new TextEncoder();
 
@@ -14,6 +16,10 @@ function num(x, digits = 5) {
   const s = x.toFixed(digits);
   // Trim trailing zeros ("0.12000" → "0.12", "3.00000" → "3").
   return s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") || "0" : s;
+}
+
+function vec3(v, digits = 5) {
+  return `(${num(v[0], digits)}, ${num(v[1], digits)}, ${num(v[2], digits)})`;
 }
 
 function vec3List(arr, digits) {
@@ -46,35 +52,102 @@ function meshExtent(points) {
       hi[k] = Math.max(hi[k], points[i + k]);
     }
   }
-  return `[(${lo.map((x) => num(x)).join(", ")}), (${hi.map((x) => num(x)).join(", ")})]`;
+  return `[${vec3(lo)}, ${vec3(hi)}]`;
 }
 
-function meshPrim(mesh, materialPath) {
+function layerHeader(defaultPrim, time) {
+  const lines = [
+    `#usda 1.0`,
+    `(`,
+    `    customLayerData = {`,
+    `        string creator = "Oviz"`,
+    `    }`,
+    `    defaultPrim = "${defaultPrim}"`,
+    `    metersPerUnit = 1`,
+    `    upAxis = "Y"`,
+  ];
+  if (time) {
+    lines.push(
+      `    startTimeCode = ${num(time.start, 3)}`,
+      `    endTimeCode = ${num(time.end, 3)}`,
+      `    timeCodesPerSecond = ${num(time.perSecond, 3)}`,
+      `    framesPerSecond = ${num(time.perSecond, 3)}`,
+    );
+  }
+  lines.push(`)`, ``);
+  return lines;
+}
+
+/** Mesh attributes (faces, normals, points, optional st) at `pad` indentation. */
+function meshBody(mesh, pad) {
   const tris = mesh.indices.length / 3;
   const lines = [
-    `            def Mesh "${usdName(mesh.name)}" (`,
-    `                prepend apiSchemas = ["MaterialBindingAPI"]`,
-    `            )`,
-    `            {`,
-    `                float3[] extent = ${meshExtent(mesh.points)}`,
-    `                int[] faceVertexCounts = [${new Array(tris).fill(3).join(", ")}]`,
-    `                int[] faceVertexIndices = [${Array.from(mesh.indices).join(", ")}]`,
-    `                rel material:binding = <${materialPath}>`,
-    `                normal3f[] normals = [${vec3List(mesh.normals, 4)}] (`,
-    `                    interpolation = "vertex"`,
-    `                )`,
-    `                point3f[] points = [${vec3List(mesh.points, 5)}]`,
+    `${pad}float3[] extent = ${meshExtent(mesh.points)}`,
+    `${pad}int[] faceVertexCounts = [${new Array(tris).fill(3).join(", ")}]`,
+    `${pad}int[] faceVertexIndices = [${Array.from(mesh.indices).join(", ")}]`,
+    `${pad}normal3f[] normals = [${vec3List(mesh.normals, 4)}] (`,
+    `${pad}    interpolation = "vertex"`,
+    `${pad})`,
+    `${pad}point3f[] points = [${vec3List(mesh.points, 5)}]`,
   ];
   if (mesh.uvs) {
     lines.push(
-      `                texCoord2f[] primvars:st = [${vec2List(mesh.uvs)}] (`,
-      `                    interpolation = "vertex"`,
-      `                )`,
+      `${pad}texCoord2f[] primvars:st = [${vec2List(mesh.uvs)}] (`,
+      `${pad}    interpolation = "vertex"`,
+      `${pad})`,
     );
   }
-  if (mesh.doubleSided) lines.push(`                uniform bool doubleSided = 1`);
-  lines.push(`                uniform token subdivisionScheme = "none"`, `            }`, ``);
-  return lines.join("\n");
+  if (mesh.doubleSided) lines.push(`${pad}uniform bool doubleSided = 1`);
+  lines.push(`${pad}uniform token subdivisionScheme = "none"`);
+  return lines;
+}
+
+/** Translate/scale ops, static or time-sampled ({t, value} lists). */
+function xformOps(node, pad) {
+  const lines = [], order = [];
+  const scale3 = (s) => (Array.isArray(s) ? s : [s, s, s]);
+  if (node.translateSamples) {
+    lines.push(`${pad}double3 xformOp:translate.timeSamples = {`);
+    for (const [t, p] of node.translateSamples) lines.push(`${pad}    ${num(t, 3)}: ${vec3(p)},`);
+    lines.push(`${pad}}`);
+    order.push("xformOp:translate");
+  } else if (node.translate) {
+    lines.push(`${pad}double3 xformOp:translate = ${vec3(node.translate)}`);
+    order.push("xformOp:translate");
+  }
+  if (node.scaleSamples) {
+    lines.push(`${pad}float3 xformOp:scale.timeSamples = {`);
+    for (const [t, s] of node.scaleSamples) lines.push(`${pad}    ${num(t, 3)}: ${vec3(scale3(s), 6)},`);
+    lines.push(`${pad}}`);
+    order.push("xformOp:scale");
+  } else if (node.scale != null) {
+    lines.push(`${pad}float3 xformOp:scale = ${vec3(scale3(node.scale), 6)}`);
+    order.push("xformOp:scale");
+  }
+  if (order.length) lines.push(`${pad}uniform token[] xformOpOrder = [${order.map((o) => `"${o}"`).join(", ")}]`);
+  return lines;
+}
+
+/**
+ * A scene node: an Xform (optionally referencing a shared geometry layer),
+ * or a Mesh when it carries `mesh`. Nodes may nest through `children`.
+ */
+function nodePrim(node, depth, matPath) {
+  const pad = "    ".repeat(depth);
+  const inner = `${pad}    `;
+  const meta = [];
+  if (node.geometry) meta.push(`${inner}prepend references = @./geometries/${node.geometry}.usda@</Geometry>`);
+  if (node.material) meta.push(`${inner}prepend apiSchemas = ["MaterialBindingAPI"]`);
+  const type = node.mesh ? "Mesh" : "Xform";
+  const lines = meta.length
+    ? [`${pad}def ${type} "${usdName(node.name)}" (`, ...meta, `${pad})`, `${pad}{`]
+    : [`${pad}def ${type} "${usdName(node.name)}"`, `${pad}{`];
+  lines.push(...xformOps(node, inner));
+  if (node.material) lines.push(`${inner}rel material:binding = <${matPath(node.material)}>`);
+  if (node.mesh) lines.push(...meshBody(node.mesh, inner));
+  for (const child of node.children || []) lines.push(...nodePrim(child, depth + 1, matPath));
+  lines.push(`${pad}}`);
+  return lines;
 }
 
 function materialPrim(m, path) {
@@ -82,8 +155,8 @@ function materialPrim(m, path) {
   const inputs = [];
   const nodes = [];
   if (m.texture) {
-    // Textured: colour and coverage come from the image (baked per material,
-    // so no renderer has to honour UsdUVTexture's scale).
+    // Textured: colour and coverage come from the image (baked per
+    // material, so no renderer has to honour UsdUVTexture's scale).
     const tex = `${path}/Texture`;
     const reader = `${path}/StReader`;
     inputs.push(`                color3f inputs:diffuseColor.connect = <${tex}.outputs:rgb>`);
@@ -133,25 +206,20 @@ function materialPrim(m, path) {
 }
 
 /**
- * USDA text for a scene: {name, meshes: [{name, points, normals, uvs?,
- * indices, doubleSided?, material}], materials: [{name, diffuse, emissive?,
- * opacity?, roughness?, texture?}]}. Positions are metres, +Y up.
+ * USDA text for a scene: {name, time?: {start, end, perSecond}, nodes,
+ * materials, meshes?}. `nodes` are scene nodes (see nodePrim); `meshes`
+ * ({name, material, points, normals, uvs?, indices, doubleSided?}) are
+ * shorthand for static mesh nodes. Positions are metres, +Y up.
  */
 export function usdaScene(scene) {
   const title = String(scene.name || "Oviz").replace(/["\\]/g, "");
   const matPath = (name) => `/Root/Materials/${usdName(name)}`;
-  const meshes = scene.meshes.filter((m) => m.indices.length && m.points.length);
+  const nodes = [
+    ...(scene.meshes || []).filter((m) => m.indices.length && m.points.length).map((m) => ({ name: m.name, material: m.material, mesh: m })),
+    ...(scene.nodes || []),
+  ];
   return [
-    `#usda 1.0`,
-    `(`,
-    `    customLayerData = {`,
-    `        string creator = "Oviz"`,
-    `    }`,
-    `    defaultPrim = "Root"`,
-    `    metersPerUnit = 1`,
-    `    upAxis = "Y"`,
-    `)`,
-    ``,
+    ...layerHeader("Root", scene.time),
     `def Xform "Root"`,
     `{`,
     `    def Scope "Scenes" (`,
@@ -169,7 +237,7 @@ export function usdaScene(scene) {
     `            token preliminary:anchoring:type = "plane"`,
     `            token preliminary:planeAnchoring:alignment = "horizontal"`,
     ``,
-    ...meshes.map((m) => meshPrim(m, matPath(m.material))),
+    ...nodes.flatMap((n) => [...nodePrim(n, 3, matPath), ``]),
     `        }`,
     `    }`,
     ``,
@@ -182,11 +250,26 @@ export function usdaScene(scene) {
   ].join("\n");
 }
 
+/** A shared geometry layer (referenced as `@./geometries/<name>.usda@</Geometry>`). */
+export function usdaGeometry(mesh) {
+  return [
+    ...layerHeader("Geometry", null),
+    `def Xform "Geometry"`,
+    `{`,
+    `    def Mesh "Mesh"`,
+    `    {`,
+    ...meshBody(mesh, "        "),
+    `    }`,
+    `}`,
+    ``,
+  ].join("\n");
+}
+
 // ---------------------------------------------------------------- ZIP
 
 let crcTable = null;
 
-function crc32(bytes) {
+export function crc32(bytes, crc = 0) {
   if (!crcTable) {
     crcTable = new Uint32Array(256);
     for (let n = 0; n < 256; n++) {
@@ -195,7 +278,7 @@ function crc32(bytes) {
       crcTable[n] = c >>> 0;
     }
   }
-  let crc = 0xffffffff;
+  crc = (crc ^ 0xffffffff) >>> 0;
   for (let i = 0; i < bytes.length; i++) crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
 }
@@ -273,9 +356,13 @@ export function zipStored(files) {
   return out;
 }
 
-/** The USDZ package: the scene layer first, then its textures. */
+/**
+ * The USDZ package: the scene layer first, then shared geometry layers
+ * (`scene.geometries`: name → mesh) and textures (path → PNG bytes).
+ */
 export function usdzPackage(scene, textures = {}) {
   const files = [{ name: "scene.usda", data: usdaScene(scene) }];
+  for (const [name, mesh] of Object.entries(scene.geometries || {})) files.push({ name: `geometries/${name}.usda`, data: usdaGeometry(mesh) });
   for (const [name, bytes] of Object.entries(textures)) files.push({ name, data: bytes });
   return zipStored(files);
 }

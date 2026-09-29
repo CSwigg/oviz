@@ -15,8 +15,9 @@ export function installApi(root, viewer, ui) {
     applyState: (s, opts) => ui.plugins.find((p) => p.name === "states")?.applyState(s, opts) ?? Promise.resolve(),
     screenshot: (opts) => viewer.renderer.capture(opts),
     // The current view as a USDZ for AR Quick Look: {blob, summary}.
-    arModel: () => ui.arModel(),
-    viewInAr: () => ui.viewInAr(),
+    // {moment: true} for a still of the current time instead of the time-lapse.
+    arModel: (opts) => ui.arModel(opts),
+    viewInAr: (opts) => ui.viewInAr(opts),
     get states() { return ui.plugins.find((p) => p.name === "states")?.api(); },
     stats: () => ({
       frames: viewer.renderer.frameCount,

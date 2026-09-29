@@ -636,7 +636,7 @@ export class AppUI {
       { label: "Search", icon: "search", shortcut: "/", run: () => this.palette.show() },
       ...(!this.statesBtn.hidden ? [{ label: "Views & story", icon: "bookmark", shortcut: "Y", run: () => this.plugins.find((p) => p.name === "states")?.toggle() }] : []),
       { label: "Reset view", icon: "home", shortcut: "Home", run: () => v.resetView() },
-      ...(this.canQuickLook ? [{ label: "View in AR", icon: "ar", run: () => this.viewInAr() }] : []),
+      ...(this.canQuickLook ? this.arMenuItems() : []),
       ...(hasTime ? [{ label: `Playback speed · ${v.timeline.speed}×`, icon: "play", run: () => this.dock.speedMenu?.(anchor) }] : []),
       "-",
       { label: "Screenshot or video…", icon: "camera", shortcut: "I", run: () => this.captureMenu(anchor) },
@@ -668,28 +668,38 @@ export class AppUI {
     try { return document.createElement("a").relList.supports("ar"); } catch (_) { return false; }
   }
 
-  /** Build the AR model of what is on screen now. */
-  async arModel() {
-    if (this._arBuilding) return this._arBuilding;
-    this._arBuilding = buildArModel(this.viewer, this).finally(() => { this._arBuilding = null; });
-    return this._arBuilding;
+  /** Whether the figure has a timeline (so AR can be a time-lapse or a still). */
+  get arHasTime() {
+    return this.viewer.timeline.count > 1 && this.manifest.time?.enabled !== false;
   }
 
   /**
-   * Open the figure in AR Quick Look. A model shipped next to the page
-   * (figure option `ar_model`) opens as is; otherwise the current view is
-   * built into a USDZ on the spot.
+   * Build the AR model of what is on screen: a time-lapse through the whole
+   * timeline, or (`moment`) a still of the current time.
    */
-  async viewInAr() {
-    const hosted = this.manifest.viewer?.arModel;
+  async arModel({ moment = false } = {}) {
+    const key = moment ? `moment:${this.viewer.timeline.frame}` : "timelapse";
+    if (this._arBuilding?.key === key) return this._arBuilding.promise;
+    const promise = buildArModel(this.viewer, this, { moment }).finally(() => { if (this._arBuilding?.promise === promise) this._arBuilding = null; });
+    this._arBuilding = { key, promise };
+    return promise;
+  }
+
+  /**
+   * Open the figure in AR Quick Look. The time-lapse opens a model shipped
+   * next to the page when there is one (figure option `ar_model`); anything
+   * else is built into a USDZ on the spot.
+   */
+  async viewInAr({ moment = false } = {}) {
+    const hosted = moment ? null : this.manifest.viewer?.arModel;
     let href = null, objectUrl = null;
     if (hosted) {
       try { href = new URL(hosted, location.href).href; } catch (_) { href = null; }
     }
     if (!href) {
-      this.toast("Preparing the AR model…", { icon: icon("ar"), ms: 1600 });
+      this.toast(moment ? `Preparing AR at ${this.formatTime(this.viewer.timeline.time)}…` : "Preparing the AR model…", { icon: icon("ar"), ms: 2200 });
       try {
-        const { blob } = await this.arModel();
+        const { blob } = await this.arModel({ moment });
         objectUrl = href = URL.createObjectURL(blob);
       } catch (err) {
         console.error(err);
@@ -706,13 +716,22 @@ export class AppUI {
     if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 120000);
   }
 
-  /** Download the current view as a USDZ (open it on an iPhone or iPad for AR). */
-  async saveArModel() {
+  /** AR entries: the time-lapse, and (with a timeline) a still of this moment. */
+  arMenuItems() {
+    return [
+      { label: this.arHasTime ? "View in AR (time-lapse)" : "View in AR", icon: "ar", run: () => this.viewInAr() },
+      ...(this.arHasTime ? [{ label: `View this moment in AR · ${Math.abs(this.viewer.timeline.time) < 1e-6 ? "today" : this.formatTime(this.viewer.timeline.time)}`, icon: "ar", run: () => this.viewInAr({ moment: true }) }] : []),
+    ];
+  }
+
+  /** Download the AR model as a USDZ (open it on an iPhone or iPad for AR). */
+  async saveArModel({ moment = false } = {}) {
     this.toast("Building the 3D model…", { icon: icon("ar"), ms: 1400 });
     try {
-      const { blob, summary } = await this.arModel();
-      downloadBlob(blob, `${slug(this.manifest.title || "oviz-figure")}.usdz`);
-      this.toast(`Saved USDZ · ${summary.objects.toLocaleString()} objects${summary.clouds ? `, ${summary.clouds.toLocaleString()} dust cloudlets` : ""}`, { icon: icon("ar") });
+      const { blob, summary } = await this.arModel({ moment });
+      const when = moment ? `-${this.formatTime(this.viewer.timeline.time).replace(/[^0-9a-z.−-]+/gi, "").replace("−", "minus")}` : "";
+      downloadBlob(blob, `${slug(this.manifest.title || "oviz-figure")}${when}.usdz`);
+      this.toast(`Saved USDZ · ${summary.objects.toLocaleString()} objects${summary.dustSlices ? `, ${summary.dustSlices} dust slices` : ""}${summary.seconds ? `, ${Math.round(summary.seconds)} s time-lapse` : ""}`, { icon: icon("ar") });
     } catch (err) {
       console.error(err);
       this.toast(err.message || "The 3D model could not be built");
@@ -957,8 +976,9 @@ export class AppUI {
   shareMenu(anchor) {
     const items = [
       { label: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
-      ...(this.canQuickLook ? [{ label: "View in AR", icon: "ar", run: () => this.viewInAr() }] : []),
-      { label: "Save 3D model for AR (USDZ)", icon: "ar", run: () => this.saveArModel() },
+      ...(this.canQuickLook ? this.arMenuItems() : []),
+      { label: this.arHasTime ? "Save AR time-lapse (USDZ)" : "Save 3D model for AR (USDZ)", icon: "ar", run: () => this.saveArModel() },
+      ...(this.arHasTime ? [{ label: "Save AR model of this moment (USDZ)", icon: "ar", run: () => this.saveArModel({ moment: true }) }] : []),
     ];
     const states = this.plugins.find((p) => p.name === "states");
     if (states) items.push("-", ...states.exportMenuItems());
@@ -1012,8 +1032,9 @@ export class AppUI {
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: this.mode === "focus" ? "Detailed mode" : "Focus mode", sub: this.mode === "focus" ? MODES[1].desc : MODES[0].desc, icon: "sidebar", shortcut: "U", keywords: "mode layout panels simple minimal focus detailed", run: () => this.toggleMode() },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
-      ...(this.canQuickLook ? [{ title: "View in AR", icon: "ar", keywords: "augmented reality iphone quick look table 3d", run: () => this.viewInAr() }] : []),
-      { title: "Save 3D model for AR (USDZ)", icon: "ar", keywords: "augmented reality iphone quick look usdz export 3d", run: () => this.saveArModel() },
+      ...(this.canQuickLook ? this.arMenuItems().map((x) => ({ title: x.label, icon: "ar", keywords: "augmented reality iphone quick look table 3d time-lapse", run: x.run })) : []),
+      { title: this.arHasTime ? "Save AR time-lapse (USDZ)" : "Save 3D model for AR (USDZ)", icon: "ar", keywords: "augmented reality iphone quick look usdz export 3d", run: () => this.saveArModel() },
+      ...(this.arHasTime ? [{ title: "Save AR model of this moment (USDZ)", icon: "ar", keywords: "augmented reality iphone quick look usdz export 3d time", run: () => this.saveArModel({ moment: true }) }] : []),
       ...(this.canFullscreen ? [{ title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() }] : []),
     ];
     if (this.manifest.sky?.enabled) {

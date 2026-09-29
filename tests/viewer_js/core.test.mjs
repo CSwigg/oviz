@@ -282,3 +282,37 @@ test("AR spheres are closed, outward-facing icospheres", async () => {
     }
   }
 });
+
+test("AR scenes carry time samples, shared geometry and the timeline", async () => {
+  const { usdaScene, usdaGeometry } = await import("../../oviz/viewer/web/src/ar/usdz.js");
+  const text = usdaScene({
+    name: "T", time: { start: 0, end: 24, perSecond: 12 },
+    materials: [{ name: "Points_0", diffuse: [1, 0, 0] }],
+    nodes: [
+      { name: "O_trace-1_3", geometry: "sphere", material: "Points_0", translateSamples: [[0, [0, 0, 0]], [12, [1, 0, 0]]], scaleSamples: [[0, 0], [12, 0.01]] },
+      { name: "Plate", translate: [0, 0.002, 0], children: [{ name: "Label", mesh: { points: Float32Array.from([0, 0, 0, 1, 0, 0, 0, 0, 1]), normals: Float32Array.from([0, 1, 0, 0, 1, 0, 0, 1, 0]), indices: Uint32Array.from([0, 1, 2]) } }] },
+    ],
+  });
+  assert.match(text, /startTimeCode = 0\n    endTimeCode = 24\n    timeCodesPerSecond = 12/);
+  assert.match(text, /def Xform "O_trace_1_3" \(\n\s+prepend references = @\.\/geometries\/sphere\.usda@<\/Geometry>/);
+  assert.match(text, /double3 xformOp:translate\.timeSamples = \{\n\s+0: \(0, 0, 0\),\n\s+12: \(1, 0, 0\),\n\s+\}/);
+  assert.match(text, /float3 xformOp:scale\.timeSamples = \{\n\s+0: \(0, 0, 0\),\n\s+12: \(0\.01, 0\.01, 0\.01\),/);
+  assert.match(text, /uniform token\[\] xformOpOrder = \["xformOp:translate", "xformOp:scale"\]/);
+  assert.match(text, /def Xform "Plate"\n\s+\{\n\s+double3 xformOp:translate = \(0, 0\.002, 0\)[\s\S]*def Mesh "Label"/);
+  assert.match(usdaGeometry({ points: Float32Array.from([0, 0, 0]), normals: Float32Array.from([0, 1, 0]), indices: Uint32Array.from([]) }), /defaultPrim = "Geometry"[\s\S]*def Xform "Geometry"[\s\S]*def Mesh "Mesh"/);
+});
+
+test("AR time samples and labels follow the timeline", async () => {
+  const { timeSamples, windowKeys, timeText } = await import("../../oviz/viewer/web/src/ar/model.js");
+  const tl = new Timeline(Array.from({ length: 301 }, (_, i) => -300 + i), { initialIndex: 300 });
+  const s = timeSamples(tl, 150);
+  // Every third frame (at most 150 samples), plus the present.
+  assert.equal(s.length, 101);
+  assert.equal(s.at(-1).time, 0, "ends at the present");
+  for (let i = 1; i < s.length; i++) assert.ok(s[i].time > s[i - 1].time, "in time order");
+  assert.equal(timeText(0), "Today");
+  assert.equal(timeText(-12.5), "−12.5 Myr");
+  assert.equal(timeText(-120), "−120 Myr");
+  assert.deepEqual(windowKeys(0, 10, 30), [[0, 1], [9.99, 1], [10, 0], [30, 0]]);
+  assert.deepEqual(windowKeys(10, 30, 30), [[0, 0], [9.99, 0], [10, 1], [29.99, 1]]);
+});
