@@ -94,7 +94,8 @@
   --ov-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --ov-text: #10151f;
   --ov-text-2: rgba(16, 21, 31, 0.72);
-  --ov-text-3: rgba(16, 21, 31, 0.5);
+  /* Light glass sits over a dark stage: captions need a little more ink. */
+  --ov-text-3: rgba(16, 21, 31, 0.62);
   --ov-text-inverse: #ffffff;
   --ov-accent: #b8791b;
   --ov-accent-strong: #9a620d;
@@ -135,8 +136,9 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-canvas { position: absolute; inset: 0; display: block; z-index: 1; cursor: grab; touch-action: none; }
 .ov-canvas:active { cursor: grabbing; }
 .ov-root[data-hovering="true"] .ov-canvas { cursor: pointer; }
-.ov-sky-host { position: absolute; inset: 0; z-index: 0; opacity: 0; transition: opacity 600ms var(--ov-ease); pointer-events: none; background: #000; }
-.ov-root[data-view="sky"] .ov-sky-host[data-ready="true"] { opacity: 1; }
+/* The Sky plugin fades the survey frame by frame (in step with the camera
+   reaching the Sun); a CSS transition would lag behind it. */
+.ov-sky-host { position: absolute; inset: 0; z-index: 0; opacity: 0; pointer-events: none; background: #000; }
 .ov-sky-host .aladin-container, .ov-sky-host > div { position: absolute !important; inset: 0; }
 /* Hide Aladin's own chrome; Oviz provides the controls. */
 .ov-sky-host .aladin-logo-container, .ov-sky-host .aladin-location, .ov-sky-host .aladin-fov,
@@ -243,6 +245,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 /* Chrome fades away in zen / presentation mode. */
 .ov-root[data-zen="true"] .ov-chrome { opacity: 0; transform: translateY(var(--ov-hide-dy, 0)); pointer-events: none; }
 .ov-chrome { transition: opacity 260ms var(--ov-ease), transform 320ms var(--ov-ease); }
+.ov-root[data-zen="true"] :is(.ov-callout, .ov-selbar) { opacity: 0; visibility: hidden; pointer-events: none; }
 
 /* ---- Top: the figure's title, search and tools ---------------------- */
 .ov-top {
@@ -526,10 +529,15 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   display: flex; flex-direction: column;
   border-radius: var(--ov-radius-lg);
   overflow: hidden;
-  transition: opacity 180ms var(--ov-ease), transform 220ms var(--ov-ease);
+  transition: opacity 180ms var(--ov-ease), transform 220ms var(--ov-ease), visibility 0s linear 0s;
 }
 .ov-panel.ov-glass { background: var(--ov-surface-strong); }
-.ov-panel[data-open="false"] { opacity: 0; pointer-events: none; }
+/* Closed panels leave the tab order and the accessibility tree once they
+   have faded out (visibility flips after the fade). */
+.ov-panel[data-open="false"] {
+  opacity: 0; pointer-events: none; visibility: hidden;
+  transition: opacity 180ms var(--ov-ease), transform 220ms var(--ov-ease), visibility 0s linear 220ms;
+}
 
 .ov-layers {
   top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top));
@@ -814,6 +822,8 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   user-select: text; -webkit-user-select: text;
 }
 .ov-palette-input::placeholder { color: var(--ov-text-3); }
+/* The palette itself is the focus context: no ring around its field. */
+.ov-root .ov-palette-input:focus-visible { outline: none; }
 .ov-palette-list { max-height: min(52vh, 460px); overflow: auto; padding: 6px; scrollbar-width: thin; }
 .ov-palette-group { padding: 10px 10px 4px; font: 650 10px/1 var(--ov-font); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ov-text-3); }
 .ov-palette-item {
@@ -861,6 +871,8 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   background: var(--ov-surface-strong);
   animation: ov-menu-in 160ms var(--ov-ease);
   transform-origin: top right;
+  max-height: calc(100% - 16px);
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
 }
 @keyframes ov-menu-in { from { opacity: 0; transform: scale(0.97) translateY(-4px); } }
 .ov-pop-title { padding: 8px 10px 6px; font: 600 10px/1 var(--ov-font); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ov-text-3); }
@@ -998,14 +1010,17 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   transform: translateX(-50%);
   border-radius: 18px;
   overflow: hidden;
-  transition: opacity 260ms var(--ov-ease), transform 320ms var(--ov-ease);
+  transition: opacity 260ms var(--ov-ease), transform 320ms var(--ov-ease), visibility 0s linear 0s;
   z-index: 12;
 }
-.ov-story[data-open="false"] { opacity: 0; transform: translateX(-50%) translateY(14px); pointer-events: none; }
+.ov-story[data-open="false"] {
+  opacity: 0; transform: translateX(-50%) translateY(14px); pointer-events: none; visibility: hidden;
+  transition: opacity 260ms var(--ov-ease), transform 320ms var(--ov-ease), visibility 0s linear 320ms;
+}
 .ov-story.ov-glass, .ov-present.ov-glass { background: var(--ov-surface-strong); }
 .ov-story-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 16px; }
 .ov-story-title { font: 680 14px/1 var(--ov-font-display); }
-.ov-story-count { font: 550 11.5px/1 var(--ov-font); color: var(--ov-text-3); font-variant-numeric: tabular-nums; }
+.ov-story-count { font: 550 11.5px/1 var(--ov-font); color: var(--ov-text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ov-grow { flex: 1; }
 .ov-story-strip {
   display: flex; gap: 10px; align-items: stretch;
@@ -1071,9 +1086,12 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   padding: 12px 12px 12px 12px;
   border-radius: 20px;
   z-index: 20;
-  transition: opacity 320ms var(--ov-ease), transform 360ms var(--ov-ease);
+  transition: opacity 320ms var(--ov-ease), transform 360ms var(--ov-ease), visibility 0s linear 0s;
 }
-.ov-present[data-open="false"] { opacity: 0; transform: translateX(-50%) translateY(20px); pointer-events: none; }
+.ov-present[data-open="false"] {
+  opacity: 0; transform: translateX(-50%) translateY(20px); pointer-events: none; visibility: hidden;
+  transition: opacity 320ms var(--ov-ease), transform 360ms var(--ov-ease), visibility 0s linear 360ms;
+}
 .ov-present .ov-ibtn { width: 44px; height: 44px; background: var(--ov-hover); }
 .ov-present .ov-ibtn:hover { background: var(--ov-active); }
 .ov-present-text { display: grid; gap: 5px; justify-items: center; text-align: center; min-width: 0; }
@@ -1099,9 +1117,12 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   display: flex; gap: 5px;
   width: min(560px, calc(100vw - 2 * var(--ov-gutter) - 40px));
   z-index: 21;
-  transition: opacity 320ms var(--ov-ease), transform 380ms var(--ov-ease);
+  transition: opacity 320ms var(--ov-ease), transform 380ms var(--ov-ease), visibility 0s linear 0s;
 }
-.ov-present-progress[data-open="false"] { opacity: 0; transform: translateX(-50%) translateY(-12px); pointer-events: none; }
+.ov-present-progress[data-open="false"] {
+  opacity: 0; transform: translateX(-50%) translateY(-12px); pointer-events: none; visibility: hidden;
+  transition: opacity 320ms var(--ov-ease), transform 380ms var(--ov-ease), visibility 0s linear 380ms;
+}
 .ov-present-seg { flex: 1; min-width: 0; height: 18px; padding: 7px 0; border: 0; background: none; }
 .ov-present-seg span { display: block; height: 3px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, 0.2); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transition: background var(--ov-dur); }
 .ov-present-seg:hover span { background: rgba(255, 255, 255, 0.34); }
@@ -1181,7 +1202,12 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   /* Bottom: corner controls stack above the full-width dock. */
   .ov-bottom { grid-template-columns: 1fr; gap: 8px; }
   .ov-bottom-left { position: absolute; left: 0; bottom: calc(var(--ov-dock-h) + 8px); }
-  .ov-bottom-right { position: absolute; right: 0; bottom: calc(var(--ov-dock-h) + 8px); }
+  /* Wrap rather than run off the left edge: the Sky extras take their own
+     row above the 3D/Sky switch when the screen is narrow. */
+  .ov-bottom-right {
+    position: absolute; right: 0; bottom: calc(var(--ov-dock-h) + 8px);
+    flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 2 * var(--ov-gutter));
+  }
   .ov-colorbars { display: none; }
   .ov-scale { padding: 7px 10px 8px; min-width: 76px; }
   .ov-scale-sub { display: none; }
@@ -1196,7 +1222,9 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
   .ov-story { width: calc(100vw - 2 * var(--ov-gutter)); bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom) + 52px); }
   .ov-card { width: 132px; }
-  .ov-story-head .ov-btn span:not(.ov-icon) { display: none; }
+  .ov-story-head { gap: 6px; padding-left: 14px; }
+  .ov-story-head .ov-btn .ov-btn-label { display: none; }
+  .ov-story-head .ov-btn { width: 36px; height: 36px; padding: 0; }
   .ov-present { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ov-present-exit { grid-column: 1 / -1; justify-self: center; }
   .ov-palette { top: calc(10px + var(--ov-safe-top)); border-radius: 16px; }
@@ -1204,6 +1232,13 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   .ov-toasts { top: calc(58px + var(--ov-safe-top)); }
   .ov-hovercard { display: none; }
   .ov-rec-pill { top: calc(58px + var(--ov-safe-top)); }
+  .ov-selbar { bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom) + 52px); max-width: calc(100vw - 2 * var(--ov-gutter)); }
+}
+
+/* The smallest phones: the 3D/Sky switch shows icons only, so the corner
+   row clears the scale. */
+@media (max-width: 360px) {
+  .ov-seg--view button { font-size: 0; gap: 0; padding: 0 10px; }
 }
 
 @media (pointer: coarse) {
@@ -1354,7 +1389,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   [data-oviz-mode="detailed"] .ov-search-trigger { width: min(260px, 24vw); }
 }
 @media (min-width: 1181px) {
-  [data-oviz-mode="detailed"] .ov-dock { width: min(880px, calc(100vw - 2 * var(--ov-gutter) - 600px)); min-width: 560px; }
+  [data-oviz-mode="detailed"] .ov-dock:not(.ov-bar-only) { width: min(880px, calc(100vw - 2 * var(--ov-gutter) - 600px)); min-width: 560px; }
 }
 
 /* -------------------------------------------------------- modes · phones
@@ -1377,6 +1412,10 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
     bottom: calc(var(--ov-dock-h) + 24px + var(--ov-safe-bottom));
     width: auto; max-width: none;
   }
+  /* Sheets and the docked card cover the corners above the bar: the key,
+     scale and corner buttons step aside instead of peeking out beneath. */
+  :is(.ov-bottom-left, .ov-bottom-right) { transition: opacity 160ms var(--ov-ease); }
+  .ov-root:is([data-callout="true"], [data-story="true"], [data-layers="true"], [data-details="true"]) :is(.ov-bottom-left, .ov-bottom-right) { opacity: 0; pointer-events: none; }
   .ov-legend .ov-legend-item { height: 22px; font-size: 12px; }
 }
 
@@ -2849,7 +2888,7 @@ return { GLError, createContext, enableExtensions, createProgram, Program, creat
 })();
 
 // ---- engine/camera.js ----
-const { UP, makePose, clonePose, forwardFromAngles, anglesFromForward, poseEye, poseFromEyeTarget, lerpPose, Camera, poseTween } = (() => {
+const { UP, PITCH_LIMIT, sanitizePose, makePose, clonePose, forwardFromAngles, anglesFromForward, poseEye, poseFromEyeTarget, lerpPose, Camera, poseTween } = (() => {
 // Camera model shared by the Galactic 3D view and the Sun-centred Sky view.
 //
 // The pose is (target, distance, yaw, pitch, fov). Galactic +z is always up,
@@ -2861,6 +2900,20 @@ const { UP, makePose, clonePose, forwardFromAngles, anglesFromForward, poseEye, 
 
 
 const UP = [0, 0, 1];
+
+/** Orbits stop just short of straight up/down, where yaw is undefined. */
+const PITCH_LIMIT = 89.5 * DEG;
+
+/**
+ * Keep a pose inside the orbit limits (in place). Exactly straight up or
+ * down has no yaw; the look-at then put +x to the right, so keep that view.
+ */
+function sanitizePose(p) {
+  if (!Number.isFinite(p.pitch)) p.pitch = 0;
+  if (Math.abs(p.pitch) >= Math.PI / 2 - 1e-9) p.yaw = Math.PI / 2;
+  p.pitch = clamp(p.pitch, -PITCH_LIMIT, PITCH_LIMIT);
+  return p;
+}
 
 function makePose(p = {}) {
   return {
@@ -2913,7 +2966,9 @@ function poseFromEyeTarget(eye, target, fov = 45) {
   const d = [target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]];
   const distance = Math.hypot(d[0], d[1], d[2]);
   const a = anglesFromForward(distance > 0 ? d : [1, 0, 0]);
-  return makePose({ target, distance, yaw: a.yaw, pitch: a.pitch, fov });
+  // A top-down eye (no horizontal offset) has no yaw: treat it as ±90°.
+  if (Math.hypot(d[0], d[1]) <= 1e-9 * Math.max(distance, 1)) a.pitch = Math.sign(a.pitch || -1) * Math.PI / 2;
+  return sanitizePose(makePose({ target, distance, yaw: a.yaw, pitch: a.pitch, fov }));
 }
 
 function lerpPose(a, b, t, out = makePose()) {
@@ -3042,7 +3097,7 @@ function poseTween(from, to, durationMs, ease = easeInOutCubic) {
     },
   };
 }
-return { UP, makePose, clonePose, forwardFromAngles, anglesFromForward, poseEye, poseFromEyeTarget, lerpPose, Camera, poseTween };
+return { UP, PITCH_LIMIT, sanitizePose, makePose, clonePose, forwardFromAngles, anglesFromForward, poseEye, poseFromEyeTarget, lerpPose, Camera, poseTween };
 })();
 
 // ---- engine/renderer.js ----
@@ -3055,6 +3110,9 @@ const { Renderer } = (() => {
 
 
 
+
+// Largest capture we ask for (Chrome's drawing-buffer area limit).
+const MAX_CAPTURE_PIXELS = 7680 * 4320;
 
 class Renderer {
   constructor(canvas, { maxDpr = 2 } = {}) {
@@ -3085,6 +3143,7 @@ class Renderer {
     this._running = false;
     this._resizeObserver = new ResizeObserver(() => this.resize());
     this._resizeObserver.observe(canvas.parentElement || canvas);
+    this._watchDpr();
     this.contextLost = false;
     this.onContextRestored = null;
     canvas.addEventListener("webglcontextlost", (e) => {
@@ -3101,6 +3160,12 @@ class Renderer {
       this.invalidate();
     });
     this.resize();
+  }
+
+  /** Re-measure when the window moves to a display with another pixel ratio. */
+  _watchDpr() {
+    const mq = window.matchMedia?.(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    mq?.addEventListener?.("change", () => { this.resize(); this._watchDpr(); }, { once: true });
   }
 
   add(layer) {
@@ -3218,6 +3283,9 @@ class Renderer {
       this.frameCount++;
       for (const fn of this.afterRender) fn(now);
     }
+    // While the context is lost nothing can draw: wait for the restore
+    // handler (it invalidates) instead of spinning every frame.
+    if (this.contextLost) return;
     if (this.continuous.size > 0 || this.dirty || this.interacting) this._schedule();
   }
 
@@ -3236,6 +3304,7 @@ class Renderer {
       cssHeight: this.height,
       dpr: this.dpr,
       interacting: this.interacting,
+      capture: !!this._capturing,
     };
     for (const layer of this.layers) if (layer.visible !== false) layer.prepare?.(frame);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -3258,10 +3327,16 @@ class Renderer {
    * browser presents (and clears) the drawing buffer.
    */
   async capture({ scale = 1, background = null, type = "image/png", quality } = {}) {
+    const gl = this.gl;
     const w = this.width, h = this.height;
     const prevDpr = this.dpr;
-    const dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr) * scale;
-    const W = Math.round(w * dpr), H = Math.round(h * dpr);
+    let dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr) * scale;
+    // Browsers cap the drawing buffer (Chrome: 7680×4320 worth of pixels);
+    // a larger canvas is silently cropped. Stay inside the caps.
+    const maxDim = Math.min(gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0], gl.getParameter(gl.MAX_VIEWPORT_DIMS)[1], gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), 16384);
+    const fit = Math.min(1, maxDim / (w * dpr), maxDim / (h * dpr), Math.sqrt(MAX_CAPTURE_PIXELS / (w * dpr * h * dpr)));
+    dpr *= fit;
+    let W = Math.floor(w * dpr), H = Math.floor(h * dpr);
     let off = null, ctx = null;
     if (background) {
       off = document.createElement("canvas");
@@ -3277,12 +3352,24 @@ class Renderer {
     }
     this.canvas.width = W;
     this.canvas.height = H;
+    // Some browsers grant less than asked even inside the caps: render at
+    // what was granted and scale it onto the background.
+    if (gl.drawingBufferWidth < W || gl.drawingBufferHeight < H) {
+      const k = Math.min(gl.drawingBufferWidth / W, gl.drawingBufferHeight / H);
+      dpr *= k;
+      W = Math.floor(w * dpr);
+      H = Math.floor(h * dpr);
+      this.canvas.width = W;
+      this.canvas.height = H;
+    }
     this.dpr = dpr;
+    this.lastCapture = { width: W, height: H };
     for (const layer of this.layers) layer.resize?.(this);
     const prevInteracting = this.interacting;
     this.interacting = false;
-    this.render();
-    if (ctx) ctx.drawImage(this.canvas, 0, 0);
+    this._capturing = true;
+    try { this.render(); } finally { this._capturing = false; }
+    if (ctx) ctx.drawImage(this.canvas, 0, 0, off.width, off.height);
     const source = off || this.canvas;
     const blobPromise = new Promise((resolve) => source.toBlob(resolve, type, quality));
     this.dpr = prevDpr;
@@ -3320,8 +3407,6 @@ const { Controls, keyMotion } = (() => {
 
 
 
-
-const PITCH_LIMIT = 89.5 * DEG;
 
 class Controls {
   constructor(element, renderer, { onChange, onInteractStart, onInteractEnd } = {}) {
@@ -3455,6 +3540,7 @@ class Controls {
   _wheel(e) {
     if (!this.enabled) return;
     e.preventDefault();
+    this.onInteractStart(e);
     let dy = e.deltaY;
     if (e.deltaMode === 1) dy *= 16;
     else if (e.deltaMode === 2) dy *= 400;
@@ -3491,12 +3577,23 @@ class Controls {
     this._changed();
   }
 
+  /**
+   * Largest vertical field of view. In Sky view Aladin's TAN projection is
+   * at most 150° wide, so the WebGL view may not be wider than that either
+   * (or the survey and the data would stop registering).
+   */
+  maxFovFor(mode = this.mode) {
+    if (mode !== "sky") return this.maxFov;
+    const aspect = this.camera.aspect || 1;
+    return Math.min(this.maxFov, (2 * Math.atan(Math.tan(75 * DEG) / aspect)) / DEG);
+  }
+
   /** Zoom by `factor` (<1 zooms in) keeping the point under (x, y) fixed. */
   zoomAt(factor, x, y) {
     const p = this.pose;
     if (this.mode === "sky" || p.distance <= 1e-6) {
       const before = p.fov;
-      p.fov = clamp(p.fov * factor, this.minFov, this.maxFov);
+      p.fov = clamp(p.fov * factor, this.minFov, this.maxFovFor());
       // Keep the cursor direction steady while zooming.
       const cam = this.camera;
       if (x != null && cam.width > 0) {
@@ -3533,22 +3630,20 @@ class Controls {
     const v = this.velocity;
     let moved = false;
     if (this.pointers.size === 0) {
+      // Velocities are per 16 ms: scale each step by the frame time so a
+      // fling travels as far on a 120 Hz screen as on a 60 Hz one.
       const decay = Math.pow(1 - this.damping, dt / 16);
+      const k = dt / 16;
       if (Math.abs(v.yaw) + Math.abs(v.pitch) > 1e-5) {
-        if (this.mode === "sky") {
-          this.pose.yaw += v.yaw;
-          this.pose.pitch = clamp(this.pose.pitch + v.pitch, -PITCH_LIMIT, PITCH_LIMIT);
-        } else {
-          this.pose.yaw += v.yaw;
-          this.pose.pitch = clamp(this.pose.pitch + v.pitch, -PITCH_LIMIT, PITCH_LIMIT);
-        }
+        this.pose.yaw += v.yaw * k;
+        this.pose.pitch = clamp(this.pose.pitch + v.pitch * k, -PITCH_LIMIT, PITCH_LIMIT);
         v.yaw *= decay; v.pitch *= decay;
         moved = true;
       } else {
         v.yaw = v.pitch = 0;
       }
       if (Math.abs(v.panX) + Math.abs(v.panY) > 0.05) {
-        this.pan(v.panX, v.panY);
+        this.pan(v.panX * k, v.panY * k);
         v.panX *= decay; v.panY *= decay;
         moved = true;
       } else {
@@ -3766,8 +3861,17 @@ function cpuFramePosition(positions, posFrames, count, index, frame, out = [0, 0
   const ax = positions[a], bx = positions[b];
   const hasA = ax === ax, hasB = bx === bx;
   if (!hasA && !hasB) return null;
-  if (!hasA) { out[0] = bx; out[1] = positions[b + 1]; out[2] = positions[b + 2]; return out; }
-  if (!hasB || t <= 0) { out[0] = ax; out[1] = positions[a + 1]; out[2] = positions[a + 2]; return out; }
+  // Entering or leaving the catalogue the GPU fades the point by presence
+  // (t, or 1 − t) and draws nothing at zero: labels and picks must agree.
+  if (!hasA) {
+    if (t <= 1e-3) return null;
+    out[0] = bx; out[1] = positions[b + 1]; out[2] = positions[b + 2]; return out;
+  }
+  if (!hasB) {
+    if (t >= 1 - 1e-3) return null;
+    out[0] = ax; out[1] = positions[a + 1]; out[2] = positions[a + 2]; return out;
+  }
+  if (t <= 0) { out[0] = ax; out[1] = positions[a + 1]; out[2] = positions[a + 2]; return out; }
   const f0 = Math.max(f1 - 1, 0), f3 = Math.min(f2 + 1, posFrames - 1);
   const p0 = (f0 * count + index) * 3, p3 = (f3 * count + index) * 3;
   const t2 = t * t, t3 = t2 * t;
@@ -4130,6 +4234,9 @@ uniform float uWidthPx;
 uniform float uDimOpacity;
 uniform int uHasAge;
 uniform float uMemberFade;
+uniform highp sampler2D uAuxTex;     // per-frame opacity, colour value
+uniform int uAuxFrames;
+uniform int uHasAux;
 
 out vec3 vColor;
 out float vScalar;
@@ -4149,10 +4256,19 @@ void main() {
   float ds = 1.0 / float(${TRAIL_SEGMENTS});
   float last = float(uFrames - 1);
   float pres, pa, pb;
-  vec4 c = clipAt(index, clamp(uFrame - uSpan * s, 0.0, last), pres);
+  float fs = clamp(uFrame - uSpan * s, 0.0, last);
+  vec4 c = clipAt(index, fs, pres);
   vec4 ca = clipAt(index, clamp(uFrame - uSpan * max(s - ds, 0.0), 0.0, last), pa);
   vec4 cb = clipAt(index, clamp(uFrame - uSpan * min(s + ds, 1.0), 0.0, last), pb);
-  float eff = aStatic.x * uOpacityScale * pres;
+  // Opacity and colour value where the object was at this point of the trail.
+  float opacity = aStatic.x;
+  float scalar = aStatic.y;
+  if (uHasAux == 1) {
+    vec4 aux = frameScalars(uAuxTex, index, uCount, uAuxFrames, fs);
+    opacity = aux.x;
+    scalar = aux.y;
+  }
+  float eff = opacity * uOpacityScale * pres;
   int st = int(aState + 0.5);
   if ((st & 18) != 0) eff = 0.0;
   else if ((st & 9) != 0) eff *= uDimOpacity;
@@ -4177,7 +4293,7 @@ void main() {
   float tail = 1.0 - s;
   vAlpha = eff * tail * tail;
   vColor = aColor;
-  vScalar = aStatic.y;
+  vScalar = scalar;
   vSide = aTrail.y;
 }
 `;
@@ -4381,6 +4497,7 @@ class PointBatch {
   setStateBits(mask, values) {
     const gl = this.gl;
     const s = this.state;
+    this.stateVersion = (this.stateVersion || 0) + 1;
     for (let i = 0; i < s.length; i++) s[i] = (s[i] & ~mask) | (values ? values[i] & mask : 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.state);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, s);
@@ -4499,6 +4616,11 @@ class PointsLayer {
       }
       prog.tex("uFrameTex", batch.frameTex.texture);
       prog.i("uCount", batch.count).i("uFrames", batch.texFrames);
+      if (batch.hasAux) {
+        prog.tex("uAuxTex", batch.auxTex.texture).i("uAuxFrames", batch.auxFrames).i("uHasAux", 1);
+      } else {
+        prog.tex("uAuxTex", batch.frameTex.texture).i("uAuxFrames", 1).i("uHasAux", 0);
+      }
       const off = frameOffset(batch.offsets, p.frame);
       prog.v3("uOffset", off[0], off[1], off[2]);
       prog.f("uOpacityScale", style.opacityScale * p.pointOpacity * Math.min(1, style.presence ?? 1));
@@ -4579,6 +4701,9 @@ class PointsLayer {
     this.pickProgram.dispose();
     this.trailProgram?.dispose();
     if (this.trailBuffer) this.gl.deleteBuffer(this.trailBuffer);
+    for (const tex of this.cmapTextures.values()) this.gl.deleteTexture(tex);
+    this.cmapTextures.clear();
+    this.gl.deleteTexture(this.fallbackCmap);
   }
 }
 return { resetStarTextures, starTextures, PointsLayer };
@@ -4761,6 +4886,7 @@ class LinesLayer {
       b.buffers.forEach((x) => gl.deleteBuffer(x));
       gl.deleteTexture(b.frameTex.texture);
     }
+    gl.deleteBuffer(this.cornerBuffer);
     this.program.dispose();
   }
 }
@@ -5086,6 +5212,12 @@ class VolumesLayer {
   /** Upload a volume. `data` is Uint8Array (z, y, x); `occ` optional block maxima. */
   addVolume(spec, data, occ) {
     const gl = this.gl;
+    // Replacing a volume frees the old textures (never leak GPU memory).
+    const old = this.volumes.get(spec.key);
+    if (old) {
+      gl.deleteTexture(old.tex);
+      if (old.occTex) gl.deleteTexture(old.occTex);
+    }
     const [nx, ny, nz] = spec.dims;
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_3D, tex);
@@ -5125,8 +5257,11 @@ class VolumesLayer {
     const draws = p.volumeDraws || [];
     if (!draws.length) { this._visible = false; return; }
     this._visible = true;
-    // Quality: march at half resolution while the view moves.
-    const scale = frame.interacting ? Math.min(0.5, this.quality) : this.quality;
+    // Quality: march at half resolution while the view moves. Large
+    // captures cap the march target (smooth volumes upsample cleanly and a
+    // full 8K float target would need hundreds of MB).
+    let scale = frame.interacting ? Math.min(0.5, this.quality) : this.quality;
+    if (frame.capture) scale = Math.min(scale, 4096 / Math.max(frame.width, frame.height));
     const w = Math.max(1, Math.round(frame.width * scale));
     const h = Math.max(1, Math.round(frame.height * scale));
     const key = [frame.camera.version, w, h, p.frame.toFixed(5), p.volumeSignature, frame.width, frame.height].join("|");
@@ -5371,7 +5506,7 @@ return { LabelsOverlay };
 })();
 
 // ---- app/timeline.js ----
-const { Timeline, formatTime, birthProfile } = (() => {
+const { Timeline, formatTime, birthProfile, birthFadeAt } = (() => {
 // Continuous time over a discrete frame grid.
 //
 // The figure stores frames at fixed times; the viewer treats time as a real
@@ -5488,9 +5623,10 @@ class Timeline {
     let f = this.frame + this.direction * this.baseFps * this.speed * dt;
     const last = this.count - 1;
     if (f > last || f < 0) {
-      if (this.loop) {
-        f = this.direction > 0 ? f - last : last + f;
-        f = clamp(f, 0, last);
+      if (this.loop && last > 0) {
+        // Wrap by the whole span: a long tick (fast playback, few frames)
+        // may pass the end more than once.
+        f = ((f % last) + last) % last;
       } else {
         f = clamp(f, 0, last);
         this.playing = false;
@@ -5545,7 +5681,27 @@ function birthProfile(timeline, ageArrays, bins = 96) {
   }
   return out;
 }
-return { Timeline, formatTime, birthProfile };
+
+/**
+ * CPU twin of the point shader's birth fade: how visible (0–1) an object of
+ * this present-day age is at time t. Objects without an age always show.
+ */
+function birthFadeAt(t, ageNow, fade = 0, inOut = false) {
+  if (!(ageNow === ageNow) || ageNow <= -1e29) return 1;
+  const birth = -ageNow;
+  const smooth = (x) => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
+  if (fade <= 1e-9) {
+    if (t < birth) return 0;
+    if (!inOut) return 1;
+    return Math.abs(t - birth) <= 1e-9 ? 1 : 0;
+  }
+  if (t < birth - fade) return 0;
+  if (t <= birth) return smooth((t - (birth - fade)) / fade);
+  if (!inOut) return 1;
+  if (t <= birth + fade) return 1 - smooth((t - birth) / fade);
+  return 0;
+}
+return { Timeline, formatTime, birthProfile, birthFadeAt };
 })();
 
 // ---- app/state.js ----
@@ -5765,6 +5921,11 @@ function legacySnapshotToState(snap, manifest, base) {
   if (Array.isArray(snap.manual_labels)) {
     st.ext = { ...(st.ext || {}), notes: snap.manual_labels.map(legacyNote).filter(Boolean) };
   }
+  // A classic click selection names its cluster; it is found by name on apply.
+  const cs = snap.current_selection;
+  if (cs && typeof cs === "object" && cs.cluster_name) {
+    st.ext = { ...(st.ext || {}), ui: { selection: { traceName: String(cs.trace_name || ""), name: String(cs.cluster_name) }, layers: null, details: null } };
+  }
   const fv = Number(snap.current_frame_value ?? snap.current_frame_index);
   if (Number.isFinite(fv)) st.time.frame = fv;
   const mode = gc.camera_view_mode === "earth" ? "sky" : "3d";
@@ -5859,6 +6020,9 @@ class Viewer extends Emitter {
     this.world = manifest.world || {};
     this.renderer.sceneRadius = Math.max(this.world.maxSpan || 1e4, 1000);
     this.state = initialViewerState(manifest);
+    // The initial state may open on another frame (classic exports do).
+    const openFrame = Number(this.state.time.frame);
+    if (Number.isFinite(openFrame) && Math.abs(openFrame - this.timeline.frame) > 1e-9) this.timeline.setFrame(openFrame, { silent: true });
     this.hover = null;
     this.selection = [];
     this.tween = null;
@@ -5872,7 +6036,8 @@ class Viewer extends Emitter {
     this._buildLayers();
     this.controls = new Controls(this.canvas, this.renderer, {
       onChange: () => this._onCameraChange(),
-      onInteractStart: () => this._cancelTween(),
+      // Grabbing the camera ends any flight or State transition.
+      onInteractStart: () => { this._cancelTween(); this.emit("camera-takeover", {}); },
     });
     this.controls.maxDistance = Math.max(this.world.maxSpan || 1e4, 1e3) * 8;
     this.labels = new LabelsOverlay(container);
@@ -5949,6 +6114,8 @@ class Viewer extends Emitter {
    * without re-decoding; plugins rebuild their own layers on "gpu-restored".
    */
   async _restoreGPU() {
+    // Loaders still streaming into the dead context's layers must stop.
+    this._gpuGeneration = (this._gpuGeneration || 0) + 1;
     resetStarTextures();
     this.data.clear();
     this.pickIds = [];
@@ -5965,12 +6132,15 @@ class Viewer extends Emitter {
   }
 
   async attachImages() {
+    const gen = this._gpuGeneration || 0;
+    const layer = this.images;
     for (const img of this.manifest.images || []) {
       try {
         const blob = await this.store.get(img.image.blob);
         const centers = img.center?.blob ? await this.store.get(img.center.blob) : null;
         const opac = img.opacity?.blob ? await this.store.get(img.opacity.blob) : null;
-        await this.images.add(img, blob, centers, opac);
+        if (gen !== (this._gpuGeneration || 0) || layer !== this.images) return;
+        await layer.add(img, blob, centers, opac);
         this.renderer.invalidate();
       } catch (err) {
         console.warn("Oviz: image plane failed to load", img.key, err);
@@ -5981,6 +6151,8 @@ class Viewer extends Emitter {
   async attachVolumes(onEach) {
     // Smallest first so something appears quickly.
     const specs = [...this.volumeSpecs].sort((a, b) => a.dims[0] * a.dims[1] * a.dims[2] - b.dims[0] * b.dims[1] * b.dims[2]);
+    const gen = this._gpuGeneration || 0;
+    const layer = this.volumes;
     for (const spec of specs) {
       try {
         const data = await this.store.get(spec.data.blob);
@@ -5989,7 +6161,8 @@ class Viewer extends Emitter {
           const o = await this.store.get(spec.occupancy.blob);
           occ = { data: o, gx: spec.occupancy.dims[0], gy: spec.occupancy.dims[1], gz: spec.occupancy.dims[2] };
         }
-        this.volumes.addVolume(spec, data, occ);
+        if (gen !== (this._gpuGeneration || 0) || layer !== this.volumes) return;
+        layer.addVolume(spec, data, occ);
         this.renderer.invalidate();
         onEach?.(spec);
         this.emit("volume-ready", spec);
@@ -6219,10 +6392,11 @@ class Viewer extends Emitter {
    * {done: false} if the flight was interrupted (user input, a new flight).
    */
   animateTo(pose, { duration = 1100, onDone, ease } = {}) {
+    this.emit("camera-takeover", {});
     this._cancelTween();
     this.controls.stop();
     const d = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : duration;
-    const tween = poseTween(this.renderer.camera.pose, pose, d, ease);
+    const tween = poseTween(this.renderer.camera.pose, sanitizePose(clonePose(pose)), d, ease);
     this.tween = tween;
     this.renderer.hold("tween");
     return new Promise((resolve) => {
@@ -6236,7 +6410,7 @@ class Viewer extends Emitter {
 
   setPose(pose) {
     this._cancelTween();
-    Object.assign(this.renderer.camera.pose, clonePose(pose));
+    Object.assign(this.renderer.camera.pose, sanitizePose(clonePose(pose)));
     this._onCameraChange();
     this.renderer.invalidate();
   }
@@ -6286,6 +6460,8 @@ class Viewer extends Emitter {
   }
 
   async setViewMode(mode, { animate = true } = {}) {
+    // A State transition in flight hands over first (it may change the mode).
+    this.emit("camera-takeover", {});
     if (mode === this.state.view.mode) return;
     const from = this.state.view.mode;
     this.state.view.mode = mode;
@@ -6361,13 +6537,15 @@ class Viewer extends Emitter {
     if (sig !== this._pickSig) {
       this.pickTarget.resize(w, h);
       this.pickTarget.bind();
+      // Layers leave the depth mask off, and a masked clear skips depth:
+      // without this, old depth piles up and hides objects from picking.
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthMask(true);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       const frame = {
         gl, camera: r.camera, width: w, height: h, cssWidth: w, cssHeight: h, dpr: 1, interacting: false,
       };
-      gl.enable(gl.DEPTH_TEST);
-      gl.depthMask(true);
       this.points.drawPick(frame);
       this.skyPickDraw?.(frame);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -6865,7 +7043,8 @@ function installTooltips(root) {
   let timer = 0;
   const show = (el) => {
     const text = el.getAttribute("data-tip");
-    if (!text) return;
+    // No tip over a button whose menu is already open.
+    if (!text || el.getAttribute("aria-expanded") === "true") return;
     const [main, keys] = text.split("  ");
     tip.textContent = main;
     if (keys) {
@@ -6945,7 +7124,7 @@ class LayersPanel {
     this.el = h("section", { class: "ov-panel ov-layers ov-glass ov-chrome", "aria-label": "Layers", "data-open": "true" });
     this.head = h("div", { class: "ov-panel-head" },
       h("span", { class: "ov-panel-title" }, "Layers"),
-      iconButton("close", "Hide layers", () => ui.setLayersOpen(false), { shortcut: "L" }),
+      iconButton("close", "Hide layers", () => ui.setLayersOpen(false), { shortcut: "⇧L" }),
     );
     this.body = h("div", { class: "ov-panel-body" });
     this.el.append(this.head, this.body);
@@ -6968,6 +7147,8 @@ class LayersPanel {
   render() {
     clear(this.body);
     this.rows.clear();
+    // Rows are rebuilt closed, so no editor is open any more.
+    this.expanded = null;
     const v = this.viewer;
     const m = this.manifest;
     const groups = m.groups?.order || [];
@@ -7415,11 +7596,15 @@ class TimelineDock {
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
     el.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowLeft" || e.key === "ArrowDown") { tl.step(e.shiftKey ? -5 : -1); e.preventDefault(); }
-      else if (e.key === "ArrowRight" || e.key === "ArrowUp") { tl.step(e.shiftKey ? 5 : 1); e.preventDefault(); }
-      else if (e.key === "Home") { tl.setFrame(0); e.preventDefault(); }
-      else if (e.key === "End") { tl.setFrame(tl.count - 1); e.preventDefault(); }
-      e.stopPropagation();
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      let handled = true;
+      if (e.key === "ArrowLeft" || e.key === "ArrowDown") tl.step(e.shiftKey ? -5 : -1);
+      else if (e.key === "ArrowRight" || e.key === "ArrowUp") tl.step(e.shiftKey ? 5 : 1);
+      else if (e.key === "Home") tl.setFrame(0);
+      else if (e.key === "End") tl.setFrame(tl.count - 1);
+      else handled = false;
+      // Every other key (Space, Esc, U, V…) still reaches the figure.
+      if (handled) { e.preventDefault(); e.stopPropagation(); }
     });
     return { el, fill, thumb, markers, bubble, heat, heatLit };
   }
@@ -7562,8 +7747,11 @@ class Inspector {
   show(hit) {
     this.current = hit;
     this.el.dataset.open = hit ? "true" : "false";
+    this.ui.root.dataset.details = String(!!hit);
     if (hit) this.refresh();
     else { this.dyn = null; this.track = null; }
+    // The selection callout hides while the panel is open.
+    this.ui.reticle?.update();
   }
 
   async refresh() {
@@ -8469,11 +8657,12 @@ class AladinSky {
     if (!a) return;
     const sig = `${lDeg.toFixed(6)}|${bDeg.toFixed(6)}|${hfovDeg.toFixed(5)}`;
     if (sig === this.lastSig) return;
-    this.lastSig = sig;
     try {
       a.gotoPosition(((lDeg % 360) + 360) % 360, bDeg);
       a.setFoV(Math.min(Math.max(hfovDeg, 1e-4), 179));
       a.view?.requestRedraw?.();
+      // Only now is the pose Aladin's: a failed push is retried next frame.
+      this.lastSig = sig;
     } catch (err) {
       // Aladin throws while its WebGL context is still warming up.
     }
@@ -8514,13 +8703,19 @@ class AladinSky {
     } catch (_) { /* ignore */ }
     const overlays = visible.slice(0, -1).reverse(); // bottom → top
     const wantKeys = overlays.map((l) => l.key);
-    const sameOrder = this.order.filter((k) => wantKeys.includes(k)).join("|") === wantKeys.filter((k) => this.order.includes(k)).join("|");
-    if (!sameOrder) {
-      for (const [key, o] of this.overlays) this._detach(key, o);
+    // Aladin always adds an overlay on top of the stack. Keep the attached
+    // layers that already sit in the wanted order, and detach everything
+    // above the first difference so it is re-added in order below.
+    let keep = 0;
+    while (keep < this.order.length && keep < wantKeys.length && this.order[keep] === wantKeys[keep]) keep++;
+    for (const key of this.order.slice(keep)) {
+      const o = this.overlays.get(key);
+      if (o) this._detach(key, o);
     }
     for (const [key, o] of this.overlays) {
       if (!wantKeys.includes(key)) this._detach(key, o);
     }
+    const attached = this.order.slice(0, keep);
     for (const l of overlays) {
       let o = this.overlays.get(l.key);
       const opacity = Math.min(1, Math.max(0, l.opacity ?? 1));
@@ -8537,6 +8732,7 @@ class AladinSky {
         }
         o = { name, hips, opacity: -1 };
         this.overlays.set(l.key, o);
+        attached.push(l.key);
       }
       if (Math.abs(o.opacity - opacity) > 1e-4) {
         o.opacity = opacity;
@@ -8544,7 +8740,8 @@ class AladinSky {
       }
       this._applyStyle(o, l);
     }
-    this.order = wantKeys;
+    // The real stack (an overlay that failed to attach is not in it).
+    this.order = attached;
   }
 
   _setOpacity(o, opacity) {
@@ -8704,6 +8901,8 @@ class MembersLayer {
     const clusterOf = new Float32Array(count);
     const rel = new Float32Array(count * 3);
     this.clusterOfStar = new Uint32Array(count);
+    // Clusters with no placeable star keep their own marker in Sky view.
+    this.clusterHasStars = new Uint8Array(this.clusterCount);
     for (let c = 0; c < this.clusterCount; c++) {
       const a = offsets[c], b = offsets[c + 1];
       let mx = 0, my = 0, mz = 0, n = 0;
@@ -8711,6 +8910,7 @@ class MembersLayer {
         if (!valid[i]) continue;
         mx += velocity[i * 3]; my += velocity[i * 3 + 1]; mz += velocity[i * 3 + 2]; n++;
       }
+      this.clusterHasStars[c] = n > 0 ? 1 : 0;
       if (n) { mx /= n; my /= n; mz /= n; }
       for (let i = a; i < b; i++) {
         clusterOf[i] = valid[i] ? c : -1;
@@ -8847,6 +9047,7 @@ class SkyPlugin {
     this.host = h("div", { class: "ov-sky-host", "aria-hidden": "true" });
     v.container.prepend(this.host);
     this.sky = new AladinSky(this.host);
+    this.ensureBaseLayer();
     this.memberTraceKeys = new Set(v.traces.filter((t) => t.points?.members).map((t) => t.key));
     v.memberTraces = this.memberTraceKeys;
     v.memberReveal = 0;
@@ -8911,7 +9112,7 @@ class SkyPlugin {
 
   async ensureSky() {
     if (this.sky.ready) return;
-    await this.sky.init({ survey: this.spec.survey, fov: 60 });
+    await this.sky.init({ survey: this.baseSurvey(), fov: 60 });
     const r = this.viewer.renderer;
     // In Sky view the viewer renders inside Aladin's frame (see AladinSky).
     this.sky.onBeforeDraw = (t) => r.externalTick(t);
@@ -8940,7 +9141,8 @@ class SkyPlugin {
         const batch = v.points.byKey.get(key);
         if (!batch) continue;
         const states = new Uint8Array(batch.count);
-        for (let i = 0; i < link.length; i++) states[i] = link[i] >= 0 ? 4 : 0;
+        const hasStars = this.members.clusterHasStars;
+        for (let i = 0; i < link.length; i++) states[i] = link[i] >= 0 && hasStars[link[i]] ? 4 : 0;
         batch.setStateBits(4, states);
       }
       this.members.visible = true;
@@ -9031,6 +9233,9 @@ class SkyPlugin {
     const op = smoothstep(0, 1, this.bgFade).toFixed(3);
     if (this.host.style.opacity !== op) this.host.style.opacity = op;
     if (inSky && this.sky.ready) {
+      // A narrower window lowers the widest field Aladin can match.
+      const cap = v.controls.maxFovFor("sky");
+      if (pose.fov > cap) pose.fov = cap;
       // Push the pose every frame the camera is in Sky view; with the
       // Aladin loop hook this lands in the same frame as the WebGL render.
       cam.update(r.sceneRadius);
@@ -9056,7 +9261,10 @@ class SkyPlugin {
       glow: g.glow,
     };
     if (reveal <= 0.002) return;
-    const sig = `${frame.toFixed(4)}|${v._pickVersion}|${reveal > 0}`;
+    // Parent state bits (filter / lasso) change without a new frame.
+    let bitsVersion = 0;
+    for (const { key } of this.links) bitsVersion += v.points.byKey.get(key)?.stateVersion || 0;
+    const sig = `${frame.toFixed(4)}|${v._pickVersion}|${bitsVersion}|${reveal > 0}`;
     if (sig === this._clusterSig) return;
     this._clusterSig = sig;
     const styles = v.points.params?.styles;
@@ -9069,15 +9277,20 @@ class SkyPlugin {
         const style = styles?.get(key);
         const trace = v.traceByKey.get(key);
         const d = v.data.get(key);
+        const bits = v.points.byKey.get(key)?.state;
         const base = parseColor(ts.color || trace.color);
         const opacityScale = ((ts.opacity ?? trace.opacity) / (trace.opacity || 1)) * g.pointOpacity * (style?.presence ?? 1);
         for (let i = 0; i < link.length; i++) {
           const c = link[i];
           if (c < 0 || state[c * 4 + 3] > 0) continue;
+          // Members share their cluster's filter and lasso state: hidden
+          // (2, 16) or dimmed (1, 8) exactly like the cluster marker.
+          const b = bits ? bits[i] : 0;
+          if (b & 18) continue;
           const p = v.objectPosition(key, i, frame);
           const p0 = v.objectPosition(key, i, zero);
           if (!p || !p0) continue;
-          let alpha = opacityScale;
+          let alpha = opacityScale * (b & 9 ? style?.dimOpacity ?? 0.16 : 1);
           const age = d.ageNow ? d.ageNow[i] : NaN;
           if (age === age) alpha *= t >= -age ? 1 : 0;
           state[c * 4] = p[0] - p0[0];
@@ -9125,6 +9338,28 @@ class SkyPlugin {
 
   layers() {
     return this.viewer.state.sky.layers || [];
+  }
+
+  /**
+   * A figure (or State) with no Sky layer list still shows its survey, as
+   * the classic viewer did; otherwise the background would stay blank with
+   * no row in the panel to turn it on.
+   */
+  ensureBaseLayer() {
+    const st = this.viewer.state.sky;
+    if (Array.isArray(st.layers) && st.layers.length) return;
+    const id = this.spec.survey || "P/DSS2/color";
+    st.layers = [{ key: id, survey: id, label: surveyLabel(id), opacity: 1, visible: true }];
+  }
+
+  /**
+   * The survey Aladin should start with: the bottom visible layer of the
+   * stack, so it does not first download (and then replace) a default.
+   */
+  baseSurvey() {
+    const visible = this.layers().filter((l) => l.visible !== false && (l.opacity ?? 1) > 0.001);
+    const bottom = visible[visible.length - 1];
+    return bottom?.survey || bottom?.key || this.spec.survey;
   }
 
   throttledApply() {
@@ -9262,12 +9497,18 @@ class SkyPlugin {
     const v = this.viewer;
     const prevMembers = v.state.sky.members;
     v.state.sky = cloneJson(sky);
+    this.ensureBaseLayer();
     this.applyLayers();
     this.renderLayerList();
     this.memberSeg?.set(v.state.sky.members);
     if (prevMembers !== v.state.sky.members && v.state.view.mode === "sky") this.revealMembers(v.state.sky.members === "stars");
     this.syncExtras();
   }
+}
+
+/** A readable name for a HiPS id ("P/DSS2/color" → "DSS2 color"). */
+function surveyLabel(id) {
+  return String(id).replace(/^https?:\/\/[^/]+\//, "").replace(/^P\//, "").replace(/\//g, " ").trim() || String(id);
 }
 return { SkyPlugin };
 })();
@@ -9294,7 +9535,8 @@ function decodeViewHash(hash) {
   for (const part of String(hash || "").replace(/^#/, "").split("&")) {
     const [k, val] = part.split("=");
     if (!k || val == null) continue;
-    out[k] = decodeURIComponent(val);
+    // A malformed escape in a pasted link must not stop the figure booting.
+    try { out[k] = decodeURIComponent(val); } catch (_) { /* ignore this part */ }
   }
   if (!out.c && !out.t) return null;
   const view = {};
@@ -9349,26 +9591,45 @@ function captureState(viewer, sky) {
   return s;
 }
 
-/** Read embedded States (v2 or legacy) into v2 items. */
+/** A transition spec, accepting `duration` as an alias (as Python does). */
+function readTransition(t, fallback = null) {
+  if (!t || typeof t !== "object") return fallback;
+  const ms = Number(t.duration_ms ?? t.duration);
+  return {
+    duration_ms: clamp(Number.isFinite(ms) ? ms : fallback?.duration_ms ?? 1200, 0, 60000),
+    easing: EASINGS[t.easing] ? String(t.easing) : fallback?.easing ?? "easeInOutCubic",
+  };
+}
+
+/**
+ * Read embedded States (v2 or legacy) into v2 items. Accepts the same
+ * aliases as the Python normaliser (oviz/threejs_states.py): `ordered_states`,
+ * `preserve_camera_on_navigation`, `camera_behavior`/`cameraBehavior`,
+ * `state` holding a legacy snapshot, and `transition.duration`.
+ */
 function importStates(manifest, baseState) {
   const block = manifest.states || {};
-  const items = Array.isArray(block.items) ? block.items : [];
+  const raw = block.items ?? block.ordered_states;
+  const items = Array.isArray(raw) ? raw : [];
+  const assets = block.assets && typeof block.assets === "object" ? block.assets : {};
+  const defaultCamera = block.preserve_camera_on_navigation ? "keep" : "follow";
   const out = [];
   for (const item of items) {
     if (!item || typeof item !== "object") continue;
     let state = null;
-    if (item.state && item.state.version === STATE_VERSION) state = cloneJson(item.state);
-    else if (item.snapshot) state = legacySnapshotToState(item.snapshot, manifest, baseState);
+    const snap = item.snapshot ?? item.state;
+    if (snap && snap.version === STATE_VERSION) state = cloneJson(snap);
+    else if (snap && typeof snap === "object") state = legacySnapshotToState(snap, manifest, baseState);
     if (!state) continue;
+    const cam = String(item.camera_behavior ?? item.cameraBehavior ?? item.camera ?? "").trim().toLowerCase();
+    const thumb = typeof item.thumb === "string" ? item.thumb : assets[item.thumb?.__oviz_asset_ref__];
     out.push({
       id: String(item.id || uid()),
       name: String(item.name || `View ${out.length + 1}`),
       caption: String(item.caption || ""),
-      thumb: typeof item.thumb === "string" ? item.thumb : "",
-      camera: item.camera_behavior === "keep" || item.camera === "keep" ? "keep" : "follow",
-      transition: item.transition && typeof item.transition === "object"
-        ? { duration_ms: clamp(Number(item.transition.duration_ms) || 1200, 0, 60000), easing: String(item.transition.easing || "easeInOutCubic") }
-        : null,
+      thumb: typeof thumb === "string" ? thumb : "",
+      camera: cam === "keep" || cam === "follow" ? cam : defaultCamera,
+      transition: readTransition(item.transition),
       state,
     });
   }
@@ -9376,9 +9637,7 @@ function importStates(manifest, baseState) {
     items: out,
     presentOnly: !!block.present_only,
     defaultMode: block.default_mode === "present" ? "present" : "edit",
-    defaultTransition: block.default_transition && typeof block.default_transition === "object"
-      ? { duration_ms: Number(block.default_transition.duration_ms) || 1200, easing: String(block.default_transition.easing || "easeInOutCubic") }
-      : { duration_ms: 1200, easing: "easeInOutCubic" },
+    defaultTransition: readTransition(block.default_transition, { duration_ms: 1200, easing: "easeInOutCubic" }),
     projectId: String(block.project_id || ""),
     autosave: block.autosave_drafts !== false,
   };
@@ -9417,12 +9676,15 @@ function resolvedTraceOpacity(viewer, st, key) {
  * {step(t) → applies the blended state, finish() → applies target exactly}.
  */
 function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
-  // A camera flight still in progress would override the State's camera
-  // once the transition lands, so the transition takes the camera over.
-  if (!keepCamera) viewer._cancelTween?.();
+  // A camera flight or fling still in progress would override the State's
+  // camera once the transition lands, so the transition takes it over.
+  if (!keepCamera) {
+    viewer._cancelTween?.();
+    viewer.controls?.stop?.();
+  }
   const from = captureState(viewer, sky);
   const to = cloneJson(target);
-  if (target.view?.pose) to.view.pose = clonePose(target.view.pose);
+  if (target.view?.pose) to.view.pose = sanitizePose(clonePose(target.view.pose));
   if (keepCamera) {
     to.view = { mode: from.view.mode, pose: clonePose(viewer.pose) };
   }
@@ -9442,6 +9704,9 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
   const skyByKeyB = new Map(skyB.map((l) => [l.key, l]));
   const skyKeys = [...new Set([...skyB.map((l) => l.key), ...skyA.map((l) => l.key)])];
   if (modeChange && to.view.mode === "sky") viewer.controls.mode = "sky";
+  // Leaving Sky: member stars fade out as the camera leaves the Sun, not
+  // after it has flown all the way into 3D.
+  if (modeChange && from.view.mode === "sky") sky?.revealMembers?.(false);
 
   function step(t) {
     const st = viewer.state;
@@ -9537,13 +9802,15 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
     if (Number.isFinite(to.time?.speed)) viewer.timeline.speed = to.time.speed;
     if (sky && to.sky) sky.applyState(to.sky);
     for (const [name, ext] of viewer.stateExtensions || []) ext.apply(to.ext ? to.ext[name] ?? null : null);
+    // Auto-orbit is camera behaviour: "keep" views leave it as it was.
+    if (keepCamera) st.global.autoOrbit = !!from.global?.autoOrbit;
     viewer.controls.autoOrbit = st.global.autoOrbit ? 0.06 : 0;
     viewer.volumes.invalidate();
     viewer.invalidatePick();
     viewer.renderer.invalidate();
   }
 
-  return { step, finish, modeChange, from, to };
+  return { step, finish, modeChange, keepCamera, from, to };
 }
 
 function easing(name) {
@@ -9601,7 +9868,7 @@ function buildExportHtml(manifest, { title, theme = "dark", mode } = {}) {
   const runtime = doc.getElementById("oviz-runtime")?.textContent || "";
   const blobs = [...doc.querySelectorAll("script[data-oviz-blob]")].map((el) => el.outerHTML).join("\n");
   const version = manifest.viewer?.version || "";
-  const pageTitle = title ?? (manifest.title || doc.title || "Oviz figure");
+  const pageTitle = title ?? (doc.title || manifest.title || "Oviz figure");
   return [
     "<!doctype html>",
     `<html lang="en" data-oviz-theme="${escapeHtml(theme)}" data-oviz-mode="${escapeHtml(modeId)}">`,
@@ -9670,9 +9937,10 @@ return { buildExportHtml, saveHtml };
 })();
 
 // ---- ui/story.js ----
-const { StoryPlugin } = (() => {
+const { StoryPlugin, figureId } = (() => {
 // "Views & story": saved States as a filmstrip, presentation mode, drafts
 // and self-export.
+
 
 
 
@@ -9700,9 +9968,9 @@ class StoryPlugin {
     this.readOnly = this.project.presentOnly;
     this.buildDrawer();
     this.buildPresenter();
-    v.on("transition", () => {});
-    // Cancel a running transition when the user grabs the camera.
-    v.canvas.addEventListener("pointerdown", () => this.cancel(), true);
+    // The user grabbing the camera (drag, wheel, keys, a flight, 3D/Sky)
+    // ends a running transition; the camera stays where it is.
+    v.on("camera-takeover", () => this.takeover());
   }
 
   afterBoot() {
@@ -9732,9 +10000,9 @@ class StoryPlugin {
     const ui = this.ui;
     this.el = h("section", { class: "ov-story ov-glass ov-chrome", "aria-label": "Views and story", "data-open": "false" });
     this.count = h("span", { class: "ov-story-count" });
-    this.addBtn = h("button", { class: "ov-btn ov-btn--primary ov-btn--sm", type: "button", onclick: () => this.add() }, icon("plus"), "Save view");
-    this.presentBtn = h("button", { class: "ov-btn ov-btn--sm", type: "button", onclick: () => this.present(true) }, icon("present"), "Present");
-    this.exportBtn = h("button", { class: "ov-btn ov-btn--sm ov-btn--ghost", type: "button", onclick: (e) => ui.menu(e.currentTarget, this.exportMenuItems(), { title: "Export", above: true }) }, icon("download"), "Export");
+    this.addBtn = h("button", { class: "ov-btn ov-btn--primary ov-btn--sm", type: "button", "aria-label": "Save view", onclick: () => this.add() }, icon("plus"), h("span", { class: "ov-btn-label" }, "Save view"));
+    this.presentBtn = h("button", { class: "ov-btn ov-btn--sm", type: "button", "aria-label": "Present", onclick: () => this.present(true) }, icon("present"), h("span", { class: "ov-btn-label" }, "Present"));
+    this.exportBtn = h("button", { class: "ov-btn ov-btn--sm ov-btn--ghost", type: "button", "aria-label": "Export", onclick: (e) => ui.menu(e.currentTarget, this.exportMenuItems(), { title: "Export", above: true }) }, icon("download"), h("span", { class: "ov-btn-label" }, "Export"));
     this.settingsBtn = iconButton("sliders", "Transition timing", (e) => this.timingMenu(e.currentTarget));
     const head = h("div", { class: "ov-story-head" },
       h("span", { class: "ov-story-title" }, "Story"), this.count,
@@ -9748,6 +10016,8 @@ class StoryPlugin {
   }
 
   toggle(open = this.el.dataset.open !== "true") {
+    // The drawer and a floating layers panel share the space above the bar.
+    if (open && this.ui.layersOpen && this.ui.layersFloating) this.ui.setLayersOpen(false);
     this.el.dataset.open = String(open);
     this.ui.statesBtn.setAttribute("aria-pressed", String(open));
     this.ui.root.dataset.story = String(open);
@@ -9764,6 +10034,7 @@ class StoryPlugin {
         h("div", { class: "ov-story-empty-title" }, "Build a story from saved views"),
         h("div", null, "Frame a view — camera, time, layers, Sky — then save it with ", kbd("N"), ". Present them in order with smooth transitions, or export a present-only file to share.")));
       this.status.textContent = "";
+      this.ui.dock.setMarkers?.([]);
       return;
     }
     items.forEach((it, i) => this.strip.append(this.card(it, i)));
@@ -9786,9 +10057,11 @@ class StoryPlugin {
     if (it.camera === "keep") card.append(h("span", { class: "ov-card-flag", title: "Keeps the current camera" }, icon("target")));
     card.addEventListener("click", () => this.goTo(i));
     card.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { this.goTo(i); e.preventDefault(); }
-      if ((e.key === "Delete" || e.key === "Backspace") && !this.readOnly) { this.remove(i); e.preventDefault(); }
-      e.stopPropagation();
+      // Only keys the card itself handles; the rest (P, Space, arrows…)
+      // still reach the figure after a card was clicked.
+      if (e.target !== card) return;
+      if (e.key === "Enter") { this.goTo(i); e.preventDefault(); e.stopPropagation(); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && !this.readOnly) { this.remove(i); e.preventDefault(); e.stopPropagation(); }
     });
     if (!this.readOnly) {
       const more = iconButton("sliders", `Edit ${it.name}`, (e) => { e.stopPropagation(); this.cardMenu(e.currentTarget, i); }, { cls: "ov-card-more" });
@@ -9800,9 +10073,10 @@ class StoryPlugin {
       card.addEventListener("dragleave", () => { card.dataset.over = "false"; });
       card.addEventListener("drop", (e) => {
         e.preventDefault();
-        const from = Number(e.dataTransfer.getData("text/oviz-state"));
+        const raw = e.dataTransfer.getData("text/oviz-state");
+        const from = raw === "" ? NaN : Number(raw);
         card.dataset.over = "false";
-        if (Number.isFinite(from) && from !== i) this.move(from, i);
+        if (Number.isInteger(from) && from >= 0 && from !== i) this.move(from, i);
       });
     }
     return card;
@@ -9836,6 +10110,8 @@ class StoryPlugin {
   async add() {
     if (this.readOnly) return;
     const v = this.viewer;
+    // A transition in flight would be captured half-blended: land it first.
+    if (this.running) this.cancel();
     const state = captureState(v, this.sky);
     const n = this.project.items.length + 1;
     const it = { id: uid(), name: this.autoName(state, n), caption: "", thumb: "", camera: "follow", transition: null, state };
@@ -9857,6 +10133,7 @@ class StoryPlugin {
 
   async update(i) {
     const it = this.project.items[i];
+    if (this.running) this.cancel();
     it.state = captureState(this.viewer, this.sky);
     it.thumb = await this.thumbnail();
     this.active = i;
@@ -9872,7 +10149,11 @@ class StoryPlugin {
     target.replaceChildren(input);
     input.focus();
     input.select();
+    let finished = false;
     const done = (commit) => {
+      // Re-rendering removes the input, which fires blur: finish only once.
+      if (finished) return;
+      finished = true;
       if (commit && input.value.trim()) { it.name = input.value.trim(); this.changed(); }
       else this.render();
     };
@@ -9894,28 +10175,41 @@ class StoryPlugin {
     setTimeout(() => ta.focus(), 30);
   }
 
+  /** Edit the list while the same view (if any) stays the active one. */
+  keepActive(fn) {
+    const cur = this.project.items[this.active];
+    fn();
+    this.active = cur ? this.project.items.indexOf(cur) : -1;
+  }
+
   duplicate(i) {
     const it = cloneJson(this.project.items[i]);
     it.id = uid();
     it.name = `${it.name} (copy)`;
-    this.project.items.splice(i + 1, 0, it);
+    this.keepActive(() => this.project.items.splice(i + 1, 0, it));
     this.changed();
   }
 
   move(from, to) {
     const items = this.project.items;
-    const [it] = items.splice(from, 1);
-    items.splice(to, 0, it);
-    this.active = to;
+    this.keepActive(() => {
+      const [it] = items.splice(from, 1);
+      items.splice(to, 0, it);
+    });
     this.changed();
   }
 
   remove(i, { silent = false } = {}) {
-    if (i < 0) return;
-    const [it] = this.project.items.splice(i, 1);
-    if (this.active >= this.project.items.length) this.active = this.project.items.length - 1;
+    if (i < 0 || i >= this.project.items.length) return;
+    let it = null;
+    this.keepActive(() => { [it] = this.project.items.splice(i, 1); });
     this.changed();
-    if (!silent) this.ui.toast(`Deleted “${it.name}”`, { action: { label: "Undo", run: () => { this.project.items.splice(i, 0, it); this.changed(); } } });
+    if (!silent) {
+      this.ui.toast(`Deleted “${it.name}”`, { action: { label: "Undo", run: () => {
+        this.keepActive(() => this.project.items.splice(Math.min(i, this.project.items.length), 0, it));
+        this.changed();
+      } } });
+    }
   }
 
   changed() {
@@ -9955,12 +10249,29 @@ class StoryPlugin {
 
   // ------------------------------------------------------------ navigation
 
-  cancel() {
+  /**
+   * The user took the camera mid-transition: land every other property now
+   * and leave the camera where it is. (A 3D↔Sky transition lands exactly,
+   * camera included, so Sky registration holds; "keep" views never held
+   * the camera, so they carry on.)
+   */
+  takeover() {
+    const r = this.running;
+    if (!r || r.transition.keepCamera) return;
+    this.cancel({ keepCamera: !r.transition.modeChange });
+  }
+
+  cancel({ keepCamera = false } = {}) {
     if (!this.running) return;
     const r = this.running;
     this.running = null;
     r.off();
+    const pose = keepCamera ? clonePose(this.viewer.renderer.camera.pose) : null;
     r.transition.finish();
+    if (pose) {
+      Object.assign(this.viewer.renderer.camera.pose, pose);
+      this.viewer.state.view.pose = this.viewer.renderer.camera.pose;
+    }
     this.viewer.renderer.release("state-transition");
     // An interrupted transition still arrives: fire the same events so the
     // view mode, panels and Sky layers reflect the applied State.
@@ -9974,13 +10285,15 @@ class StoryPlugin {
     i = ((i % items.length) + items.length) % items.length;
     const it = items[i];
     const v = this.viewer;
-    if (this.running) this.cancel();
+    // Rapid next/previous: the new flight starts from wherever the camera
+    // is now, instead of snapping to the interrupted view first.
+    if (this.running) this.cancel({ keepCamera: !this.running.transition.modeChange });
     this.active = i;
     this.markActive();
     this.renderPresenter();
     v.timeline.pause();
-    this.ui.following = null;
     const keepCamera = it.camera === "keep";
+    if (!keepCamera) this.ui.following = null;
     const transition = makeTransition(v, this.sky, it.state, { keepCamera });
     const spec = it.transition || this.project.defaultTransition;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -9988,6 +10301,31 @@ class StoryPlugin {
     const ease = easing(spec.easing);
     if (this.presenting) this.renderProgress(dur);
     v.emit("state-transition-start", { index: i, id: it.id });
+    return this.runTransition(transition, dur, ease);
+  }
+
+  /**
+   * Apply any captured State (the public `applyState`): a smooth transition
+   * by default, or `{ instant: true }`. No saved view becomes active.
+   */
+  applyState(state, { instant = false, duration_ms: ms, easing: easeName, keepCamera = false } = {}) {
+    if (!state || typeof state !== "object" || !state.view) return Promise.resolve();
+    const v = this.viewer;
+    if (this.running) this.cancel({ keepCamera: !this.running.transition.modeChange });
+    this.active = -1;
+    this.markActive();
+    v.timeline.pause();
+    this.ui.following = null;
+    const transition = makeTransition(v, this.sky, state, { keepCamera });
+    const spec = this.project.defaultTransition;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const dur = instant || reduce ? 0 : Math.max(0, Number(ms ?? spec.duration_ms) || 0) * (transition.modeChange ? 1.35 : 1);
+    return this.runTransition(transition, dur, easing(easeName || spec.easing));
+  }
+
+  /** Animate a transition over `dur` ms; resolves once it has arrived exactly. */
+  runTransition(transition, dur, ease) {
+    const v = this.viewer;
     return new Promise((resolve) => {
       if (dur <= 0) {
         transition.finish();
@@ -10240,9 +10578,11 @@ class StoryPlugin {
 
   manifestForExport({ presentOnly = false, currentOnly = false } = {}) {
     const m = cloneJson(this.viewer.manifest);
+    // Saved files reopen the way they were being viewed (theme and mode).
+    m.viewer = { ...(m.viewer || {}), mode: this.ui.mode };
     if (currentOnly) {
       const cur = captureState(this.viewer, this.sky);
-      m.states = exportStatesBlock({ ...this.project, items: [{ id: uid(), name: "View", caption: "", thumb: "", camera: "follow", transition: null, state: cur }] }, { defaultMode: "edit" });
+      m.states = exportStatesBlock({ ...this.project, projectId: uid(), items: [{ id: uid(), name: "View", caption: "", thumb: "", camera: "follow", transition: null, state: cur }] }, { defaultMode: "edit" });
       m.states.apply_first_on_load = true;
       m.states.items_hidden = true;
       return m;
@@ -10253,7 +10593,7 @@ class StoryPlugin {
 
   async exportHtml(opts = {}) {
     const m = this.manifestForExport(opts);
-    const text = buildExportHtml(m, { theme: this.ui.theme });
+    const text = buildExportHtml(m, { theme: this.ui.theme, mode: this.ui.mode });
     const base = slugName(this.viewer.manifest.title || "oviz-figure");
     const suffix = opts.presentOnly ? "-presentation" : opts.currentOnly ? "-view" : "";
     const res = await saveHtml(text, `${base}${suffix}.html`);
@@ -10263,7 +10603,7 @@ class StoryPlugin {
   async saveDocument() {
     if (this.readOnly) return;
     const m = this.manifestForExport({});
-    const text = buildExportHtml(m, { theme: this.ui.theme });
+    const text = buildExportHtml(m, { theme: this.ui.theme, mode: this.ui.mode });
     const res = await saveHtml(text, `${slugName(this.viewer.manifest.title || "oviz-figure")}.html`, { reuseHandle: true });
     if (res.ok) {
       this.dirty = false;
@@ -10299,9 +10639,11 @@ class StoryPlugin {
     try {
       const d = JSON.parse(raw);
       if (!Array.isArray(d.items)) return;
-      const embedded = JSON.stringify(this.project.items.map((x) => [x.id, x.name]));
-      const draft = JSON.stringify(d.items.map((x) => [x.id, x.name]));
-      if (embedded === draft && d.items.length === this.project.items.length) return;
+      // Any edit counts (captions, updated views, camera, timing), not only
+      // the list of names.
+      const same = JSON.stringify(d.items) === JSON.stringify(this.project.items)
+        && (!d.defaultTransition || JSON.stringify(d.defaultTransition) === JSON.stringify(this.project.defaultTransition));
+      if (same) return;
       const backup = this.project.items;
       this.project.items = d.items;
       if (d.defaultTransition) this.project.defaultTransition = d.defaultTransition;
@@ -10319,7 +10661,10 @@ class StoryPlugin {
   api() {
     return {
       list: () => this.project.items.map((it, i) => ({ index: i + 1, id: it.id, name: it.name })),
-      goTo: (target) => this.goTo(typeof target === "number" ? target - 1 : this.project.items.findIndex((x) => x.id === target || x.name === target)),
+      goTo: (target) => {
+        const i = typeof target === "number" ? target - 1 : this.project.items.findIndex((x) => x.id === target || x.name === target);
+        return i >= 0 && i < this.project.items.length ? this.goTo(i) : Promise.resolve();
+      },
       next: () => this.next(),
       previous: () => this.previous(),
       add: () => this.add(),
@@ -10338,6 +10683,7 @@ function slugName(s) {
   return String(s).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "oviz-figure";
 }
 
+/** Stable id for a figure (title + blob fingerprint), for per-figure storage. */
 function figureId(m) {
   let hash = 2166136261;
   const text = `${m.title}|${(m.blobs || []).map((b) => `${b.id}:${b.bytes}`).join(",")}`;
@@ -10347,7 +10693,7 @@ function figureId(m) {
   }
   return (hash >>> 0).toString(36);
 }
-return { StoryPlugin };
+return { StoryPlugin, figureId };
 })();
 
 // ---- ui/recorder.js ----
@@ -10422,8 +10768,9 @@ class RecorderPlugin {
     recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
     const bg = "#04060a";
     const sky = this.ui.plugins.find((p) => p.name === "sky");
+    // The video keeps its starting size; if the canvas is resized mid-take
+    // (fullscreen, a rotated phone) frames are scaled into it, never dropped.
     const draw = () => {
-      if (comp.width !== src.width - (src.width % 2)) return;
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, comp.width, comp.height);
       if (v.state.view.mode === "sky" && sky?.host) {
@@ -10436,7 +10783,7 @@ class RecorderPlugin {
           ctx.globalAlpha = 1;
         }
       }
-      ctx.drawImage(src, 0, 0);
+      ctx.drawImage(src, 0, 0, comp.width, comp.height);
     };
     r.afterRender.push(draw);
     r.hold("recording");
@@ -10446,7 +10793,7 @@ class RecorderPlugin {
       const s = Math.floor((performance.now() - t0) / 1000);
       this.pillText.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
     }, 250);
-    this.rec = { recorder, chunks, draw, timer, ext, label, mime };
+    this.rec = { recorder, stream, chunks, draw, timer, ext, label, mime };
     this.pill.hidden = false;
     this.ui.shotBtn.dataset.recording = "true";
     this.ui.toast("Recording — press Stop when done", { icon: icon("record"), ms: 1800 });
@@ -10459,6 +10806,7 @@ class RecorderPlugin {
     const v = this.viewer;
     return new Promise((resolve) => {
       rec.recorder.onstop = () => {
+        for (const track of rec.stream.getTracks()) track.stop();
         const blob = new Blob(rec.chunks, { type: rec.mime || `video/${rec.ext}` });
         const name = `${slug(v.manifest.title || "oviz")}-${rec.label}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${rec.ext}`;
         downloadBlob(blob, name);
@@ -10559,6 +10907,7 @@ class FilterPlugin {
     v.on("time", () => { if (this.param?.key === "ageAt" || this.param?.key === "dist" || this.param?.key === "z") redraw(); });
     v.on("style", redraw);
     v.on("gpu-restored", redraw);
+    v.on("theme", redraw); // axis text and range colours follow the theme
     v.stateExtensions.set("filter", { capture: () => this.captureState(), apply: (f) => this.applyState(f) });
     ui.filter = this;
   }
@@ -10895,17 +11244,27 @@ class NotesPlugin {
     const el = anchorEl || this.viewer.labels.dynamic.get(`note:${id}`)?.el;
     if (!el) return;
     const input = h("input", { class: "ov-input", value: n.text, "aria-label": "Note text" });
+    let cancelled = false;
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Enter") { commit(); this.ui.closeMenu(); }
-      if (e.key === "Escape") this.ui.closeMenu();
+      // Closing the menu blurs the field; the blur must not commit.
+      if (e.key === "Escape") { cancelled = true; this.ui.closeMenu(); }
     });
     const commit = () => {
+      if (cancelled) return;
       const t = input.value.trim();
       if (t && t !== n.text) { n.text = t; this.sync(); }
     };
     const colors = ["#ffffff", "#f4c46a", "#7cc4ff", "#ff7a70", "#6fdc9b"].map((c) =>
-      h("button", { class: "ov-chip", type: "button", style: { background: c }, "aria-label": c, "aria-pressed": String(n.color === c), onclick: () => { n.color = c; this.sync(); } }));
+      h("button", {
+        class: "ov-chip", type: "button", style: { background: c }, "aria-label": c, "aria-pressed": String(n.color === c),
+        onclick: (e) => {
+          n.color = c;
+          this.sync();
+          for (const b of colors) b.setAttribute("aria-pressed", String(b === e.currentTarget));
+        },
+      }));
     const body = h("div", { class: "ov-pop-body" }, input, h("div", { class: "ov-colors" }, colors));
     this.ui.menu(el, [
       { body },
@@ -10929,6 +11288,7 @@ return { NotesPlugin };
 const { LassoPlugin } = (() => {
 // Lasso selection: draw around objects to select them; everything else dims.
 // The selection bar offers framing, isolating and a CSV export.
+
 
 
 
@@ -11036,13 +11396,18 @@ class LassoPlugin {
     const sel = new Map();
     let total = 0;
     const scr = [0, 0, 0];
+    const t = v.timeline.time;
+    const g = v.state.global;
     for (const trace of v.traces) {
       if (!trace.points || !v.state.traces[trace.key]?.visible) continue;
       const batch = v.points.byKey.get(trace.key);
       if (!batch) continue;
+      const ages = v.data.get(trace.key)?.ageNow;
       const hits = [];
       for (let i = 0; i < trace.points.count; i++) {
-        if (batch.state[i] & 2) continue; // hidden by the filter
+        if (batch.state[i] & 18) continue; // hidden by the filter or an isolated lasso
+        // Not yet born (or long faded) at this time: invisible, so not selectable.
+        if (ages && birthFadeAt(t, ages[i], g.fadeTime, g.fadeInOut) <= 0) continue;
         const p = v.objectPosition(trace.key, i);
         const s = p && cam.project(p, scr);
         if (s && inside(s[0], s[1], poly)) hits.push(i);
@@ -11140,13 +11505,14 @@ class LassoPlugin {
     if (!this.selection) return null;
     const out = {};
     for (const [k, idx] of this.selection) out[k] = Array.from(idx);
-    return { selection: out, isolate: this.isolate };
+    return { selection: out, isolate: this.isolate, filterOff: !!this.filterOff };
   }
 
   restore(s) {
     if (!s || !s.selection) { if (this.selection) this.clear(); return; }
     this.selection = new Map(Object.entries(s.selection).map(([k, v]) => [k, Uint32Array.from(v)]));
     this.isolate = !!s.isolate;
+    this.filterOff = !!s.filterOff;
     this.applyBits();
     this.renderBar();
   }
@@ -11250,17 +11616,19 @@ class SelectionReticle {
       if (d.dist != null) facts.push(formatDistance(d.dist));
       if (d.nStars != null) facts.push(`${fmtInt(d.nStars)} stars`);
     }
-    this.callout.replaceChildren(
+    // Native replaceChildren would print a null child as "null": filter them.
+    this.callout.replaceChildren(...[
       h("div", { class: "ov-callout-head" },
         h("span", { class: "ov-callout-dot", style: { background: color } }),
         h("span", { class: "ov-callout-kicker" }, kicker),
         iconButton("close", "Clear selection", () => this.ui.select(null), { cls: "ov-callout-close", shortcut: "Esc" })),
       h("div", { class: "ov-callout-name" }, name),
       facts.length ? h("div", { class: "ov-callout-facts" }, facts.join(" · ")) : null,
-      sel.kind === "member" ? null : h("div", { class: "ov-callout-actions" },
-        h("button", { class: "ov-callout-btn", type: "button", onclick: () => v.flyToObject(sel.trace, sel.index) }, "Fly to"),
+      h("div", { class: "ov-callout-actions" },
+        // Member stars are seen from the Sun: there is nowhere to fly to.
+        sel.kind === "member" ? null : h("button", { class: "ov-callout-btn", type: "button", onclick: () => v.flyToObject(sel.trace, sel.index) }, "Fly to"),
         h("button", { class: "ov-callout-btn ov-callout-btn--primary", type: "button", onclick: () => this.ui.openDetails() }, "Details")),
-    );
+    ].filter(Boolean));
     this.callout.hidden = false;
   }
 
@@ -11278,10 +11646,13 @@ class SelectionReticle {
   }
 
   hide() {
+    // Always hide the card: a selection that starts off-screen must not
+    // show a freshly built card at its last (or initial 0, 0) position.
+    this.callout.style.visibility = "hidden";
+    delete this.ui.root.dataset.callout;
     if (!this.visible) return;
     this.visible = false;
     this.mark.setAttribute("opacity", "0");
-    this.callout.style.visibility = "hidden";
     delete this.ui.root.dataset.reticle;
   }
 
@@ -11289,7 +11660,7 @@ class SelectionReticle {
     const sel = this.ui.selection;
     const v = this.viewer;
     if (!sel) return this.hide();
-    const p = sel.kind === "member" ? sel.member.position : v.objectPosition(sel.trace, sel.index);
+    const p = this.ui.selectionPosition(sel);
     const cam = v.renderer.camera;
     const s = p && cam.project(p, this.scr);
     const W = cam.width, H = cam.height;
@@ -11303,7 +11674,12 @@ class SelectionReticle {
     this.mark.setAttribute("opacity", "1");
     this.visible = true;
     this.ui.root.dataset.reticle = "true";
-    this.callout.style.visibility = "";
+    // The label card steps aside while the details panel shows the object.
+    const details = this.ui.inspector?.el.dataset.open === "true";
+    const showCallout = !this.callout.hidden && !details;
+    this.callout.style.visibility = showCallout ? "" : "hidden";
+    if (showCallout) this.ui.root.dataset.callout = "true";
+    else delete this.ui.root.dataset.callout;
     this.placeCallout(x, y);
   }
 }
@@ -11443,7 +11819,7 @@ const LAYOUTS = {
    */
   detailed(lm, ui) {
     const bar = timeBar(lm, ui);
-    lm.add(sep(), bar);
+    if (!ui.dock.el.hidden) lm.add(sep(), bar);
     lm.move(ui.modeBtn, bar);
     lm.move(ui.legend.el, ui.bottomLeft, ui.scale);
   },
@@ -11469,7 +11845,7 @@ class CompactLegend {
     const v = (this.viewer = ui.viewer);
     this.rows = [];
     this.group = null;
-    this.el = h("div", { class: "ov-legend", role: "list", "aria-label": "Legend" });
+    this.el = h("div", { class: "ov-legend", role: "group", "aria-label": "Legend" });
     v.on("style", () => this.sync());
     v.on("state-applied", () => this.render());
     this.render();
@@ -11488,7 +11864,7 @@ class CompactLegend {
     this.rows = all.slice(0, MAX_ITEMS).map((t) => {
       const dot = h("span", { class: "ov-legend-dot" });
       const b = h("button", {
-        class: "ov-legend-item", type: "button", role: "listitem",
+        class: "ov-legend-item", type: "button",
         "data-tip": `${t.name}\nClick to show or hide · double-click to show only this`,
       }, dot, h("span", { class: "ov-legend-name" }, t.name));
       let timer = 0;
@@ -11517,6 +11893,7 @@ class CompactLegend {
     for (const r of this.rows) {
       const st = v.state.traces[r.t.key] || {};
       r.b.dataset.visible = String(!!st.visible);
+      r.b.setAttribute("aria-pressed", String(!!st.visible));
       const cb = r.t.colorBy;
       const mode = st.colorMode || cb?.defaultMode || "fixed";
       const lut = mode === "by_value" && cb ? this.ui.luts.get(st.colormap || cb.colormap) : null;
@@ -11551,7 +11928,9 @@ class IdleFade {
     this.fine = window.matchMedia?.("(hover: hover) and (pointer: fine)");
     const root = ui.root;
     const wake = () => this.wake();
-    for (const type of ["pointermove", "pointerdown", "wheel", "keydown"]) root.addEventListener(type, wake, { passive: true });
+    for (const type of ["pointermove", "pointerdown", "wheel"]) root.addEventListener(type, wake, { passive: true });
+    // Keys arrive at the window when nothing inside the figure has focus.
+    window.addEventListener("keydown", wake, { capture: true, passive: true });
     root.addEventListener("pointerover", (e) => { this.over = !!e.target.closest?.(CHROME); }, { passive: true });
     root.addEventListener("pointerleave", () => { this.over = false; });
   }
@@ -11563,7 +11942,10 @@ class IdleFade {
   busy() {
     const ui = this.ui;
     const ds = ui.root.dataset;
-    return this.over || ui.layersOpen || ui.overlays?.size || ui.palette?.open || ui._menu || ui._sheet
+    // A control with keyboard focus must stay visible under the user's hands.
+    const focused = document.activeElement;
+    const keyboardFocus = focused && focused !== document.body && ui.ui.contains(focused) && focused.matches?.(":focus-visible");
+    return this.over || keyboardFocus || ui.layersOpen || ui.overlays?.size || ui.palette?.open || ui._menu || ui._sheet
       || ds.story === "true" || ds.presenting === "true" || ds.lasso === "true" || ui.viewer.controls.pointers.size > 0;
   }
 
@@ -11661,6 +12043,8 @@ class AppUI {
     this.layout = new LayoutManager(this);
     this.overlays = new Set();
     this.idle = new IdleFade(this);
+    // States restore the selection and the panels too.
+    viewer.stateExtensions.set("ui", { capture: () => this.captureUiState(), apply: (s) => this.applyUiState(s) });
     // Phones: every bottom sheet swipes down to dismiss.
     const sheetHead = (el) => el.querySelector(".ov-panel-head");
     flickToDismiss(this.inspector.el, sheetHead(this.inspector.el), { axis: "y", sign: 1, enabled: () => this.narrow, onDismiss: () => this.select(null) });
@@ -11668,7 +12052,9 @@ class AppUI {
     this.bindPointer();
     this.bindKeys();
     this.bindViewer();
-    this.applyTheme(localStorageGet("oviz.theme") || document.documentElement.dataset.ovizTheme || "dark");
+    // The authored theme, unless someone switched theme on this figure.
+    this.themeKey = `oviz.theme.${figureId(this.manifest)}`;
+    this.applyTheme(localStorageGet(this.themeKey) || document.documentElement.dataset.ovizTheme || "dark", { remember: false });
     this.setLayersOpen(window.innerWidth > 720 && this.modeConfig.layersOpen);
   }
 
@@ -11751,6 +12137,7 @@ class AppUI {
     if (!hasSky) this.viewSeg.hidden = true;
     this.homeBtn = iconButton("home", "Reset view", () => v.resetView(), { shortcut: "Home", cls: "ov-glass" });
     this.fsBtn = iconButton("expand", "Fullscreen", () => this.toggleFullscreen(), { shortcut: "M", cls: "ov-glass" });
+    this.fsBtn.hidden = !this.canFullscreen;
     this.skyExtras = h("div", { class: "ov-corner-btns" });
     this.cornerBtns = h("div", { class: "ov-corner-btns" }, this.homeBtn, this.fsBtn);
     const right = h("div", { class: "ov-bottom-right" }, this.skyExtras, this.viewSeg, this.cornerBtns);
@@ -11770,13 +12157,18 @@ class AppUI {
     v.renderer.afterRender.push(() => updateScale());
     v.on("style", () => this.renderColorbars());
     v.on("viewmode", ({ mode }) => {
+      // Member stars exist only in Sky view: a member selection ends with it.
+      if (mode !== "sky" && this.selection?.kind === "member") this.select(null, { recordUndo: false });
       this.root.dataset.view = mode;
       this.syncViewToggle();
       this.syncViewSeg();
       this.renderColorbars();
     });
+    // The measurement line and its label follow both objects through time.
+    const measure = rafThrottle(() => this.updateMeasure());
     v.on("time", () => {
       if (this.following) this.updateFollow();
+      if (this._measure) measure();
     });
     new ResizeObserver(() => this.syncViewSeg()).observe(this.viewSeg);
     v.on("gpu-restored", () => {
@@ -11804,7 +12196,11 @@ class AppUI {
     this.firstRunHint();
     let narrow = this.narrow;
     window.addEventListener("resize", rafThrottle(() => {
-      if (this.narrow !== narrow) { narrow = this.narrow; this.applyLayout(); }
+      if (this.narrow !== narrow) {
+        narrow = this.narrow;
+        this.applyLayout();
+        this.setLayersOpen(!narrow && this.modeConfig.layersOpen);
+      }
       this.anchorLayers();
     }));
   }
@@ -11888,6 +12284,8 @@ class AppUI {
       const quick = performance.now() - down.t < 450;
       down = null;
       if (moved > 5 || !quick) return;
+      // A click on the figure dismisses a floating layers panel, like a menu.
+      if (this.layersOpen && this.layersFloating) this.setLayersOpen(false);
       const r = canvas.getBoundingClientRect();
       const hit = v.pick(e.clientX - r.left, e.clientY - r.top, { radius: e.pointerType === "touch" ? 18 : 6 });
       if (e.shiftKey && hit && this.selection) this.measure(this.selection, hit);
@@ -11934,12 +12332,73 @@ class AppUI {
         v.renderer.invalidate();
       });
     } else if (hit && hit.kind === "member") {
-      labels.setDynamic("selection", `${hit.member.cluster} member`, () => hit.member.position, "ov-label--sel");
+      labels.setDynamic("selection", `${hit.member.cluster} member`, () => this.selectionPosition(hit), "ov-label--sel");
     }
     if (!hit && this.following) this.toggleFollow(null);
     v.selected = hit;
     v.renderer.invalidate();
     this.viewer.emit("select", hit);
+  }
+
+  /**
+   * The interface's part of a State: the selection, plus the panels where
+   * they differ from the mode's own defaults (so a view saved in Detailed,
+   * where the layers panel is open anyway, does not pop it open in Focus).
+   */
+  captureUiState() {
+    const sel = this.selection;
+    const detailsOpen = this.inspector.el.dataset.open === "true";
+    return {
+      selection: !sel ? null : sel.kind === "member" ? { kind: "member", index: sel.index } : { trace: sel.trace, index: sel.index },
+      layers: this.narrow || !!this.layersOpen === !!this.modeConfig.layersOpen ? null : !!this.layersOpen,
+      details: this.modeConfig.selection === "callout" && detailsOpen ? true : null,
+    };
+  }
+
+  async applyUiState(s) {
+    if (!s || typeof s !== "object") return; // older States leave the interface alone
+    const v = this.viewer;
+    const sel = s.selection;
+    let hit = null;
+    if (sel?.kind === "member") {
+      if (v.state.view.mode === "sky" && this.sky) {
+        await this.sky.ensureMembers?.();
+        hit = this.sky.resolveMemberPick?.({ index: sel.index }) || null;
+      }
+    } else if (sel && v.traceByKey.has(sel.trace) && Number.isInteger(sel.index)) {
+      hit = { trace: sel.trace, index: sel.index };
+    } else if (sel?.name) {
+      hit = await this.findObject(sel.traceName, sel.name);
+    }
+    const same = (a, b) => (!a && !b) || (!!a && !!b && (a.kind || "") === (b.kind || "") && a.trace === b.trace && a.index === b.index);
+    if (!same(hit, this.selection)) this.select(hit, { recordUndo: false });
+    if (!this.narrow) this.setLayersOpen(s.layers == null ? !!this.modeConfig.layersOpen : !!s.layers);
+    if (this.modeConfig.selection === "callout") {
+      if (hit && s.details) this.openDetails();
+      else if (this.inspector.el.dataset.open === "true") this.inspector.show(null);
+    }
+  }
+
+  /** Find an object by its (trace and) name, as classic States store it. */
+  async findObject(traceName, name) {
+    const v = this.viewer;
+    const norm = (x) => String(x || "").replace(/_/g, " ").trim().toLowerCase();
+    const want = norm(name);
+    const pointTraces = v.traces.filter((t) => t.points);
+    const named = pointTraces.filter((t) => traceName && (t.name === traceName || t.key === traceName));
+    for (const t of named.length ? named : pointTraces) {
+      const meta = await v.objectMeta(t.key);
+      const i = (meta.name || []).findIndex((n) => norm(n) === want);
+      if (i >= 0) return { trace: t.key, index: i };
+    }
+    return null;
+  }
+
+  /** Where a selection is now (member stars move through time too). */
+  selectionPosition(hit) {
+    if (!hit) return null;
+    if (hit.kind === "member") return this.sky?.members?.starPosition(hit.index, this.viewer.timeline.time, true) || hit.member.position;
+    return this.viewer.objectPosition(hit.trace, hit.index);
   }
 
   async selectAndFly(hit, fly = true) {
@@ -11951,28 +12410,38 @@ class AppUI {
   // ------------------------------------------------------------- measure
 
   measure(a, b) {
+    this._measure = { a, b, key: "" };
+    const text = this.updateMeasure();
+    if (text) this.toast(`Separation ${text}`, { icon: icon("ruler") });
+  }
+
+  /** Redraw the measurement for the current time; returns its label. */
+  updateMeasure() {
+    const m = this._measure;
+    if (!m) return "";
     const v = this.viewer;
-    const pa = a.kind === "member" ? a.member.position : v.objectPosition(a.trace, a.index);
-    const pb = b.kind === "member" ? b.member.position : v.objectPosition(b.trace, b.index);
-    if (!pa || !pb) return;
+    const pa = this.selectionPosition(m.a), pb = this.selectionPosition(m.b);
+    if (!pa || !pb) return "";
+    const key = [...pa, ...pb].map((x) => x.toFixed(3)).join(",");
+    if (key === m.key) return m.text;
+    m.key = key;
     const d = Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]);
-    const mid = () => {
-      const qa = a.kind === "member" ? a.member.position : v.objectPosition(a.trace, a.index);
-      const qb = b.kind === "member" ? b.member.position : v.objectPosition(b.trace, b.index);
-      return qa && qb ? [(qa[0] + qb[0]) / 2, (qa[1] + qb[1]) / 2, (qa[2] + qb[2]) / 2] : null;
-    };
-    let text = formatDistance(d);
     const eye = v.skyEye();
     const ua = norm([pa[0] - eye[0], pa[1] - eye[1], pa[2] - eye[2]]);
     const ub = norm([pb[0] - eye[0], pb[1] - eye[1], pb[2] - eye[2]]);
     const ang = Math.acos(clamp(ua[0] * ub[0] + ua[1] * ub[1] + ua[2] * ub[2], -1, 1)) * 180 / Math.PI;
-    text += ` · ${formatAngle(ang)}`;
-    v.labels.setDynamic("measure", text, mid, "ov-label--measure");
-    this.setTrailPath("__measure", [pa, pb], { color: "#7cc4ff", width: 1.5, dash: "dash", live: [a, b] });
-    this.toast(`Separation ${text}`, { icon: icon("ruler") });
+    m.text = `${formatDistance(d)} · ${formatAngle(ang)}`;
+    const mid = () => {
+      const qa = this.selectionPosition(m.a), qb = this.selectionPosition(m.b);
+      return qa && qb ? [(qa[0] + qb[0]) / 2, (qa[1] + qb[1]) / 2, (qa[2] + qb[2]) / 2] : null;
+    };
+    v.labels.setDynamic("measure", m.text, mid, "ov-label--measure");
+    this.setTrailPath("__measure", [pa, pb], { color: "#7cc4ff", width: 1.5, dash: "dash" });
+    return m.text;
   }
 
   clearMeasure() {
+    this._measure = null;
     this.viewer.labels.removeDynamic("measure");
     this.removeTrail("__measure");
   }
@@ -12078,8 +12547,17 @@ class AppUI {
     this.viewThumb.style.transform = `translateX(${active.offsetLeft}px)`;
   }
 
+  /** Layers float over the figure (Focus popover, phone sheet) instead of docking. */
+  get layersFloating() {
+    return this.narrow || this.layout?.current?.layout === "focus";
+  }
+
   setLayersOpen(open) {
     if (open && this.narrow && this.selection) this.select(null);
+    // A floating layers panel and the story drawer share the space above the bar.
+    if (open && this.layersFloating && this.root.dataset.story === "true") {
+      this.plugins.find((p) => p.name === "states")?.toggle(false);
+    }
     this.layersOpen = open;
     this.layers.el.dataset.open = String(open);
     this.root.dataset.layers = String(open);
@@ -12121,20 +12599,22 @@ class AppUI {
   moreMenu(anchor) {
     const v = this.viewer;
     const lasso = this.plugins.find((p) => p.name === "lasso");
+    const hasTime = !this.dock.el.hidden;
+    const keyboard = !window.matchMedia?.("(any-hover: none)").matches;
     this.menu(anchor, [
       { label: this.mode === "focus" ? "Detailed mode" : "Focus mode", icon: "sidebar", shortcut: "U", run: () => this.toggleMode() },
       { label: "Search", icon: "search", shortcut: "/", run: () => this.palette.show() },
       ...(!this.statesBtn.hidden ? [{ label: "Views & story", icon: "bookmark", shortcut: "Y", run: () => this.plugins.find((p) => p.name === "states")?.toggle() }] : []),
       { label: "Reset view", icon: "home", shortcut: "Home", run: () => v.resetView() },
-      { label: `Playback speed · ${v.timeline.speed}×`, icon: "play", run: () => this.dock.speedMenu?.(anchor) },
+      ...(hasTime ? [{ label: `Playback speed · ${v.timeline.speed}×`, icon: "play", run: () => this.dock.speedMenu?.(anchor) }] : []),
       "-",
       { label: "Screenshot or video…", icon: "camera", shortcut: "I", run: () => this.captureMenu(anchor) },
       { label: "Share & export…", icon: "share", run: () => this.shareMenu(anchor) },
       { label: "Display settings…", icon: "sliders", run: () => this.settingsMenu(anchor) },
       "-",
       ...(lasso ? [{ label: "Lasso select", icon: "wand", shortcut: "L", run: () => lasso.arm(true) }] : []),
-      { label: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
-      { label: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
+      ...(this.canFullscreen ? [{ label: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() }] : []),
+      ...(keyboard ? [{ label: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() }] : []),
       { label: "About this figure", icon: "info", run: () => this.showAbout() },
     ], { align: "right", above: true });
   }
@@ -12150,20 +12630,34 @@ class AppUI {
     try { this.plugins.find((p) => p.name === "sky")?.sky?.aladin?.view?.fixLayoutDimensions?.(); } catch (_) { /* Aladin not ready */ }
   }
 
-  toggleFullscreen() {
-    const el = this.root;
-    if (document.fullscreenElement) document.exitFullscreen?.();
-    else (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el).catch?.(() => this.toast("Fullscreen is not available here"));
+  /** Whether this page may go fullscreen (not iPhone Safari, not a locked iframe). */
+  get canFullscreen() {
+    const d = document;
+    return !!(d.fullscreenEnabled || d.webkitFullscreenEnabled) && !!(this.root.requestFullscreen || this.root.webkitRequestFullscreen);
   }
 
-  applyTheme(theme) {
+  toggleFullscreen() {
+    const d = document;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      (d.exitFullscreen || d.webkitExitFullscreen)?.call(d);
+      return;
+    }
+    const el = this.root;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen;
+    const unavailable = () => this.toast("Fullscreen is not available here");
+    if (!this.canFullscreen || !request) { unavailable(); return; }
+    try { Promise.resolve(request.call(el)).catch(unavailable); } catch (_) { unavailable(); }
+  }
+
+  applyTheme(theme, { remember = true } = {}) {
     this.theme = theme === "light" ? "light" : "dark";
     document.documentElement.dataset.ovizTheme = this.theme;
     this.viewer.emit("theme", { theme: this.theme });
     const v = this.viewer;
     v.renderer.clearColor = [0, 0, 0, 0];
     v.renderer.invalidate();
-    localStorageSet("oviz.theme", this.theme);
+    // Remember an explicit choice for this figure only.
+    if (remember) localStorageSet(this.themeKey, this.theme);
   }
 
   focusCanvas() {
@@ -12213,7 +12707,12 @@ class AppUI {
   // ------------------------------------------------------------- menus
 
   menu(anchor, items, { title, align = "right", above = false } = {}) {
+    // Pressing the button of the open menu closes it.
+    if (this._menu?.anchor === anchor) { this.closeMenu(); return null; }
     this.closeMenu();
+    this.tooltips?.hide();
+    // Menus from the bar would open on top of a floating layers panel.
+    if (this.layersOpen && this.layersFloating && !this.layers.el.contains(anchor)) this.setLayersOpen(false);
     const pop = h("div", { class: "ov-pop ov-glass", role: "menu" });
     if (title) pop.append(h("div", { class: "ov-pop-title" }, title));
     for (const it of items) {
@@ -12223,19 +12722,28 @@ class AppUI {
         it.icon ? icon(it.icon) : it.checked !== undefined ? h("span", { class: "ov-icon" }, it.checked ? "✓" : "") : null,
         h("span", { class: "ov-grow" }, it.label),
         it.shortcut ? kbd(it.shortcut) : null);
-      b.addEventListener("click", () => { if (!it.keepOpen) this.closeMenu(); it.run?.(); });
+      // Keyboard activation (detail 0) returns focus to the menu's button.
+      b.addEventListener("click", (e) => { if (!it.keepOpen) this.closeMenu({ refocus: e.detail === 0 }); it.run?.(); });
       pop.append(b);
     }
     this.ui.append(pop);
     const r = anchor.getBoundingClientRect();
     const rr = this.root.getBoundingClientRect();
-    const w = pop.offsetWidth, ht = pop.offsetHeight;
+    const w = pop.offsetWidth;
+    let ht = pop.offsetHeight;
     let x = align === "center" ? r.left + r.width / 2 - w / 2 : align === "left" ? r.left : r.right - w;
     x = clamp(x - rr.left, 8, rr.width - w - 8);
-    let y = above ? r.top - rr.top - ht - 8 : r.bottom - rr.top + 8;
-    if (!above && y + ht > rr.height - 8) y = r.top - rr.top - ht - 8;
+    // Open on the preferred side if it fits, else on the roomier side, and
+    // scroll (rather than run off the screen) when neither side fits.
+    const roomAbove = r.top - rr.top - 16, roomBelow = rr.bottom - r.bottom - 16;
+    const fitsPreferred = ht <= (above ? roomAbove : roomBelow);
+    const placeAbove = fitsPreferred ? above : roomAbove > roomBelow;
+    const room = Math.max(120, placeAbove ? roomAbove : roomBelow);
+    if (ht > room) { pop.style.maxHeight = `${room}px`; ht = pop.offsetHeight; }
+    let y = placeAbove ? r.top - rr.top - ht - 8 : r.bottom - rr.top + 8;
+    y = clamp(y, 8, Math.max(8, rr.height - ht - 8));
     pop.style.left = `${x}px`;
-    pop.style.top = `${Math.max(8, y)}px`;
+    pop.style.top = `${y}px`;
     anchor.setAttribute("aria-expanded", "true");
     const onDown = (e) => {
       if (!pop.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) this.closeMenu();
@@ -12249,11 +12757,13 @@ class AppUI {
     return pop;
   }
 
-  closeMenu() {
+  closeMenu({ refocus = false } = {}) {
     const m = this._menu;
     if (!m) return false;
     this._menu = null;
     m.anchor.setAttribute("aria-expanded", "false");
+    // Keyboard users land back on the button that opened the menu.
+    if (refocus && m.pop.contains(document.activeElement) && m.anchor.isConnected) m.anchor.focus({ preventScroll: true });
     this.root.removeEventListener("pointerdown", m.onDown, true);
     this.setOverlay("menu", false);
     conceal(m.pop, m.anchor.isConnected ? m.anchor.getBoundingClientRect() : null).then(() => m.pop.remove());
@@ -12377,7 +12887,8 @@ class AppUI {
         this.toast("Image copied", { icon: icon("copy") });
       } else {
         downloadBlob(blob, `${slug(this.manifest.title || "oviz-figure")}-${stamp()}.png`);
-        this.toast(`Saved ${scale > 1 ? `${scale}× ` : ""}PNG`, { icon: icon("camera") });
+        const size = v.renderer.lastCapture;
+        this.toast(size ? `Saved PNG · ${size.width} × ${size.height}` : "Saved PNG", { icon: icon("camera") });
       }
     } catch (err) {
       console.error(err);
@@ -12410,7 +12921,7 @@ class AppUI {
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: this.mode === "focus" ? "Detailed mode" : "Focus mode", sub: this.mode === "focus" ? MODES[1].desc : MODES[0].desc, icon: "sidebar", shortcut: "U", keywords: "mode layout panels simple minimal focus detailed", run: () => this.toggleMode() },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
-      { title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
+      ...(this.canFullscreen ? [{ title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() }] : []),
     ];
     if (this.manifest.sky?.enabled) {
       list.splice(2, 0, { title: v.state.view.mode === "sky" ? "Switch to Galactic 3D" : "Switch to Sky view", icon: v.state.view.mode === "sky" ? "cube" : "globe", shortcut: "V", pinned: true, run: () => this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky") });
@@ -12574,6 +13085,9 @@ class AppUI {
     const clearKeys = () => { this.keysDown.clear(); this.shiftDown = false; v.renderer.release("keys"); };
     window.addEventListener("blur", clearKeys);
     window.addEventListener("keyup", (e) => {
+      // macOS sends no keyup for keys released while ⌘ is held: releasing ⌘
+      // lets go of every held movement key, so none stays stuck.
+      if (e.key === "Meta") { clearKeys(); return; }
       if (e.key === "Shift") this.shiftDown = false;
       this.keysDown.delete(e.key.toLowerCase());
       if (!this.keysDown.size) v.renderer.release("keys");
@@ -12591,11 +13105,17 @@ class AppUI {
         return;
       }
       if (mod) {
+        if (e.repeat) return;
         for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
         return;
       }
       if (e.altKey) return;
-      if (this.palette.open) return;
+      // The palette handles keys in its field; if focus left the field,
+      // Escape still closes it.
+      if (this.palette.open) {
+        if (k === "Escape") { this.palette.close(); e.preventDefault(); }
+        return;
+      }
       if (k === "Shift") { this.shiftDown = true; return; }
       if ("wasdqerf".includes(lower) && lower.length === 1) {
         // Movement keys are held, not pressed: see applyKeyMotion.
@@ -12605,16 +13125,19 @@ class AppUI {
           this._lastKeyMotion = 0;
           v._cancelTween();
           v.controls.stop();
+          v.emit("camera-takeover", {});
           v.renderer.hold("keys");
         }
         e.preventDefault();
         return;
       }
-      for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
+      // Held keys repeat only where repeating makes sense (stepping, sizes);
+      // toggles such as N, L, B, Y or P fire once per press.
       if (e.repeat && !["ArrowLeft", "ArrowRight", "[", "]", "{", "}", "<", ">", ",", "."].includes(k)) {
         e.preventDefault();
         return;
       }
+      for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
       let handled = true;
       switch (lower) {
         // ---- classic Oviz keys
@@ -12637,11 +13160,14 @@ class AppUI {
           break;
         }
         case "Escape":
-          if (this.closeMenu() || this.closeSheet()) break;
+          if (this.closeMenu({ refocus: true }) || this.closeSheet()) break;
+          if (this.layersOpen && this.layersFloating) { this.setLayersOpen(false); break; }
+          if (this.root.dataset.story === "true") { this.plugins.find((p) => p.name === "states")?.toggle(false); break; }
           if (this.root.dataset.zen === "true") { this.setZen(false); break; }
           if (this.selection || this.plugins.find((p) => p.name === "lasso")?.selection) {
+            // One undo step covers both the click and the lasso selection.
             this.pushSelectionUndo();
-            this.select(null);
+            this.select(null, { recordUndo: false });
             this.plugins.find((p) => p.name === "lasso")?.clear();
             break;
           }
@@ -12690,7 +13216,7 @@ class AppUI {
       fast: this.shiftDown,
       sky: v.state.view.mode === "sky",
       maxSpan: v.world.maxSpan,
-      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFov,
+      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFovFor(v.state.view.mode === "sky" ? "sky" : "galactic"),
     });
     v.renderer.markInteraction();
     v._onCameraChange();
@@ -12752,9 +13278,10 @@ function installApi(root, viewer, ui) {
     setTime: (t) => viewer.timeline.setTime(Number(t)),
     play: () => viewer.timeline.play(),
     pause: () => viewer.timeline.pause(),
-    setViewMode: (m) => viewer.setViewMode(m === "sky" ? "sky" : "3d"),
-    getState: () => viewer.captureState?.(),
-    applyState: (s, opts) => viewer.applyState?.(s, opts),
+    setViewMode: (m) => ui.setViewMode(m === "sky" ? "sky" : "3d"),
+    // Whole-viewer States, the same snapshots saved views use.
+    getState: () => ui.plugins.find((p) => p.name === "states")?.api().capture() ?? null,
+    applyState: (s, opts) => ui.plugins.find((p) => p.name === "states")?.applyState(s, opts) ?? Promise.resolve(),
     screenshot: (opts) => viewer.renderer.capture(opts),
     get states() { return ui.plugins.find((p) => p.name === "states")?.api(); },
     stats: () => ({
