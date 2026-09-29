@@ -10,15 +10,17 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from html import unescape
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
 from oviz import Animate3D, OvizFigure
 from oviz.viewer import build
 from oviz.viewer.bundle import BundleBuilder, Bundle, byte_shuffle, byte_unshuffle
-from oviz.viewer.compile import compile_scene_spec
-from oviz.viewer.figure import render_bundle_html
+from oviz.viewer.compile import _radec_to_gal, compile_scene_spec
+from oviz.viewer.figure import _spec_fingerprint, render_bundle_html
 from oviz.viewer.upgrade import read_legacy_scene_spec, upgrade_html
 
 REPO = Path(__file__).resolve().parents[1]
@@ -77,6 +79,19 @@ def _spec_with_rings():
         "initial_state": {},
         "states": {"items": [{"id": "s1", "name": "Start", "snapshot": {"current_frame_index": 0}}]},
     }
+
+
+def _lut_option(name, alpha=255):
+    """A colormap option with a 16-entry LUT; volumes often bake alpha in."""
+
+    ramp = np.linspace(0, 255, 16).astype(np.uint8)
+    lut = np.stack([ramp, ramp // 2, 255 - ramp, np.broadcast_to(np.asarray(alpha, np.uint8), 16)], 1)
+    return {"name": name, "lut_b64": base64.b64encode(lut.tobytes()).decode()}
+
+
+def _member_rows(ra, dec, n=3, **extra):
+    return [{"ra": ra + 0.1 * k, "dec": dec, "is_cluster_member": True, "source_id": f"{ra}-{k}", **extra}
+            for k in range(n)]
 
 
 class BundleTests(unittest.TestCase):
@@ -188,6 +203,83 @@ class CompileEdgeCaseTests(unittest.TestCase):
         self.assertNotIn("<", text)
         self.assertEqual(json.loads(text)["title"], "Clusters <!-- draft --> & </script>")
 
+    def test_members_without_distances_sit_at_the_parent_distance(self):
+        # A member table with only a name and ra/dec is enough (CLAUDE.md):
+        # such stars go on the sky at the parent cluster's present distance.
+        spec = _spec_with_rings()
+        spec["sky_panel"] = {"enabled": True, "members_by_cluster": {
+            "A": _member_rows(83.8, -5.4),
+            "B": _member_rows(56.7, 24.1, distance_pc=135.0)[:1] + _member_rows(56.9, 24.1)[:1],
+        }}
+        bundle = compile_scene_spec(spec)
+        members = bundle.manifest["sky"]["members"]
+        self.assertEqual(members["clusters"], ["A", "B"])
+        self.assertEqual(bundle.decode(members["valid"]["blob"]).tolist(), [1] * 5)
+        xyz = bundle.decode(members["position"]["blob"]).astype(np.float64)
+        # Object A is at (3, 2, 3) pc at t = 0; B's rows keep their own median.
+        np.testing.assert_allclose(np.linalg.norm(xyz, axis=1), [np.sqrt(22.0)] * 3 + [135.0] * 2, rtol=1e-5)
+        lon, lat = _radec_to_gal(np.array([83.8]), np.array([-5.4]))
+        l, b = np.radians(lon[0]), np.radians(lat[0])
+        np.testing.assert_allclose(xyz[0] / np.sqrt(22.0), [np.cos(b) * np.cos(l), np.cos(b) * np.sin(l), np.sin(b)], atol=1e-5)
+        pts = next(t for t in bundle.manifest["traces"] if t["key"] == "trace-0")["points"]
+        self.assertEqual(bundle.decode(pts["members"]["blob"]).tolist(), [0, 1])
+
+    def test_member_links_match_the_loaders_names_and_alias_separators(self):
+        spec = _spec_with_rings()
+        sel = spec["frames"][2]["traces"][0]["points"][0]["selection"]
+        sel.update(cluster_name="Melotte_22", name_all="Melotte_22;Pleiades")
+        # The loader keeps the catalogue's spelling and matches it by a
+        # normalized key; the classic runtime splits aliases on , ; and |.
+        for key in ("melotte 22", "MELOTTE-22", "Pleiades"):
+            spec["sky_panel"] = {"enabled": True, "members_by_cluster": {key: _member_rows(56.75, 24.12, distance_pc=135.0)}}
+            bundle = compile_scene_spec(spec)
+            pts = next(t for t in bundle.manifest["traces"] if t["key"] == "trace-0")["points"]
+            self.assertIn("members", pts, key)
+            self.assertEqual(bundle.decode(pts["members"]["blob"]).tolist(), [0, -1], key)
+
+    def test_colormap_name_clashes_follow_the_registered_name(self):
+        # Two traces and a volume each define "inferno" with a different
+        # table; each reference must resolve to its own table.
+        ramp = np.linspace(0, 255, 16).astype(np.uint8)
+        tables = {"trace-0": _lut_option("inferno"), "trace-3": _lut_option("inferno", ramp),
+                  "dust": _lut_option("inferno", ramp[::-1])}
+        spec = _spec_with_rings()
+        for item in spec["legend"]["items"]:
+            item["color_by"] = {"mode": "age", "colormap": "inferno", "colormap_options": [tables[item["key"]]]}
+        spec["volumes"] = {"layers": [{
+            "key": "dust", "shape": {"x": 4, "y": 4, "z": 4},
+            "data_b64": base64.b64encode(np.arange(64, dtype=np.uint8).tobytes()).decode(),
+            "bounds": {"x": [-10, 10], "y": [-10, 10], "z": [-10, 10]},
+            "colormap_options": [tables["dust"]],
+            "default_controls": {"colormap": "inferno"},
+        }]}
+        legacy = {
+            "trace_style_state": {"trace-0": {"colormap": "inferno"}, "trace-3": {"colormap": "inferno"}},
+            "volume_state_by_key": {"dust": {"colormap": "inferno"}},
+        }
+        spec["initial_state"] = json.loads(json.dumps(legacy))
+        spec["states"] = {"items": [{"id": "s1", "name": "Start", "snapshot": json.loads(json.dumps(legacy))}]}
+        bundle = compile_scene_spec(spec)
+        m = bundle.manifest
+        traces = {t["key"]: t for t in m["traces"]}
+        self.assertEqual(sorted(m["colormaps"]), ["inferno", "inferno~1", "inferno~2"])
+        vol = m["volumes"][0]
+        chosen = {
+            "trace-0": traces["trace-0"]["colorBy"]["colormap"],
+            "trace-3": traces["trace-3"]["colorBy"]["colormap"],
+            "dust": vol["defaults"]["colormap"],
+        }
+        self.assertEqual(traces["trace-3"]["colorBy"]["colormaps"], [chosen["trace-3"]])
+        self.assertEqual(vol["colormaps"], [chosen["dust"]])
+        for key, name in chosen.items():
+            expected = np.frombuffer(base64.b64decode(tables[key]["lut_b64"]), np.uint8).reshape(-1, 4)
+            np.testing.assert_array_equal(bundle.decode(m["colormaps"][name]["blob"]), expected, key)
+        for snap in (m["initialState"], m["states"]["items"][0]["snapshot"]):
+            self.assertEqual(snap["trace_style_state"]["trace-0"]["colormap"], chosen["trace-0"])
+            self.assertEqual(snap["trace_style_state"]["trace-3"]["colormap"], chosen["trace-3"])
+            self.assertEqual(snap["volume_state_by_key"]["dust"]["colormap"], chosen["dust"])
+        self.assertEqual(spec["initial_state"], legacy)  # the scene spec itself is untouched
+
 
 class HtmlTests(unittest.TestCase):
     def test_html_is_self_contained_and_script_safe(self):
@@ -222,6 +314,37 @@ class HtmlTests(unittest.TestCase):
         fig.scene_spec["states"] = {"items": [{"id": "late", "name": "Late", "snapshot": {}}]}
         self.assertEqual(fig.bundle.manifest["states"]["items"][0]["id"], "late")
 
+    def test_figure_recompiles_after_in_place_edits_of_large_members(self):
+        spec = _spec_with_rings()
+        fig = OvizFigure(spec)
+        first = fig.to_html()
+        self.assertIs(fig.bundle, fig.bundle)  # unchanged content reuses the bundle
+        trace = spec["frames"][2]["traces"][0]
+        trace["default_color"] = "#00ff00"
+        trace["points"][0]["x"] = 999.0
+        self.assertNotEqual(fig.to_html(), first)
+        compiled = next(t for t in fig.bundle.manifest["traces"] if t["key"] == "trace-0")
+        self.assertEqual(compiled["color"], "#00ff00")
+        self.assertEqual(float(fig.bundle.decode(compiled["points"]["position"]["blob"])[2, 0, 0]), 999.0)
+        # numpy content is fingerprinted by value; unhashable content disables the cache.
+        a = _spec_fingerprint({"frames": [{"data": np.arange(4.0)}]})
+        self.assertNotEqual(a, _spec_fingerprint({"frames": [{"data": np.arange(4.0) + 1}]}))
+        self.assertEqual(a, _spec_fingerprint({"frames": [{"data": np.arange(4.0)}]}))
+        self.assertIsNone(_spec_fingerprint({"note": object()}))
+
+    def test_notebook_display_uses_srcdoc(self):
+        # Chromium does not load data: URL documents over 2 MiB.
+        fig = OvizFigure(_spec_with_rings())
+        frame = fig._repr_html_()
+        self.assertTrue(frame.startswith('<iframe srcdoc="'))
+        self.assertNotIn("data:text/html", frame)
+        srcdoc = re.match(r'<iframe srcdoc="([^"]*)"', frame).group(1)
+        self.assertEqual(unescape(srcdoc), fig.to_html())
+        # Isolated from the notebook's origin, as the data: URL was.
+        sandbox = re.search(r'sandbox="([^"]*)"', frame).group(1).split()
+        self.assertIn("allow-scripts", sandbox)
+        self.assertNotIn("allow-same-origin", sandbox)
+
 
 class RuntimeBuildTests(unittest.TestCase):
     def test_bundle_has_unique_exports_and_valid_syntax(self):
@@ -244,6 +367,45 @@ class RuntimeBuildTests(unittest.TestCase):
             build._strip_module("x.js", "export default 1;\n")
         with self.assertRaises(build.ViewerBuildError):
             build._strip_module("x.js", "import * as z from './z.js';\n")
+        with self.assertRaises(build.ViewerBuildError):
+            build._strip_module("x.js", "export var z = 1;\n")
+        with self.assertRaisesRegex(build.ViewerBuildError, "aliases"):
+            build._strip_module("x.js", 'import { a as c } from "./m.js";\n')
+
+    def _bundle_sources(self, files):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for rel, text in files.items():
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text(text)
+            with mock.patch.object(build, "SRC_ROOT", root):
+                return build.bundle_js("app/main.js")
+
+    def test_bundler_checks_imported_names_against_exports(self):
+        math = "export function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }\n"
+        main = 'import { clamp, lerp } from "../core/math.js";\nexport const y = lerp(clamp(1, 0, 2));\n'
+        with self.assertRaisesRegex(build.ViewerBuildError, r"app/main\.js imports `lerp` from core/math\.js"):
+            self._bundle_sources({"core/math.js": math, "app/main.js": main})
+
+    def test_bundler_leaves_template_literals_and_comments_alone(self):
+        help_text = 'Usage:\nexport const figure = oviz.save();\nimport { x } from "./missing.js";\n'
+        main = (
+            'import { clamp } from "../core/math.js";\n'
+            f"const help = `{help_text}${{clamp(5, 0, 2)}}`;\n"
+            '/* export default 1;\nimport * as q from "./q.js";\n*/\n'
+            "const quotes = /[`\"']/g;\n"
+            "export const shown = help + quotes.source;\n"
+            "console.log(JSON.stringify(shown));\n"
+        )
+        math = "export function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }\n"
+        js = self._bundle_sources({"core/math.js": math, "app/main.js": main})
+        self.assertIn(help_text, js)
+        self.assertIn("return { shown };", js)
+        if not NODE:
+            self.skipTest("node is not installed")
+        r = subprocess.run([NODE, "-e", js], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        self.assertEqual(json.loads(r.stdout), help_text + "2" + "[`\"']")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_shaders_avoid_glsl_reserved_identifiers(self):

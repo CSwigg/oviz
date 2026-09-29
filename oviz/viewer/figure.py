@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import base64
+import hashlib
 import html
 import json
 import re
@@ -10,6 +10,8 @@ import tempfile
 import webbrowser
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from .build import bundle_css, bundle_js, template_html
 from .bundle import Bundle, encode_base64_lines
@@ -30,20 +32,52 @@ def _check_mode(mode: str | None) -> str:
     return mode
 
 
-def _spec_fingerprint(spec: dict[str, Any]) -> str:
-    """Cheap change detector: identity of the big members + small ones' JSON."""
+def _json_default(value: Any) -> Any:
+    if isinstance(value, np.ndarray):
+        if value.dtype == object:
+            return value.tolist()
+        return [value.dtype.str, list(value.shape), hashlib.sha1(np.ascontiguousarray(value).tobytes()).hexdigest()]
+    if isinstance(value, np.generic):
+        return value.item()
+    raise TypeError(f"cannot fingerprint {type(value).__name__}")
 
-    parts = []
-    for k in sorted(spec):
-        v = spec[k]
-        if k in ("frames", "volumes", "sky_panel", "image_planes", "dendrogram"):
-            parts.append(f"{k}:{id(v)}:{len(v) if hasattr(v, '__len__') else 0}")
-        else:
-            try:
-                parts.append(f"{k}:{json.dumps(v, sort_keys=True, default=str)}")
-            except (TypeError, ValueError):
-                parts.append(f"{k}:{id(v)}")
-    return str(hash("|".join(parts)))
+
+def _hash_json(digest: Any, value: Any, depth: int) -> None:
+    """Feed ``value`` to ``digest`` as JSON, split into pieces ``depth`` levels deep."""
+
+    if depth and isinstance(value, dict):
+        digest.update(b"{")
+        for k, v in value.items():
+            digest.update(json.dumps(k, default=_json_default).encode() + b":")
+            _hash_json(digest, v, depth - 1)
+            digest.update(b",")
+        digest.update(b"}")
+    elif depth and isinstance(value, (list, tuple)):
+        digest.update(b"[")
+        for v in value:
+            _hash_json(digest, v, depth - 1)
+            digest.update(b",")
+        digest.update(b"]")
+    else:
+        digest.update(json.dumps(value, default=_json_default, separators=(",", ":")).encode())
+
+
+def _spec_fingerprint(spec: dict[str, Any]) -> str | None:
+    """Content hash of the scene spec, or None when it cannot be hashed.
+
+    Any in-place edit (a frame's colour, a point, a volume setting, States
+    attached after construction) must trigger a recompile, so the whole
+    spec is hashed. Its JSON is fed in pieces (per frame, volume layer,
+    member cluster, ...) so a spec of hundreds of MB is never one string;
+    hashing a 413 MB spec takes ~3 s against ~13 s to compile it.
+    """
+
+    digest = hashlib.sha1()
+    try:
+        _hash_json(digest, spec, 3)
+    except (TypeError, ValueError, RecursionError):
+        return None
+    return digest.hexdigest()
 
 
 def _json_for_script(obj: Any) -> str:
@@ -105,12 +139,12 @@ class OvizFigure:
 
     @property
     def bundle(self) -> Bundle:
-        """The compiled bundle (recompiled if the scene spec changed)."""
+        """The compiled bundle (recompiled if the scene spec's content changed)."""
 
         if self.scene_spec is None:
             return self._bundle
         key = _spec_fingerprint(self.scene_spec)
-        if self._bundle is None or key != self._bundle_key:
+        if self._bundle is None or key is None or key != self._bundle_key:
             self._bundle = compile_scene_spec(self.scene_spec)
             self._bundle_key = key
         return self._bundle
@@ -130,15 +164,17 @@ class OvizFigure:
     def size_report(self) -> dict[str, Any]:
         return self.bundle.size_report()
 
-    def _data_url(self) -> str:
-        encoded = base64.b64encode(self.to_html().encode("utf-8")).decode("ascii")
-        return f"data:text/html;charset=utf-8;base64,{encoded}"
-
     def _repr_html_(self) -> str:
+        # srcdoc rather than a data: URL: Chromium does not load data: URL
+        # documents over 2 MiB, and figures are usually far larger. A srcdoc
+        # frame would share the notebook's origin, so the sandbox (without
+        # allow-same-origin) keeps the figure, and the Aladin script it
+        # loads, isolated the way a data: URL did.
         return (
-            f'<iframe src="{self._data_url()}" style="width:100%;height:78vh;min-height:520px;'
+            f'<iframe srcdoc="{html.escape(self.to_html(), quote=True)}" style="width:100%;height:78vh;min-height:520px;'
             'border:0;border-radius:12px;display:block" loading="eager" '
-            'referrerpolicy="no-referrer" allow="fullscreen"></iframe>'
+            'sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox" '
+            'referrerpolicy="no-referrer" allow="fullscreen; clipboard-write"></iframe>'
         )
 
     def show(self) -> str | None:

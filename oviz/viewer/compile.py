@@ -243,6 +243,10 @@ class _TraceCompiler:
         self.F = len(times)
         self.t0 = t0_index
         self.colormaps = colormaps
+        #: trace key → (N, 3) object positions at the zero-time frame.
+        self.present_positions: dict[str, np.ndarray] = {}
+        #: trace key → {spec colormap name: registered name}.
+        self.colormap_names: dict[str, dict[str, str]] = {}
 
     def compile(self, key: str, entries: list[dict | None], legend_item: dict | None) -> dict[str, Any] | None:
         F = self.F
@@ -274,15 +278,16 @@ class _TraceCompiler:
         }
         color_by = legend_item.get("color_by") or pick("color_by")
         if isinstance(color_by, dict) and color_by.get("mode"):
-            options = color_by.get("colormap_options") or []
-            names = [self.colormaps.add(o) for o in options if isinstance(o, dict)]
+            names, renamed = self.colormaps.add_options(color_by.get("colormap_options"))
+            self.colormap_names[key] = renamed
+            colormap = str(color_by.get("colormap") or "")
             spec["colorBy"] = {
                 "mode": str(color_by.get("mode")),
                 "label": str(color_by.get("label") or color_by.get("mode")),
                 "cmin": _num(color_by.get("cmin"), 0.0),
                 "cmax": _num(color_by.get("cmax"), 1.0),
-                "colormap": str(color_by.get("colormap") or (names[0] if names else "turbo")),
-                "colormaps": [n for n in names if n],
+                "colormap": renamed.get(colormap, colormap) or (names[0] if names else "turbo"),
+                "colormaps": names,
                 # Legacy default: colour by value unless the spec says "fixed".
                 "defaultMode": "fixed" if str(color_by.get("default_color_mode") or "by_value") == "fixed" else "by_value",
             }
@@ -395,6 +400,7 @@ class _TraceCompiler:
         size = _fill_absent_frames(size, present)
         opacity = _fill_absent_frames(opacity, present)
         scalar = _fill_absent_frames(scalar, present)
+        self.present_positions[key] = pos[self.t0].copy()
         out["position"] = _position_channel(b, pos, f"{key}-pos", CRITICAL)
 
         size_ch = _scalar_channel(b, size, f"{key}-size", CRITICAL, default_size)
@@ -604,6 +610,26 @@ class _ColormapRegistry:
             self._by_blob.setdefault(blob, name)
         return name
 
+    def add_options(self, options: Any) -> tuple[list[str], dict[str, str]]:
+        """Register colormap options.
+
+        Returns the registered names and a map from each option's spec name
+        to its registered name, which differs when the name was already taken
+        by a different lookup table ("inferno" → "inferno~1"). Anything that
+        refers to these colormaps by name must go through the map.
+        """
+
+        names: list[str] = []
+        renamed: dict[str, str] = {}
+        for option in options or []:
+            if not isinstance(option, dict):
+                continue
+            name = self.add(option)
+            if name:
+                names.append(name)
+                renamed.setdefault(str(option.get("name") or "").strip(), name)
+        return names, renamed
+
 
 # ---------------------------------------------------------------------------
 # Volumes
@@ -710,14 +736,16 @@ def occupancy_grid(vol: np.ndarray, max_blocks: int = 64) -> np.ndarray | None:
 
 
 def _compile_volume(builder: BundleBuilder, layer: dict[str, Any], colormaps: _ColormapRegistry,
-                    presence: list[int] | None, co_rotation: float) -> dict[str, Any]:
+                    presence: list[int] | None, co_rotation: float) -> tuple[dict[str, Any], dict[str, str]]:
+    """Compile one volume layer; also return its colormap renames."""
+
     scalar, validity = _volume_bytes(layer)
     nz, ny, nx = scalar.shape
     bounds = layer.get("bounds") or {}
-    options = layer.get("colormap_options") or []
-    names = [colormaps.add(o) for o in options if isinstance(o, dict)]
-    names = [n for n in names if n]
+    names, renamed = colormaps.add_options(layer.get("colormap_options"))
     defaults = dict(layer.get("default_controls") or {})
+    if isinstance(defaults.get("colormap"), str):
+        defaults["colormap"] = renamed.get(defaults["colormap"], defaults["colormap"])
     data_range = layer.get("data_range") or [0.0, 1.0]
     out: dict[str, Any] = {
         "key": str(layer.get("key")),
@@ -760,7 +788,7 @@ def _compile_volume(builder: BundleBuilder, layer: dict[str, Any], colormaps: _C
         }
     if presence is not None:
         out["presence"] = presence
-    return out
+    return out, renamed
 
 
 # ---------------------------------------------------------------------------
@@ -788,10 +816,62 @@ def _radec_to_gal(ra_deg: np.ndarray, dec_deg: np.ndarray) -> tuple[np.ndarray, 
     return lon, lat
 
 
-def _compile_members(builder: BundleBuilder, sky_panel: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, int]]:
+_ALIAS_SPLIT_RE = re.compile(r"[,;|]")
+
+
+def _link_members(builder: BundleBuilder, traces: list[dict[str, Any]],
+                  member_keys: dict[str, int]) -> list[tuple[dict[str, Any], np.ndarray]]:
+    """Link each trace object to its member cluster (-1 = none).
+
+    Candidates are the object's name and aliases, split on ``,;|`` and tried
+    with ``_``/space variants, like the classic runtime. Exact spellings win;
+    otherwise the member loader's normalized key (lowercase alphanumerics)
+    decides, because that is how it selected the catalogue rows.
+    """
+
+    from ..viz import _normalize_threejs_cluster_catalog_key as normalize  # deferred: oviz.viz imports the viewer
+
+    # The first catalogue key (in catalogue order) for each normalized spelling.
+    by_normal: dict[str, tuple[int, int]] = {}
+    for rank, (key, cluster) in enumerate(member_keys.items()):
+        by_normal.setdefault(normalize(key), (rank, cluster))
+    links = []
+    for trace in traces:
+        pts = trace.get("points")
+        if not pts:
+            continue
+        meta = builder_blob_json(builder, pts["meta"]["blob"])
+        names = meta.get("name") or []
+        aliases = meta.get("aliases") or [""] * len(names)
+        link = np.full(len(names), -1, dtype=np.int32)
+        for j, nm in enumerate(names):
+            cands = []
+            for part in _ALIAS_SPLIT_RE.split(f"{nm},{aliases[j] or ''}"):
+                part = part.strip()
+                if part:
+                    cands.extend([part, part.replace("_", " "), re.sub(r"\s+", "_", part)])
+            hit = next((member_keys[c] for c in cands if c in member_keys), None)
+            if hit is None:
+                found = [by_normal[n] for n in map(normalize, cands) if n in by_normal]
+                hit = min(found)[1] if found else None
+            if hit is not None:
+                link[j] = hit
+        links.append((trace, link))
+    return links
+
+
+def _compile_members(builder: BundleBuilder, sky_panel: dict[str, Any], traces: list[dict[str, Any]],
+                     present_positions: dict[str, np.ndarray]) -> dict[str, Any] | None:
+    """Compile the member-star catalogue and link trace objects to it.
+
+    ``present_positions`` holds each trace's object positions at the
+    zero-time frame; a cluster whose rows carry no distance at all is placed
+    at its parent object's present-day distance.
+    """
+
     members = sky_panel.get("members_by_cluster") if isinstance(sky_panel, dict) else None
     if not isinstance(members, dict) or not members:
-        return None, {}
+        return None
     clusters: list[str] = []
     offsets = [0]
     signature_to_cluster: dict[tuple, int] = {}
@@ -822,7 +902,18 @@ def _compile_members(builder: BundleBuilder, sky_panel: dict[str, Any]) -> tuple
             cols["pmdec"].append(_num(s.get("pmdec_masyr")))
         offsets.append(len(cols["ra"]))
     if not clusters:
-        return None, {}
+        return None
+    links = _link_members(builder, traces, key_to_cluster)
+    parent_dist = np.full(len(clusters), np.nan)
+    for trace, link in links:
+        p0 = present_positions.get(trace["key"])
+        if p0 is None or len(p0) != len(link):
+            continue
+        d0 = np.linalg.norm(p0, axis=1)
+        for j in np.flatnonzero(link >= 0):
+            c = link[j]
+            if np.isnan(parent_dist[c]) and np.isfinite(d0[j]) and d0[j] > 0:
+                parent_dist[c] = d0[j]
     ra = np.array(cols["ra"])
     dec = np.array(cols["dec"])
     lon = np.array(cols["l"])
@@ -834,14 +925,15 @@ def _compile_members(builder: BundleBuilder, sky_panel: dict[str, Any]) -> tuple
     dist = np.array(cols["dist"])
     pmra = np.nan_to_num(np.array(cols["pmra"]), nan=0.0)
     pmdec = np.nan_to_num(np.array(cols["pmdec"]), nan=0.0)
-    # Fill missing distances with the cluster median so stars stay on the sky.
+    # Fill missing distances with the cluster median so stars stay on the
+    # sky, or with the parent object's distance when no row has one.
     off = np.array(offsets)
     for c in range(len(clusters)):
         seg = dist[off[c]:off[c + 1]]
         bad = ~np.isfinite(seg) | (seg <= 0)
         if np.any(bad):
             good = seg[~bad]
-            seg[bad] = float(np.median(good)) if good.size else np.nan
+            seg[bad] = float(np.median(good)) if good.size else parent_dist[c]
     lr = np.radians(lon)
     br = np.radians(lat)
     unit = np.stack([np.cos(br) * np.cos(lr), np.cos(br) * np.sin(lr), np.sin(br)], axis=1)
@@ -865,7 +957,10 @@ def _compile_members(builder: BundleBuilder, sky_panel: dict[str, Any]) -> tuple
         "velocity": {"blob": builder.array(vel.astype(np.float32), "f32", hint="members-vel", priority=NORMAL)},
         "valid": {"blob": builder.array(good.astype(np.uint8), "u8", hint="members-valid", priority=NORMAL)},
     }
-    return spec, key_to_cluster
+    for trace, link in links:
+        if np.any(link >= 0):
+            trace["points"]["members"] = {"blob": builder.array(link, "i32", hint=f"{trace['key']}-members", priority=NORMAL)}
+    return spec
 
 
 # ---------------------------------------------------------------------------
@@ -997,39 +1092,20 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
     vol_block = spec.get("volumes") or {}
     co_rotation = _num(vol_block.get("co_rotation_rate_rad_per_myr"), 0.0)
     volumes = []
+    volume_colormaps: dict[str, dict[str, str]] = {}
     for layer in vol_block.get("layers") or []:
         if not isinstance(layer, dict):
             continue
         pres = volume_presence.get(str(layer.get("key")))
         presence = None if pres is None or len(pres) == len(frames) else sorted(pres)
-        volumes.append(_compile_volume(builder, layer, colormaps, presence, co_rotation))
+        volume, renamed = _compile_volume(builder, layer, colormaps, presence, co_rotation)
+        volumes.append(volume)
+        volume_colormaps.setdefault(volume["stateKey"], renamed)
 
     # ---- sky
     sky_panel = spec.get("sky_panel") or {}
     sky_dome = spec.get("sky_dome") or {}
-    members, member_keys = _compile_members(builder, sky_panel)
-    if members:
-        # Link member clusters to trace objects by name and aliases.
-        for trace in traces:
-            pts = trace.get("points")
-            if not pts:
-                continue
-            meta = builder_blob_json(builder, pts["meta"]["blob"])
-            names = meta.get("name") or []
-            aliases = meta.get("aliases") or [""] * len(names)
-            link = np.full(len(names), -1, dtype=np.int32)
-            for j, nm in enumerate(names):
-                cands = [nm, nm.replace("_", " "), nm.replace(" ", "_")]
-                for alias in str(aliases[j] or "").split(","):
-                    alias = alias.strip()
-                    if alias:
-                        cands.extend([alias, alias.replace("_", " "), alias.replace(" ", "_")])
-                for c in cands:
-                    if c in member_keys:
-                        link[j] = member_keys[c]
-                        break
-            if np.any(link >= 0):
-                pts["members"] = {"blob": builder.array(link, "i32", hint=f"{trace['key']}-members", priority=NORMAL)}
+    members = _compile_members(builder, sky_panel, traces, tc.present_positions)
     init = spec.get("initial_state") or {}
     sky = None
     if sky_panel.get("enabled") or sky_dome.get("enabled"):
@@ -1074,7 +1150,11 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
     }
 
     animation = spec.get("animation") or {}
-    states = spec.get("states") or {}
+    initial_state = _remap_frame_fields(_clean_json(_strip_heavy(init)), order)
+    states = _remap_states_frames(_clean_json(spec.get("states") or {}), order)
+    items = (states.get("items") if isinstance(states, dict) else None) or []
+    for snapshot in [initial_state, *[i.get("snapshot") for i in items if isinstance(i, dict)]]:
+        _rename_state_colormaps(snapshot, tc.colormap_names, volume_colormaps)
     manifest: dict[str, Any] = {
         "format": BUNDLE_FORMAT,
         "title": str(spec.get("title") or ""),
@@ -1105,8 +1185,8 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
         "volumes": volumes,
         "colormaps": colormaps.entries,
         "sky": sky,
-        "initialState": _remap_frame_fields(_clean_json(_strip_heavy(init)), order),
-        "states": _remap_states_frames(_clean_json(states), order),
+        "initialState": initial_state,
+        "states": states,
         "legacy": {
             "decorations": extra_decorations,
             "exportProfile": spec.get("export_profile"),
@@ -1156,6 +1236,22 @@ def _remap_states_frames(states: Any, order: list[int]) -> Any:
         if isinstance(item, dict) and isinstance(item.get("snapshot"), dict):
             _remap_frame_fields(item["snapshot"], order)
     return states
+
+
+def _rename_state_colormaps(snapshot: Any, trace_names: dict[str, dict[str, str]],
+                            volume_names: dict[str, dict[str, str]]) -> None:
+    """Point a legacy snapshot's trace/volume colormaps at their registered names."""
+
+    if not isinstance(snapshot, dict):
+        return
+    for field, renames in (("trace_style_state", trace_names), ("volume_state_by_key", volume_names)):
+        styles = snapshot.get(field)
+        if not isinstance(styles, dict):
+            continue
+        for key, style in styles.items():
+            renamed = renames.get(str(key)) or {}
+            if isinstance(style, dict) and isinstance(style.get("colormap"), str):
+                style["colormap"] = renamed.get(style["colormap"], style["colormap"])
 
 
 def builder_blob_json(builder: BundleBuilder, blob_id: str) -> Any:
