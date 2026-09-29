@@ -141,7 +141,8 @@ export function installTooltips(root) {
   let timer = 0;
   const show = (el) => {
     const text = el.getAttribute("data-tip");
-    if (!text) return;
+    // No tip over a button whose menu is already open.
+    if (!text || el.getAttribute("aria-expanded") === "true") return;
     const [main, keys] = text.split("  ");
     tip.textContent = main;
     if (keys) {

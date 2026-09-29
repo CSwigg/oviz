@@ -5,9 +5,7 @@
 // the cursor stays under the cursor), wheel/pinch change the field of view.
 
 import { DEG, clamp } from "../core/math.js";
-import { forwardFromAngles } from "./camera.js";
-
-const PITCH_LIMIT = 89.5 * DEG;
+import { forwardFromAngles, PITCH_LIMIT } from "./camera.js";
 
 export class Controls {
   constructor(element, renderer, { onChange, onInteractStart, onInteractEnd } = {}) {
@@ -141,6 +139,7 @@ export class Controls {
   _wheel(e) {
     if (!this.enabled) return;
     e.preventDefault();
+    this.onInteractStart(e);
     let dy = e.deltaY;
     if (e.deltaMode === 1) dy *= 16;
     else if (e.deltaMode === 2) dy *= 400;
@@ -177,12 +176,23 @@ export class Controls {
     this._changed();
   }
 
+  /**
+   * Largest vertical field of view. In Sky view Aladin's TAN projection is
+   * at most 150° wide, so the WebGL view may not be wider than that either
+   * (or the survey and the data would stop registering).
+   */
+  maxFovFor(mode = this.mode) {
+    if (mode !== "sky") return this.maxFov;
+    const aspect = this.camera.aspect || 1;
+    return Math.min(this.maxFov, (2 * Math.atan(Math.tan(75 * DEG) / aspect)) / DEG);
+  }
+
   /** Zoom by `factor` (<1 zooms in) keeping the point under (x, y) fixed. */
   zoomAt(factor, x, y) {
     const p = this.pose;
     if (this.mode === "sky" || p.distance <= 1e-6) {
       const before = p.fov;
-      p.fov = clamp(p.fov * factor, this.minFov, this.maxFov);
+      p.fov = clamp(p.fov * factor, this.minFov, this.maxFovFor());
       // Keep the cursor direction steady while zooming.
       const cam = this.camera;
       if (x != null && cam.width > 0) {
@@ -219,22 +229,20 @@ export class Controls {
     const v = this.velocity;
     let moved = false;
     if (this.pointers.size === 0) {
+      // Velocities are per 16 ms: scale each step by the frame time so a
+      // fling travels as far on a 120 Hz screen as on a 60 Hz one.
       const decay = Math.pow(1 - this.damping, dt / 16);
+      const k = dt / 16;
       if (Math.abs(v.yaw) + Math.abs(v.pitch) > 1e-5) {
-        if (this.mode === "sky") {
-          this.pose.yaw += v.yaw;
-          this.pose.pitch = clamp(this.pose.pitch + v.pitch, -PITCH_LIMIT, PITCH_LIMIT);
-        } else {
-          this.pose.yaw += v.yaw;
-          this.pose.pitch = clamp(this.pose.pitch + v.pitch, -PITCH_LIMIT, PITCH_LIMIT);
-        }
+        this.pose.yaw += v.yaw * k;
+        this.pose.pitch = clamp(this.pose.pitch + v.pitch * k, -PITCH_LIMIT, PITCH_LIMIT);
         v.yaw *= decay; v.pitch *= decay;
         moved = true;
       } else {
         v.yaw = v.pitch = 0;
       }
       if (Math.abs(v.panX) + Math.abs(v.panY) > 0.05) {
-        this.pan(v.panX, v.panY);
+        this.pan(v.panX * k, v.panY * k);
         v.panX *= decay; v.panY *= decay;
         moved = true;
       } else {

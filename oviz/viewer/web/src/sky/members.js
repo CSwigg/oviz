@@ -103,6 +103,8 @@ export class MembersLayer {
     const clusterOf = new Float32Array(count);
     const rel = new Float32Array(count * 3);
     this.clusterOfStar = new Uint32Array(count);
+    // Clusters with no placeable star keep their own marker in Sky view.
+    this.clusterHasStars = new Uint8Array(this.clusterCount);
     for (let c = 0; c < this.clusterCount; c++) {
       const a = offsets[c], b = offsets[c + 1];
       let mx = 0, my = 0, mz = 0, n = 0;
@@ -110,6 +112,7 @@ export class MembersLayer {
         if (!valid[i]) continue;
         mx += velocity[i * 3]; my += velocity[i * 3 + 1]; mz += velocity[i * 3 + 2]; n++;
       }
+      this.clusterHasStars[c] = n > 0 ? 1 : 0;
       if (n) { mx /= n; my /= n; mz /= n; }
       for (let i = a; i < b; i++) {
         clusterOf[i] = valid[i] ? c : -1;

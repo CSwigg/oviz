@@ -213,6 +213,11 @@ export function legacySnapshotToState(snap, manifest, base) {
   if (Array.isArray(snap.manual_labels)) {
     st.ext = { ...(st.ext || {}), notes: snap.manual_labels.map(legacyNote).filter(Boolean) };
   }
+  // A classic click selection names its cluster; it is found by name on apply.
+  const cs = snap.current_selection;
+  if (cs && typeof cs === "object" && cs.cluster_name) {
+    st.ext = { ...(st.ext || {}), ui: { selection: { traceName: String(cs.trace_name || ""), name: String(cs.cluster_name) }, layers: null, details: null } };
+  }
   const fv = Number(snap.current_frame_value ?? snap.current_frame_index);
   if (Number.isFinite(fv)) st.time.frame = fv;
   const mode = gc.camera_view_mode === "earth" ? "sky" : "3d";

@@ -14,7 +14,9 @@ export class IdleFade {
     this.fine = window.matchMedia?.("(hover: hover) and (pointer: fine)");
     const root = ui.root;
     const wake = () => this.wake();
-    for (const type of ["pointermove", "pointerdown", "wheel", "keydown"]) root.addEventListener(type, wake, { passive: true });
+    for (const type of ["pointermove", "pointerdown", "wheel"]) root.addEventListener(type, wake, { passive: true });
+    // Keys arrive at the window when nothing inside the figure has focus.
+    window.addEventListener("keydown", wake, { capture: true, passive: true });
     root.addEventListener("pointerover", (e) => { this.over = !!e.target.closest?.(CHROME); }, { passive: true });
     root.addEventListener("pointerleave", () => { this.over = false; });
   }
@@ -26,7 +28,10 @@ export class IdleFade {
   busy() {
     const ui = this.ui;
     const ds = ui.root.dataset;
-    return this.over || ui.layersOpen || ui.overlays?.size || ui.palette?.open || ui._menu || ui._sheet
+    // A control with keyboard focus must stay visible under the user's hands.
+    const focused = document.activeElement;
+    const keyboardFocus = focused && focused !== document.body && ui.ui.contains(focused) && focused.matches?.(":focus-visible");
+    return this.over || keyboardFocus || ui.layersOpen || ui.overlays?.size || ui.palette?.open || ui._menu || ui._sheet
       || ds.story === "true" || ds.presenting === "true" || ds.lasso === "true" || ui.viewer.controls.pointers.size > 0;
   }
 

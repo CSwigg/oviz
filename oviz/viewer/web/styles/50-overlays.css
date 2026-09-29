@@ -25,6 +25,8 @@
   user-select: text; -webkit-user-select: text;
 }
 .ov-palette-input::placeholder { color: var(--ov-text-3); }
+/* The palette itself is the focus context: no ring around its field. */
+.ov-root .ov-palette-input:focus-visible { outline: none; }
 .ov-palette-list { max-height: min(52vh, 460px); overflow: auto; padding: 6px; scrollbar-width: thin; }
 .ov-palette-group { padding: 10px 10px 4px; font: 650 10px/1 var(--ov-font); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ov-text-3); }
 .ov-palette-item {
@@ -72,6 +74,8 @@
   background: var(--ov-surface-strong);
   animation: ov-menu-in 160ms var(--ov-ease);
   transform-origin: top right;
+  max-height: calc(100% - 16px);
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
 }
 @keyframes ov-menu-in { from { opacity: 0; transform: scale(0.97) translateY(-4px); } }
 .ov-pop-title { padding: 8px 10px 6px; font: 600 10px/1 var(--ov-font); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ov-text-3); }

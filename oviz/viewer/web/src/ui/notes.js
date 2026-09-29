@@ -77,17 +77,27 @@ export class NotesPlugin {
     const el = anchorEl || this.viewer.labels.dynamic.get(`note:${id}`)?.el;
     if (!el) return;
     const input = h("input", { class: "ov-input", value: n.text, "aria-label": "Note text" });
+    let cancelled = false;
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Enter") { commit(); this.ui.closeMenu(); }
-      if (e.key === "Escape") this.ui.closeMenu();
+      // Closing the menu blurs the field; the blur must not commit.
+      if (e.key === "Escape") { cancelled = true; this.ui.closeMenu(); }
     });
     const commit = () => {
+      if (cancelled) return;
       const t = input.value.trim();
       if (t && t !== n.text) { n.text = t; this.sync(); }
     };
     const colors = ["#ffffff", "#f4c46a", "#7cc4ff", "#ff7a70", "#6fdc9b"].map((c) =>
-      h("button", { class: "ov-chip", type: "button", style: { background: c }, "aria-label": c, "aria-pressed": String(n.color === c), onclick: () => { n.color = c; this.sync(); } }));
+      h("button", {
+        class: "ov-chip", type: "button", style: { background: c }, "aria-label": c, "aria-pressed": String(n.color === c),
+        onclick: (e) => {
+          n.color = c;
+          this.sync();
+          for (const b of colors) b.setAttribute("aria-pressed", String(b === e.currentTarget));
+        },
+      }));
     const body = h("div", { class: "ov-pop-body" }, input, h("div", { class: "ov-colors" }, colors));
     this.ui.menu(el, [
       { body },

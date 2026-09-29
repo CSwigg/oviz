@@ -212,6 +212,12 @@ export class VolumesLayer {
   /** Upload a volume. `data` is Uint8Array (z, y, x); `occ` optional block maxima. */
   addVolume(spec, data, occ) {
     const gl = this.gl;
+    // Replacing a volume frees the old textures (never leak GPU memory).
+    const old = this.volumes.get(spec.key);
+    if (old) {
+      gl.deleteTexture(old.tex);
+      if (old.occTex) gl.deleteTexture(old.occTex);
+    }
     const [nx, ny, nz] = spec.dims;
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_3D, tex);
@@ -251,8 +257,11 @@ export class VolumesLayer {
     const draws = p.volumeDraws || [];
     if (!draws.length) { this._visible = false; return; }
     this._visible = true;
-    // Quality: march at half resolution while the view moves.
-    const scale = frame.interacting ? Math.min(0.5, this.quality) : this.quality;
+    // Quality: march at half resolution while the view moves. Large
+    // captures cap the march target (smooth volumes upsample cleanly and a
+    // full 8K float target would need hundreds of MB).
+    let scale = frame.interacting ? Math.min(0.5, this.quality) : this.quality;
+    if (frame.capture) scale = Math.min(scale, 4096 / Math.max(frame.width, frame.height));
     const w = Math.max(1, Math.round(frame.width * scale));
     const h = Math.max(1, Math.round(frame.height * scale));
     const key = [frame.camera.version, w, h, p.frame.toFixed(5), p.volumeSignature, frame.width, frame.height].join("|");

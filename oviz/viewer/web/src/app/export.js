@@ -27,7 +27,7 @@ export function buildExportHtml(manifest, { title, theme = "dark", mode } = {}) 
   const runtime = doc.getElementById("oviz-runtime")?.textContent || "";
   const blobs = [...doc.querySelectorAll("script[data-oviz-blob]")].map((el) => el.outerHTML).join("\n");
   const version = manifest.viewer?.version || "";
-  const pageTitle = title ?? (manifest.title || doc.title || "Oviz figure");
+  const pageTitle = title ?? (doc.title || manifest.title || "Oviz figure");
   return [
     "<!doctype html>",
     `<html lang="en" data-oviz-theme="${escapeHtml(theme)}" data-oviz-mode="${escapeHtml(modeId)}">`,

@@ -76,17 +76,19 @@ export class SelectionReticle {
       if (d.dist != null) facts.push(formatDistance(d.dist));
       if (d.nStars != null) facts.push(`${fmtInt(d.nStars)} stars`);
     }
-    this.callout.replaceChildren(
+    // Native replaceChildren would print a null child as "null": filter them.
+    this.callout.replaceChildren(...[
       h("div", { class: "ov-callout-head" },
         h("span", { class: "ov-callout-dot", style: { background: color } }),
         h("span", { class: "ov-callout-kicker" }, kicker),
         iconButton("close", "Clear selection", () => this.ui.select(null), { cls: "ov-callout-close", shortcut: "Esc" })),
       h("div", { class: "ov-callout-name" }, name),
       facts.length ? h("div", { class: "ov-callout-facts" }, facts.join(" · ")) : null,
-      sel.kind === "member" ? null : h("div", { class: "ov-callout-actions" },
-        h("button", { class: "ov-callout-btn", type: "button", onclick: () => v.flyToObject(sel.trace, sel.index) }, "Fly to"),
+      h("div", { class: "ov-callout-actions" },
+        // Member stars are seen from the Sun: there is nowhere to fly to.
+        sel.kind === "member" ? null : h("button", { class: "ov-callout-btn", type: "button", onclick: () => v.flyToObject(sel.trace, sel.index) }, "Fly to"),
         h("button", { class: "ov-callout-btn ov-callout-btn--primary", type: "button", onclick: () => this.ui.openDetails() }, "Details")),
-    );
+    ].filter(Boolean));
     this.callout.hidden = false;
   }
 
@@ -104,10 +106,13 @@ export class SelectionReticle {
   }
 
   hide() {
+    // Always hide the card: a selection that starts off-screen must not
+    // show a freshly built card at its last (or initial 0, 0) position.
+    this.callout.style.visibility = "hidden";
+    delete this.ui.root.dataset.callout;
     if (!this.visible) return;
     this.visible = false;
     this.mark.setAttribute("opacity", "0");
-    this.callout.style.visibility = "hidden";
     delete this.ui.root.dataset.reticle;
   }
 
@@ -115,7 +120,7 @@ export class SelectionReticle {
     const sel = this.ui.selection;
     const v = this.viewer;
     if (!sel) return this.hide();
-    const p = sel.kind === "member" ? sel.member.position : v.objectPosition(sel.trace, sel.index);
+    const p = this.ui.selectionPosition(sel);
     const cam = v.renderer.camera;
     const s = p && cam.project(p, this.scr);
     const W = cam.width, H = cam.height;
@@ -129,7 +134,12 @@ export class SelectionReticle {
     this.mark.setAttribute("opacity", "1");
     this.visible = true;
     this.ui.root.dataset.reticle = "true";
-    this.callout.style.visibility = "";
+    // The label card steps aside while the details panel shows the object.
+    const details = this.ui.inspector?.el.dataset.open === "true";
+    const showCallout = !this.callout.hidden && !details;
+    this.callout.style.visibility = showCallout ? "" : "hidden";
+    if (showCallout) this.ui.root.dataset.callout = "true";
+    else delete this.ui.root.dataset.callout;
     this.placeCallout(x, y);
   }
 }

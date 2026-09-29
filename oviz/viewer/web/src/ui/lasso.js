@@ -3,6 +3,7 @@
 
 import { h, icon, iconButton, downloadBlob } from "./dom.js";
 import { clonePose } from "../engine/camera.js";
+import { birthFadeAt } from "../app/timeline.js";
 
 const LASSO_BIT = 8;
 
@@ -107,13 +108,18 @@ export class LassoPlugin {
     const sel = new Map();
     let total = 0;
     const scr = [0, 0, 0];
+    const t = v.timeline.time;
+    const g = v.state.global;
     for (const trace of v.traces) {
       if (!trace.points || !v.state.traces[trace.key]?.visible) continue;
       const batch = v.points.byKey.get(trace.key);
       if (!batch) continue;
+      const ages = v.data.get(trace.key)?.ageNow;
       const hits = [];
       for (let i = 0; i < trace.points.count; i++) {
-        if (batch.state[i] & 2) continue; // hidden by the filter
+        if (batch.state[i] & 18) continue; // hidden by the filter or an isolated lasso
+        // Not yet born (or long faded) at this time: invisible, so not selectable.
+        if (ages && birthFadeAt(t, ages[i], g.fadeTime, g.fadeInOut) <= 0) continue;
         const p = v.objectPosition(trace.key, i);
         const s = p && cam.project(p, scr);
         if (s && inside(s[0], s[1], poly)) hits.push(i);
@@ -211,13 +217,14 @@ export class LassoPlugin {
     if (!this.selection) return null;
     const out = {};
     for (const [k, idx] of this.selection) out[k] = Array.from(idx);
-    return { selection: out, isolate: this.isolate };
+    return { selection: out, isolate: this.isolate, filterOff: !!this.filterOff };
   }
 
   restore(s) {
     if (!s || !s.selection) { if (this.selection) this.clear(); return; }
     this.selection = new Map(Object.entries(s.selection).map(([k, v]) => [k, Uint32Array.from(v)]));
     this.isolate = !!s.isolate;
+    this.filterOff = !!s.filterOff;
     this.applyBits();
     this.renderBar();
   }

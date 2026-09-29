@@ -5,7 +5,7 @@
 // one animates every continuous property together and then assigns the
 // target exactly, so the arrival is bit-for-bit the captured view.
 
-import { clonePose, lerpPose, makePose } from "../engine/camera.js";
+import { clonePose, lerpPose, makePose, sanitizePose } from "../engine/camera.js";
 import { cloneJson, legacySnapshotToState, STATE_VERSION } from "./state.js";
 import { clamp, lerp, easeInOutCubic } from "../core/math.js";
 
@@ -33,26 +33,45 @@ export function captureState(viewer, sky) {
   return s;
 }
 
-/** Read embedded States (v2 or legacy) into v2 items. */
+/** A transition spec, accepting `duration` as an alias (as Python does). */
+function readTransition(t, fallback = null) {
+  if (!t || typeof t !== "object") return fallback;
+  const ms = Number(t.duration_ms ?? t.duration);
+  return {
+    duration_ms: clamp(Number.isFinite(ms) ? ms : fallback?.duration_ms ?? 1200, 0, 60000),
+    easing: EASINGS[t.easing] ? String(t.easing) : fallback?.easing ?? "easeInOutCubic",
+  };
+}
+
+/**
+ * Read embedded States (v2 or legacy) into v2 items. Accepts the same
+ * aliases as the Python normaliser (oviz/threejs_states.py): `ordered_states`,
+ * `preserve_camera_on_navigation`, `camera_behavior`/`cameraBehavior`,
+ * `state` holding a legacy snapshot, and `transition.duration`.
+ */
 export function importStates(manifest, baseState) {
   const block = manifest.states || {};
-  const items = Array.isArray(block.items) ? block.items : [];
+  const raw = block.items ?? block.ordered_states;
+  const items = Array.isArray(raw) ? raw : [];
+  const assets = block.assets && typeof block.assets === "object" ? block.assets : {};
+  const defaultCamera = block.preserve_camera_on_navigation ? "keep" : "follow";
   const out = [];
   for (const item of items) {
     if (!item || typeof item !== "object") continue;
     let state = null;
-    if (item.state && item.state.version === STATE_VERSION) state = cloneJson(item.state);
-    else if (item.snapshot) state = legacySnapshotToState(item.snapshot, manifest, baseState);
+    const snap = item.snapshot ?? item.state;
+    if (snap && snap.version === STATE_VERSION) state = cloneJson(snap);
+    else if (snap && typeof snap === "object") state = legacySnapshotToState(snap, manifest, baseState);
     if (!state) continue;
+    const cam = String(item.camera_behavior ?? item.cameraBehavior ?? item.camera ?? "").trim().toLowerCase();
+    const thumb = typeof item.thumb === "string" ? item.thumb : assets[item.thumb?.__oviz_asset_ref__];
     out.push({
       id: String(item.id || uid()),
       name: String(item.name || `View ${out.length + 1}`),
       caption: String(item.caption || ""),
-      thumb: typeof item.thumb === "string" ? item.thumb : "",
-      camera: item.camera_behavior === "keep" || item.camera === "keep" ? "keep" : "follow",
-      transition: item.transition && typeof item.transition === "object"
-        ? { duration_ms: clamp(Number(item.transition.duration_ms) || 1200, 0, 60000), easing: String(item.transition.easing || "easeInOutCubic") }
-        : null,
+      thumb: typeof thumb === "string" ? thumb : "",
+      camera: cam === "keep" || cam === "follow" ? cam : defaultCamera,
+      transition: readTransition(item.transition),
       state,
     });
   }
@@ -60,9 +79,7 @@ export function importStates(manifest, baseState) {
     items: out,
     presentOnly: !!block.present_only,
     defaultMode: block.default_mode === "present" ? "present" : "edit",
-    defaultTransition: block.default_transition && typeof block.default_transition === "object"
-      ? { duration_ms: Number(block.default_transition.duration_ms) || 1200, easing: String(block.default_transition.easing || "easeInOutCubic") }
-      : { duration_ms: 1200, easing: "easeInOutCubic" },
+    defaultTransition: readTransition(block.default_transition, { duration_ms: 1200, easing: "easeInOutCubic" }),
     projectId: String(block.project_id || ""),
     autosave: block.autosave_drafts !== false,
   };
@@ -101,12 +118,15 @@ function resolvedTraceOpacity(viewer, st, key) {
  * {step(t) → applies the blended state, finish() → applies target exactly}.
  */
 export function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
-  // A camera flight still in progress would override the State's camera
-  // once the transition lands, so the transition takes the camera over.
-  if (!keepCamera) viewer._cancelTween?.();
+  // A camera flight or fling still in progress would override the State's
+  // camera once the transition lands, so the transition takes it over.
+  if (!keepCamera) {
+    viewer._cancelTween?.();
+    viewer.controls?.stop?.();
+  }
   const from = captureState(viewer, sky);
   const to = cloneJson(target);
-  if (target.view?.pose) to.view.pose = clonePose(target.view.pose);
+  if (target.view?.pose) to.view.pose = sanitizePose(clonePose(target.view.pose));
   if (keepCamera) {
     to.view = { mode: from.view.mode, pose: clonePose(viewer.pose) };
   }
@@ -126,6 +146,9 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
   const skyByKeyB = new Map(skyB.map((l) => [l.key, l]));
   const skyKeys = [...new Set([...skyB.map((l) => l.key), ...skyA.map((l) => l.key)])];
   if (modeChange && to.view.mode === "sky") viewer.controls.mode = "sky";
+  // Leaving Sky: member stars fade out as the camera leaves the Sun, not
+  // after it has flown all the way into 3D.
+  if (modeChange && from.view.mode === "sky") sky?.revealMembers?.(false);
 
   function step(t) {
     const st = viewer.state;
@@ -221,13 +244,15 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
     if (Number.isFinite(to.time?.speed)) viewer.timeline.speed = to.time.speed;
     if (sky && to.sky) sky.applyState(to.sky);
     for (const [name, ext] of viewer.stateExtensions || []) ext.apply(to.ext ? to.ext[name] ?? null : null);
+    // Auto-orbit is camera behaviour: "keep" views leave it as it was.
+    if (keepCamera) st.global.autoOrbit = !!from.global?.autoOrbit;
     viewer.controls.autoOrbit = st.global.autoOrbit ? 0.06 : 0;
     viewer.volumes.invalidate();
     viewer.invalidatePick();
     viewer.renderer.invalidate();
   }
 
-  return { step, finish, modeChange, from, to };
+  return { step, finish, modeChange, keepCamera, from, to };
 }
 
 export function easing(name) {

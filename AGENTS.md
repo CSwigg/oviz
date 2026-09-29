@@ -95,9 +95,9 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
   `85-modes-mobile.css`; behaviour flags in `src/ui/modes.js`; arrangements
   in `src/ui/layout.js`, which moves (never rebuilds) the shared components
   and undoes every move on a mode or breakpoint change; the Python list is
-  `figure.VIEWER_MODES`. Keep mode layout rules inside desktop media queries
-  so phones keep the mobile layout, and never make a feature depend on one
-  mode.
+  `figure.VIEWER_MODES`. On phones Focus keeps its single bar (the toolbar's
+  actions live in More); phone-specific mode rules belong in
+  `85-modes-mobile.css`. Never make a feature reachable in only one mode.
 - `src/app/export.js` mirrors `web/template.html` for in-browser self-export.
   Keep the two in sync; `tests/test_viewer.py` checks this.
 - Time is continuous: the vertex shader interpolates frame textures, so

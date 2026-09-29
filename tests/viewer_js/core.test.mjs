@@ -168,3 +168,64 @@ test("the birth profile counts births inside the timeline only", async () => {
   assert.ok(profile[3] > profile[0] && profile[0] > 0);
   assert.equal(birthProfile(tl, [], 4).every((x) => x === 0), true);
 });
+
+test("the CPU birth fade matches the point shader", async () => {
+  const { birthFadeAt } = await import("../../oviz/viewer/web/src/app/timeline.js");
+  // A 20 Myr old cluster is born at t = −20.
+  assert.equal(birthFadeAt(-30, 20), 0);
+  assert.equal(birthFadeAt(-20, 20), 1);
+  assert.equal(birthFadeAt(0, 20), 1);
+  // With a fade it appears over the 8 Myr before birth.
+  assert.equal(birthFadeAt(-28.5, 20, 8), 0);
+  close(birthFadeAt(-24, 20, 8), 0.5);
+  assert.equal(birthFadeAt(-20, 20, 8), 1);
+  // Fade in and out: gone again once the fade after birth has passed.
+  close(birthFadeAt(-16, 20, 8, true), 0.5);
+  assert.equal(birthFadeAt(-5, 20, 8, true), 0);
+  // No age (NaN or the shader's sentinel): always visible.
+  assert.equal(birthFadeAt(-100, NaN, 8), 1);
+  assert.equal(birthFadeAt(-100, -1e30, 8), 1);
+});
+
+test("looping playback wraps however far one tick goes", () => {
+  const tl = new Timeline([-1, 0], { initialIndex: 0 });
+  tl.loop = true;
+  tl.speed = 8;
+  tl.play(1);
+  let t = 1000;
+  tl.tick(t);
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) { t += 100; tl.tick(t); seen.add(Math.round(tl.frame * 1000)); }
+  assert.ok(tl.playing);
+  // It keeps cycling instead of sticking on the last frame.
+  assert.ok(seen.size >= 2, `stuck at ${[...seen]}`);
+  for (const f of seen) assert.ok(f >= 0 && f <= 1000);
+});
+
+test("view links survive malformed escapes", () => {
+  const v = decodeViewHash("#g=All&t=-1%&c=0,0,0,100,0,0,60");
+  assert.equal(v.group, "All");
+  assert.equal(v.time, undefined);
+  assert.equal(v.pose.distance, 100);
+  assert.deepEqual(decodeViewHash("#t=-12.5&v=sky"), { time: -12.5, mode: "sky" });
+});
+
+test("CPU positions vanish exactly where the GPU draws nothing", () => {
+  // One object, three frames; absent at frame 0.
+  const P = Float64Array.from([NaN, NaN, NaN, 1, 2, 3, 4, 5, 6]);
+  assert.equal(cpuFramePosition(P, 3, 1, 0, 0), null);
+  assert.deepEqual(Array.from(cpuFramePosition(P, 3, 1, 0, 0.5)), [1, 2, 3]);
+  // Leaving: absent at the last frame.
+  const Q = Float64Array.from([1, 2, 3, 4, 5, 6, NaN, NaN, NaN]);
+  assert.deepEqual(Array.from(cpuFramePosition(Q, 3, 1, 0, 1)), [4, 5, 6]);
+  assert.equal(cpuFramePosition(Q, 3, 1, 0, 2), null);
+});
+
+test("a straight-down eye keeps +x to the right and stays inside the orbit limit", async () => {
+  const { poseFromEyeTarget, PITCH_LIMIT } = await import("../../oviz/viewer/web/src/engine/camera.js");
+  const p = poseFromEyeTarget([0, 0, 2000], [0, 0, 0], 60);
+  close(p.pitch, -PITCH_LIMIT);
+  close(p.yaw, Math.PI / 2);
+  const up = poseFromEyeTarget([0, 0, -10], [0, 0, 0], 60);
+  close(up.pitch, PITCH_LIMIT);
+});

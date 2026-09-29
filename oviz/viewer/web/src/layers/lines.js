@@ -173,6 +173,7 @@ export class LinesLayer {
       b.buffers.forEach((x) => gl.deleteBuffer(x));
       gl.deleteTexture(b.frameTex.texture);
     }
+    gl.deleteBuffer(this.cornerBuffer);
     this.program.dispose();
   }
 }

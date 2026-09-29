@@ -141,6 +141,9 @@ Browser API
     Fly between Galactic 3D and Sky.
 ``screenshot({scale})``
     A PNG ``Blob`` of the WebGL layer.
+``getState()``, ``applyState(state, {instant, duration_ms, easing, keepCamera})``
+    Capture the whole viewer as a State, and restore one exactly (animated
+    unless ``instant``; returns a promise that resolves on arrival).
 ``states``
     ``list()``, ``goTo(indexOrId)``, ``next()``, ``previous()``, ``add()``,
     ``capture()``, ``present(on)``, and ``exportHtml({presentOnly,

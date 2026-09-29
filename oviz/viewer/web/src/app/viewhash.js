@@ -18,7 +18,8 @@ export function decodeViewHash(hash) {
   for (const part of String(hash || "").replace(/^#/, "").split("&")) {
     const [k, val] = part.split("=");
     if (!k || val == null) continue;
-    out[k] = decodeURIComponent(val);
+    // A malformed escape in a pasted link must not stop the figure booting.
+    try { out[k] = decodeURIComponent(val); } catch (_) { /* ignore this part */ }
   }
   if (!out.c && !out.t) return null;
   const view = {};

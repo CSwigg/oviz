@@ -15,7 +15,7 @@ export class LayersPanel {
     this.el = h("section", { class: "ov-panel ov-layers ov-glass ov-chrome", "aria-label": "Layers", "data-open": "true" });
     this.head = h("div", { class: "ov-panel-head" },
       h("span", { class: "ov-panel-title" }, "Layers"),
-      iconButton("close", "Hide layers", () => ui.setLayersOpen(false), { shortcut: "L" }),
+      iconButton("close", "Hide layers", () => ui.setLayersOpen(false), { shortcut: "⇧L" }),
     );
     this.body = h("div", { class: "ov-panel-body" });
     this.el.append(this.head, this.body);
@@ -38,6 +38,8 @@ export class LayersPanel {
   render() {
     clear(this.body);
     this.rows.clear();
+    // Rows are rebuilt closed, so no editor is open any more.
+    this.expanded = null;
     const v = this.viewer;
     const m = this.manifest;
     const groups = m.groups?.order || [];

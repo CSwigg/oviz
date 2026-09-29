@@ -14,7 +14,7 @@ import { keyMotion } from "../engine/controls.js";
 import { cpuFramePosition, frameOffset } from "../engine/frames.js";
 import { SkyPlugin } from "../sky/sky.js";
 import { encodeViewHash, decodeViewHash } from "../app/viewhash.js";
-import { StoryPlugin } from "./story.js";
+import { StoryPlugin, figureId } from "./story.js";
 import { RecorderPlugin } from "./recorder.js";
 import { FilterPlugin } from "./filter.js";
 import { NotesPlugin } from "./notes.js";
@@ -72,6 +72,8 @@ export class AppUI {
     this.layout = new LayoutManager(this);
     this.overlays = new Set();
     this.idle = new IdleFade(this);
+    // States restore the selection and the panels too.
+    viewer.stateExtensions.set("ui", { capture: () => this.captureUiState(), apply: (s) => this.applyUiState(s) });
     // Phones: every bottom sheet swipes down to dismiss.
     const sheetHead = (el) => el.querySelector(".ov-panel-head");
     flickToDismiss(this.inspector.el, sheetHead(this.inspector.el), { axis: "y", sign: 1, enabled: () => this.narrow, onDismiss: () => this.select(null) });
@@ -79,7 +81,9 @@ export class AppUI {
     this.bindPointer();
     this.bindKeys();
     this.bindViewer();
-    this.applyTheme(localStorageGet("oviz.theme") || document.documentElement.dataset.ovizTheme || "dark");
+    // The authored theme, unless someone switched theme on this figure.
+    this.themeKey = `oviz.theme.${figureId(this.manifest)}`;
+    this.applyTheme(localStorageGet(this.themeKey) || document.documentElement.dataset.ovizTheme || "dark", { remember: false });
     this.setLayersOpen(window.innerWidth > 720 && this.modeConfig.layersOpen);
   }
 
@@ -162,6 +166,7 @@ export class AppUI {
     if (!hasSky) this.viewSeg.hidden = true;
     this.homeBtn = iconButton("home", "Reset view", () => v.resetView(), { shortcut: "Home", cls: "ov-glass" });
     this.fsBtn = iconButton("expand", "Fullscreen", () => this.toggleFullscreen(), { shortcut: "M", cls: "ov-glass" });
+    this.fsBtn.hidden = !this.canFullscreen;
     this.skyExtras = h("div", { class: "ov-corner-btns" });
     this.cornerBtns = h("div", { class: "ov-corner-btns" }, this.homeBtn, this.fsBtn);
     const right = h("div", { class: "ov-bottom-right" }, this.skyExtras, this.viewSeg, this.cornerBtns);
@@ -181,13 +186,18 @@ export class AppUI {
     v.renderer.afterRender.push(() => updateScale());
     v.on("style", () => this.renderColorbars());
     v.on("viewmode", ({ mode }) => {
+      // Member stars exist only in Sky view: a member selection ends with it.
+      if (mode !== "sky" && this.selection?.kind === "member") this.select(null, { recordUndo: false });
       this.root.dataset.view = mode;
       this.syncViewToggle();
       this.syncViewSeg();
       this.renderColorbars();
     });
+    // The measurement line and its label follow both objects through time.
+    const measure = rafThrottle(() => this.updateMeasure());
     v.on("time", () => {
       if (this.following) this.updateFollow();
+      if (this._measure) measure();
     });
     new ResizeObserver(() => this.syncViewSeg()).observe(this.viewSeg);
     v.on("gpu-restored", () => {
@@ -215,7 +225,11 @@ export class AppUI {
     this.firstRunHint();
     let narrow = this.narrow;
     window.addEventListener("resize", rafThrottle(() => {
-      if (this.narrow !== narrow) { narrow = this.narrow; this.applyLayout(); }
+      if (this.narrow !== narrow) {
+        narrow = this.narrow;
+        this.applyLayout();
+        this.setLayersOpen(!narrow && this.modeConfig.layersOpen);
+      }
       this.anchorLayers();
     }));
   }
@@ -299,6 +313,8 @@ export class AppUI {
       const quick = performance.now() - down.t < 450;
       down = null;
       if (moved > 5 || !quick) return;
+      // A click on the figure dismisses a floating layers panel, like a menu.
+      if (this.layersOpen && this.layersFloating) this.setLayersOpen(false);
       const r = canvas.getBoundingClientRect();
       const hit = v.pick(e.clientX - r.left, e.clientY - r.top, { radius: e.pointerType === "touch" ? 18 : 6 });
       if (e.shiftKey && hit && this.selection) this.measure(this.selection, hit);
@@ -345,12 +361,73 @@ export class AppUI {
         v.renderer.invalidate();
       });
     } else if (hit && hit.kind === "member") {
-      labels.setDynamic("selection", `${hit.member.cluster} member`, () => hit.member.position, "ov-label--sel");
+      labels.setDynamic("selection", `${hit.member.cluster} member`, () => this.selectionPosition(hit), "ov-label--sel");
     }
     if (!hit && this.following) this.toggleFollow(null);
     v.selected = hit;
     v.renderer.invalidate();
     this.viewer.emit("select", hit);
+  }
+
+  /**
+   * The interface's part of a State: the selection, plus the panels where
+   * they differ from the mode's own defaults (so a view saved in Detailed,
+   * where the layers panel is open anyway, does not pop it open in Focus).
+   */
+  captureUiState() {
+    const sel = this.selection;
+    const detailsOpen = this.inspector.el.dataset.open === "true";
+    return {
+      selection: !sel ? null : sel.kind === "member" ? { kind: "member", index: sel.index } : { trace: sel.trace, index: sel.index },
+      layers: this.narrow || !!this.layersOpen === !!this.modeConfig.layersOpen ? null : !!this.layersOpen,
+      details: this.modeConfig.selection === "callout" && detailsOpen ? true : null,
+    };
+  }
+
+  async applyUiState(s) {
+    if (!s || typeof s !== "object") return; // older States leave the interface alone
+    const v = this.viewer;
+    const sel = s.selection;
+    let hit = null;
+    if (sel?.kind === "member") {
+      if (v.state.view.mode === "sky" && this.sky) {
+        await this.sky.ensureMembers?.();
+        hit = this.sky.resolveMemberPick?.({ index: sel.index }) || null;
+      }
+    } else if (sel && v.traceByKey.has(sel.trace) && Number.isInteger(sel.index)) {
+      hit = { trace: sel.trace, index: sel.index };
+    } else if (sel?.name) {
+      hit = await this.findObject(sel.traceName, sel.name);
+    }
+    const same = (a, b) => (!a && !b) || (!!a && !!b && (a.kind || "") === (b.kind || "") && a.trace === b.trace && a.index === b.index);
+    if (!same(hit, this.selection)) this.select(hit, { recordUndo: false });
+    if (!this.narrow) this.setLayersOpen(s.layers == null ? !!this.modeConfig.layersOpen : !!s.layers);
+    if (this.modeConfig.selection === "callout") {
+      if (hit && s.details) this.openDetails();
+      else if (this.inspector.el.dataset.open === "true") this.inspector.show(null);
+    }
+  }
+
+  /** Find an object by its (trace and) name, as classic States store it. */
+  async findObject(traceName, name) {
+    const v = this.viewer;
+    const norm = (x) => String(x || "").replace(/_/g, " ").trim().toLowerCase();
+    const want = norm(name);
+    const pointTraces = v.traces.filter((t) => t.points);
+    const named = pointTraces.filter((t) => traceName && (t.name === traceName || t.key === traceName));
+    for (const t of named.length ? named : pointTraces) {
+      const meta = await v.objectMeta(t.key);
+      const i = (meta.name || []).findIndex((n) => norm(n) === want);
+      if (i >= 0) return { trace: t.key, index: i };
+    }
+    return null;
+  }
+
+  /** Where a selection is now (member stars move through time too). */
+  selectionPosition(hit) {
+    if (!hit) return null;
+    if (hit.kind === "member") return this.sky?.members?.starPosition(hit.index, this.viewer.timeline.time, true) || hit.member.position;
+    return this.viewer.objectPosition(hit.trace, hit.index);
   }
 
   async selectAndFly(hit, fly = true) {
@@ -362,28 +439,38 @@ export class AppUI {
   // ------------------------------------------------------------- measure
 
   measure(a, b) {
+    this._measure = { a, b, key: "" };
+    const text = this.updateMeasure();
+    if (text) this.toast(`Separation ${text}`, { icon: icon("ruler") });
+  }
+
+  /** Redraw the measurement for the current time; returns its label. */
+  updateMeasure() {
+    const m = this._measure;
+    if (!m) return "";
     const v = this.viewer;
-    const pa = a.kind === "member" ? a.member.position : v.objectPosition(a.trace, a.index);
-    const pb = b.kind === "member" ? b.member.position : v.objectPosition(b.trace, b.index);
-    if (!pa || !pb) return;
+    const pa = this.selectionPosition(m.a), pb = this.selectionPosition(m.b);
+    if (!pa || !pb) return "";
+    const key = [...pa, ...pb].map((x) => x.toFixed(3)).join(",");
+    if (key === m.key) return m.text;
+    m.key = key;
     const d = Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]);
-    const mid = () => {
-      const qa = a.kind === "member" ? a.member.position : v.objectPosition(a.trace, a.index);
-      const qb = b.kind === "member" ? b.member.position : v.objectPosition(b.trace, b.index);
-      return qa && qb ? [(qa[0] + qb[0]) / 2, (qa[1] + qb[1]) / 2, (qa[2] + qb[2]) / 2] : null;
-    };
-    let text = formatDistance(d);
     const eye = v.skyEye();
     const ua = norm([pa[0] - eye[0], pa[1] - eye[1], pa[2] - eye[2]]);
     const ub = norm([pb[0] - eye[0], pb[1] - eye[1], pb[2] - eye[2]]);
     const ang = Math.acos(clamp(ua[0] * ub[0] + ua[1] * ub[1] + ua[2] * ub[2], -1, 1)) * 180 / Math.PI;
-    text += ` · ${formatAngle(ang)}`;
-    v.labels.setDynamic("measure", text, mid, "ov-label--measure");
-    this.setTrailPath("__measure", [pa, pb], { color: "#7cc4ff", width: 1.5, dash: "dash", live: [a, b] });
-    this.toast(`Separation ${text}`, { icon: icon("ruler") });
+    m.text = `${formatDistance(d)} · ${formatAngle(ang)}`;
+    const mid = () => {
+      const qa = this.selectionPosition(m.a), qb = this.selectionPosition(m.b);
+      return qa && qb ? [(qa[0] + qb[0]) / 2, (qa[1] + qb[1]) / 2, (qa[2] + qb[2]) / 2] : null;
+    };
+    v.labels.setDynamic("measure", m.text, mid, "ov-label--measure");
+    this.setTrailPath("__measure", [pa, pb], { color: "#7cc4ff", width: 1.5, dash: "dash" });
+    return m.text;
   }
 
   clearMeasure() {
+    this._measure = null;
     this.viewer.labels.removeDynamic("measure");
     this.removeTrail("__measure");
   }
@@ -489,8 +576,17 @@ export class AppUI {
     this.viewThumb.style.transform = `translateX(${active.offsetLeft}px)`;
   }
 
+  /** Layers float over the figure (Focus popover, phone sheet) instead of docking. */
+  get layersFloating() {
+    return this.narrow || this.layout?.current?.layout === "focus";
+  }
+
   setLayersOpen(open) {
     if (open && this.narrow && this.selection) this.select(null);
+    // A floating layers panel and the story drawer share the space above the bar.
+    if (open && this.layersFloating && this.root.dataset.story === "true") {
+      this.plugins.find((p) => p.name === "states")?.toggle(false);
+    }
     this.layersOpen = open;
     this.layers.el.dataset.open = String(open);
     this.root.dataset.layers = String(open);
@@ -532,20 +628,22 @@ export class AppUI {
   moreMenu(anchor) {
     const v = this.viewer;
     const lasso = this.plugins.find((p) => p.name === "lasso");
+    const hasTime = !this.dock.el.hidden;
+    const keyboard = !window.matchMedia?.("(any-hover: none)").matches;
     this.menu(anchor, [
       { label: this.mode === "focus" ? "Detailed mode" : "Focus mode", icon: "sidebar", shortcut: "U", run: () => this.toggleMode() },
       { label: "Search", icon: "search", shortcut: "/", run: () => this.palette.show() },
       ...(!this.statesBtn.hidden ? [{ label: "Views & story", icon: "bookmark", shortcut: "Y", run: () => this.plugins.find((p) => p.name === "states")?.toggle() }] : []),
       { label: "Reset view", icon: "home", shortcut: "Home", run: () => v.resetView() },
-      { label: `Playback speed · ${v.timeline.speed}×`, icon: "play", run: () => this.dock.speedMenu?.(anchor) },
+      ...(hasTime ? [{ label: `Playback speed · ${v.timeline.speed}×`, icon: "play", run: () => this.dock.speedMenu?.(anchor) }] : []),
       "-",
       { label: "Screenshot or video…", icon: "camera", shortcut: "I", run: () => this.captureMenu(anchor) },
       { label: "Share & export…", icon: "share", run: () => this.shareMenu(anchor) },
       { label: "Display settings…", icon: "sliders", run: () => this.settingsMenu(anchor) },
       "-",
       ...(lasso ? [{ label: "Lasso select", icon: "wand", shortcut: "L", run: () => lasso.arm(true) }] : []),
-      { label: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
-      { label: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
+      ...(this.canFullscreen ? [{ label: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() }] : []),
+      ...(keyboard ? [{ label: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() }] : []),
       { label: "About this figure", icon: "info", run: () => this.showAbout() },
     ], { align: "right", above: true });
   }
@@ -561,20 +659,34 @@ export class AppUI {
     try { this.plugins.find((p) => p.name === "sky")?.sky?.aladin?.view?.fixLayoutDimensions?.(); } catch (_) { /* Aladin not ready */ }
   }
 
-  toggleFullscreen() {
-    const el = this.root;
-    if (document.fullscreenElement) document.exitFullscreen?.();
-    else (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el).catch?.(() => this.toast("Fullscreen is not available here"));
+  /** Whether this page may go fullscreen (not iPhone Safari, not a locked iframe). */
+  get canFullscreen() {
+    const d = document;
+    return !!(d.fullscreenEnabled || d.webkitFullscreenEnabled) && !!(this.root.requestFullscreen || this.root.webkitRequestFullscreen);
   }
 
-  applyTheme(theme) {
+  toggleFullscreen() {
+    const d = document;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      (d.exitFullscreen || d.webkitExitFullscreen)?.call(d);
+      return;
+    }
+    const el = this.root;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen;
+    const unavailable = () => this.toast("Fullscreen is not available here");
+    if (!this.canFullscreen || !request) { unavailable(); return; }
+    try { Promise.resolve(request.call(el)).catch(unavailable); } catch (_) { unavailable(); }
+  }
+
+  applyTheme(theme, { remember = true } = {}) {
     this.theme = theme === "light" ? "light" : "dark";
     document.documentElement.dataset.ovizTheme = this.theme;
     this.viewer.emit("theme", { theme: this.theme });
     const v = this.viewer;
     v.renderer.clearColor = [0, 0, 0, 0];
     v.renderer.invalidate();
-    localStorageSet("oviz.theme", this.theme);
+    // Remember an explicit choice for this figure only.
+    if (remember) localStorageSet(this.themeKey, this.theme);
   }
 
   focusCanvas() {
@@ -624,7 +736,12 @@ export class AppUI {
   // ------------------------------------------------------------- menus
 
   menu(anchor, items, { title, align = "right", above = false } = {}) {
+    // Pressing the button of the open menu closes it.
+    if (this._menu?.anchor === anchor) { this.closeMenu(); return null; }
     this.closeMenu();
+    this.tooltips?.hide();
+    // Menus from the bar would open on top of a floating layers panel.
+    if (this.layersOpen && this.layersFloating && !this.layers.el.contains(anchor)) this.setLayersOpen(false);
     const pop = h("div", { class: "ov-pop ov-glass", role: "menu" });
     if (title) pop.append(h("div", { class: "ov-pop-title" }, title));
     for (const it of items) {
@@ -634,19 +751,28 @@ export class AppUI {
         it.icon ? icon(it.icon) : it.checked !== undefined ? h("span", { class: "ov-icon" }, it.checked ? "✓" : "") : null,
         h("span", { class: "ov-grow" }, it.label),
         it.shortcut ? kbd(it.shortcut) : null);
-      b.addEventListener("click", () => { if (!it.keepOpen) this.closeMenu(); it.run?.(); });
+      // Keyboard activation (detail 0) returns focus to the menu's button.
+      b.addEventListener("click", (e) => { if (!it.keepOpen) this.closeMenu({ refocus: e.detail === 0 }); it.run?.(); });
       pop.append(b);
     }
     this.ui.append(pop);
     const r = anchor.getBoundingClientRect();
     const rr = this.root.getBoundingClientRect();
-    const w = pop.offsetWidth, ht = pop.offsetHeight;
+    const w = pop.offsetWidth;
+    let ht = pop.offsetHeight;
     let x = align === "center" ? r.left + r.width / 2 - w / 2 : align === "left" ? r.left : r.right - w;
     x = clamp(x - rr.left, 8, rr.width - w - 8);
-    let y = above ? r.top - rr.top - ht - 8 : r.bottom - rr.top + 8;
-    if (!above && y + ht > rr.height - 8) y = r.top - rr.top - ht - 8;
+    // Open on the preferred side if it fits, else on the roomier side, and
+    // scroll (rather than run off the screen) when neither side fits.
+    const roomAbove = r.top - rr.top - 16, roomBelow = rr.bottom - r.bottom - 16;
+    const fitsPreferred = ht <= (above ? roomAbove : roomBelow);
+    const placeAbove = fitsPreferred ? above : roomAbove > roomBelow;
+    const room = Math.max(120, placeAbove ? roomAbove : roomBelow);
+    if (ht > room) { pop.style.maxHeight = `${room}px`; ht = pop.offsetHeight; }
+    let y = placeAbove ? r.top - rr.top - ht - 8 : r.bottom - rr.top + 8;
+    y = clamp(y, 8, Math.max(8, rr.height - ht - 8));
     pop.style.left = `${x}px`;
-    pop.style.top = `${Math.max(8, y)}px`;
+    pop.style.top = `${y}px`;
     anchor.setAttribute("aria-expanded", "true");
     const onDown = (e) => {
       if (!pop.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) this.closeMenu();
@@ -660,11 +786,13 @@ export class AppUI {
     return pop;
   }
 
-  closeMenu() {
+  closeMenu({ refocus = false } = {}) {
     const m = this._menu;
     if (!m) return false;
     this._menu = null;
     m.anchor.setAttribute("aria-expanded", "false");
+    // Keyboard users land back on the button that opened the menu.
+    if (refocus && m.pop.contains(document.activeElement) && m.anchor.isConnected) m.anchor.focus({ preventScroll: true });
     this.root.removeEventListener("pointerdown", m.onDown, true);
     this.setOverlay("menu", false);
     conceal(m.pop, m.anchor.isConnected ? m.anchor.getBoundingClientRect() : null).then(() => m.pop.remove());
@@ -788,7 +916,8 @@ export class AppUI {
         this.toast("Image copied", { icon: icon("copy") });
       } else {
         downloadBlob(blob, `${slug(this.manifest.title || "oviz-figure")}-${stamp()}.png`);
-        this.toast(`Saved ${scale > 1 ? `${scale}× ` : ""}PNG`, { icon: icon("camera") });
+        const size = v.renderer.lastCapture;
+        this.toast(size ? `Saved PNG · ${size.width} × ${size.height}` : "Saved PNG", { icon: icon("camera") });
       }
     } catch (err) {
       console.error(err);
@@ -821,7 +950,7 @@ export class AppUI {
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: this.mode === "focus" ? "Detailed mode" : "Focus mode", sub: this.mode === "focus" ? MODES[1].desc : MODES[0].desc, icon: "sidebar", shortcut: "U", keywords: "mode layout panels simple minimal focus detailed", run: () => this.toggleMode() },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
-      { title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() },
+      ...(this.canFullscreen ? [{ title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() }] : []),
     ];
     if (this.manifest.sky?.enabled) {
       list.splice(2, 0, { title: v.state.view.mode === "sky" ? "Switch to Galactic 3D" : "Switch to Sky view", icon: v.state.view.mode === "sky" ? "cube" : "globe", shortcut: "V", pinned: true, run: () => this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky") });
@@ -985,6 +1114,9 @@ export class AppUI {
     const clearKeys = () => { this.keysDown.clear(); this.shiftDown = false; v.renderer.release("keys"); };
     window.addEventListener("blur", clearKeys);
     window.addEventListener("keyup", (e) => {
+      // macOS sends no keyup for keys released while ⌘ is held: releasing ⌘
+      // lets go of every held movement key, so none stays stuck.
+      if (e.key === "Meta") { clearKeys(); return; }
       if (e.key === "Shift") this.shiftDown = false;
       this.keysDown.delete(e.key.toLowerCase());
       if (!this.keysDown.size) v.renderer.release("keys");
@@ -1002,11 +1134,17 @@ export class AppUI {
         return;
       }
       if (mod) {
+        if (e.repeat) return;
         for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
         return;
       }
       if (e.altKey) return;
-      if (this.palette.open) return;
+      // The palette handles keys in its field; if focus left the field,
+      // Escape still closes it.
+      if (this.palette.open) {
+        if (k === "Escape") { this.palette.close(); e.preventDefault(); }
+        return;
+      }
       if (k === "Shift") { this.shiftDown = true; return; }
       if ("wasdqerf".includes(lower) && lower.length === 1) {
         // Movement keys are held, not pressed: see applyKeyMotion.
@@ -1016,16 +1154,19 @@ export class AppUI {
           this._lastKeyMotion = 0;
           v._cancelTween();
           v.controls.stop();
+          v.emit("camera-takeover", {});
           v.renderer.hold("keys");
         }
         e.preventDefault();
         return;
       }
-      for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
+      // Held keys repeat only where repeating makes sense (stepping, sizes);
+      // toggles such as N, L, B, Y or P fire once per press.
       if (e.repeat && !["ArrowLeft", "ArrowRight", "[", "]", "{", "}", "<", ">", ",", "."].includes(k)) {
         e.preventDefault();
         return;
       }
+      for (const p of this.plugins) if (p.onKey?.(e)) { e.preventDefault(); return; }
       let handled = true;
       switch (lower) {
         // ---- classic Oviz keys
@@ -1048,11 +1189,14 @@ export class AppUI {
           break;
         }
         case "Escape":
-          if (this.closeMenu() || this.closeSheet()) break;
+          if (this.closeMenu({ refocus: true }) || this.closeSheet()) break;
+          if (this.layersOpen && this.layersFloating) { this.setLayersOpen(false); break; }
+          if (this.root.dataset.story === "true") { this.plugins.find((p) => p.name === "states")?.toggle(false); break; }
           if (this.root.dataset.zen === "true") { this.setZen(false); break; }
           if (this.selection || this.plugins.find((p) => p.name === "lasso")?.selection) {
+            // One undo step covers both the click and the lasso selection.
             this.pushSelectionUndo();
-            this.select(null);
+            this.select(null, { recordUndo: false });
             this.plugins.find((p) => p.name === "lasso")?.clear();
             break;
           }
@@ -1101,7 +1245,7 @@ export class AppUI {
       fast: this.shiftDown,
       sky: v.state.view.mode === "sky",
       maxSpan: v.world.maxSpan,
-      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFov,
+      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFovFor(v.state.view.mode === "sky" ? "sky" : "galactic"),
     });
     v.renderer.markInteraction();
     v._onCameraChange();

@@ -23,8 +23,11 @@ export class Inspector {
   show(hit) {
     this.current = hit;
     this.el.dataset.open = hit ? "true" : "false";
+    this.ui.root.dataset.details = String(!!hit);
     if (hit) this.refresh();
     else { this.dyn = null; this.track = null; }
+    // The selection callout hides while the panel is open.
+    this.ui.reticle?.update();
   }
 
   async refresh() {

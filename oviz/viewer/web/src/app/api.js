@@ -9,9 +9,10 @@ export function installApi(root, viewer, ui) {
     setTime: (t) => viewer.timeline.setTime(Number(t)),
     play: () => viewer.timeline.play(),
     pause: () => viewer.timeline.pause(),
-    setViewMode: (m) => viewer.setViewMode(m === "sky" ? "sky" : "3d"),
-    getState: () => viewer.captureState?.(),
-    applyState: (s, opts) => viewer.applyState?.(s, opts),
+    setViewMode: (m) => ui.setViewMode(m === "sky" ? "sky" : "3d"),
+    // Whole-viewer States, the same snapshots saved views use.
+    getState: () => ui.plugins.find((p) => p.name === "states")?.api().capture() ?? null,
+    applyState: (s, opts) => ui.plugins.find((p) => p.name === "states")?.applyState(s, opts) ?? Promise.resolve(),
     screenshot: (opts) => viewer.renderer.capture(opts),
     get states() { return ui.plugins.find((p) => p.name === "states")?.api(); },
     stats: () => ({

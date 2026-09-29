@@ -137,11 +137,15 @@ export class TimelineDock {
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
     el.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowLeft" || e.key === "ArrowDown") { tl.step(e.shiftKey ? -5 : -1); e.preventDefault(); }
-      else if (e.key === "ArrowRight" || e.key === "ArrowUp") { tl.step(e.shiftKey ? 5 : 1); e.preventDefault(); }
-      else if (e.key === "Home") { tl.setFrame(0); e.preventDefault(); }
-      else if (e.key === "End") { tl.setFrame(tl.count - 1); e.preventDefault(); }
-      e.stopPropagation();
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      let handled = true;
+      if (e.key === "ArrowLeft" || e.key === "ArrowDown") tl.step(e.shiftKey ? -5 : -1);
+      else if (e.key === "ArrowRight" || e.key === "ArrowUp") tl.step(e.shiftKey ? 5 : 1);
+      else if (e.key === "Home") tl.setFrame(0);
+      else if (e.key === "End") tl.setFrame(tl.count - 1);
+      else handled = false;
+      // Every other key (Space, Esc, U, V…) still reaches the figure.
+      if (handled) { e.preventDefault(); e.stopPropagation(); }
     });
     return { el, fill, thumb, markers, bubble, heat, heatLit };
   }

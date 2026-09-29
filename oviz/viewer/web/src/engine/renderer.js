@@ -7,6 +7,9 @@
 import { createContext, enableExtensions } from "./gl.js";
 import { Camera } from "./camera.js";
 
+// Largest capture we ask for (Chrome's drawing-buffer area limit).
+const MAX_CAPTURE_PIXELS = 7680 * 4320;
+
 export class Renderer {
   constructor(canvas, { maxDpr = 2 } = {}) {
     this.canvas = canvas;
@@ -36,6 +39,7 @@ export class Renderer {
     this._running = false;
     this._resizeObserver = new ResizeObserver(() => this.resize());
     this._resizeObserver.observe(canvas.parentElement || canvas);
+    this._watchDpr();
     this.contextLost = false;
     this.onContextRestored = null;
     canvas.addEventListener("webglcontextlost", (e) => {
@@ -52,6 +56,12 @@ export class Renderer {
       this.invalidate();
     });
     this.resize();
+  }
+
+  /** Re-measure when the window moves to a display with another pixel ratio. */
+  _watchDpr() {
+    const mq = window.matchMedia?.(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    mq?.addEventListener?.("change", () => { this.resize(); this._watchDpr(); }, { once: true });
   }
 
   add(layer) {
@@ -169,6 +179,9 @@ export class Renderer {
       this.frameCount++;
       for (const fn of this.afterRender) fn(now);
     }
+    // While the context is lost nothing can draw: wait for the restore
+    // handler (it invalidates) instead of spinning every frame.
+    if (this.contextLost) return;
     if (this.continuous.size > 0 || this.dirty || this.interacting) this._schedule();
   }
 
@@ -187,6 +200,7 @@ export class Renderer {
       cssHeight: this.height,
       dpr: this.dpr,
       interacting: this.interacting,
+      capture: !!this._capturing,
     };
     for (const layer of this.layers) if (layer.visible !== false) layer.prepare?.(frame);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -209,10 +223,16 @@ export class Renderer {
    * browser presents (and clears) the drawing buffer.
    */
   async capture({ scale = 1, background = null, type = "image/png", quality } = {}) {
+    const gl = this.gl;
     const w = this.width, h = this.height;
     const prevDpr = this.dpr;
-    const dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr) * scale;
-    const W = Math.round(w * dpr), H = Math.round(h * dpr);
+    let dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr) * scale;
+    // Browsers cap the drawing buffer (Chrome: 7680×4320 worth of pixels);
+    // a larger canvas is silently cropped. Stay inside the caps.
+    const maxDim = Math.min(gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0], gl.getParameter(gl.MAX_VIEWPORT_DIMS)[1], gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), 16384);
+    const fit = Math.min(1, maxDim / (w * dpr), maxDim / (h * dpr), Math.sqrt(MAX_CAPTURE_PIXELS / (w * dpr * h * dpr)));
+    dpr *= fit;
+    let W = Math.floor(w * dpr), H = Math.floor(h * dpr);
     let off = null, ctx = null;
     if (background) {
       off = document.createElement("canvas");
@@ -228,12 +248,24 @@ export class Renderer {
     }
     this.canvas.width = W;
     this.canvas.height = H;
+    // Some browsers grant less than asked even inside the caps: render at
+    // what was granted and scale it onto the background.
+    if (gl.drawingBufferWidth < W || gl.drawingBufferHeight < H) {
+      const k = Math.min(gl.drawingBufferWidth / W, gl.drawingBufferHeight / H);
+      dpr *= k;
+      W = Math.floor(w * dpr);
+      H = Math.floor(h * dpr);
+      this.canvas.width = W;
+      this.canvas.height = H;
+    }
     this.dpr = dpr;
+    this.lastCapture = { width: W, height: H };
     for (const layer of this.layers) layer.resize?.(this);
     const prevInteracting = this.interacting;
     this.interacting = false;
-    this.render();
-    if (ctx) ctx.drawImage(this.canvas, 0, 0);
+    this._capturing = true;
+    try { this.render(); } finally { this._capturing = false; }
+    if (ctx) ctx.drawImage(this.canvas, 0, 0, off.width, off.height);
     const source = off || this.canvas;
     const blobPromise = new Promise((resolve) => source.toBlob(resolve, type, quality));
     this.dpr = prevDpr;

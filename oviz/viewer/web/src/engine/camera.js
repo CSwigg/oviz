@@ -13,6 +13,20 @@ import {
 
 export const UP = [0, 0, 1];
 
+/** Orbits stop just short of straight up/down, where yaw is undefined. */
+export const PITCH_LIMIT = 89.5 * DEG;
+
+/**
+ * Keep a pose inside the orbit limits (in place). Exactly straight up or
+ * down has no yaw; the look-at then put +x to the right, so keep that view.
+ */
+export function sanitizePose(p) {
+  if (!Number.isFinite(p.pitch)) p.pitch = 0;
+  if (Math.abs(p.pitch) >= Math.PI / 2 - 1e-9) p.yaw = Math.PI / 2;
+  p.pitch = clamp(p.pitch, -PITCH_LIMIT, PITCH_LIMIT);
+  return p;
+}
+
 export function makePose(p = {}) {
   return {
     target: (p.target || [0, 0, 0]).slice(),
@@ -64,7 +78,9 @@ export function poseFromEyeTarget(eye, target, fov = 45) {
   const d = [target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]];
   const distance = Math.hypot(d[0], d[1], d[2]);
   const a = anglesFromForward(distance > 0 ? d : [1, 0, 0]);
-  return makePose({ target, distance, yaw: a.yaw, pitch: a.pitch, fov });
+  // A top-down eye (no horizontal offset) has no yaw: treat it as ±90°.
+  if (Math.hypot(d[0], d[1]) <= 1e-9 * Math.max(distance, 1)) a.pitch = Math.sign(a.pitch || -1) * Math.PI / 2;
+  return sanitizePose(makePose({ target, distance, yaw: a.yaw, pitch: a.pitch, fov }));
 }
 
 export function lerpPose(a, b, t, out = makePose()) {

@@ -68,8 +68,9 @@ export class RecorderPlugin {
     recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
     const bg = "#04060a";
     const sky = this.ui.plugins.find((p) => p.name === "sky");
+    // The video keeps its starting size; if the canvas is resized mid-take
+    // (fullscreen, a rotated phone) frames are scaled into it, never dropped.
     const draw = () => {
-      if (comp.width !== src.width - (src.width % 2)) return;
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, comp.width, comp.height);
       if (v.state.view.mode === "sky" && sky?.host) {
@@ -82,7 +83,7 @@ export class RecorderPlugin {
           ctx.globalAlpha = 1;
         }
       }
-      ctx.drawImage(src, 0, 0);
+      ctx.drawImage(src, 0, 0, comp.width, comp.height);
     };
     r.afterRender.push(draw);
     r.hold("recording");
@@ -92,7 +93,7 @@ export class RecorderPlugin {
       const s = Math.floor((performance.now() - t0) / 1000);
       this.pillText.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
     }, 250);
-    this.rec = { recorder, chunks, draw, timer, ext, label, mime };
+    this.rec = { recorder, stream, chunks, draw, timer, ext, label, mime };
     this.pill.hidden = false;
     this.ui.shotBtn.dataset.recording = "true";
     this.ui.toast("Recording — press Stop when done", { icon: icon("record"), ms: 1800 });
@@ -105,6 +106,7 @@ export class RecorderPlugin {
     const v = this.viewer;
     return new Promise((resolve) => {
       rec.recorder.onstop = () => {
+        for (const track of rec.stream.getTracks()) track.stop();
         const blob = new Blob(rec.chunks, { type: rec.mime || `video/${rec.ext}` });
         const name = `${slug(v.manifest.title || "oviz")}-${rec.label}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "")}.${rec.ext}`;
         downloadBlob(blob, name);

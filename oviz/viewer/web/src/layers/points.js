@@ -246,6 +246,9 @@ uniform float uWidthPx;
 uniform float uDimOpacity;
 uniform int uHasAge;
 uniform float uMemberFade;
+uniform highp sampler2D uAuxTex;     // per-frame opacity, colour value
+uniform int uAuxFrames;
+uniform int uHasAux;
 
 out vec3 vColor;
 out float vScalar;
@@ -265,10 +268,19 @@ void main() {
   float ds = 1.0 / float(${TRAIL_SEGMENTS});
   float last = float(uFrames - 1);
   float pres, pa, pb;
-  vec4 c = clipAt(index, clamp(uFrame - uSpan * s, 0.0, last), pres);
+  float fs = clamp(uFrame - uSpan * s, 0.0, last);
+  vec4 c = clipAt(index, fs, pres);
   vec4 ca = clipAt(index, clamp(uFrame - uSpan * max(s - ds, 0.0), 0.0, last), pa);
   vec4 cb = clipAt(index, clamp(uFrame - uSpan * min(s + ds, 1.0), 0.0, last), pb);
-  float eff = aStatic.x * uOpacityScale * pres;
+  // Opacity and colour value where the object was at this point of the trail.
+  float opacity = aStatic.x;
+  float scalar = aStatic.y;
+  if (uHasAux == 1) {
+    vec4 aux = frameScalars(uAuxTex, index, uCount, uAuxFrames, fs);
+    opacity = aux.x;
+    scalar = aux.y;
+  }
+  float eff = opacity * uOpacityScale * pres;
   int st = int(aState + 0.5);
   if ((st & 18) != 0) eff = 0.0;
   else if ((st & 9) != 0) eff *= uDimOpacity;
@@ -293,7 +305,7 @@ void main() {
   float tail = 1.0 - s;
   vAlpha = eff * tail * tail;
   vColor = aColor;
-  vScalar = aStatic.y;
+  vScalar = scalar;
   vSide = aTrail.y;
 }
 `;
@@ -497,6 +509,7 @@ class PointBatch {
   setStateBits(mask, values) {
     const gl = this.gl;
     const s = this.state;
+    this.stateVersion = (this.stateVersion || 0) + 1;
     for (let i = 0; i < s.length; i++) s[i] = (s[i] & ~mask) | (values ? values[i] & mask : 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.state);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, s);
@@ -615,6 +628,11 @@ export class PointsLayer {
       }
       prog.tex("uFrameTex", batch.frameTex.texture);
       prog.i("uCount", batch.count).i("uFrames", batch.texFrames);
+      if (batch.hasAux) {
+        prog.tex("uAuxTex", batch.auxTex.texture).i("uAuxFrames", batch.auxFrames).i("uHasAux", 1);
+      } else {
+        prog.tex("uAuxTex", batch.frameTex.texture).i("uAuxFrames", 1).i("uHasAux", 0);
+      }
       const off = frameOffset(batch.offsets, p.frame);
       prog.v3("uOffset", off[0], off[1], off[2]);
       prog.f("uOpacityScale", style.opacityScale * p.pointOpacity * Math.min(1, style.presence ?? 1));
@@ -695,5 +713,8 @@ export class PointsLayer {
     this.pickProgram.dispose();
     this.trailProgram?.dispose();
     if (this.trailBuffer) this.gl.deleteBuffer(this.trailBuffer);
+    for (const tex of this.cmapTextures.values()) this.gl.deleteTexture(tex);
+    this.cmapTextures.clear();
+    this.gl.deleteTexture(this.fallbackCmap);
   }
 }

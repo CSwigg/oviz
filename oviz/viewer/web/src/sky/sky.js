@@ -25,6 +25,7 @@ export class SkyPlugin {
     this.host = h("div", { class: "ov-sky-host", "aria-hidden": "true" });
     v.container.prepend(this.host);
     this.sky = new AladinSky(this.host);
+    this.ensureBaseLayer();
     this.memberTraceKeys = new Set(v.traces.filter((t) => t.points?.members).map((t) => t.key));
     v.memberTraces = this.memberTraceKeys;
     v.memberReveal = 0;
@@ -89,7 +90,7 @@ export class SkyPlugin {
 
   async ensureSky() {
     if (this.sky.ready) return;
-    await this.sky.init({ survey: this.spec.survey, fov: 60 });
+    await this.sky.init({ survey: this.baseSurvey(), fov: 60 });
     const r = this.viewer.renderer;
     // In Sky view the viewer renders inside Aladin's frame (see AladinSky).
     this.sky.onBeforeDraw = (t) => r.externalTick(t);
@@ -118,7 +119,8 @@ export class SkyPlugin {
         const batch = v.points.byKey.get(key);
         if (!batch) continue;
         const states = new Uint8Array(batch.count);
-        for (let i = 0; i < link.length; i++) states[i] = link[i] >= 0 ? 4 : 0;
+        const hasStars = this.members.clusterHasStars;
+        for (let i = 0; i < link.length; i++) states[i] = link[i] >= 0 && hasStars[link[i]] ? 4 : 0;
         batch.setStateBits(4, states);
       }
       this.members.visible = true;
@@ -209,6 +211,9 @@ export class SkyPlugin {
     const op = smoothstep(0, 1, this.bgFade).toFixed(3);
     if (this.host.style.opacity !== op) this.host.style.opacity = op;
     if (inSky && this.sky.ready) {
+      // A narrower window lowers the widest field Aladin can match.
+      const cap = v.controls.maxFovFor("sky");
+      if (pose.fov > cap) pose.fov = cap;
       // Push the pose every frame the camera is in Sky view; with the
       // Aladin loop hook this lands in the same frame as the WebGL render.
       cam.update(r.sceneRadius);
@@ -234,7 +239,10 @@ export class SkyPlugin {
       glow: g.glow,
     };
     if (reveal <= 0.002) return;
-    const sig = `${frame.toFixed(4)}|${v._pickVersion}|${reveal > 0}`;
+    // Parent state bits (filter / lasso) change without a new frame.
+    let bitsVersion = 0;
+    for (const { key } of this.links) bitsVersion += v.points.byKey.get(key)?.stateVersion || 0;
+    const sig = `${frame.toFixed(4)}|${v._pickVersion}|${bitsVersion}|${reveal > 0}`;
     if (sig === this._clusterSig) return;
     this._clusterSig = sig;
     const styles = v.points.params?.styles;
@@ -247,15 +255,20 @@ export class SkyPlugin {
         const style = styles?.get(key);
         const trace = v.traceByKey.get(key);
         const d = v.data.get(key);
+        const bits = v.points.byKey.get(key)?.state;
         const base = parseColor(ts.color || trace.color);
         const opacityScale = ((ts.opacity ?? trace.opacity) / (trace.opacity || 1)) * g.pointOpacity * (style?.presence ?? 1);
         for (let i = 0; i < link.length; i++) {
           const c = link[i];
           if (c < 0 || state[c * 4 + 3] > 0) continue;
+          // Members share their cluster's filter and lasso state: hidden
+          // (2, 16) or dimmed (1, 8) exactly like the cluster marker.
+          const b = bits ? bits[i] : 0;
+          if (b & 18) continue;
           const p = v.objectPosition(key, i, frame);
           const p0 = v.objectPosition(key, i, zero);
           if (!p || !p0) continue;
-          let alpha = opacityScale;
+          let alpha = opacityScale * (b & 9 ? style?.dimOpacity ?? 0.16 : 1);
           const age = d.ageNow ? d.ageNow[i] : NaN;
           if (age === age) alpha *= t >= -age ? 1 : 0;
           state[c * 4] = p[0] - p0[0];
@@ -303,6 +316,28 @@ export class SkyPlugin {
 
   layers() {
     return this.viewer.state.sky.layers || [];
+  }
+
+  /**
+   * A figure (or State) with no Sky layer list still shows its survey, as
+   * the classic viewer did; otherwise the background would stay blank with
+   * no row in the panel to turn it on.
+   */
+  ensureBaseLayer() {
+    const st = this.viewer.state.sky;
+    if (Array.isArray(st.layers) && st.layers.length) return;
+    const id = this.spec.survey || "P/DSS2/color";
+    st.layers = [{ key: id, survey: id, label: surveyLabel(id), opacity: 1, visible: true }];
+  }
+
+  /**
+   * The survey Aladin should start with: the bottom visible layer of the
+   * stack, so it does not first download (and then replace) a default.
+   */
+  baseSurvey() {
+    const visible = this.layers().filter((l) => l.visible !== false && (l.opacity ?? 1) > 0.001);
+    const bottom = visible[visible.length - 1];
+    return bottom?.survey || bottom?.key || this.spec.survey;
   }
 
   throttledApply() {
@@ -440,10 +475,16 @@ export class SkyPlugin {
     const v = this.viewer;
     const prevMembers = v.state.sky.members;
     v.state.sky = cloneJson(sky);
+    this.ensureBaseLayer();
     this.applyLayers();
     this.renderLayerList();
     this.memberSeg?.set(v.state.sky.members);
     if (prevMembers !== v.state.sky.members && v.state.view.mode === "sky") this.revealMembers(v.state.sky.members === "stars");
     this.syncExtras();
   }
+}
+
+/** A readable name for a HiPS id ("P/DSS2/color" → "DSS2 color"). */
+function surveyLabel(id) {
+  return String(id).replace(/^https?:\/\/[^/]+\//, "").replace(/^P\//, "").replace(/\//g, " ").trim() || String(id);
 }

@@ -7,6 +7,7 @@ import { captureState, importStates, exportStatesBlock, makeTransition, easing, 
 import { cloneJson } from "../app/state.js";
 import { buildExportHtml, saveHtml } from "../app/export.js";
 import { clamp } from "../core/math.js";
+import { clonePose } from "../engine/camera.js";
 
 export class StoryPlugin {
   constructor() {
@@ -27,9 +28,9 @@ export class StoryPlugin {
     this.readOnly = this.project.presentOnly;
     this.buildDrawer();
     this.buildPresenter();
-    v.on("transition", () => {});
-    // Cancel a running transition when the user grabs the camera.
-    v.canvas.addEventListener("pointerdown", () => this.cancel(), true);
+    // The user grabbing the camera (drag, wheel, keys, a flight, 3D/Sky)
+    // ends a running transition; the camera stays where it is.
+    v.on("camera-takeover", () => this.takeover());
   }
 
   afterBoot() {
@@ -59,9 +60,9 @@ export class StoryPlugin {
     const ui = this.ui;
     this.el = h("section", { class: "ov-story ov-glass ov-chrome", "aria-label": "Views and story", "data-open": "false" });
     this.count = h("span", { class: "ov-story-count" });
-    this.addBtn = h("button", { class: "ov-btn ov-btn--primary ov-btn--sm", type: "button", onclick: () => this.add() }, icon("plus"), "Save view");
-    this.presentBtn = h("button", { class: "ov-btn ov-btn--sm", type: "button", onclick: () => this.present(true) }, icon("present"), "Present");
-    this.exportBtn = h("button", { class: "ov-btn ov-btn--sm ov-btn--ghost", type: "button", onclick: (e) => ui.menu(e.currentTarget, this.exportMenuItems(), { title: "Export", above: true }) }, icon("download"), "Export");
+    this.addBtn = h("button", { class: "ov-btn ov-btn--primary ov-btn--sm", type: "button", "aria-label": "Save view", onclick: () => this.add() }, icon("plus"), h("span", { class: "ov-btn-label" }, "Save view"));
+    this.presentBtn = h("button", { class: "ov-btn ov-btn--sm", type: "button", "aria-label": "Present", onclick: () => this.present(true) }, icon("present"), h("span", { class: "ov-btn-label" }, "Present"));
+    this.exportBtn = h("button", { class: "ov-btn ov-btn--sm ov-btn--ghost", type: "button", "aria-label": "Export", onclick: (e) => ui.menu(e.currentTarget, this.exportMenuItems(), { title: "Export", above: true }) }, icon("download"), h("span", { class: "ov-btn-label" }, "Export"));
     this.settingsBtn = iconButton("sliders", "Transition timing", (e) => this.timingMenu(e.currentTarget));
     const head = h("div", { class: "ov-story-head" },
       h("span", { class: "ov-story-title" }, "Story"), this.count,
@@ -75,6 +76,8 @@ export class StoryPlugin {
   }
 
   toggle(open = this.el.dataset.open !== "true") {
+    // The drawer and a floating layers panel share the space above the bar.
+    if (open && this.ui.layersOpen && this.ui.layersFloating) this.ui.setLayersOpen(false);
     this.el.dataset.open = String(open);
     this.ui.statesBtn.setAttribute("aria-pressed", String(open));
     this.ui.root.dataset.story = String(open);
@@ -91,6 +94,7 @@ export class StoryPlugin {
         h("div", { class: "ov-story-empty-title" }, "Build a story from saved views"),
         h("div", null, "Frame a view — camera, time, layers, Sky — then save it with ", kbd("N"), ". Present them in order with smooth transitions, or export a present-only file to share.")));
       this.status.textContent = "";
+      this.ui.dock.setMarkers?.([]);
       return;
     }
     items.forEach((it, i) => this.strip.append(this.card(it, i)));
@@ -113,9 +117,11 @@ export class StoryPlugin {
     if (it.camera === "keep") card.append(h("span", { class: "ov-card-flag", title: "Keeps the current camera" }, icon("target")));
     card.addEventListener("click", () => this.goTo(i));
     card.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { this.goTo(i); e.preventDefault(); }
-      if ((e.key === "Delete" || e.key === "Backspace") && !this.readOnly) { this.remove(i); e.preventDefault(); }
-      e.stopPropagation();
+      // Only keys the card itself handles; the rest (P, Space, arrows…)
+      // still reach the figure after a card was clicked.
+      if (e.target !== card) return;
+      if (e.key === "Enter") { this.goTo(i); e.preventDefault(); e.stopPropagation(); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && !this.readOnly) { this.remove(i); e.preventDefault(); e.stopPropagation(); }
     });
     if (!this.readOnly) {
       const more = iconButton("sliders", `Edit ${it.name}`, (e) => { e.stopPropagation(); this.cardMenu(e.currentTarget, i); }, { cls: "ov-card-more" });
@@ -127,9 +133,10 @@ export class StoryPlugin {
       card.addEventListener("dragleave", () => { card.dataset.over = "false"; });
       card.addEventListener("drop", (e) => {
         e.preventDefault();
-        const from = Number(e.dataTransfer.getData("text/oviz-state"));
+        const raw = e.dataTransfer.getData("text/oviz-state");
+        const from = raw === "" ? NaN : Number(raw);
         card.dataset.over = "false";
-        if (Number.isFinite(from) && from !== i) this.move(from, i);
+        if (Number.isInteger(from) && from >= 0 && from !== i) this.move(from, i);
       });
     }
     return card;
@@ -163,6 +170,8 @@ export class StoryPlugin {
   async add() {
     if (this.readOnly) return;
     const v = this.viewer;
+    // A transition in flight would be captured half-blended: land it first.
+    if (this.running) this.cancel();
     const state = captureState(v, this.sky);
     const n = this.project.items.length + 1;
     const it = { id: uid(), name: this.autoName(state, n), caption: "", thumb: "", camera: "follow", transition: null, state };
@@ -184,6 +193,7 @@ export class StoryPlugin {
 
   async update(i) {
     const it = this.project.items[i];
+    if (this.running) this.cancel();
     it.state = captureState(this.viewer, this.sky);
     it.thumb = await this.thumbnail();
     this.active = i;
@@ -199,7 +209,11 @@ export class StoryPlugin {
     target.replaceChildren(input);
     input.focus();
     input.select();
+    let finished = false;
     const done = (commit) => {
+      // Re-rendering removes the input, which fires blur: finish only once.
+      if (finished) return;
+      finished = true;
       if (commit && input.value.trim()) { it.name = input.value.trim(); this.changed(); }
       else this.render();
     };
@@ -221,28 +235,41 @@ export class StoryPlugin {
     setTimeout(() => ta.focus(), 30);
   }
 
+  /** Edit the list while the same view (if any) stays the active one. */
+  keepActive(fn) {
+    const cur = this.project.items[this.active];
+    fn();
+    this.active = cur ? this.project.items.indexOf(cur) : -1;
+  }
+
   duplicate(i) {
     const it = cloneJson(this.project.items[i]);
     it.id = uid();
     it.name = `${it.name} (copy)`;
-    this.project.items.splice(i + 1, 0, it);
+    this.keepActive(() => this.project.items.splice(i + 1, 0, it));
     this.changed();
   }
 
   move(from, to) {
     const items = this.project.items;
-    const [it] = items.splice(from, 1);
-    items.splice(to, 0, it);
-    this.active = to;
+    this.keepActive(() => {
+      const [it] = items.splice(from, 1);
+      items.splice(to, 0, it);
+    });
     this.changed();
   }
 
   remove(i, { silent = false } = {}) {
-    if (i < 0) return;
-    const [it] = this.project.items.splice(i, 1);
-    if (this.active >= this.project.items.length) this.active = this.project.items.length - 1;
+    if (i < 0 || i >= this.project.items.length) return;
+    let it = null;
+    this.keepActive(() => { [it] = this.project.items.splice(i, 1); });
     this.changed();
-    if (!silent) this.ui.toast(`Deleted “${it.name}”`, { action: { label: "Undo", run: () => { this.project.items.splice(i, 0, it); this.changed(); } } });
+    if (!silent) {
+      this.ui.toast(`Deleted “${it.name}”`, { action: { label: "Undo", run: () => {
+        this.keepActive(() => this.project.items.splice(Math.min(i, this.project.items.length), 0, it));
+        this.changed();
+      } } });
+    }
   }
 
   changed() {
@@ -282,12 +309,29 @@ export class StoryPlugin {
 
   // ------------------------------------------------------------ navigation
 
-  cancel() {
+  /**
+   * The user took the camera mid-transition: land every other property now
+   * and leave the camera where it is. (A 3D↔Sky transition lands exactly,
+   * camera included, so Sky registration holds; "keep" views never held
+   * the camera, so they carry on.)
+   */
+  takeover() {
+    const r = this.running;
+    if (!r || r.transition.keepCamera) return;
+    this.cancel({ keepCamera: !r.transition.modeChange });
+  }
+
+  cancel({ keepCamera = false } = {}) {
     if (!this.running) return;
     const r = this.running;
     this.running = null;
     r.off();
+    const pose = keepCamera ? clonePose(this.viewer.renderer.camera.pose) : null;
     r.transition.finish();
+    if (pose) {
+      Object.assign(this.viewer.renderer.camera.pose, pose);
+      this.viewer.state.view.pose = this.viewer.renderer.camera.pose;
+    }
     this.viewer.renderer.release("state-transition");
     // An interrupted transition still arrives: fire the same events so the
     // view mode, panels and Sky layers reflect the applied State.
@@ -301,13 +345,15 @@ export class StoryPlugin {
     i = ((i % items.length) + items.length) % items.length;
     const it = items[i];
     const v = this.viewer;
-    if (this.running) this.cancel();
+    // Rapid next/previous: the new flight starts from wherever the camera
+    // is now, instead of snapping to the interrupted view first.
+    if (this.running) this.cancel({ keepCamera: !this.running.transition.modeChange });
     this.active = i;
     this.markActive();
     this.renderPresenter();
     v.timeline.pause();
-    this.ui.following = null;
     const keepCamera = it.camera === "keep";
+    if (!keepCamera) this.ui.following = null;
     const transition = makeTransition(v, this.sky, it.state, { keepCamera });
     const spec = it.transition || this.project.defaultTransition;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -315,6 +361,31 @@ export class StoryPlugin {
     const ease = easing(spec.easing);
     if (this.presenting) this.renderProgress(dur);
     v.emit("state-transition-start", { index: i, id: it.id });
+    return this.runTransition(transition, dur, ease);
+  }
+
+  /**
+   * Apply any captured State (the public `applyState`): a smooth transition
+   * by default, or `{ instant: true }`. No saved view becomes active.
+   */
+  applyState(state, { instant = false, duration_ms: ms, easing: easeName, keepCamera = false } = {}) {
+    if (!state || typeof state !== "object" || !state.view) return Promise.resolve();
+    const v = this.viewer;
+    if (this.running) this.cancel({ keepCamera: !this.running.transition.modeChange });
+    this.active = -1;
+    this.markActive();
+    v.timeline.pause();
+    this.ui.following = null;
+    const transition = makeTransition(v, this.sky, state, { keepCamera });
+    const spec = this.project.defaultTransition;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const dur = instant || reduce ? 0 : Math.max(0, Number(ms ?? spec.duration_ms) || 0) * (transition.modeChange ? 1.35 : 1);
+    return this.runTransition(transition, dur, easing(easeName || spec.easing));
+  }
+
+  /** Animate a transition over `dur` ms; resolves once it has arrived exactly. */
+  runTransition(transition, dur, ease) {
+    const v = this.viewer;
     return new Promise((resolve) => {
       if (dur <= 0) {
         transition.finish();
@@ -567,9 +638,11 @@ export class StoryPlugin {
 
   manifestForExport({ presentOnly = false, currentOnly = false } = {}) {
     const m = cloneJson(this.viewer.manifest);
+    // Saved files reopen the way they were being viewed (theme and mode).
+    m.viewer = { ...(m.viewer || {}), mode: this.ui.mode };
     if (currentOnly) {
       const cur = captureState(this.viewer, this.sky);
-      m.states = exportStatesBlock({ ...this.project, items: [{ id: uid(), name: "View", caption: "", thumb: "", camera: "follow", transition: null, state: cur }] }, { defaultMode: "edit" });
+      m.states = exportStatesBlock({ ...this.project, projectId: uid(), items: [{ id: uid(), name: "View", caption: "", thumb: "", camera: "follow", transition: null, state: cur }] }, { defaultMode: "edit" });
       m.states.apply_first_on_load = true;
       m.states.items_hidden = true;
       return m;
@@ -580,7 +653,7 @@ export class StoryPlugin {
 
   async exportHtml(opts = {}) {
     const m = this.manifestForExport(opts);
-    const text = buildExportHtml(m, { theme: this.ui.theme });
+    const text = buildExportHtml(m, { theme: this.ui.theme, mode: this.ui.mode });
     const base = slugName(this.viewer.manifest.title || "oviz-figure");
     const suffix = opts.presentOnly ? "-presentation" : opts.currentOnly ? "-view" : "";
     const res = await saveHtml(text, `${base}${suffix}.html`);
@@ -590,7 +663,7 @@ export class StoryPlugin {
   async saveDocument() {
     if (this.readOnly) return;
     const m = this.manifestForExport({});
-    const text = buildExportHtml(m, { theme: this.ui.theme });
+    const text = buildExportHtml(m, { theme: this.ui.theme, mode: this.ui.mode });
     const res = await saveHtml(text, `${slugName(this.viewer.manifest.title || "oviz-figure")}.html`, { reuseHandle: true });
     if (res.ok) {
       this.dirty = false;
@@ -626,9 +699,11 @@ export class StoryPlugin {
     try {
       const d = JSON.parse(raw);
       if (!Array.isArray(d.items)) return;
-      const embedded = JSON.stringify(this.project.items.map((x) => [x.id, x.name]));
-      const draft = JSON.stringify(d.items.map((x) => [x.id, x.name]));
-      if (embedded === draft && d.items.length === this.project.items.length) return;
+      // Any edit counts (captions, updated views, camera, timing), not only
+      // the list of names.
+      const same = JSON.stringify(d.items) === JSON.stringify(this.project.items)
+        && (!d.defaultTransition || JSON.stringify(d.defaultTransition) === JSON.stringify(this.project.defaultTransition));
+      if (same) return;
       const backup = this.project.items;
       this.project.items = d.items;
       if (d.defaultTransition) this.project.defaultTransition = d.defaultTransition;
@@ -646,7 +721,10 @@ export class StoryPlugin {
   api() {
     return {
       list: () => this.project.items.map((it, i) => ({ index: i + 1, id: it.id, name: it.name })),
-      goTo: (target) => this.goTo(typeof target === "number" ? target - 1 : this.project.items.findIndex((x) => x.id === target || x.name === target)),
+      goTo: (target) => {
+        const i = typeof target === "number" ? target - 1 : this.project.items.findIndex((x) => x.id === target || x.name === target);
+        return i >= 0 && i < this.project.items.length ? this.goTo(i) : Promise.resolve();
+      },
       next: () => this.next(),
       previous: () => this.previous(),
       add: () => this.add(),
@@ -665,7 +743,8 @@ function slugName(s) {
   return String(s).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "oviz-figure";
 }
 
-function figureId(m) {
+/** Stable id for a figure (title + blob fingerprint), for per-figure storage. */
+export function figureId(m) {
   let hash = 2166136261;
   const text = `${m.title}|${(m.blobs || []).map((b) => `${b.id}:${b.bytes}`).join(",")}`;
   for (let i = 0; i < text.length; i++) {

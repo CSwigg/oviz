@@ -138,11 +138,12 @@ export class AladinSky {
     if (!a) return;
     const sig = `${lDeg.toFixed(6)}|${bDeg.toFixed(6)}|${hfovDeg.toFixed(5)}`;
     if (sig === this.lastSig) return;
-    this.lastSig = sig;
     try {
       a.gotoPosition(((lDeg % 360) + 360) % 360, bDeg);
       a.setFoV(Math.min(Math.max(hfovDeg, 1e-4), 179));
       a.view?.requestRedraw?.();
+      // Only now is the pose Aladin's: a failed push is retried next frame.
+      this.lastSig = sig;
     } catch (err) {
       // Aladin throws while its WebGL context is still warming up.
     }
@@ -183,13 +184,19 @@ export class AladinSky {
     } catch (_) { /* ignore */ }
     const overlays = visible.slice(0, -1).reverse(); // bottom → top
     const wantKeys = overlays.map((l) => l.key);
-    const sameOrder = this.order.filter((k) => wantKeys.includes(k)).join("|") === wantKeys.filter((k) => this.order.includes(k)).join("|");
-    if (!sameOrder) {
-      for (const [key, o] of this.overlays) this._detach(key, o);
+    // Aladin always adds an overlay on top of the stack. Keep the attached
+    // layers that already sit in the wanted order, and detach everything
+    // above the first difference so it is re-added in order below.
+    let keep = 0;
+    while (keep < this.order.length && keep < wantKeys.length && this.order[keep] === wantKeys[keep]) keep++;
+    for (const key of this.order.slice(keep)) {
+      const o = this.overlays.get(key);
+      if (o) this._detach(key, o);
     }
     for (const [key, o] of this.overlays) {
       if (!wantKeys.includes(key)) this._detach(key, o);
     }
+    const attached = this.order.slice(0, keep);
     for (const l of overlays) {
       let o = this.overlays.get(l.key);
       const opacity = Math.min(1, Math.max(0, l.opacity ?? 1));
@@ -206,6 +213,7 @@ export class AladinSky {
         }
         o = { name, hips, opacity: -1 };
         this.overlays.set(l.key, o);
+        attached.push(l.key);
       }
       if (Math.abs(o.opacity - opacity) > 1e-4) {
         o.opacity = opacity;
@@ -213,7 +221,8 @@ export class AladinSky {
       }
       this._applyStyle(o, l);
     }
-    this.order = wantKeys;
+    // The real stack (an overlay that failed to attach is not in it).
+    this.order = attached;
   }
 
   _setOpacity(o, opacity) {

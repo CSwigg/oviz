@@ -14,6 +14,7 @@
 /* Chrome fades away in zen / presentation mode. */
 .ov-root[data-zen="true"] .ov-chrome { opacity: 0; transform: translateY(var(--ov-hide-dy, 0)); pointer-events: none; }
 .ov-chrome { transition: opacity 260ms var(--ov-ease), transform 320ms var(--ov-ease); }
+.ov-root[data-zen="true"] :is(.ov-callout, .ov-selbar) { opacity: 0; visibility: hidden; pointer-events: none; }
 
 /* ---- Top: the figure's title, search and tools ---------------------- */
 .ov-top {

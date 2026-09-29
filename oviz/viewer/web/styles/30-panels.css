@@ -4,10 +4,15 @@
   display: flex; flex-direction: column;
   border-radius: var(--ov-radius-lg);
   overflow: hidden;
-  transition: opacity 180ms var(--ov-ease), transform 220ms var(--ov-ease);
+  transition: opacity 180ms var(--ov-ease), transform 220ms var(--ov-ease), visibility 0s linear 0s;
 }
 .ov-panel.ov-glass { background: var(--ov-surface-strong); }
-.ov-panel[data-open="false"] { opacity: 0; pointer-events: none; }
+/* Closed panels leave the tab order and the accessibility tree once they
+   have faded out (visibility flips after the fade). */
+.ov-panel[data-open="false"] {
+  opacity: 0; pointer-events: none; visibility: hidden;
+  transition: opacity 180ms var(--ov-ease), transform 220ms var(--ov-ease), visibility 0s linear 220ms;
+}
 
 .ov-layers {
   top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top));

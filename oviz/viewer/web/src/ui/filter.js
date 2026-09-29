@@ -36,6 +36,7 @@ export class FilterPlugin {
     v.on("time", () => { if (this.param?.key === "ageAt" || this.param?.key === "dist" || this.param?.key === "z") redraw(); });
     v.on("style", redraw);
     v.on("gpu-restored", redraw);
+    v.on("theme", redraw); // axis text and range colours follow the theme
     v.stateExtensions.set("filter", { capture: () => this.captureState(), apply: (f) => this.applyState(f) });
     ui.filter = this;
   }

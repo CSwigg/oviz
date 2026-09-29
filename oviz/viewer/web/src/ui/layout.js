@@ -78,7 +78,7 @@ const LAYOUTS = {
    */
   detailed(lm, ui) {
     const bar = timeBar(lm, ui);
-    lm.add(sep(), bar);
+    if (!ui.dock.el.hidden) lm.add(sep(), bar);
     lm.move(ui.modeBtn, bar);
     lm.move(ui.legend.el, ui.bottomLeft, ui.scale);
   },

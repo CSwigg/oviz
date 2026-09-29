@@ -6,7 +6,7 @@ import { clamp, DEG, v3dist, niceFloor } from "../core/math.js";
 import { Renderer } from "../engine/renderer.js";
 import { Controls } from "../engine/controls.js";
 import { RenderTarget } from "../engine/gl.js";
-import { makePose, clonePose, poseFromEyeTarget, poseTween, forwardFromAngles, anglesFromForward } from "../engine/camera.js";
+import { makePose, clonePose, poseFromEyeTarget, poseTween, forwardFromAngles, anglesFromForward, sanitizePose } from "../engine/camera.js";
 import { cpuFramePosition, frameOffset, trailParams } from "../engine/frames.js";
 import { PointsLayer, resetStarTextures } from "../layers/points.js";
 import { LinesLayer } from "../layers/lines.js";
@@ -39,6 +39,9 @@ export class Viewer extends Emitter {
     this.world = manifest.world || {};
     this.renderer.sceneRadius = Math.max(this.world.maxSpan || 1e4, 1000);
     this.state = initialViewerState(manifest);
+    // The initial state may open on another frame (classic exports do).
+    const openFrame = Number(this.state.time.frame);
+    if (Number.isFinite(openFrame) && Math.abs(openFrame - this.timeline.frame) > 1e-9) this.timeline.setFrame(openFrame, { silent: true });
     this.hover = null;
     this.selection = [];
     this.tween = null;
@@ -52,7 +55,8 @@ export class Viewer extends Emitter {
     this._buildLayers();
     this.controls = new Controls(this.canvas, this.renderer, {
       onChange: () => this._onCameraChange(),
-      onInteractStart: () => this._cancelTween(),
+      // Grabbing the camera ends any flight or State transition.
+      onInteractStart: () => { this._cancelTween(); this.emit("camera-takeover", {}); },
     });
     this.controls.maxDistance = Math.max(this.world.maxSpan || 1e4, 1e3) * 8;
     this.labels = new LabelsOverlay(container);
@@ -129,6 +133,8 @@ export class Viewer extends Emitter {
    * without re-decoding; plugins rebuild their own layers on "gpu-restored".
    */
   async _restoreGPU() {
+    // Loaders still streaming into the dead context's layers must stop.
+    this._gpuGeneration = (this._gpuGeneration || 0) + 1;
     resetStarTextures();
     this.data.clear();
     this.pickIds = [];
@@ -145,12 +151,15 @@ export class Viewer extends Emitter {
   }
 
   async attachImages() {
+    const gen = this._gpuGeneration || 0;
+    const layer = this.images;
     for (const img of this.manifest.images || []) {
       try {
         const blob = await this.store.get(img.image.blob);
         const centers = img.center?.blob ? await this.store.get(img.center.blob) : null;
         const opac = img.opacity?.blob ? await this.store.get(img.opacity.blob) : null;
-        await this.images.add(img, blob, centers, opac);
+        if (gen !== (this._gpuGeneration || 0) || layer !== this.images) return;
+        await layer.add(img, blob, centers, opac);
         this.renderer.invalidate();
       } catch (err) {
         console.warn("Oviz: image plane failed to load", img.key, err);
@@ -161,6 +170,8 @@ export class Viewer extends Emitter {
   async attachVolumes(onEach) {
     // Smallest first so something appears quickly.
     const specs = [...this.volumeSpecs].sort((a, b) => a.dims[0] * a.dims[1] * a.dims[2] - b.dims[0] * b.dims[1] * b.dims[2]);
+    const gen = this._gpuGeneration || 0;
+    const layer = this.volumes;
     for (const spec of specs) {
       try {
         const data = await this.store.get(spec.data.blob);
@@ -169,7 +180,8 @@ export class Viewer extends Emitter {
           const o = await this.store.get(spec.occupancy.blob);
           occ = { data: o, gx: spec.occupancy.dims[0], gy: spec.occupancy.dims[1], gz: spec.occupancy.dims[2] };
         }
-        this.volumes.addVolume(spec, data, occ);
+        if (gen !== (this._gpuGeneration || 0) || layer !== this.volumes) return;
+        layer.addVolume(spec, data, occ);
         this.renderer.invalidate();
         onEach?.(spec);
         this.emit("volume-ready", spec);
@@ -399,10 +411,11 @@ export class Viewer extends Emitter {
    * {done: false} if the flight was interrupted (user input, a new flight).
    */
   animateTo(pose, { duration = 1100, onDone, ease } = {}) {
+    this.emit("camera-takeover", {});
     this._cancelTween();
     this.controls.stop();
     const d = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : duration;
-    const tween = poseTween(this.renderer.camera.pose, pose, d, ease);
+    const tween = poseTween(this.renderer.camera.pose, sanitizePose(clonePose(pose)), d, ease);
     this.tween = tween;
     this.renderer.hold("tween");
     return new Promise((resolve) => {
@@ -416,7 +429,7 @@ export class Viewer extends Emitter {
 
   setPose(pose) {
     this._cancelTween();
-    Object.assign(this.renderer.camera.pose, clonePose(pose));
+    Object.assign(this.renderer.camera.pose, sanitizePose(clonePose(pose)));
     this._onCameraChange();
     this.renderer.invalidate();
   }
@@ -466,6 +479,8 @@ export class Viewer extends Emitter {
   }
 
   async setViewMode(mode, { animate = true } = {}) {
+    // A State transition in flight hands over first (it may change the mode).
+    this.emit("camera-takeover", {});
     if (mode === this.state.view.mode) return;
     const from = this.state.view.mode;
     this.state.view.mode = mode;
@@ -541,13 +556,15 @@ export class Viewer extends Emitter {
     if (sig !== this._pickSig) {
       this.pickTarget.resize(w, h);
       this.pickTarget.bind();
+      // Layers leave the depth mask off, and a masked clear skips depth:
+      // without this, old depth piles up and hides objects from picking.
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthMask(true);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       const frame = {
         gl, camera: r.camera, width: w, height: h, cssWidth: w, cssHeight: h, dpr: 1, interacting: false,
       };
-      gl.enable(gl.DEPTH_TEST);
-      gl.depthMask(true);
       this.points.drawPick(frame);
       this.skyPickDraw?.(frame);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);

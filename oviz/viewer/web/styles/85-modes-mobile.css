@@ -18,5 +18,9 @@
     bottom: calc(var(--ov-dock-h) + 24px + var(--ov-safe-bottom));
     width: auto; max-width: none;
   }
+  /* Sheets and the docked card cover the corners above the bar: the key,
+     scale and corner buttons step aside instead of peeking out beneath. */
+  :is(.ov-bottom-left, .ov-bottom-right) { transition: opacity 160ms var(--ov-ease); }
+  .ov-root:is([data-callout="true"], [data-story="true"], [data-layers="true"], [data-details="true"]) :is(.ov-bottom-left, .ov-bottom-right) { opacity: 0; pointer-events: none; }
   .ov-legend .ov-legend-item { height: 22px; font-size: 12px; }
 }

@@ -143,8 +143,17 @@ export function cpuFramePosition(positions, posFrames, count, index, frame, out 
   const ax = positions[a], bx = positions[b];
   const hasA = ax === ax, hasB = bx === bx;
   if (!hasA && !hasB) return null;
-  if (!hasA) { out[0] = bx; out[1] = positions[b + 1]; out[2] = positions[b + 2]; return out; }
-  if (!hasB || t <= 0) { out[0] = ax; out[1] = positions[a + 1]; out[2] = positions[a + 2]; return out; }
+  // Entering or leaving the catalogue the GPU fades the point by presence
+  // (t, or 1 − t) and draws nothing at zero: labels and picks must agree.
+  if (!hasA) {
+    if (t <= 1e-3) return null;
+    out[0] = bx; out[1] = positions[b + 1]; out[2] = positions[b + 2]; return out;
+  }
+  if (!hasB) {
+    if (t >= 1 - 1e-3) return null;
+    out[0] = ax; out[1] = positions[a + 1]; out[2] = positions[a + 2]; return out;
+  }
+  if (t <= 0) { out[0] = ax; out[1] = positions[a + 1]; out[2] = positions[a + 2]; return out; }
   const f0 = Math.max(f1 - 1, 0), f3 = Math.min(f2 + 1, posFrames - 1);
   const p0 = (f0 * count + index) * 3, p3 = (f3 * count + index) * 3;
   const t2 = t * t, t3 = t2 * t;

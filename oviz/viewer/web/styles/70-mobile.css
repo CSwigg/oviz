@@ -38,7 +38,12 @@
   /* Bottom: corner controls stack above the full-width dock. */
   .ov-bottom { grid-template-columns: 1fr; gap: 8px; }
   .ov-bottom-left { position: absolute; left: 0; bottom: calc(var(--ov-dock-h) + 8px); }
-  .ov-bottom-right { position: absolute; right: 0; bottom: calc(var(--ov-dock-h) + 8px); }
+  /* Wrap rather than run off the left edge: the Sky extras take their own
+     row above the 3D/Sky switch when the screen is narrow. */
+  .ov-bottom-right {
+    position: absolute; right: 0; bottom: calc(var(--ov-dock-h) + 8px);
+    flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 2 * var(--ov-gutter));
+  }
   .ov-colorbars { display: none; }
   .ov-scale { padding: 7px 10px 8px; min-width: 76px; }
   .ov-scale-sub { display: none; }
@@ -53,7 +58,9 @@
 
   .ov-story { width: calc(100vw - 2 * var(--ov-gutter)); bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom) + 52px); }
   .ov-card { width: 132px; }
-  .ov-story-head .ov-btn span:not(.ov-icon) { display: none; }
+  .ov-story-head { gap: 6px; padding-left: 14px; }
+  .ov-story-head .ov-btn .ov-btn-label { display: none; }
+  .ov-story-head .ov-btn { width: 36px; height: 36px; padding: 0; }
   .ov-present { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ov-present-exit { grid-column: 1 / -1; justify-self: center; }
   .ov-palette { top: calc(10px + var(--ov-safe-top)); border-radius: 16px; }
@@ -61,6 +68,13 @@
   .ov-toasts { top: calc(58px + var(--ov-safe-top)); }
   .ov-hovercard { display: none; }
   .ov-rec-pill { top: calc(58px + var(--ov-safe-top)); }
+  .ov-selbar { bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom) + 52px); max-width: calc(100vw - 2 * var(--ov-gutter)); }
+}
+
+/* The smallest phones: the 3D/Sky switch shows icons only, so the corner
+   row clears the scale. */
+@media (max-width: 360px) {
+  .ov-seg--view button { font-size: 0; gap: 0; padding: 0 10px; }
 }
 
 @media (pointer: coarse) {

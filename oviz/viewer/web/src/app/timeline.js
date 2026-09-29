@@ -114,9 +114,10 @@ export class Timeline {
     let f = this.frame + this.direction * this.baseFps * this.speed * dt;
     const last = this.count - 1;
     if (f > last || f < 0) {
-      if (this.loop) {
-        f = this.direction > 0 ? f - last : last + f;
-        f = clamp(f, 0, last);
+      if (this.loop && last > 0) {
+        // Wrap by the whole span: a long tick (fast playback, few frames)
+        // may pass the end more than once.
+        f = ((f % last) + last) % last;
       } else {
         f = clamp(f, 0, last);
         this.playing = false;
@@ -170,4 +171,24 @@ export function birthProfile(timeline, ageArrays, bins = 96) {
     out[i] = acc;
   }
   return out;
+}
+
+/**
+ * CPU twin of the point shader's birth fade: how visible (0–1) an object of
+ * this present-day age is at time t. Objects without an age always show.
+ */
+export function birthFadeAt(t, ageNow, fade = 0, inOut = false) {
+  if (!(ageNow === ageNow) || ageNow <= -1e29) return 1;
+  const birth = -ageNow;
+  const smooth = (x) => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
+  if (fade <= 1e-9) {
+    if (t < birth) return 0;
+    if (!inOut) return 1;
+    return Math.abs(t - birth) <= 1e-9 ? 1 : 0;
+  }
+  if (t < birth - fade) return 0;
+  if (t <= birth) return smooth((t - (birth - fade)) / fade);
+  if (!inOut) return 1;
+  if (t <= birth + fade) return 1 - smooth((t - birth) / fade);
+  return 0;
 }

@@ -14,7 +14,7 @@ export class CompactLegend {
     const v = (this.viewer = ui.viewer);
     this.rows = [];
     this.group = null;
-    this.el = h("div", { class: "ov-legend", role: "list", "aria-label": "Legend" });
+    this.el = h("div", { class: "ov-legend", role: "group", "aria-label": "Legend" });
     v.on("style", () => this.sync());
     v.on("state-applied", () => this.render());
     this.render();
@@ -33,7 +33,7 @@ export class CompactLegend {
     this.rows = all.slice(0, MAX_ITEMS).map((t) => {
       const dot = h("span", { class: "ov-legend-dot" });
       const b = h("button", {
-        class: "ov-legend-item", type: "button", role: "listitem",
+        class: "ov-legend-item", type: "button",
         "data-tip": `${t.name}\nClick to show or hide · double-click to show only this`,
       }, dot, h("span", { class: "ov-legend-name" }, t.name));
       let timer = 0;
@@ -62,6 +62,7 @@ export class CompactLegend {
     for (const r of this.rows) {
       const st = v.state.traces[r.t.key] || {};
       r.b.dataset.visible = String(!!st.visible);
+      r.b.setAttribute("aria-pressed", String(!!st.visible));
       const cb = r.t.colorBy;
       const mode = st.colorMode || cb?.defaultMode || "fixed";
       const lut = mode === "by_value" && cb ? this.ui.luts.get(st.colormap || cb.colormap) : null;

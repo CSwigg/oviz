@@ -26,8 +26,9 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-canvas { position: absolute; inset: 0; display: block; z-index: 1; cursor: grab; touch-action: none; }
 .ov-canvas:active { cursor: grabbing; }
 .ov-root[data-hovering="true"] .ov-canvas { cursor: pointer; }
-.ov-sky-host { position: absolute; inset: 0; z-index: 0; opacity: 0; transition: opacity 600ms var(--ov-ease); pointer-events: none; background: #000; }
-.ov-root[data-view="sky"] .ov-sky-host[data-ready="true"] { opacity: 1; }
+/* The Sky plugin fades the survey frame by frame (in step with the camera
+   reaching the Sun); a CSS transition would lag behind it. */
+.ov-sky-host { position: absolute; inset: 0; z-index: 0; opacity: 0; pointer-events: none; background: #000; }
 .ov-sky-host .aladin-container, .ov-sky-host > div { position: absolute !important; inset: 0; }
 /* Hide Aladin's own chrome; Oviz provides the controls. */
 .ov-sky-host .aladin-logo-container, .ov-sky-host .aladin-location, .ov-sky-host .aladin-fov,

@@ -85,7 +85,8 @@
   --ov-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --ov-text: #10151f;
   --ov-text-2: rgba(16, 21, 31, 0.72);
-  --ov-text-3: rgba(16, 21, 31, 0.5);
+  /* Light glass sits over a dark stage: captions need a little more ink. */
+  --ov-text-3: rgba(16, 21, 31, 0.62);
   --ov-text-inverse: #ffffff;
   --ov-accent: #b8791b;
   --ov-accent-strong: #9a620d;
