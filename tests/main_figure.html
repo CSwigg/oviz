@@ -6740,6 +6740,7 @@ const ICONS = {
   home: '<path d="M3.8 9.2 10 4l6.2 5.2"/><path d="M5.5 8v7.5h9V8"/>',
   globe: '<circle cx="10" cy="10" r="6.8"/><path d="M3.2 10h13.6"/><path d="M10 3.2c2 2 2.8 4.3 2.8 6.8S12 14.8 10 16.8C8 14.8 7.2 12.5 7.2 10S8 5.2 10 3.2Z"/>',
   cube: '<path d="m10 2.8 6.2 3.5v7.4L10 17.2l-6.2-3.5V6.3L10 2.8Z"/><path d="m3.9 6.3 6.1 3.5 6.1-3.5"/><path d="M10 9.8v7.3"/>',
+  ar: '<path d="M3 7V4.5A1.5 1.5 0 0 1 4.5 3H7M13 3h2.5A1.5 1.5 0 0 1 17 4.5V7M17 13v2.5a1.5 1.5 0 0 1-1.5 1.5H13M7 17H4.5A1.5 1.5 0 0 1 3 15.5V13"/><path d="m10 5.8 3.7 2.1v4.2L10 14.2l-3.7-2.1V7.9L10 5.8Z"/><path d="M6.4 7.9 10 10l3.6-2.1M10 10v4.2"/>',
   sparkle: '<path d="M10 3v3.2M10 13.8V17M3 10h3.2M13.8 10H17"/><path d="m5.1 5.1 2 2m5.8 5.8 2 2m0-9.8-2 2m-5.8 5.8-2 2"/>',
   orbit: '<ellipse cx="10" cy="10" rx="7" ry="3.2" transform="rotate(-25 10 10)"/><circle cx="10" cy="10" r="1.8" fill="currentColor"/>',
   grid: '<circle cx="10" cy="10" r="6.8"/><circle cx="10" cy="10" r="3.4"/><path d="M10 3.2v13.6M3.2 10h13.6"/>',
@@ -11967,9 +11968,669 @@ class IdleFade {
 return { IdleFade };
 })();
 
+// ---- ar/usdz.js ----
+const { usdName, usdaScene, zipStored, usdzPackage } = (() => {
+// USDZ writer for Apple's AR Quick Look.
+//
+// A USDZ file is an uncompressed ZIP whose first entry is a USD layer and
+// whose file data start on 64-byte boundaries. The layer here is plain-text
+// USDA using only what AR Quick Look (RealityKit) renders reliably: meshes
+// with UsdPreviewSurface materials, optionally textured through UsdUVTexture,
+// under a scene anchored to a horizontal plane. Structure follows the
+// MIT-licensed three.js USDZExporter (as the classic Oviz exporter did).
+
+const enc = new TextEncoder();
+
+function num(x, digits = 5) {
+  if (!Number.isFinite(x)) return "0";
+  const s = x.toFixed(digits);
+  // Trim trailing zeros ("0.12000" → "0.12", "3.00000" → "3").
+  return s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") || "0" : s;
+}
+
+function vec3List(arr, digits) {
+  const out = new Array(arr.length / 3);
+  for (let i = 0, j = 0; i < arr.length; i += 3, j++) out[j] = `(${num(arr[i], digits)}, ${num(arr[i + 1], digits)}, ${num(arr[i + 2], digits)})`;
+  return out.join(", ");
+}
+
+function vec2List(arr) {
+  const out = new Array(arr.length / 2);
+  for (let i = 0, j = 0; i < arr.length; i += 2, j++) out[j] = `(${num(arr[i], 4)}, ${num(arr[i + 1], 4)})`;
+  return out.join(", ");
+}
+
+function color(c) {
+  return `(${num(c[0], 4)}, ${num(c[1], 4)}, ${num(c[2], 4)})`;
+}
+
+/** A USD prim name: letters, digits and underscores, not starting with a digit. */
+function usdName(s) {
+  const n = String(s || "Item").replace(/[^A-Za-z0-9_]/g, "_");
+  return /^[A-Za-z_]/.test(n) ? n : `_${n}`;
+}
+
+function meshExtent(points) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < points.length; i += 3) {
+    for (let k = 0; k < 3; k++) {
+      lo[k] = Math.min(lo[k], points[i + k]);
+      hi[k] = Math.max(hi[k], points[i + k]);
+    }
+  }
+  return `[(${lo.map((x) => num(x)).join(", ")}), (${hi.map((x) => num(x)).join(", ")})]`;
+}
+
+function meshPrim(mesh, materialPath) {
+  const tris = mesh.indices.length / 3;
+  const lines = [
+    `            def Mesh "${usdName(mesh.name)}" (`,
+    `                prepend apiSchemas = ["MaterialBindingAPI"]`,
+    `            )`,
+    `            {`,
+    `                float3[] extent = ${meshExtent(mesh.points)}`,
+    `                int[] faceVertexCounts = [${new Array(tris).fill(3).join(", ")}]`,
+    `                int[] faceVertexIndices = [${Array.from(mesh.indices).join(", ")}]`,
+    `                rel material:binding = <${materialPath}>`,
+    `                normal3f[] normals = [${vec3List(mesh.normals, 4)}] (`,
+    `                    interpolation = "vertex"`,
+    `                )`,
+    `                point3f[] points = [${vec3List(mesh.points, 5)}]`,
+  ];
+  if (mesh.uvs) {
+    lines.push(
+      `                texCoord2f[] primvars:st = [${vec2List(mesh.uvs)}] (`,
+      `                    interpolation = "vertex"`,
+      `                )`,
+    );
+  }
+  if (mesh.doubleSided) lines.push(`                uniform bool doubleSided = 1`);
+  lines.push(`                uniform token subdivisionScheme = "none"`, `            }`, ``);
+  return lines.join("\n");
+}
+
+function materialPrim(m, path) {
+  const surf = `${path}/Surface`;
+  const inputs = [];
+  const nodes = [];
+  if (m.texture) {
+    // Textured: colour and coverage come from the image (baked per material,
+    // so no renderer has to honour UsdUVTexture's scale).
+    const tex = `${path}/Texture`;
+    const reader = `${path}/StReader`;
+    inputs.push(`                color3f inputs:diffuseColor.connect = <${tex}.outputs:rgb>`);
+    inputs.push(`                float inputs:opacity.connect = <${tex}.outputs:a>`);
+    nodes.push(
+      `            def Shader "StReader"`,
+      `            {`,
+      `                uniform token info:id = "UsdPrimvarReader_float2"`,
+      `                float2 inputs:fallback = (0, 0)`,
+      `                string inputs:varname = "st"`,
+      `                float2 outputs:result`,
+      `            }`,
+      `            def Shader "Texture"`,
+      `            {`,
+      `                uniform token info:id = "UsdUVTexture"`,
+      `                asset inputs:file = @${m.texture}@`,
+      `                float2 inputs:st.connect = <${reader}.outputs:result>`,
+      `                token inputs:sourceColorSpace = "sRGB"`,
+      `                token inputs:wrapS = "clamp"`,
+      `                token inputs:wrapT = "clamp"`,
+      `                float3 outputs:rgb`,
+      `                float outputs:a`,
+      `            }`,
+    );
+  } else {
+    inputs.push(`                color3f inputs:diffuseColor = ${color(m.diffuse)}`);
+    inputs.push(`                float inputs:opacity = ${num(m.opacity ?? 1, 4)}`);
+  }
+  if (m.emissive && Math.max(...m.emissive) > 0) inputs.push(`                color3f inputs:emissiveColor = ${color(m.emissive)}`);
+  inputs.push(`                float inputs:roughness = ${num(m.roughness ?? 0.6, 3)}`);
+  inputs.push(`                float inputs:metallic = 0`);
+  inputs.push(`                int inputs:useSpecularWorkflow = 0`);
+  return [
+    `        def Material "${usdName(m.name)}"`,
+    `        {`,
+    `            token outputs:surface.connect = <${surf}.outputs:surface>`,
+    `            def Shader "Surface"`,
+    `            {`,
+    `                uniform token info:id = "UsdPreviewSurface"`,
+    ...inputs,
+    `                token outputs:surface`,
+    `            }`,
+    ...nodes,
+    `        }`,
+    ``,
+  ].join("\n");
+}
+
+/**
+ * USDA text for a scene: {name, meshes: [{name, points, normals, uvs?,
+ * indices, doubleSided?, material}], materials: [{name, diffuse, emissive?,
+ * opacity?, roughness?, texture?}]}. Positions are metres, +Y up.
+ */
+function usdaScene(scene) {
+  const title = String(scene.name || "Oviz").replace(/["\\]/g, "");
+  const matPath = (name) => `/Root/Materials/${usdName(name)}`;
+  const meshes = scene.meshes.filter((m) => m.indices.length && m.points.length);
+  return [
+    `#usda 1.0`,
+    `(`,
+    `    customLayerData = {`,
+    `        string creator = "Oviz"`,
+    `    }`,
+    `    defaultPrim = "Root"`,
+    `    metersPerUnit = 1`,
+    `    upAxis = "Y"`,
+    `)`,
+    ``,
+    `def Xform "Root"`,
+    `{`,
+    `    def Scope "Scenes" (`,
+    `        kind = "sceneLibrary"`,
+    `    )`,
+    `    {`,
+    `        def Xform "Scene" (`,
+    `            customData = {`,
+    `                bool preliminary_collidesWithEnvironment = 0`,
+    `                string sceneName = "${title}"`,
+    `            }`,
+    `            sceneName = "${title}"`,
+    `        )`,
+    `        {`,
+    `            token preliminary:anchoring:type = "plane"`,
+    `            token preliminary:planeAnchoring:alignment = "horizontal"`,
+    ``,
+    ...meshes.map((m) => meshPrim(m, matPath(m.material))),
+    `        }`,
+    `    }`,
+    ``,
+    `    def Scope "Materials"`,
+    `    {`,
+    ...scene.materials.map((m) => materialPrim(m, matPath(m.name))),
+    `    }`,
+    `}`,
+    ``,
+  ].join("\n");
+}
+
+// ---------------------------------------------------------------- ZIP
+
+let crcTable = null;
+
+function crc32(bytes) {
+  if (!crcTable) {
+    crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      crcTable[n] = c >>> 0;
+    }
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * An uncompressed ZIP with every file's data 64-byte aligned (padding goes
+ * in each local header's extra field), as the USDZ specification requires.
+ */
+function zipStored(files) {
+  const entries = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name);
+    const data = f.data instanceof Uint8Array ? f.data : enc.encode(String(f.data));
+    const headerEnd = offset + 30 + name.length;
+    // Extra field: id (2) + size (2) + padding, so the data start is aligned.
+    let extra = 0;
+    if (headerEnd % 64) extra = 4 + ((64 - ((headerEnd + 4) % 64)) % 64);
+    entries.push({ name, data, extra, offset, crc: crc32(data) });
+    offset = headerEnd + extra + data.length;
+  }
+  const centralSize = entries.reduce((s, e) => s + 46 + e.name.length, 0);
+  const out = new Uint8Array(offset + centralSize + 22);
+  const dv = new DataView(out.buffer);
+  for (const e of entries) {
+    let p = e.offset;
+    dv.setUint32(p, 0x04034b50, true);
+    dv.setUint16(p + 4, 20, true);
+    dv.setUint16(p + 6, 0, true);
+    dv.setUint16(p + 8, 0, true); // stored
+    dv.setUint16(p + 10, 0, true);
+    dv.setUint16(p + 12, 33, true);
+    dv.setUint32(p + 14, e.crc, true);
+    dv.setUint32(p + 18, e.data.length, true);
+    dv.setUint32(p + 22, e.data.length, true);
+    dv.setUint16(p + 26, e.name.length, true);
+    dv.setUint16(p + 28, e.extra, true);
+    p += 30;
+    out.set(e.name, p);
+    p += e.name.length;
+    if (e.extra) {
+      dv.setUint16(p, 0x1986, true); // private id for alignment padding
+      dv.setUint16(p + 2, e.extra - 4, true);
+      p += e.extra;
+    }
+    out.set(e.data, p);
+  }
+  let p = offset;
+  for (const e of entries) {
+    dv.setUint32(p, 0x02014b50, true);
+    dv.setUint16(p + 4, 20, true);
+    dv.setUint16(p + 6, 20, true);
+    dv.setUint16(p + 8, 0, true);
+    dv.setUint16(p + 10, 0, true);
+    dv.setUint16(p + 12, 0, true);
+    dv.setUint16(p + 14, 33, true);
+    dv.setUint32(p + 16, e.crc, true);
+    dv.setUint32(p + 20, e.data.length, true);
+    dv.setUint32(p + 24, e.data.length, true);
+    dv.setUint16(p + 28, e.name.length, true);
+    dv.setUint16(p + 30, 0, true);
+    dv.setUint16(p + 32, 0, true);
+    dv.setUint16(p + 34, 0, true);
+    dv.setUint16(p + 36, 0, true);
+    dv.setUint32(p + 38, 0, true);
+    dv.setUint32(p + 42, e.offset, true);
+    out.set(e.name, p + 46);
+    p += 46 + e.name.length;
+  }
+  dv.setUint32(p, 0x06054b50, true);
+  dv.setUint16(p + 8, entries.length, true);
+  dv.setUint16(p + 10, entries.length, true);
+  dv.setUint32(p + 12, centralSize, true);
+  dv.setUint32(p + 16, offset, true);
+  return out;
+}
+
+/** The USDZ package: the scene layer first, then its textures. */
+function usdzPackage(scene, textures = {}) {
+  const files = [{ name: "scene.usda", data: usdaScene(scene) }];
+  for (const [name, bytes] of Object.entries(textures)) files.push({ name, data: bytes });
+  return zipStored(files);
+}
+return { usdName, usdaScene, zipStored, usdzPackage };
+})();
+
+// ---- ar/model.js ----
+const { icosphere, buildArModel } = (() => {
+// AR model of the current view, for Apple's AR Quick Look (iPhone, iPad).
+//
+// What is on screen becomes a tabletop model: every visible object at the
+// current time as a small glowing sphere in its displayed colour, and each
+// visible dust volume as soft, crossed "cloudlet" quads where it is dense.
+// Galactic x, y, z (pc) map to AR metres with Galactic north up (+Y) and
+// the model resting a little above the detected table.
+
+
+
+
+
+
+const TARGET_RADIUS_M = 0.4;   // most of the model fits within this radius
+const FIT_QUANTILE = 0.9;      // …measured on this share of the objects
+const KEEP_RADII = 1.8;        // far outliers beyond this many radii are left out
+const LIFT_M = 0.02;           // gap between the table and the lowest object
+const MIN_RADIUS_M = 0.0015;
+const MAX_RADIUS_M = 0.009;
+const SUN_RADIUS_M = 0.004;
+const MAX_CLOUDLETS = 1500;
+const CLOUD_BINS = 8;
+
+// ------------------------------------------------------------ geometry
+
+/** Unit icosphere (level 0 = icosahedron), outward CCW faces. */
+function icosphere(level = 0) {
+  const t = (1 + Math.sqrt(5)) / 2;
+  let verts = [
+    [-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0],
+    [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t],
+    [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1],
+  ].map(unit);
+  let faces = [
+    [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+    [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+    [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+    [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
+  ];
+  for (let l = 0; l < level; l++) {
+    const mid = new Map();
+    const midpoint = (a, b) => {
+      const key = a < b ? `${a},${b}` : `${b},${a}`;
+      if (!mid.has(key)) {
+        mid.set(key, verts.length);
+        verts.push(unit([(verts[a][0] + verts[b][0]) / 2, (verts[a][1] + verts[b][1]) / 2, (verts[a][2] + verts[b][2]) / 2]));
+      }
+      return mid.get(key);
+    };
+    const next = [];
+    for (const [a, b, c] of faces) {
+      const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
+      next.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]);
+    }
+    faces = next;
+  }
+  return { verts: Float32Array.from(verts.flat()), faces: Uint32Array.from(faces.flat()) };
+}
+
+function unit(v) {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+}
+
+/** Growable mesh buffers. */
+class MeshBuilder {
+  constructor(name, material, { uvs = false, doubleSided = false } = {}) {
+    this.name = name;
+    this.material = material;
+    this.doubleSided = doubleSided;
+    this.p = [];
+    this.n = [];
+    this.uv = uvs ? [] : null;
+    this.i = [];
+  }
+
+  sphere(geo, c, r) {
+    const base = this.p.length / 3;
+    const v = geo.verts;
+    for (let k = 0; k < v.length; k += 3) {
+      this.p.push(c[0] + v[k] * r, c[1] + v[k + 1] * r, c[2] + v[k + 2] * r);
+      this.n.push(v[k], v[k + 1], v[k + 2]);
+    }
+    for (const f of geo.faces) this.i.push(base + f);
+  }
+
+  /** Three perpendicular soft quads through `c` (a cloudlet reads as volume from any side). */
+  cloudlet(c, hx, hy, hz) {
+    const quad = (corners, normal) => {
+      const base = this.p.length / 3;
+      for (const q of corners) { this.p.push(q[0], q[1], q[2]); this.n.push(normal[0], normal[1], normal[2]); }
+      this.uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+      this.i.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    };
+    const [x, y, z] = c;
+    quad([[x - hx, y - hy, z], [x + hx, y - hy, z], [x + hx, y + hy, z], [x - hx, y + hy, z]], [0, 0, 1]);
+    quad([[x - hx, y, z + hz], [x + hx, y, z + hz], [x + hx, y, z - hz], [x - hx, y, z - hz]], [0, 1, 0]);
+    quad([[x, y - hy, z + hz], [x, y - hy, z - hz], [x, y + hy, z - hz], [x, y + hy, z + hz]], [1, 0, 0]);
+  }
+
+  finish() {
+    return {
+      name: this.name,
+      material: this.material,
+      doubleSided: this.doubleSided,
+      points: Float32Array.from(this.p),
+      normals: Float32Array.from(this.n),
+      uvs: this.uv ? Float32Array.from(this.uv) : null,
+      indices: Uint32Array.from(this.i),
+    };
+  }
+}
+
+// ------------------------------------------------------------ sampling
+
+function lutColor(lut, u) {
+  const w = lut.length / 4;
+  const x = clamp(u, 0, 1) * (w - 1);
+  const i = Math.floor(x), j = Math.min(i + 1, w - 1), t = x - i;
+  const ch = (k) => (lut[i * 4 + k] * (1 - t) + lut[j * 4 + k] * t) / 255;
+  return [ch(0), ch(1), ch(2), ch(3)];
+}
+
+function stretchValue(v, name) {
+  if (name === "log" || name === "log10") return Math.log(1 + 999 * v) / Math.log(1000);
+  if (name === "asinh") return Math.asinh(10 * v) / Math.asinh(10);
+  return v;
+}
+
+/** A per-frame (frame-major) or static per-object value at a fractional frame. */
+function frameValue(values, frames, count, i, frame, fallback) {
+  if (!values) return fallback;
+  if (!(frames > 1)) return values[i] === values[i] ? values[i] : fallback;
+  const f = clamp(frame, 0, frames - 1);
+  const f0 = Math.floor(f), f1 = Math.min(f0 + 1, frames - 1), t = f - f0;
+  const a = values[f0 * count + i], b = values[f1 * count + i];
+  const v = a * (1 - t) + b * t;
+  return v === v ? v : a === a ? a : fallback;
+}
+
+/** Everything drawn as a point right now: position (pc), colour, brightness, radius (pc). */
+function collectObjects(viewer, ui) {
+  const v = viewer;
+  const params = v.points.params;
+  const g = v.state.global;
+  const t = v.timeline.time;
+  const frame = v.timeline.frame;
+  const out = [];
+  for (const trace of v.traces) {
+    const pts = trace.points;
+    if (!pts || !trace.showInLegend) continue;
+    const style = params?.styles.get(trace.key);
+    if (!style || !style.visible || (style.presence ?? 1) <= 0.001) continue;
+    const d = v.data.get(trace.key);
+    const batch = v.points.byKey.get(trace.key);
+    if (!d) continue;
+    const N = pts.count;
+    const byValue = style.colorMode === "by_value" && trace.colorBy;
+    const lut = byValue ? ui.luts.get(style.colormap) : null;
+    const override = style.colorOverride ? parseColor(style.colorOverride) : null;
+    const base = parseColor(trace.color);
+    const stars = trace.hasStars ? style.starsExp || 0 : 0;
+    const sizeFrames = d.size ? pts.size.frames || 1 : 1;
+    const opFrames = d.opacity ? pts.opacity.frames || 1 : 1;
+    const scFrames = d.scalar ? pts.colorScalar?.frames || 1 : 1;
+    const defSize = pts.size?.value ?? trace.pointSize ?? 1;
+    const defOpacity = pts.opacity?.value ?? trace.opacity ?? 1;
+    for (let i = 0; i < N; i++) {
+      const bits = batch ? batch.state[i] : 0;
+      if (bits & 18) continue; // hidden by the filter or an isolated lasso
+      const p = v.objectPosition(trace.key, i);
+      if (!p) continue;
+      const age = d.ageNow ? d.ageNow[i] : NaN;
+      const fade = birthFadeAt(t, age, g.fadeTime, g.fadeInOut);
+      if (fade <= 0.01) continue;
+      let rgb;
+      if (lut) {
+        const s = frameValue(d.scalar, scFrames, N, i, frame, pts.colorScalar?.value ?? 0);
+        const u = (s - style.cmin) / ((style.cmax - style.cmin) || 1);
+        rgb = lutColor(lut, u);
+      } else if (override) rgb = override;
+      else if (d.rgb) rgb = [d.rgb[i * 3] / 255, d.rgb[i * 3 + 1] / 255, d.rgb[i * 3 + 2] / 255];
+      else rgb = base;
+      let bright = frameValue(d.opacity, opFrames, N, i, frame, defOpacity) * style.opacityScale * g.pointOpacity * (style.presence ?? 1);
+      if (bits & 9) bright *= style.dimOpacity ?? 0.16;
+      let size = frameValue(d.size, sizeFrames, N, i, frame, defSize) * (style.sizeScale ?? 1) * g.pointSize;
+      if (g.fadeByOpacity) bright *= fade;
+      else size *= fade;
+      if (stars && d.starsFactor) size *= Math.pow(Math.max(d.starsFactor[i], 1e-6), stars);
+      out.push({ p, rgb, bright: clamp(bright, 0, 1), radiusPc: 0.25 * size * (v.world.pointScale || 1), sun: trace.key === v.world.sunTrace });
+    }
+  }
+  return out;
+}
+
+/** Soft samples of every dust volume drawn right now. */
+async function collectClouds(viewer, ui, maxClouds) {
+  const v = viewer;
+  const draws = v.volumes.params?.volumeDraws || [];
+  const out = [];
+  for (const d of draws) {
+    const spec = v.volumeSpecs.find((s) => s.key === d.key);
+    if (!spec) continue;
+    const data = await v.store.get(spec.data.blob);
+    const lut = ui.luts.get(d.state.colormap) || ui.luts.get(spec.colormaps?.[0]);
+    if (!data || !lut) continue;
+    const [nx, ny, nz] = spec.dims;
+    // A coarse grid of blocks: each keeps the mean density of a sparse
+    // sample of its voxels (dense sheets read as clouds, not specks).
+    const block = Math.max(2, Math.ceil(Math.cbrt((nx * ny * nz) / 60000)));
+    const stride = Math.max(1, Math.floor(block / 3));
+    const [lo, hi] = spec.bounds;
+    const cell = [(hi[0] - lo[0]) / nx, (hi[1] - lo[1]) / ny, (hi[2] - lo[2]) / nz];
+    const span = Math.max(d.high - d.low, 1e-6);
+    const cx = (lo[0] + hi[0]) / 2, cy = (lo[1] + hi[1]) / 2;
+    const ca = Math.cos(d.angle || 0), sa = Math.sin(d.angle || 0);
+    const opacity = (d.state.opacity ?? 1) * (d.fade ?? 1);
+    for (let bz = 0; bz < nz; bz += block) {
+      for (let by = 0; by < ny; by += block) {
+        for (let bx = 0; bx < nx; bx += block) {
+          let sum = 0, n = 0;
+          for (let z = bz; z < Math.min(bz + block, nz); z += stride) {
+            for (let y = by; y < Math.min(by + block, ny); y += stride) {
+              const row = (z * ny + y) * nx;
+              for (let x = bx; x < Math.min(bx + block, nx); x += stride) {
+                const w = (data[row + x] / 255 - d.low) / span;
+                if (w > 0) sum += stretchValue(Math.min(w, 0.999), d.state.stretch);
+                n++;
+              }
+            }
+          }
+          const w = n ? sum / n : 0;
+          if (!(w > 0)) continue;
+          const c = lutColor(lut, w);
+          // Block centre in pc (co-rotating volumes turn about their centre).
+          let px = lo[0] + (bx + Math.min(block, nx - bx) / 2) * cell[0];
+          let py = lo[1] + (by + Math.min(block, ny - by) / 2) * cell[1];
+          const pz = lo[2] + (bz + Math.min(block, nz - bz) / 2) * cell[2];
+          if (d.angle) {
+            const rx = px - cx, ry = py - cy;
+            px = cx + rx * ca - ry * sa;
+            py = cy + rx * sa + ry * ca;
+          }
+          out.push({ p: [px, py, pz], rgb: c, density: w, opacity, size: [block * cell[0], block * cell[1], block * cell[2]] });
+        }
+      }
+    }
+  }
+  // The renderer integrates faint dust along each ray, so absolute block
+  // densities are small: keep the densest blocks and weigh each against the
+  // densest ones (a thin shell must still read as a shell).
+  out.sort((a, b) => b.density - a.density);
+  const top = out.length ? out[Math.min(out.length - 1, Math.floor(Math.min(out.length, maxClouds) * 0.02))].density : 1;
+  // Relative, not absolute: dust windows differ between figures.
+  const kept = out.filter((c) => c.density >= top * 0.03).slice(0, maxClouds);
+  for (const c of kept) c.weight = clamp(c.density / top, 0, 1) * c.opacity;
+  return kept;
+}
+
+/** A soft round sprite in `rgb`, peak opacity `alpha`, fading to the edge (PNG bytes). */
+async function cloudTexture(rgb, alpha) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 31.5);
+  const [r, gg, b] = rgb.map((x) => Math.round(clamp(x, 0, 1) * 255));
+  const stop = (at, a) => g.addColorStop(at, `rgba(${r},${gg},${b},${(a * alpha).toFixed(4)})`);
+  stop(0, 1);
+  stop(0.34, 0.8);
+  stop(0.68, 0.25);
+  stop(1, 0);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  const blob = await new Promise((resolve) => c.toBlob(resolve, "image/png"));
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+// ------------------------------------------------------------ model
+
+/**
+ * Build the USDZ for the current view. Returns {blob, summary} where the
+ * summary counts objects and cloudlets and gives the pc → m scale.
+ */
+async function buildArModel(viewer, ui, { targetRadius = TARGET_RADIUS_M, maxClouds = MAX_CLOUDLETS } = {}) {
+  const v = viewer;
+  v._resolveParams?.(); // styles for exactly this time and state
+  const objects = collectObjects(v, ui);
+  const clouds = await collectClouds(v, ui, maxClouds);
+  if (!objects.length && !clouds.length) throw new Error("Nothing is visible to place in AR.");
+
+  // Fit like the figure frames itself: centred on the figure's own centre
+  // (else the median object), with most objects and all the dust inside the
+  // tabletop radius. A few far outliers must not shrink the rest to a speck.
+  const all = [...objects.map((o) => o.p), ...clouds.map((c) => c.p)];
+  const median = (k) => { const a = all.map((p) => p[k]).sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
+  const wc = v.world?.center;
+  const center = Array.isArray(wc) && wc.length === 3 && wc.every(Number.isFinite) ? wc.slice() : [median(0), median(1), median(2)];
+  const dist = (p) => Math.hypot(p[0] - center[0], p[1] - center[1], p[2] - center[2]);
+  const od = objects.map((o) => dist(o.p)).sort((a, b) => a - b);
+  let radius = od.length ? od[Math.floor(FIT_QUANTILE * (od.length - 1))] : 0;
+  for (const c of clouds) radius = Math.max(radius, dist(c.p));
+  radius = Math.max(radius, 1e-6);
+  const keep = (p) => dist(p) <= radius * KEEP_RADII;
+  const s = targetRadius / radius;
+  let zmin = Infinity;
+  for (const p of all) if (keep(p)) zmin = Math.min(zmin, p[2]);
+  const lift = LIFT_M + (center[2] - zmin) * s;
+  // Galactic (x, y, z) → USD (x, z, −y): right-handed, +Y up.
+  const toAr = (p) => [(p[0] - center[0]) * s, (p[2] - center[2]) * s + lift, -(p[1] - center[1]) * s];
+
+  const materials = [];
+  const meshes = [];
+  // Objects: one mesh per (colour, brightness) so each gets one material.
+  // Small spheres read as round even as icosahedra; big ones need more faces.
+  const small = icosphere(0), medium = icosphere(1), round = icosphere(2);
+  const groups = new Map();
+  let placed = 0;
+  for (const o of objects) {
+    if (!keep(o.p)) continue;
+    placed++;
+    const q = o.rgb.slice(0, 3).map((x) => Math.round(clamp(x, 0, 1) * 31));
+    const level = Math.min(3, Math.floor(o.bright * 4));
+    const key = o.sun ? "sun" : `${q.join("_")}_${level}`;
+    if (!groups.has(key)) {
+      const e = o.sun ? 1 : 0.3 + 0.7 * ((level + 0.5) / 4);
+      const rgb = q.map((x) => x / 31);
+      const name = `Points_${groups.size}`;
+      materials.push({ name, diffuse: rgb.map((x) => x * 0.35), emissive: rgb.map((x) => x * e), roughness: 0.45 });
+      groups.set(key, new MeshBuilder(name, name));
+    }
+    const r = o.sun ? Math.max(SUN_RADIUS_M, o.radiusPc * s) : clamp(o.radiusPc * s, MIN_RADIUS_M, MAX_RADIUS_M);
+    groups.get(key).sphere(o.sun ? round : r > 0.004 ? medium : small, toAr(o.p), r);
+  }
+  for (const b of groups.values()) meshes.push(b.finish());
+
+  // Dust: cloudlets binned by colour, faint and double-sided.
+  const textures = {};
+  if (clouds.length) {
+    const bins = new Map();
+    for (const c of clouds) {
+      const bin = Math.min(CLOUD_BINS - 1, Math.floor(clamp(c.weight, 0, 1) * CLOUD_BINS));
+      if (!bins.has(bin)) bins.set(bin, []);
+      bins.get(bin).push(c);
+    }
+    for (const [bin, list] of bins) {
+      const mean = (k) => list.reduce((acc, c) => acc + c.rgb[k], 0) / list.length;
+      const rgb = [mean(0), mean(1), mean(2)];
+      const name = `Dust_${bin}`;
+      // Faint and layered, like the renderer's haze: dense sheets build up
+      // where many cloudlets overlap, thin dust stays see-through.
+      const file = `textures/dust_${bin}.png`;
+      textures[file] = await cloudTexture(rgb, 0.06 + 0.24 * ((bin + 0.5) / CLOUD_BINS));
+      materials.push({ name, texture: file, diffuse: rgb, emissive: rgb.map((x) => x * 0.12), roughness: 0.9 });
+      const mb = new MeshBuilder(name, name, { uvs: true, doubleSided: true });
+      for (const c of list) {
+        const h = c.size.map((x) => x * s * 0.75); // overlap neighbours a little
+        mb.cloudlet(toAr(c.p), h[0], h[2], h[1]);
+      }
+      meshes.push(mb.finish());
+    }
+  }
+  const title = v.manifest.title || "Oviz figure";
+  const bytes = usdzPackage({ name: title, meshes, materials }, textures);
+  return {
+    blob: new Blob([bytes], { type: "model/vnd.usdz+zip" }),
+    summary: { objects: placed, clouds: clouds.length, metresPerPc: s, bytes: bytes.length },
+  };
+}
+return { icosphere, buildArModel };
+})();
+
 // ---- ui/app-ui.js ----
 const { mountUI, AppUI } = (() => {
 // The application shell: wires panels, dock, overlays, shortcuts and modes.
+
 
 
 
@@ -12606,6 +13267,7 @@ class AppUI {
       { label: "Search", icon: "search", shortcut: "/", run: () => this.palette.show() },
       ...(!this.statesBtn.hidden ? [{ label: "Views & story", icon: "bookmark", shortcut: "Y", run: () => this.plugins.find((p) => p.name === "states")?.toggle() }] : []),
       { label: "Reset view", icon: "home", shortcut: "Home", run: () => v.resetView() },
+      ...(this.canQuickLook ? [{ label: "View in AR", icon: "ar", run: () => this.viewInAr() }] : []),
       ...(hasTime ? [{ label: `Playback speed · ${v.timeline.speed}×`, icon: "play", run: () => this.dock.speedMenu?.(anchor) }] : []),
       "-",
       { label: "Screenshot or video…", icon: "camera", shortcut: "I", run: () => this.captureMenu(anchor) },
@@ -12628,6 +13290,64 @@ class AppUI {
   refit() {
     this.viewer.renderer.resize();
     try { this.plugins.find((p) => p.name === "sky")?.sky?.aladin?.view?.fixLayoutDimensions?.(); } catch (_) { /* Aladin not ready */ }
+  }
+
+  // ------------------------------------------------------------- AR
+
+  /** Apple's AR Quick Look (iPhone and iPad Safari) can open USDZ links. */
+  get canQuickLook() {
+    try { return document.createElement("a").relList.supports("ar"); } catch (_) { return false; }
+  }
+
+  /** Build the AR model of what is on screen now. */
+  async arModel() {
+    if (this._arBuilding) return this._arBuilding;
+    this._arBuilding = buildArModel(this.viewer, this).finally(() => { this._arBuilding = null; });
+    return this._arBuilding;
+  }
+
+  /**
+   * Open the figure in AR Quick Look. A model shipped next to the page
+   * (figure option `ar_model`) opens as is; otherwise the current view is
+   * built into a USDZ on the spot.
+   */
+  async viewInAr() {
+    const hosted = this.manifest.viewer?.arModel;
+    let href = null, objectUrl = null;
+    if (hosted) {
+      try { href = new URL(hosted, location.href).href; } catch (_) { href = null; }
+    }
+    if (!href) {
+      this.toast("Preparing the AR model…", { icon: icon("ar"), ms: 1600 });
+      try {
+        const { blob } = await this.arModel();
+        objectUrl = href = URL.createObjectURL(blob);
+      } catch (err) {
+        console.error(err);
+        this.toast(err.message || "The AR model could not be built");
+        return;
+      }
+    }
+    // Quick Look opens links with rel="ar" that wrap an image.
+    const a = h("a", { rel: "ar", href: `${href}#allowsContentScaling=1`, style: { display: "none" } }, h("img", { alt: "" }));
+    if (objectUrl) a.download = `${slug(this.manifest.title || "oviz-figure")}.usdz`;
+    this.ui.append(a);
+    a.click();
+    a.remove();
+    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 120000);
+  }
+
+  /** Download the current view as a USDZ (open it on an iPhone or iPad for AR). */
+  async saveArModel() {
+    this.toast("Building the 3D model…", { icon: icon("ar"), ms: 1400 });
+    try {
+      const { blob, summary } = await this.arModel();
+      downloadBlob(blob, `${slug(this.manifest.title || "oviz-figure")}.usdz`);
+      this.toast(`Saved USDZ · ${summary.objects.toLocaleString()} objects${summary.clouds ? `, ${summary.clouds.toLocaleString()} dust cloudlets` : ""}`, { icon: icon("ar") });
+    } catch (err) {
+      console.error(err);
+      this.toast(err.message || "The 3D model could not be built");
+    }
   }
 
   /** Whether this page may go fullscreen (not iPhone Safari, not a locked iframe). */
@@ -12868,6 +13588,8 @@ class AppUI {
   shareMenu(anchor) {
     const items = [
       { label: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
+      ...(this.canQuickLook ? [{ label: "View in AR", icon: "ar", run: () => this.viewInAr() }] : []),
+      { label: "Save 3D model for AR (USDZ)", icon: "ar", run: () => this.saveArModel() },
     ];
     const states = this.plugins.find((p) => p.name === "states");
     if (states) items.push("-", ...states.exportMenuItems());
@@ -12921,6 +13643,8 @@ class AppUI {
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: this.mode === "focus" ? "Detailed mode" : "Focus mode", sub: this.mode === "focus" ? MODES[1].desc : MODES[0].desc, icon: "sidebar", shortcut: "U", keywords: "mode layout panels simple minimal focus detailed", run: () => this.toggleMode() },
       { title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() },
+      ...(this.canQuickLook ? [{ title: "View in AR", icon: "ar", keywords: "augmented reality iphone quick look table 3d", run: () => this.viewInAr() }] : []),
+      { title: "Save 3D model for AR (USDZ)", icon: "ar", keywords: "augmented reality iphone quick look usdz export 3d", run: () => this.saveArModel() },
       ...(this.canFullscreen ? [{ title: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() }] : []),
     ];
     if (this.manifest.sky?.enabled) {
@@ -13283,6 +14007,9 @@ function installApi(root, viewer, ui) {
     getState: () => ui.plugins.find((p) => p.name === "states")?.api().capture() ?? null,
     applyState: (s, opts) => ui.plugins.find((p) => p.name === "states")?.applyState(s, opts) ?? Promise.resolve(),
     screenshot: (opts) => viewer.renderer.capture(opts),
+    // The current view as a USDZ for AR Quick Look: {blob, summary}.
+    arModel: () => ui.arModel(),
+    viewInAr: () => ui.viewInAr(),
     get states() { return ui.plugins.find((p) => p.name === "states")?.api(); },
     stats: () => ({
       frames: viewer.renderer.frameCount,
