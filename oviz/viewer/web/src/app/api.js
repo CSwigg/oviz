@@ -10,6 +10,17 @@ export function installApi(root, viewer, ui) {
     play: () => viewer.timeline.play(),
     pause: () => viewer.timeline.pause(),
     setViewMode: (m) => ui.setViewMode(m === "sky" ? "sky" : "3d"),
+    // What the camera orbits, zooms toward and moves with through time:
+    // {kind: "lsr" | "sun" | "free"} or {kind: "object", trace, index}.
+    get cameraAnchor() { return { ...viewer.anchor }; },
+    setCameraAnchor: (a) => {
+      const anchor = a && typeof a === "object" && a.kind === undefined ? { kind: "object", ...a } : a;
+      if (anchor === "free" || anchor?.kind === "free") {
+        viewer.releaseAnchor();
+        return Promise.resolve({ done: true });
+      }
+      return viewer.setAnchor(anchor);
+    },
     // Whole-viewer States, the same snapshots saved views use.
     getState: () => ui.plugins.find((p) => p.name === "states")?.api().capture() ?? null,
     applyState: (s, opts) => ui.plugins.find((p) => p.name === "states")?.applyState(s, opts) ?? Promise.resolve(),

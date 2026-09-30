@@ -110,6 +110,13 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
 - Sky registration relies on a TAN projection with the same centre,
   horizontal FOV, and Galactic-north-up orientation. The camera sits at the
   origin in Sky view.
+- The camera has an anchor (`src/engine/anchor.js`). It defaults to the LSR,
+  which is the origin of Oviz's LSR-centred frame. The other anchors are the
+  Sun, a followed object, and free.
+  - While anchored, zoom keeps the anchor centred.
+  - Time moves the camera by the anchor's displacement; it never snaps.
+  - Pans and flights elsewhere free the camera; Home re-anchors it.
+  - States and view links carry the anchor. Older ones infer it from the pose.
 - Per-object GPU state is a bitfield: 1 = dimmed, 2 = hidden, 4 = replaced by
   member stars.
 - A lost WebGL context must be recoverable. New GPU resources must be

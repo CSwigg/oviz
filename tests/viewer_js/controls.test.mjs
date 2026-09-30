@@ -2,8 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { keyMotion } from "../../oviz/viewer/web/src/engine/controls.js";
-import { makePose, poseEye, forwardFromAngles } from "../../oviz/viewer/web/src/engine/camera.js";
+import { keyMotion, Controls } from "../../oviz/viewer/web/src/engine/controls.js";
+import { makePose, poseEye, forwardFromAngles, Camera } from "../../oviz/viewer/web/src/engine/camera.js";
 
 const hold = (pose, key, opts = {}) => keyMotion(pose, new Set([key]), { dt: 0.25, maxSpan: 4000, ...opts });
 const pose3d = () => makePose({ target: [0, 0, 0], distance: 1000, yaw: -Math.PI / 2, pitch: 0.4, fov: 50 });
@@ -49,4 +49,40 @@ test("Sky view: keys turn the gaze and Q/E change the field of view", () => {
   const r = hold(sky(), "r", { sky: true });
   assert.deepEqual(r.target, [0, 0, 0]);
   assert.equal(r.distance, 0);
+});
+
+/** Controls on a fake element, with the camera anchored or not. */
+function anchoredControls(anchored) {
+  const el = { style: {}, addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0 }) };
+  const camera = new Camera();
+  camera.setViewport(800, 600);
+  camera.pose = makePose({ target: [0, 0, 0], distance: 1000, yaw: 0.3, pitch: 0.5, fov: 45 });
+  camera.update();
+  const renderer = { camera, beforeRender: [], invalidate() {}, markInteraction() {}, hold() {}, continuous: new Set() };
+  const state = { anchored, released: 0 };
+  const controls = new Controls(el, renderer, {
+    anchored: () => state.anchored,
+    onRelease: () => { state.anchored = false; state.released++; },
+  });
+  return { controls, camera, state };
+}
+
+test("anchored zoom keeps the anchor centred; free zoom follows the pointer", () => {
+  const a = anchoredControls(true);
+  a.controls.zoomAt(0.5, 700, 120);
+  assert.deepEqual(a.camera.pose.target, [0, 0, 0]);
+  assert.equal(a.camera.pose.distance, 500);
+  const f = anchoredControls(false);
+  f.controls.zoomAt(0.5, 700, 120);
+  assert.ok(Math.hypot(...f.camera.pose.target) > 1, "free zoom moves the orbit centre toward the pointer");
+  assert.equal(f.camera.pose.distance, 500);
+});
+
+test("panning frees an anchored camera, then moves it", () => {
+  const a = anchoredControls(true);
+  a.controls.pan(40, 0);
+  assert.equal(a.state.released, 1);
+  assert.ok(Math.hypot(...a.camera.pose.target) > 1);
+  a.controls.pan(40, 0);
+  assert.equal(a.state.released, 1, "releases once");
 });

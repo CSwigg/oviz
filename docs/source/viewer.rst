@@ -16,11 +16,29 @@ Using a figure
 --------------
 
 **Navigate.** Drag to orbit, Shift-drag or right-drag to pan, and scroll to
-zoom toward the cursor. The classic keyboard controls are kept: hold
+zoom. The classic keyboard controls are kept: hold
 **W A S D** to orbit and tilt, **Shift + W A S D** to fly, **Q E** to zoom out
 and in, and **R F** to move up and down. In Sky view the same keys look around
 and **Q E** change the field of view. Double-click an object to fly to it, or
 empty space to reset the view (also **Home**). **O** auto-orbits.
+
+**Camera anchor.** The camera is anchored to the Local Standard of Rest by
+default. Oviz scenes are LSR-centred: positions are relative to a reference
+orbit that starts at the Sun with the LSR's velocity, so the LSR is the origin
+at every time. The camera orbits the LSR, zooming keeps it centred, and the
+camera stays with it through time while the Sun and the clusters move around
+it. The scale readout says what the camera is anchored to (for example
+"Eye 6 kpc from the LSR"). You can change the anchor under *Display settings*:
+
+- **Sun** rides along with the Sun.
+- **Follow** in the inspector rides along with any object.
+- **Free** lets the wheel zoom toward the pointer.
+
+Panning, flying or framing somewhere else frees the camera. **Home**
+re-anchors it. Views and shared links remember the anchor. Figures choose
+theirs with ``make_plot(..., camera_anchor="lsr" | "sun" | "free")`` or
+``OvizFigure(..., camera_anchor=...)``. Scenes centred on a focus group's orbit
+have no LSR at their origin, so they offer no LSR anchor.
 
 **Time.** Time is continuous: positions are interpolated between the stored
 frames on the GPU, so playback is smooth at any speed. Use **Space** to play,
@@ -123,7 +141,7 @@ re-running its pipeline. Saved States are migrated too.
 
 .. code-block:: bash
 
-   python -m oviz.viewer.upgrade old_figure.html new_figure.html
+   python -m oviz.viewer.upgrade old_figure.html new_figure.html [--mode detailed] [--camera-anchor sun]
 
 .. code-block:: python
 
@@ -181,6 +199,10 @@ Browser API
     Timeline control.
 ``setViewMode("3d" | "sky")``
     Fly between Galactic 3D and Sky.
+``cameraAnchor``, ``setCameraAnchor(anchor)``
+    The camera anchor: ``"lsr"``, ``"sun"``, ``"free"``, or
+    ``{trace, index}`` for an object (``{kind: ...}`` objects are accepted
+    too). Setting one flies the orbit centre onto it.
 ``screenshot({scale})``
     A PNG ``Blob`` of the WebGL layer.
 ``arModel({moment})``, ``viewInAr({moment})``

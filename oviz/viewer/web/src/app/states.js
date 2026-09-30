@@ -6,6 +6,7 @@
 // target exactly, so the arrival is bit-for-bit the captured view.
 
 import { clonePose, lerpPose, makePose, sanitizePose } from "../engine/camera.js";
+import { normalizeAnchor } from "../engine/anchor.js";
 import { cloneJson, legacySnapshotToState, STATE_VERSION } from "./state.js";
 import { clamp, lerp, easeInOutCubic } from "../core/math.js";
 
@@ -24,7 +25,7 @@ export function uid() {
 export function captureState(viewer, sky) {
   const s = cloneJson(viewer.state);
   s.version = STATE_VERSION;
-  s.view = { mode: viewer.state.view.mode, pose: clonePose(viewer.pose) };
+  s.view = { mode: viewer.state.view.mode, pose: clonePose(viewer.pose), anchor: cloneJson(viewer.state.view.anchor || { kind: "free" }) };
   s.time = { frame: viewer.timeline.frame, speed: viewer.timeline.speed };
   if (sky) s.sky = sky.captureState();
   // Plugins (e.g. the distribution filter) contribute their own state.
@@ -128,8 +129,13 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
   const to = cloneJson(target);
   if (target.view?.pose) to.view.pose = sanitizePose(clonePose(target.view.pose));
   if (keepCamera) {
-    to.view = { mode: from.view.mode, pose: clonePose(viewer.pose) };
+    to.view = { mode: from.view.mode, pose: clonePose(viewer.pose), anchor: from.view.anchor };
   }
+  // The camera anchor is part of the camera. States saved before anchors
+  // existed get the one their pose implies (the LSR if they orbit it).
+  const anchorB = normalizeAnchor(to.view?.anchor)
+    || (to.view?.pose && viewer.inferAnchor ? viewer.inferAnchor(to.view.pose) : null)
+    || from.view.anchor;
   const traceKeys = new Set([...Object.keys(from.traces || {}), ...Object.keys(to.traces || {})]);
   const volKeys = new Set([...Object.keys(from.volumes || {}), ...Object.keys(to.volumes || {})]);
   const poseA = clonePose(from.view.pose || viewer.pose);
@@ -240,7 +246,13 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
     viewer.controls.mode = to.view.mode === "sky" ? "sky" : "galactic";
     if (!keepCamera) Object.assign(viewer.renderer.camera.pose, clonePose(poseB));
     st.view.pose = viewer.renderer.camera.pose;
+    const anchorChanged = JSON.stringify(st.view.anchor || null) !== JSON.stringify(anchorB || null);
+    st.view.anchor = cloneJson(anchorB || { kind: "free" });
+    // Arrive exactly: the anchor starts riding from here, it never snaps.
+    viewer._anchorLast = null;
     viewer.timeline.setFrame(frameB);
+    viewer._anchorLast = viewer.anchorPoint?.() ?? null;
+    if (anchorChanged) viewer.emit?.("anchor", { anchor: st.view.anchor, released: false });
     if (Number.isFinite(to.time?.speed)) viewer.timeline.speed = to.time.speed;
     if (sky && to.sky) sky.applyState(to.sky);
     for (const [name, ext] of viewer.stateExtensions || []) ext.apply(to.ext ? to.ext[name] ?? null : null);

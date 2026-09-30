@@ -198,6 +198,10 @@ export function poseTween(from, to, durationMs, ease = easeInOutCubic) {
   const out = makePose();
   return {
     durationMs,
+    /** Move the destination with a moving camera anchor, so the flight lands on it. */
+    shiftTarget(d) {
+      b.target[0] += d[0]; b.target[1] += d[1]; b.target[2] += d[2];
+    },
     step(now = performance.now()) {
       const raw = durationMs > 0 ? clamp((now - start) / durationMs, 0, 1) : 1;
       const t = ease(raw);

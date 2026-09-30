@@ -113,3 +113,11 @@ test("stateDifferences reports numeric and structural changes", () => {
   assert.deepEqual(stateDifferences({ a: 1 }, { a: 2 }), ["state.a"]);
   assert.deepEqual(stateDifferences({ a: "x" }, { a: "y", b: 1 }), ["state.a", "state.b"]);
 });
+
+test("legacy snapshots leave the camera anchor to be inferred on apply", () => {
+  const base = initialViewerState(manifest);
+  assert.deepEqual(base.view.anchor, { kind: "free" });
+  base.view.anchor = { kind: "sun" };
+  const s = legacySnapshotToState({ camera: { position: { x: 0, y: -10, z: 5 }, target: { x: 40, y: 0, z: 0 } } }, manifest, base);
+  assert.equal(s.view.anchor, undefined);
+});

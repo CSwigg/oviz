@@ -463,6 +463,33 @@ class IntegrationTests(unittest.TestCase):
             self.assertIn(f'id: "{mode}"', runtime)
             self.assertIn(f'[data-oviz-mode="{mode}"]', css)
 
+    def test_camera_anchor_defaults_to_the_lsr_and_is_validated(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        time = np.array([0.0, -1.0, -2.0])
+        fig = viz.make_plot(time=time, show=False)
+        manifest_of = lambda html: json.loads(re.search(r'id="oviz-manifest">(.*?)</script>', html, re.S).group(1))
+        # Unset, the viewer anchors the camera to the LSR itself (the home
+        # view orbits the origin of the LSR-centred frame).
+        viewer = manifest_of(fig.to_html())["viewer"]
+        self.assertNotIn("cameraAnchor", viewer)
+        self.assertNotIn("lsrOrigin", viewer)
+        self.assertEqual(fig.bundle.manifest["camera"]["target"], [0.0, 0.0, 0.0])
+        self.assertEqual(manifest_of(fig.to_html(camera_anchor="sun"))["viewer"]["cameraAnchor"], "sun")
+        pinned = viz.make_plot(time=time, show=False, camera_anchor="LSR")
+        self.assertEqual(pinned.camera_anchor, "lsr")
+        self.assertEqual(manifest_of(pinned.to_html())["viewer"]["cameraAnchor"], "lsr")
+        with self.assertRaises(ValueError):
+            OvizFigure(bundle=fig.bundle, camera_anchor="galactic-centre")
+        # A scene centred on another reference orbit has no LSR at its origin.
+        custom = viz.make_plot(time=time, show=False, reference_frame_center=[0, 0, 0, -11.1, -12.24, -7.25])
+        self.assertIs(manifest_of(custom.to_html())["viewer"]["lsrOrigin"], False)
+        # The runtime knows every anchor the Python side accepts.
+        from oviz.viewer.figure import CAMERA_ANCHORS
+        runtime = build.bundle_js()
+        self.assertIn("cameraAnchor", runtime)
+        for anchor in CAMERA_ANCHORS:
+            self.assertIn(f'"{anchor}"', runtime)
+
     def test_ar_model_option_points_view_in_ar_at_a_hosted_usdz(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         fig = viz.make_plot(time=np.array([0.0, -1.0, -2.0]), show=False)

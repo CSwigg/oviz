@@ -10,6 +10,7 @@ import { lutGradient } from "../core/color.js";
 import { rafThrottle } from "../core/emitter.js";
 import { formatAngle, formatDistance, clamp } from "../core/math.js";
 import { clonePose } from "../engine/camera.js";
+import { anchorLabel } from "../engine/anchor.js";
 import { keyMotion } from "../engine/controls.js";
 import { cpuFramePosition, frameOffset } from "../engine/frames.js";
 import { SkyPlugin } from "../sky/sky.js";
@@ -47,7 +48,6 @@ export class AppUI {
     this.manifest = viewer.manifest;
     this.luts = new Map();
     this.trails = new Map();
-    this.following = null;
     this.selection = null;
     this.plugins = [];
     for (const [name, entry] of Object.entries(this.manifest.colormaps || {})) {
@@ -197,8 +197,18 @@ export class AppUI {
     // The measurement line and its label follow both objects through time.
     const measure = rafThrottle(() => this.updateMeasure());
     v.on("time", () => {
-      if (this.following) this.updateFollow();
       if (this._measure) measure();
+    });
+    // The camera anchor shows in the scale readout and the inspector.
+    v.on("anchor", ({ released } = {}) => {
+      this.updateScale();
+      if (this.selection) this.inspector.refresh();
+      // The first time a pan or flight frees the camera, say how to get back.
+      const home = v.defaultAnchor;
+      if (released && !this._anchorHinted && home && home.kind !== "free") {
+        this._anchorHinted = true;
+        this.toast(`Camera free · Home re-anchors it to ${anchorLabel(home, this.anchorName(home))}`, { icon: icon("home"), ms: 3200 });
+      }
     });
     new ResizeObserver(() => this.syncViewSeg()).observe(this.viewSeg);
     v.on("gpu-restored", () => {
@@ -269,7 +279,13 @@ export class AppUI {
     if (hv.group && (this.manifest.groups?.order || []).includes(hv.group)) this.layers.setGroup(hv.group);
     if (hv.time != null) v.timeline.setTime(hv.time);
     if (hv.mode === "sky" && this.manifest.sky?.enabled) await v.setViewMode("sky", { animate: false });
-    if (hv.pose) v.setPose({ ...v.pose, ...hv.pose });
+    if (hv.pose) {
+      // The link's anchor (or, for older links, the one its pose implies);
+      // a centre that is not on it leaves the camera free.
+      const anchor = hv.anchor && v.anchorAvailable(hv.anchor) ? hv.anchor : v.inferAnchor(hv.pose);
+      v.setAnchor(anchor, { fly: false });
+      v.setPose({ ...v.pose, ...hv.pose });
+    }
   }
 
   use(plugin) {
@@ -364,7 +380,8 @@ export class AppUI {
     } else if (hit && hit.kind === "member") {
       labels.setDynamic("selection", `${hit.member.cluster} member`, () => this.selectionPosition(hit), "ov-label--sel");
     }
-    if (!hit && this.following) this.toggleFollow(null);
+    // Deselecting stops following an object (Sun and LSR anchors stay).
+    if (!hit && v.anchor.kind === "object") v.releaseAnchor();
     v.selected = hit;
     v.renderer.invalidate();
     this.viewer.emit("select", hit);
@@ -537,28 +554,58 @@ export class AppUI {
     v.renderer.invalidate();
   }
 
-  toggleFollow(hit) {
-    const v = this.viewer;
-    if (!hit || (this.following && this.following.trace === hit.trace && this.following.index === hit.index)) {
-      this.following = null;
-      v.followOffset = null;
-      return;
-    }
-    this.following = hit;
-    const pos = v.objectPosition(hit.trace, hit.index);
-    if (pos) v.flyToObject(hit.trace, hit.index, { distance: Math.min(v.pose.distance, 600) });
-    this.toast("Following — the camera tracks this object through time", { icon: icon("follow") });
+  /** The object the camera is anchored to (inspector "Follow"), if any. */
+  get following() {
+    const a = this.viewer.anchor;
+    if (a.kind === "object") return { trace: a.trace, index: a.index };
+    if (a.kind === "sun" && this.viewer.world.sunTrace) return { trace: this.viewer.world.sunTrace, index: 0 };
+    return null;
   }
 
-  updateFollow() {
+  /** Anchor the camera to an object (or let go of it): it moves with it through time. */
+  toggleFollow(hit) {
     const v = this.viewer;
     const f = this.following;
-    if (!f || v.tween || v.state.view.mode === "sky") return;
-    const pos = v.objectPosition(f.trace, f.index);
-    if (!pos) return;
-    v.pose.target = pos;
-    v.renderer.camera.pose.target = pos;
-    v.renderer.invalidate();
+    if (!hit || (f && f.trace === hit.trace && f.index === hit.index)) {
+      if (f) v.releaseAnchor();
+      return;
+    }
+    const sun = hit.trace === v.world.sunTrace && hit.index === 0;
+    v.setAnchor(sun ? { kind: "sun" } : { kind: "object", trace: hit.trace, index: hit.index }, { distance: Math.min(v.pose.distance, 600) });
+    this.toast("Following · the camera moves with it through time", { icon: icon("follow") });
+  }
+
+  /** Anchor the camera to the LSR, the Sun or nothing ("free"). */
+  setCameraAnchor(kind) {
+    const v = this.viewer;
+    if (kind === "free") v.releaseAnchor();
+    else if (v.anchorAvailable({ kind })) v.setAnchor({ kind });
+    else return;
+    const name = anchorLabel(v.anchor, this.anchorName(v.anchor));
+    this.toast(kind === "free" ? "Camera free · scroll zooms toward the pointer" : `Camera anchored to ${name}`, { icon: icon(kind === "free" ? "orbit" : "target"), ms: 1600 });
+  }
+
+  /** Display name of an object anchor (empty for the others). */
+  anchorName(a) {
+    if (a?.kind !== "object") return "";
+    return this.viewer.describeObject(a.trace, a.index)?.name || "";
+  }
+
+  anchorField() {
+    const v = this.viewer;
+    const a = v.anchor;
+    const options = [];
+    if (v.anchorAvailable({ kind: "lsr" })) options.push({ value: "lsr", label: "LSR" });
+    if (v.anchorAvailable({ kind: "sun" })) options.push({ value: "sun", label: "Sun" });
+    options.push({ value: "free", label: "Free" });
+    if (a.kind === "object") options.push({ value: "object", label: "Object" });
+    return miniSeg({
+      label: "Camera anchor",
+      hint: "What the camera orbits, zooms toward and moves with through time",
+      value: a.kind,
+      options,
+      onChange: (k) => { if (k !== "object") this.setCameraAnchor(k); },
+    });
   }
 
   // ------------------------------------------------------------- modes
@@ -788,8 +835,12 @@ export class AppUI {
       this.scaleSub.textContent = `l ${l.toFixed(1)}° b ${b >= 0 ? "+" : "−"}${Math.abs(b).toFixed(1)}° · ${formatAngle(cam.hfov)} field`;
     } else {
       this.scaleLabel.textContent = formatDistance(sb.value);
-      const p = this.viewer.pose;
-      this.scaleSub.textContent = `Eye ${formatDistance(p.distance)} away`;
+      const v = this.viewer;
+      const eye = formatDistance(v.pose.distance);
+      // Anchored, the eye distance is measured from the anchor.
+      const name = v.anchored ? anchorLabel(v.anchor, this.anchorName(v.anchor)) : "";
+      this.scaleSub.textContent = name ? `Eye ${eye} from ${name}` : `Eye ${eye} away`;
+      this.scaleSub.title = name ? `Camera anchored to ${name}: it orbits, zooms toward and moves with it through time` : "";
     }
   }
 
@@ -893,6 +944,7 @@ export class AppUI {
     const body = h("div", { class: "ov-pop-body" },
       miniSeg({ label: "Mode", value: this.mode, options: MODES.map((m) => ({ value: m.id, label: m.name })), onChange: (m) => { this.closeMenu(); this.setMode(m); } }),
       miniSeg({ label: "Theme", value: this.theme, options: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }], onChange: (t) => this.applyTheme(t) }),
+      this.anchorField(),
       slider({ label: "Point size", min: 0.25, max: 4, value: g.pointSize, scale: "log", format: (x) => `${x.toFixed(2)}×`, onInput: (x) => v.setGlobal({ pointSize: x }) }),
       slider({ label: "Point brightness", min: 0, max: 2, value: g.pointOpacity, format: (x) => `${x.toFixed(2)}×`, onInput: (x) => v.setGlobal({ pointOpacity: x }) }),
       slider({ label: "Star glow", min: 0, max: 4, value: g.glow, format: (x) => (x <= 0.02 ? "Markers" : x.toFixed(2)), onInput: (x) => v.setGlobal({ glow: x }) }),
@@ -1028,6 +1080,12 @@ export class AppUI {
       { title: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
       { title: this.theme === "dark" ? "Switch to light theme" : "Switch to dark theme", icon: this.theme === "dark" ? "sun" : "moon", run: () => this.applyTheme(this.theme === "dark" ? "light" : "dark") },
       { title: v.controls.autoOrbit ? "Stop auto-orbit" : "Auto-orbit camera", icon: "orbit", shortcut: "O", run: () => this.setAutoOrbit(!v.controls.autoOrbit) },
+      ...["lsr", "sun", "free"].filter((k) => k !== v.anchor.kind && (k === "free" || v.anchorAvailable({ kind: k }))).map((k) => ({
+        title: k === "free" ? "Free the camera (no anchor)" : `Anchor camera to ${anchorLabel({ kind: k })}`,
+        icon: k === "free" ? "orbit" : "target",
+        keywords: "camera anchor lock follow centre center pivot frame reference lsr sun local standard of rest",
+        run: () => this.setCameraAnchor(k),
+      })),
       ...(tl.count > 1 ? [{ title: v.state.global.trails > 0 ? "Hide motion trails" : "Show motion trails", icon: "trail", shortcut: "J", keywords: "streaks motion history comet", run: () => this.toggleTrails() }] : []),
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: this.mode === "focus" ? "Detailed mode" : "Focus mode", sub: this.mode === "focus" ? MODES[1].desc : MODES[0].desc, icon: "sidebar", shortcut: "U", keywords: "mode layout panels simple minimal focus detailed", run: () => this.toggleMode() },
@@ -1136,7 +1194,7 @@ export class AppUI {
 
   showHelp() {
     const groups = [
-      ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
+      ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⇧ Drag"], ["Zoom (keeps the camera anchor centred)", "Scroll"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view and re-anchor", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
       ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
       ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Motion trails", "J"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
       ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Fly to object", "Double-click"], ["Measure separation", "⇧ Click"], ["Lasso", "L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
@@ -1325,12 +1383,15 @@ export class AppUI {
     const dt = this._lastKeyMotion ? Math.min(Math.max((now - this._lastKeyMotion) / 1000, 0), 0.1) : 1 / 60;
     this._lastKeyMotion = now;
     const c = v.controls;
+    const sky = v.state.view.mode === "sky";
+    // Flying (Shift+W/A/S/D) or moving up and down (R/F) leaves the anchor.
+    if (!sky && ((this.shiftDown && ["w", "a", "s", "d"].some((k) => keys.has(k))) || keys.has("r") || keys.has("f"))) v.releaseAnchor();
     keyMotion(pose, keys, {
       dt,
       fast: this.shiftDown,
-      sky: v.state.view.mode === "sky",
+      sky,
       maxSpan: v.world.maxSpan,
-      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFovFor(v.state.view.mode === "sky" ? "sky" : "galactic"),
+      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFovFor(sky ? "sky" : "galactic"),
     });
     v.renderer.markInteraction();
     v._onCameraChange();

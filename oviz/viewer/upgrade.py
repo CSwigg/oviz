@@ -68,7 +68,13 @@ def read_legacy_scene_spec(path: str | Path) -> dict[str, Any]:
     raise ValueError(f"{path}: no embedded Oviz scene spec found")
 
 
-def upgrade_html(src: str | Path, dst: str | Path, *, verbose: bool = False) -> dict[str, Any]:
+def upgrade_html(src: str | Path, dst: str | Path, *, verbose: bool = False, mode: str = "focus",
+                 camera_anchor: str | None = None, title: str | None = None) -> dict[str, Any]:
+    """Convert the legacy figure ``src`` into a new-viewer figure at ``dst``.
+
+    ``mode`` and ``camera_anchor`` are the :class:`~oviz.viewer.figure.OvizFigure`
+    options (the anchor defaults to the LSR when the home view orbits it).
+    """
     from .figure import OvizFigure
     from .compile import compile_scene_spec
 
@@ -77,7 +83,7 @@ def upgrade_html(src: str | Path, dst: str | Path, *, verbose: bool = False) -> 
     t1 = time.perf_counter()
     bundle = compile_scene_spec(spec)
     t2 = time.perf_counter()
-    fig = OvizFigure(bundle=bundle)
+    fig = OvizFigure(bundle=bundle, mode=mode, camera_anchor=camera_anchor, title=title)
     out = fig.write_html(dst)
     t3 = time.perf_counter()
     report = {
@@ -101,8 +107,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Upgrade a legacy Oviz HTML figure to the new viewer.")
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--mode", choices=("focus", "detailed"), default="focus", help="mode the figure opens in")
+    parser.add_argument("--camera-anchor", choices=("lsr", "sun", "free"), default=None,
+                        help="what the camera orbits and moves with (default: the LSR when the home view orbits it)")
     args = parser.parse_args(argv)
-    upgrade_html(args.source, args.output, verbose=True)
+    upgrade_html(args.source, args.output, verbose=True, mode=args.mode, camera_anchor=args.camera_anchor)
     return 0
 
 

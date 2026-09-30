@@ -8,6 +8,7 @@ import { cpuFramePosition, frameOffset } from "../../oviz/viewer/web/src/engine/
 import { unshuffle } from "../../oviz/viewer/web/src/core/loader.js";
 import { poseFromEyeTarget, poseEye, lerpPose, makePose } from "../../oviz/viewer/web/src/engine/camera.js";
 import { encodeViewHash, decodeViewHash } from "../../oviz/viewer/web/src/app/viewhash.js";
+import { normalizeAnchor, encodeAnchor, decodeAnchor, sameAnchor, inferAnchor, LSR_POINT } from "../../oviz/viewer/web/src/engine/anchor.js";
 import { fuzzyScore } from "../../oviz/viewer/web/src/ui/dom.js";
 
 const close = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≉ ${b}`);
@@ -315,4 +316,40 @@ test("AR time samples and labels follow the timeline", async () => {
   assert.equal(timeText(-120), "−120 Myr");
   assert.deepEqual(windowKeys(0, 10, 30), [[0, 1], [9.99, 1], [10, 0], [30, 0]]);
   assert.deepEqual(windowKeys(10, 30, 30), [[0, 0], [9.99, 0], [10, 1], [29.99, 1]]);
+});
+
+test("camera anchors normalise, encode and infer", () => {
+  assert.deepEqual(normalizeAnchor("LSR"), { kind: "lsr" });
+  assert.deepEqual(normalizeAnchor({ kind: "object", trace: "trace-3", index: 12 }), { kind: "object", trace: "trace-3", index: 12 });
+  assert.equal(normalizeAnchor({ kind: "object", trace: "", index: 1 }), null);
+  assert.equal(normalizeAnchor({ kind: "object", trace: "t", index: -1 }), null);
+  assert.equal(normalizeAnchor({ kind: "galaxy" }), null);
+  assert.equal(encodeAnchor({ kind: "object", trace: "trace-3", index: 12 }), "o:trace-3:12");
+  assert.deepEqual(decodeAnchor("o:trace-3:12"), { kind: "object", trace: "trace-3", index: 12 });
+  assert.deepEqual(decodeAnchor("o:a:b:7"), { kind: "object", trace: "a:b", index: 7 });
+  assert.equal(decodeAnchor("o:trace-3:x"), null);
+  assert.equal(decodeAnchor("o::3"), null);
+  assert.equal(decodeAnchor("elsewhere"), null);
+  assert.ok(sameAnchor("sun", { kind: "sun" }));
+  assert.ok(!sameAnchor("sun", "lsr"));
+  // States and links from before anchors: the LSR if the camera orbits it.
+  const home = { target: [0, 0, 0], distance: 6000, yaw: 0, pitch: 1.2, fov: 60 };
+  assert.deepEqual(inferAnchor(home, LSR_POINT, 2), { kind: "lsr" });
+  assert.deepEqual(inferAnchor({ ...home, target: [120, 0, 0] }, LSR_POINT, 2), { kind: "free" });
+  assert.deepEqual(inferAnchor({ ...home, distance: 0 }, LSR_POINT, 2, { kind: "sun" }), { kind: "sun" });
+  assert.deepEqual(inferAnchor(home, null, 2), { kind: "free" }, "no LSR anchor when the origin is not the LSR");
+});
+
+test("view links carry the camera anchor", () => {
+  const viewer = {
+    pose: { target: [10, 20, 30], distance: 500, yaw: 0.5, pitch: 0.2, fov: 50 },
+    timeline: { time: -3 },
+    state: { view: { mode: "3d", anchor: { kind: "object", trace: "trace-2", index: 5 } }, group: "" },
+  };
+  const v = decodeViewHash(`#${encodeViewHash(viewer)}`);
+  assert.deepEqual(v.anchor, { kind: "object", trace: "trace-2", index: 5 });
+  viewer.state.view.anchor = { kind: "lsr" };
+  assert.ok(encodeViewHash(viewer).includes("a=lsr"));
+  assert.equal(decodeViewHash("#t=0&a=bogus").anchor, undefined);
+  assert.equal(decodeViewHash("#t=0").anchor, undefined);
 });

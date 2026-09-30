@@ -78,7 +78,7 @@ export function select({ label, options, value, onChange }) {
   return field;
 }
 
-export function miniSeg({ options, value, onChange, label }) {
+export function miniSeg({ options, value, onChange, label, hint }) {
   const wrap = h("div", { class: "ov-mini-seg", role: "group", "aria-label": label || "" });
   const buttons = options.map((o) => {
     const b = h("button", { type: "button", "aria-pressed": String(o.value === value) }, o.label);
@@ -91,7 +91,8 @@ export function miniSeg({ options, value, onChange, label }) {
   });
   wrap.set = (v) => buttons.forEach((b, i) => b.setAttribute("aria-pressed", String(options[i].value === v)));
   return label
-    ? Object.assign(h("div", { class: "ov-field" }, h("div", { class: "ov-field-head" }, h("span", { class: "ov-field-label" }, label)), wrap), { set: wrap.set })
+    ? Object.assign(h("div", { class: "ov-field" }, h("div", { class: "ov-field-head" }, h("span", { class: "ov-field-label" }, label)), wrap,
+      hint ? h("small", { class: "ov-field-hint" }, hint) : null), { set: wrap.set })
     : wrap;
 }
 

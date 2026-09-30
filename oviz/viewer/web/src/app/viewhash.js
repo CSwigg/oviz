@@ -1,6 +1,8 @@
-// Shareable view links: #t=<time>&v=<mode>&c=<target,distance,yaw,pitch,fov>&g=<group>
+// Shareable view links: #t=<time>&v=<mode>&c=<target,distance,yaw,pitch,fov>&a=<anchor>&g=<group>
 
-/** Compact, human-readable hash: #t=-12.5&v=3d&c=x,y,z,d,yaw,pitch,fov */
+import { encodeAnchor, decodeAnchor } from "../engine/anchor.js";
+
+/** Compact, human-readable hash: #t=-12.5&v=3d&c=x,y,z,d,yaw,pitch,fov&a=lsr */
 export function encodeViewHash(viewer) {
   const p = viewer.pose;
   const r = (x, d = 2) => Number(x.toFixed(d));
@@ -9,6 +11,8 @@ export function encodeViewHash(viewer) {
     `v=${viewer.state.view.mode}`,
     `c=${[...p.target.map((x) => r(x, 1)), r(p.distance, 1), r(p.yaw, 4), r(p.pitch, 4), r(p.fov, 2)].join(",")}`,
   ];
+  const anchor = encodeAnchor(viewer.state.view.anchor);
+  if (anchor) parts.push(`a=${encodeURIComponent(anchor)}`);
   if (viewer.state.group) parts.push(`g=${encodeURIComponent(viewer.state.group)}`);
   return parts.join("&");
 }
@@ -26,6 +30,8 @@ export function decodeViewHash(hash) {
   if (out.t != null && Number.isFinite(Number(out.t))) view.time = Number(out.t);
   if (out.v) view.mode = out.v === "sky" ? "sky" : "3d";
   if (out.g) view.group = out.g;
+  const anchor = out.a ? decodeAnchor(out.a) : null;
+  if (anchor) view.anchor = anchor;
   if (out.c) {
     const n = out.c.split(",").map(Number);
     if (n.length === 7 && n.every(Number.isFinite)) {

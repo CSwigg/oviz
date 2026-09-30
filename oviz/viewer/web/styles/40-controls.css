@@ -2,6 +2,7 @@
 .ov-field { display: grid; gap: 6px; }
 .ov-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .ov-field-label { font: 560 11.5px/1.2 var(--ov-font); color: var(--ov-text-2); }
+.ov-field-hint { display: block; color: var(--ov-text-3); font-size: 11px; line-height: 1.35; margin-top: 5px; }
 .ov-field-value { font: 600 11.5px/1 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text); }
 .ov-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 

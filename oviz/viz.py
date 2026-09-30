@@ -306,6 +306,7 @@ class Animate3D:
         scene_spec_compression_threshold_bytes=None,
         viewer=None,
         viewer_mode=None,
+        camera_anchor=None,
     ):
         """Integrate the data, build timeline frames, and return a figure.
 
@@ -336,12 +337,19 @@ class Animate3D:
             ``"oviz"`` (the default) writes the WebGL2 Oviz viewer: compact
             binary payloads, GPU time interpolation, Views & story, video
             capture. ``"classic"`` writes the previous Three.js runtime
-            byte-for-byte (Slides, Paper and AR remain classic-only).
+            byte-for-byte (Slides and Paper remain classic-only).
         viewer_mode : {"focus", "detailed"}, optional
             Oviz viewer only: the mode the figure opens in. ``"focus"`` (the
             default) shows the figure, its key and one quiet bar;
             ``"detailed"`` keeps the layers panel, details and every control
             in view. Readers switch modes at any time with **U**.
+        camera_anchor : {"lsr", "sun", "free"}, optional
+            Oviz viewer only: what the camera orbits, zooms toward and moves
+            with through time. By default it is the Local Standard of Rest,
+            the origin of the LSR-centred frame (when the home view orbits
+            it), so the Sun and the clusters move around a steady camera.
+            ``"sun"`` rides along with the Sun trace; ``"free"`` zooms toward
+            the pointer. Readers change it under Display settings.
         show : bool
             Display the figure after construction.
         save_name : path-like, optional
@@ -361,6 +369,10 @@ class Animate3D:
         # Determine the reference frame center
         if reference_frame_center is None:
             reference_frame_center = self.set_focus(focus_group)
+        # The default frame is centred on the LSR's orbit (orbit_maker), so the
+        # viewer can anchor its camera there; a focus group's orbit is not it.
+        self.frame_is_lsr = reference_frame_center is None
+        self.camera_anchor = camera_anchor
 
         # Re-integrate whenever the requested grid differs from the cached one.
         # Orbit frames and marker sizes are both functions of this timeline.
@@ -1898,7 +1910,12 @@ class Animate3D:
         if getattr(self, "viewer_name", DEFAULT_VIEWER) == "oviz":
             from .viewer.figure import OvizFigure
 
-            self.figure = OvizFigure(scene_spec, mode=getattr(self, "viewer_mode", None) or "focus")
+            self.figure = OvizFigure(
+                scene_spec,
+                mode=getattr(self, "viewer_mode", None) or "focus",
+                camera_anchor=getattr(self, "camera_anchor", None),
+                lsr_origin=getattr(self, "frame_is_lsr", True),
+            )
             return
         self.figure = ThreeJSFigure(
             scene_spec,

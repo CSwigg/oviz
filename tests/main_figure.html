@@ -702,6 +702,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-field { display: grid; gap: 6px; }
 .ov-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .ov-field-label { font: 560 11.5px/1.2 var(--ov-font); color: var(--ov-text-2); }
+.ov-field-hint { display: block; color: var(--ov-text-3); font-size: 11px; line-height: 1.35; margin-top: 5px; }
 .ov-field-value { font: 600 11.5px/1 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text); }
 .ov-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
@@ -3086,6 +3087,10 @@ function poseTween(from, to, durationMs, ease = easeInOutCubic) {
   const out = makePose();
   return {
     durationMs,
+    /** Move the destination with a moving camera anchor, so the flight lands on it. */
+    shiftTarget(d) {
+      b.target[0] += d[0]; b.target[1] += d[1]; b.target[2] += d[2];
+    },
     step(now = performance.now()) {
       const raw = durationMs > 0 ? clamp((now - start) / durationMs, 0, 1) : 1;
       const t = ease(raw);
@@ -3404,18 +3409,23 @@ const { Controls, keyMotion } = (() => {
 // Galactic mode: drag orbits, right/shift/two-finger drag pans, wheel and
 // pinch zoom toward the cursor. Sky mode: drag grabs the sky (the point under
 // the cursor stays under the cursor), wheel/pinch change the field of view.
+// While the camera is anchored (see anchor.js) zooming keeps the orbit centre
+// on the anchor instead, and panning first frees the camera (`onRelease`).
 
 
 
 
 class Controls {
-  constructor(element, renderer, { onChange, onInteractStart, onInteractEnd } = {}) {
+  constructor(element, renderer, { onChange, onInteractStart, onInteractEnd, anchored, onRelease } = {}) {
     this.el = element;
     this.renderer = renderer;
     this.camera = renderer.camera;
     this.onChange = onChange || (() => {});
     this.onInteractStart = onInteractStart || (() => {});
     this.onInteractEnd = onInteractEnd || (() => {});
+    // Whether the orbit centre is held on a camera anchor, and how to let go.
+    this.anchored = anchored || (() => false);
+    this.onRelease = onRelease || (() => {});
     this.mode = "galactic"; // "galactic" | "sky"
     this.enabled = true;
     this.minDistance = 1;
@@ -3468,11 +3478,12 @@ class Controls {
     const pts = [...this.pointers.values()];
     if (pts.length >= 2) {
       const [a, b] = pts;
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
       this.gesture = {
         kind: "pinch",
         dist: Math.hypot(a.x - b.x, a.y - b.y),
-        cx: (a.x + b.x) / 2,
-        cy: (a.y + b.y) / 2,
+        cx, cy,
+        sx: cx, sy: cy, // where the fingers started (anchored pinches ignore small drift)
       };
     } else if (pts.length === 1) {
       const p = pts[0];
@@ -3503,8 +3514,10 @@ class Controls {
       const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
       const factor = g.dist > 0 ? g.dist / dist : 1;
       this.zoomAt(factor, cx, cy);
-      if (this.mode !== "sky") this.pan(cx - g.cx, cy - g.cy);
-      else this.lookDrag(cx - g.cx, cy - g.cy);
+      if (this.mode === "sky") this.lookDrag(cx - g.cx, cy - g.cy);
+      // Anchored, a pinch only zooms: the fingers' centre wanders a little in
+      // any pinch, so only a deliberate two-finger drag pans (and frees).
+      else if (!this.anchored() || Math.hypot(cx - g.sx, cy - g.sy) > 32) this.pan(cx - g.cx, cy - g.cy);
       g.dist = dist; g.cx = cx; g.cy = cy;
     } else if (g.kind === "pan") {
       this.pan(dx, dy);
@@ -3569,6 +3582,8 @@ class Controls {
   }
 
   pan(dx, dy) {
+    // Moving the orbit centre off the anchor frees the camera.
+    if (this.anchored()) this.onRelease();
     const p = this.pose;
     const cam = this.camera;
     const scale = cam.pixelScale(Math.max(p.distance, 1));
@@ -3588,7 +3603,10 @@ class Controls {
     return Math.min(this.maxFov, (2 * Math.atan(Math.tan(75 * DEG) / aspect)) / DEG);
   }
 
-  /** Zoom by `factor` (<1 zooms in) keeping the point under (x, y) fixed. */
+  /**
+   * Zoom by `factor` (<1 zooms in) keeping the point under (x, y) fixed, or,
+   * while anchored, keeping the anchor at the centre of the view.
+   */
   zoomAt(factor, x, y) {
     const p = this.pose;
     if (this.mode === "sky" || p.distance <= 1e-6) {
@@ -3607,7 +3625,7 @@ class Controls {
     }
     const next = clamp(p.distance * factor, this.minDistance, this.maxDistance);
     const actual = next / p.distance;
-    if (x != null) {
+    if (x != null && !this.anchored()) {
       // Move the target toward the cursor ray so zoom follows the pointer.
       const cam = this.camera;
       const ray = cam.ray(x, y);
@@ -3712,6 +3730,95 @@ function keyMotion(pose, keys, { dt, fast = false, sky = false, maxSpan = 1, min
   return pose;
 }
 return { Controls, keyMotion };
+})();
+
+// ---- engine/anchor.js ----
+const { LSR_POINT, normalizeAnchor, encodeAnchor, decodeAnchor, sameAnchor, inferAnchor, anchorLabel } = (() => {
+// Camera anchors: the point the camera orbits and zooms about, and the body
+// it rides with through time.
+//
+//   {kind: "lsr"}                   the Local Standard of Rest. Oviz scenes
+//                                   are LSR-centred (positions are relative
+//                                   to a reference orbit that starts at the
+//                                   Sun with the LSR's velocity), so the LSR
+//                                   is the origin at every time: an anchored
+//                                   camera stays with it while the Sun and
+//                                   the clusters move around it.
+//   {kind: "sun"}                   the Sun's track (the figure's "Sun" trace).
+//   {kind: "object", trace, index}  any object's track ("Follow").
+//   {kind: "free"}                  no anchor: the wheel zooms toward the
+//                                   cursor and the camera stays where it is.
+//
+// While anchored, zooming keeps the anchor at the centre of the view, and
+// the camera moves by the anchor's own displacement as time changes, so it
+// never jumps. Panning or flying elsewhere frees the camera; Home re-anchors.
+
+/** The LSR in scene coordinates (the origin of Oviz's LSR-centred frame). */
+const LSR_POINT = Object.freeze([0, 0, 0]);
+
+const SIMPLE_KINDS = ["lsr", "sun", "free"];
+
+/** A canonical anchor object, or null if `a` is not one (strings allowed). */
+function normalizeAnchor(a) {
+  if (typeof a === "string") return decodeAnchor(a);
+  if (!a || typeof a !== "object") return null;
+  const kind = String(a.kind || "").toLowerCase();
+  if (kind === "object") {
+    const index = Number(a.index);
+    if (typeof a.trace !== "string" || !a.trace || !Number.isInteger(index) || index < 0) return null;
+    return { kind, trace: a.trace, index };
+  }
+  return SIMPLE_KINDS.includes(kind) ? { kind } : null;
+}
+
+/** Compact text form (view links): lsr, sun, free, or o:<trace>:<index>. */
+function encodeAnchor(a) {
+  const n = normalizeAnchor(a);
+  if (!n) return "";
+  return n.kind === "object" ? `o:${n.trace}:${n.index}` : n.kind;
+}
+
+function decodeAnchor(s) {
+  const text = String(s ?? "").trim();
+  if (text.startsWith("o:")) {
+    const i = text.lastIndexOf(":");
+    const index = Number(text.slice(i + 1));
+    return i > 2 && /^\d+$/.test(text.slice(i + 1)) && Number.isSafeInteger(index)
+      ? { kind: "object", trace: text.slice(2, i), index }
+      : null;
+  }
+  const kind = text.toLowerCase();
+  return SIMPLE_KINDS.includes(kind) ? { kind } : null;
+}
+
+function sameAnchor(a, b) {
+  return encodeAnchor(a) === encodeAnchor(b);
+}
+
+/**
+ * The anchor a pose implies when none was recorded (States and links from
+ * before anchors existed): the LSR if the camera orbits it, otherwise free.
+ * A Sky pose (eye at the Sun) implies nothing, so it gets `fallback`.
+ */
+function inferAnchor(pose, lsr, tolerance, fallback = { kind: "free" }) {
+  if (!pose || !Array.isArray(pose.target)) return { ...fallback };
+  if (!(pose.distance > 1e-6)) return { ...fallback };
+  if (!lsr) return { kind: "free" };
+  const t = pose.target;
+  const d = Math.hypot(t[0] - lsr[0], t[1] - lsr[1], t[2] - lsr[2]);
+  return d <= tolerance ? { kind: "lsr" } : { kind: "free" };
+}
+
+/** Short name for the readout and menus. */
+function anchorLabel(a, objectName = "") {
+  switch (a?.kind) {
+    case "lsr": return "the LSR";
+    case "sun": return "the Sun";
+    case "object": return objectName || "the selected object";
+    default: return "";
+  }
+}
+return { LSR_POINT, normalizeAnchor, encodeAnchor, decodeAnchor, sameAnchor, inferAnchor, anchorLabel };
 })();
 
 // ---- engine/frames.js ----
@@ -5710,7 +5817,7 @@ const { STATE_VERSION, defaultVolumeState, clampVolumeState, groupMode, initialV
 //
 // The state object is plain JSON so it can be captured into a State,
 // serialized into an export, diffed and interpolated. Shape:
-//   { version, group, time: {frame, speed}, view: {mode, pose},
+//   { version, group, time: {frame, speed}, view: {mode, pose, anchor},
 //     traces: {key: {visible, opacity, sizeScale, colorMode, colormap, color}},
 //     volumes: {stateKey: {...}}, images: {key: {visible, opacity}},
 //     global: {...}, sky: {...} }
@@ -5792,7 +5899,7 @@ function initialViewerState(manifest) {
     version: STATE_VERSION,
     group,
     time: { frame: manifest.time?.initialIndex ?? 0, speed: 1 },
-    view: { mode: "3d", pose: makePose() },
+    view: { mode: "3d", pose: makePose(), anchor: { kind: "free" } }, // the viewer sets pose and anchor
     traces: {},
     volumes: {},
     images: {},
@@ -5930,6 +6037,8 @@ function legacySnapshotToState(snap, manifest, base) {
   if (Number.isFinite(fv)) st.time.frame = fv;
   const mode = gc.camera_view_mode === "earth" ? "sky" : "3d";
   st.view.mode = mode;
+  // Classic States had no camera anchor: applying one infers it from the pose.
+  delete st.view.anchor;
   const cam = snap.camera;
   if (cam && cam.position && cam.target) {
     const p = [cam.position.x, cam.position.y, cam.position.z].map(Number);
@@ -5997,6 +6106,7 @@ const { Viewer, isMobile } = (() => {
 
 
 
+
 const SKY_FOV = 60;
 
 class Viewer extends Emitter {
@@ -6038,6 +6148,8 @@ class Viewer extends Emitter {
       onChange: () => this._onCameraChange(),
       // Grabbing the camera ends any flight or State transition.
       onInteractStart: () => { this._cancelTween(); this.emit("camera-takeover", {}); },
+      anchored: () => this.anchored,
+      onRelease: () => this.releaseAnchor(),
     });
     this.controls.maxDistance = Math.max(this.world.maxSpan || 1e4, 1e3) * 8;
     this.labels = new LabelsOverlay(container);
@@ -6045,6 +6157,7 @@ class Viewer extends Emitter {
     this.renderer.beforeRender.push((now) => this._beforeRender(now));
     this.renderer.onContextRestored = () => this._restoreGPU();
     this.timeline.on(() => {
+      this._trackAnchor();
       this.renderer.invalidate();
       this.emit("time", this.timeline);
     });
@@ -6105,6 +6218,7 @@ class Viewer extends Emitter {
         this.labels.addTrace(trace, ld);
       }
     }
+    this._settleInitialAnchor();
     this.renderer.invalidate();
   }
 
@@ -6178,9 +6292,30 @@ class Viewer extends Emitter {
     const pos = cam.position || [0, -800, 1500];
     const tgt = cam.target || this.world.center || [0, 0, 0];
     const pose = poseFromEyeTarget(pos, tgt, cam.fov || 60);
+    // The figure's camera anchor: the one it asks for, else the LSR when the
+    // home view orbits it (Oviz scenes are LSR-centred), else none.
+    const asked = normalizeAnchor(this.manifest.viewer?.cameraAnchor);
+    this.defaultAnchor = asked && this.anchorAvailable(asked) ? asked : this.inferAnchor(pose, { kind: "free" });
+    if (this.defaultAnchor.kind === "lsr") pose.target = LSR_POINT.slice();
+    this.state.view.anchor = { ...this.defaultAnchor };
     this.homePose = clonePose(pose);
     this.renderer.camera.pose = pose;
     this.state.view.pose = pose;
+  }
+
+  /** A Sun or object anchor needs its track: land the opening view on it. */
+  _settleInitialAnchor() {
+    const a = this.state.view.anchor;
+    if (this._anchorSettled || !a || a.kind === "free" || a.kind === "lsr") return;
+    const p = this.anchorPoint(a);
+    if (!p) return;
+    this._anchorSettled = true;
+    this.homePose.target = p.slice();
+    if (this.state.view.mode !== "sky" && !this.tween) {
+      this.renderer.camera.pose.target = p.slice();
+      this._onCameraChange();
+    }
+    this._anchorLast = p;
   }
 
   start() {
@@ -6390,11 +6525,13 @@ class Viewer extends Emitter {
   /**
    * Fly the camera to `pose`. Resolves {done: true} on arrival, or
    * {done: false} if the flight was interrupted (user input, a new flight).
+   * A flight whose orbit centre is not the camera anchor frees the camera.
    */
   animateTo(pose, { duration = 1100, onDone, ease } = {}) {
     this.emit("camera-takeover", {});
     this._cancelTween();
     this.controls.stop();
+    this._keepAnchorFor(pose);
     const d = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : duration;
     const tween = poseTween(this.renderer.camera.pose, sanitizePose(clonePose(pose)), d, ease);
     this.tween = tween;
@@ -6410,18 +6547,155 @@ class Viewer extends Emitter {
 
   setPose(pose) {
     this._cancelTween();
+    this._keepAnchorFor(pose);
     Object.assign(this.renderer.camera.pose, sanitizePose(clonePose(pose)));
+    this._anchorLast = this.anchorPoint();
     this._onCameraChange();
     this.renderer.invalidate();
   }
 
+  /** Fly home: the opening view, anchored the way the figure opens. */
   resetView() {
     if (this.state.view.mode === "sky") {
       const p = clonePose(this.pose);
       p.fov = SKY_FOV;
       return this.animateTo(p, { duration: 700 });
     }
-    return this.animateTo(this.homePose, { duration: 1000 });
+    this.emit("camera-takeover", {});
+    this._setAnchorState(this.defaultAnchor);
+    return this.animateTo(this.homeView(), { duration: 1000 });
+  }
+
+  /** The home pose, centred on the default anchor where it is now. */
+  homeView() {
+    const p = clonePose(this.homePose);
+    const at = this.anchorPoint(this.defaultAnchor);
+    if (at) p.target = at;
+    return p;
+  }
+
+  // -------------------------------------------------------------- camera anchor
+
+  /** Whether the scene's origin is the LSR (figures centred on a cluster group are not). */
+  get hasLsr() {
+    return this.manifest.viewer?.lsrOrigin !== false;
+  }
+
+  /** How close the orbit centre must be to count as on an anchor (pc). */
+  get anchorTolerance() {
+    return Math.max((this.world.maxSpan || 1000) * 1e-4, 0.05);
+  }
+
+  get anchor() {
+    return this.state.view.anchor || { kind: "free" };
+  }
+
+  /** The orbit centre is held on an anchor (never in Sky view, where the eye is at the Sun). */
+  get anchored() {
+    return this.state.view.mode !== "sky" && this.anchor.kind !== "free";
+  }
+
+  anchorAvailable(anchor) {
+    const a = normalizeAnchor(anchor);
+    if (!a) return false;
+    if (a.kind === "lsr") return this.hasLsr;
+    if (a.kind === "sun") return !!this.traceByKey.get(this.world.sunTrace)?.points;
+    if (a.kind === "object") {
+      const t = this.traceByKey.get(a.trace);
+      return !!t?.points && a.index < t.points.count;
+    }
+    return true;
+  }
+
+  /** The anchor a pose implies (for States and links saved without one). */
+  inferAnchor(pose, fallback = this.defaultAnchor || { kind: "free" }) {
+    return inferAnchor(pose, this.hasLsr ? LSR_POINT : null, this.anchorTolerance, fallback);
+  }
+
+  /** Where an anchor is at a (fractional) frame; null for "free". */
+  anchorPoint(anchor = this.anchor, frame = this.timeline.frame) {
+    const a = normalizeAnchor(anchor);
+    if (!a) return null;
+    if (a.kind === "lsr") return this.hasLsr ? LSR_POINT.slice() : null;
+    if (a.kind === "sun") return this.world.sunTrace ? this.objectPosition(this.world.sunTrace, 0, frame) : null;
+    if (a.kind === "object") return this.objectPosition(a.trace, a.index, frame);
+    return null;
+  }
+
+  /**
+   * Anchor the camera (see engine/anchor.js). It flies its orbit centre onto
+   * the anchor, keeping the viewing angle (and `distance`, if given), then
+   * orbits, zooms and moves through time with it.
+   */
+  setAnchor(anchor, { fly = true, distance, duration = 900 } = {}) {
+    const a = normalizeAnchor(anchor);
+    if (!a || !this.anchorAvailable(a)) return Promise.resolve({ done: false });
+    // A State transition in flight hands the camera over first.
+    this.emit("camera-takeover", {});
+    this._setAnchorState(a);
+    const at = this._anchorLast;
+    if (!fly || !at || this.state.view.mode === "sky") return Promise.resolve({ done: true });
+    const p = clonePose(this.pose);
+    p.target = at.slice();
+    if (distance != null) p.distance = distance;
+    return this.animateTo(p, { duration });
+  }
+
+  /** Let go of the anchor (panning or flying elsewhere); the camera stays put. */
+  releaseAnchor() {
+    if (this.anchor.kind === "free") return;
+    this._setAnchorState({ kind: "free" }, { released: true });
+  }
+
+  _setAnchorState(anchor, { released = false } = {}) {
+    const a = normalizeAnchor(anchor) || { kind: "free" };
+    const changed = !sameAnchor(a, this.state.view.anchor);
+    this.state.view.anchor = a;
+    this._anchorLast = this.anchorPoint(a);
+    if (changed) this.emit("anchor", { anchor: a, released });
+  }
+
+  /** After the camera was placed by other means, keep the anchor only if it still orbits it. */
+  reconcileAnchor() {
+    this._keepAnchorFor(this.pose);
+    this._anchorLast = this.anchorPoint();
+  }
+
+  /** Free the camera when a flight or pose puts the orbit centre somewhere else. */
+  _keepAnchorFor(pose) {
+    if (!this.anchored || !(pose?.distance > 1e-6)) return;
+    const at = this.anchorPoint();
+    const t = pose.target;
+    if (!at || Math.hypot(t[0] - at[0], t[1] - at[1], t[2] - at[2]) > this.anchorTolerance) this.releaseAnchor();
+  }
+
+  /**
+   * Keep the camera with its anchor as time changes: move it by the anchor's
+   * displacement (never snap), so a camera placed near the anchor keeps its
+   * offset and nothing jumps. The LSR is fixed in the scene, so an
+   * LSR-anchored camera stays put. In Sky view the pose to return to moves.
+   */
+  _trackAnchor() {
+    const a = this.anchor;
+    if (a.kind === "free" || a.kind === "lsr") return;
+    const p = this.anchorPoint(a);
+    if (!p) return; // not present at this time: catch up when it reappears
+    const last = this._anchorLast;
+    this._anchorLast = p;
+    if (!last) return;
+    const d = [p[0] - last[0], p[1] - last[1], p[2] - last[2]];
+    if (!d[0] && !d[1] && !d[2]) return;
+    if (this.state.view.mode === "sky") {
+      if (this.returnPose) for (let i = 0; i < 3; i++) this.returnPose.target[i] += d[i];
+      return;
+    }
+    if (this.tween) {
+      this.tween.shiftTarget?.(d);
+      return;
+    }
+    const t = this.renderer.camera.pose.target;
+    t[0] += d[0]; t[1] += d[1]; t[2] += d[2];
+    this._onCameraChange();
   }
 
   /** Current world position of an object (interpolated at the current time). */
@@ -6485,7 +6759,10 @@ class Viewer extends Emitter {
       }
       if (this.state.view.mode !== "sky") return;
     } else {
-      const back = this.returnPose || this.homePose;
+      // The pose Sky was entered from rode along with the anchor meanwhile;
+      // a figure that opened in Sky goes home, re-anchored.
+      if (!this.returnPose) this._setAnchorState(this.defaultAnchor);
+      const back = this.returnPose ? clonePose(this.returnPose) : this.homeView();
       this.controls.mode = "galactic";
       if (animate) await this.animateTo(back, { duration: 1300 });
       else this.setPose(back);
@@ -6981,7 +7258,7 @@ function select({ label, options, value, onChange }) {
   return field;
 }
 
-function miniSeg({ options, value, onChange, label }) {
+function miniSeg({ options, value, onChange, label, hint }) {
   const wrap = h("div", { class: "ov-mini-seg", role: "group", "aria-label": label || "" });
   const buttons = options.map((o) => {
     const b = h("button", { type: "button", "aria-pressed": String(o.value === value) }, o.label);
@@ -6994,7 +7271,8 @@ function miniSeg({ options, value, onChange, label }) {
   });
   wrap.set = (v) => buttons.forEach((b, i) => b.setAttribute("aria-pressed", String(options[i].value === v)));
   return label
-    ? Object.assign(h("div", { class: "ov-field" }, h("div", { class: "ov-field-head" }, h("span", { class: "ov-field-label" }, label)), wrap), { set: wrap.set })
+    ? Object.assign(h("div", { class: "ov-field" }, h("div", { class: "ov-field-head" }, h("span", { class: "ov-field-label" }, label)), wrap,
+      hint ? h("small", { class: "ov-field-hint" }, hint) : null), { set: wrap.set })
     : wrap;
 }
 
@@ -9516,9 +9794,11 @@ return { SkyPlugin };
 
 // ---- app/viewhash.js ----
 const { encodeViewHash, decodeViewHash } = (() => {
-// Shareable view links: #t=<time>&v=<mode>&c=<target,distance,yaw,pitch,fov>&g=<group>
+// Shareable view links: #t=<time>&v=<mode>&c=<target,distance,yaw,pitch,fov>&a=<anchor>&g=<group>
 
-/** Compact, human-readable hash: #t=-12.5&v=3d&c=x,y,z,d,yaw,pitch,fov */
+
+
+/** Compact, human-readable hash: #t=-12.5&v=3d&c=x,y,z,d,yaw,pitch,fov&a=lsr */
 function encodeViewHash(viewer) {
   const p = viewer.pose;
   const r = (x, d = 2) => Number(x.toFixed(d));
@@ -9527,6 +9807,8 @@ function encodeViewHash(viewer) {
     `v=${viewer.state.view.mode}`,
     `c=${[...p.target.map((x) => r(x, 1)), r(p.distance, 1), r(p.yaw, 4), r(p.pitch, 4), r(p.fov, 2)].join(",")}`,
   ];
+  const anchor = encodeAnchor(viewer.state.view.anchor);
+  if (anchor) parts.push(`a=${encodeURIComponent(anchor)}`);
   if (viewer.state.group) parts.push(`g=${encodeURIComponent(viewer.state.group)}`);
   return parts.join("&");
 }
@@ -9544,6 +9826,8 @@ function decodeViewHash(hash) {
   if (out.t != null && Number.isFinite(Number(out.t))) view.time = Number(out.t);
   if (out.v) view.mode = out.v === "sky" ? "sky" : "3d";
   if (out.g) view.group = out.g;
+  const anchor = out.a ? decodeAnchor(out.a) : null;
+  if (anchor) view.anchor = anchor;
   if (out.c) {
     const n = out.c.split(",").map(Number);
     if (n.length === 7 && n.every(Number.isFinite)) {
@@ -9568,6 +9852,7 @@ const { uid, captureState, importStates, exportStatesBlock, makeTransition, easi
 
 
 
+
 const EASINGS = {
   linear: (t) => t,
   easeInOutCubic,
@@ -9583,7 +9868,7 @@ function uid() {
 function captureState(viewer, sky) {
   const s = cloneJson(viewer.state);
   s.version = STATE_VERSION;
-  s.view = { mode: viewer.state.view.mode, pose: clonePose(viewer.pose) };
+  s.view = { mode: viewer.state.view.mode, pose: clonePose(viewer.pose), anchor: cloneJson(viewer.state.view.anchor || { kind: "free" }) };
   s.time = { frame: viewer.timeline.frame, speed: viewer.timeline.speed };
   if (sky) s.sky = sky.captureState();
   // Plugins (e.g. the distribution filter) contribute their own state.
@@ -9687,8 +9972,13 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
   const to = cloneJson(target);
   if (target.view?.pose) to.view.pose = sanitizePose(clonePose(target.view.pose));
   if (keepCamera) {
-    to.view = { mode: from.view.mode, pose: clonePose(viewer.pose) };
+    to.view = { mode: from.view.mode, pose: clonePose(viewer.pose), anchor: from.view.anchor };
   }
+  // The camera anchor is part of the camera. States saved before anchors
+  // existed get the one their pose implies (the LSR if they orbit it).
+  const anchorB = normalizeAnchor(to.view?.anchor)
+    || (to.view?.pose && viewer.inferAnchor ? viewer.inferAnchor(to.view.pose) : null)
+    || from.view.anchor;
   const traceKeys = new Set([...Object.keys(from.traces || {}), ...Object.keys(to.traces || {})]);
   const volKeys = new Set([...Object.keys(from.volumes || {}), ...Object.keys(to.volumes || {})]);
   const poseA = clonePose(from.view.pose || viewer.pose);
@@ -9799,7 +10089,13 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
     viewer.controls.mode = to.view.mode === "sky" ? "sky" : "galactic";
     if (!keepCamera) Object.assign(viewer.renderer.camera.pose, clonePose(poseB));
     st.view.pose = viewer.renderer.camera.pose;
+    const anchorChanged = JSON.stringify(st.view.anchor || null) !== JSON.stringify(anchorB || null);
+    st.view.anchor = cloneJson(anchorB || { kind: "free" });
+    // Arrive exactly: the anchor starts riding from here, it never snaps.
+    viewer._anchorLast = null;
     viewer.timeline.setFrame(frameB);
+    viewer._anchorLast = viewer.anchorPoint?.() ?? null;
+    if (anchorChanged) viewer.emit?.("anchor", { anchor: st.view.anchor, released: false });
     if (Number.isFinite(to.time?.speed)) viewer.timeline.speed = to.time.speed;
     if (sky && to.sky) sky.applyState(to.sky);
     for (const [name, ext] of viewer.stateExtensions || []) ext.apply(to.ext ? to.ext[name] ?? null : null);
@@ -10272,6 +10568,8 @@ class StoryPlugin {
     if (pose) {
       Object.assign(this.viewer.renderer.camera.pose, pose);
       this.viewer.state.view.pose = this.viewer.renderer.camera.pose;
+      // Stopped mid-flight: the view's anchor holds only if the camera is on it.
+      this.viewer.reconcileAnchor?.();
     }
     this.viewer.renderer.release("state-transition");
     // An interrupted transition still arrives: fire the same events so the
@@ -10294,7 +10592,6 @@ class StoryPlugin {
     this.renderPresenter();
     v.timeline.pause();
     const keepCamera = it.camera === "keep";
-    if (!keepCamera) this.ui.following = null;
     const transition = makeTransition(v, this.sky, it.state, { keepCamera });
     const spec = it.transition || this.project.defaultTransition;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -10316,7 +10613,6 @@ class StoryPlugin {
     this.active = -1;
     this.markActive();
     v.timeline.pause();
-    this.ui.following = null;
     const transition = makeTransition(v, this.sky, state, { keepCamera });
     const spec = this.project.defaultTransition;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -13016,6 +13312,7 @@ const { mountUI, AppUI } = (() => {
 
 
 
+
 function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
   if (viewer.manifest.sky?.enabled) ui.use(new SkyPlugin());
@@ -13036,7 +13333,6 @@ class AppUI {
     this.manifest = viewer.manifest;
     this.luts = new Map();
     this.trails = new Map();
-    this.following = null;
     this.selection = null;
     this.plugins = [];
     for (const [name, entry] of Object.entries(this.manifest.colormaps || {})) {
@@ -13186,8 +13482,18 @@ class AppUI {
     // The measurement line and its label follow both objects through time.
     const measure = rafThrottle(() => this.updateMeasure());
     v.on("time", () => {
-      if (this.following) this.updateFollow();
       if (this._measure) measure();
+    });
+    // The camera anchor shows in the scale readout and the inspector.
+    v.on("anchor", ({ released } = {}) => {
+      this.updateScale();
+      if (this.selection) this.inspector.refresh();
+      // The first time a pan or flight frees the camera, say how to get back.
+      const home = v.defaultAnchor;
+      if (released && !this._anchorHinted && home && home.kind !== "free") {
+        this._anchorHinted = true;
+        this.toast(`Camera free · Home re-anchors it to ${anchorLabel(home, this.anchorName(home))}`, { icon: icon("home"), ms: 3200 });
+      }
     });
     new ResizeObserver(() => this.syncViewSeg()).observe(this.viewSeg);
     v.on("gpu-restored", () => {
@@ -13258,7 +13564,13 @@ class AppUI {
     if (hv.group && (this.manifest.groups?.order || []).includes(hv.group)) this.layers.setGroup(hv.group);
     if (hv.time != null) v.timeline.setTime(hv.time);
     if (hv.mode === "sky" && this.manifest.sky?.enabled) await v.setViewMode("sky", { animate: false });
-    if (hv.pose) v.setPose({ ...v.pose, ...hv.pose });
+    if (hv.pose) {
+      // The link's anchor (or, for older links, the one its pose implies);
+      // a centre that is not on it leaves the camera free.
+      const anchor = hv.anchor && v.anchorAvailable(hv.anchor) ? hv.anchor : v.inferAnchor(hv.pose);
+      v.setAnchor(anchor, { fly: false });
+      v.setPose({ ...v.pose, ...hv.pose });
+    }
   }
 
   use(plugin) {
@@ -13353,7 +13665,8 @@ class AppUI {
     } else if (hit && hit.kind === "member") {
       labels.setDynamic("selection", `${hit.member.cluster} member`, () => this.selectionPosition(hit), "ov-label--sel");
     }
-    if (!hit && this.following) this.toggleFollow(null);
+    // Deselecting stops following an object (Sun and LSR anchors stay).
+    if (!hit && v.anchor.kind === "object") v.releaseAnchor();
     v.selected = hit;
     v.renderer.invalidate();
     this.viewer.emit("select", hit);
@@ -13526,28 +13839,58 @@ class AppUI {
     v.renderer.invalidate();
   }
 
-  toggleFollow(hit) {
-    const v = this.viewer;
-    if (!hit || (this.following && this.following.trace === hit.trace && this.following.index === hit.index)) {
-      this.following = null;
-      v.followOffset = null;
-      return;
-    }
-    this.following = hit;
-    const pos = v.objectPosition(hit.trace, hit.index);
-    if (pos) v.flyToObject(hit.trace, hit.index, { distance: Math.min(v.pose.distance, 600) });
-    this.toast("Following — the camera tracks this object through time", { icon: icon("follow") });
+  /** The object the camera is anchored to (inspector "Follow"), if any. */
+  get following() {
+    const a = this.viewer.anchor;
+    if (a.kind === "object") return { trace: a.trace, index: a.index };
+    if (a.kind === "sun" && this.viewer.world.sunTrace) return { trace: this.viewer.world.sunTrace, index: 0 };
+    return null;
   }
 
-  updateFollow() {
+  /** Anchor the camera to an object (or let go of it): it moves with it through time. */
+  toggleFollow(hit) {
     const v = this.viewer;
     const f = this.following;
-    if (!f || v.tween || v.state.view.mode === "sky") return;
-    const pos = v.objectPosition(f.trace, f.index);
-    if (!pos) return;
-    v.pose.target = pos;
-    v.renderer.camera.pose.target = pos;
-    v.renderer.invalidate();
+    if (!hit || (f && f.trace === hit.trace && f.index === hit.index)) {
+      if (f) v.releaseAnchor();
+      return;
+    }
+    const sun = hit.trace === v.world.sunTrace && hit.index === 0;
+    v.setAnchor(sun ? { kind: "sun" } : { kind: "object", trace: hit.trace, index: hit.index }, { distance: Math.min(v.pose.distance, 600) });
+    this.toast("Following · the camera moves with it through time", { icon: icon("follow") });
+  }
+
+  /** Anchor the camera to the LSR, the Sun or nothing ("free"). */
+  setCameraAnchor(kind) {
+    const v = this.viewer;
+    if (kind === "free") v.releaseAnchor();
+    else if (v.anchorAvailable({ kind })) v.setAnchor({ kind });
+    else return;
+    const name = anchorLabel(v.anchor, this.anchorName(v.anchor));
+    this.toast(kind === "free" ? "Camera free · scroll zooms toward the pointer" : `Camera anchored to ${name}`, { icon: icon(kind === "free" ? "orbit" : "target"), ms: 1600 });
+  }
+
+  /** Display name of an object anchor (empty for the others). */
+  anchorName(a) {
+    if (a?.kind !== "object") return "";
+    return this.viewer.describeObject(a.trace, a.index)?.name || "";
+  }
+
+  anchorField() {
+    const v = this.viewer;
+    const a = v.anchor;
+    const options = [];
+    if (v.anchorAvailable({ kind: "lsr" })) options.push({ value: "lsr", label: "LSR" });
+    if (v.anchorAvailable({ kind: "sun" })) options.push({ value: "sun", label: "Sun" });
+    options.push({ value: "free", label: "Free" });
+    if (a.kind === "object") options.push({ value: "object", label: "Object" });
+    return miniSeg({
+      label: "Camera anchor",
+      hint: "What the camera orbits, zooms toward and moves with through time",
+      value: a.kind,
+      options,
+      onChange: (k) => { if (k !== "object") this.setCameraAnchor(k); },
+    });
   }
 
   // ------------------------------------------------------------- modes
@@ -13777,8 +14120,12 @@ class AppUI {
       this.scaleSub.textContent = `l ${l.toFixed(1)}° b ${b >= 0 ? "+" : "−"}${Math.abs(b).toFixed(1)}° · ${formatAngle(cam.hfov)} field`;
     } else {
       this.scaleLabel.textContent = formatDistance(sb.value);
-      const p = this.viewer.pose;
-      this.scaleSub.textContent = `Eye ${formatDistance(p.distance)} away`;
+      const v = this.viewer;
+      const eye = formatDistance(v.pose.distance);
+      // Anchored, the eye distance is measured from the anchor.
+      const name = v.anchored ? anchorLabel(v.anchor, this.anchorName(v.anchor)) : "";
+      this.scaleSub.textContent = name ? `Eye ${eye} from ${name}` : `Eye ${eye} away`;
+      this.scaleSub.title = name ? `Camera anchored to ${name}: it orbits, zooms toward and moves with it through time` : "";
     }
   }
 
@@ -13882,6 +14229,7 @@ class AppUI {
     const body = h("div", { class: "ov-pop-body" },
       miniSeg({ label: "Mode", value: this.mode, options: MODES.map((m) => ({ value: m.id, label: m.name })), onChange: (m) => { this.closeMenu(); this.setMode(m); } }),
       miniSeg({ label: "Theme", value: this.theme, options: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }], onChange: (t) => this.applyTheme(t) }),
+      this.anchorField(),
       slider({ label: "Point size", min: 0.25, max: 4, value: g.pointSize, scale: "log", format: (x) => `${x.toFixed(2)}×`, onInput: (x) => v.setGlobal({ pointSize: x }) }),
       slider({ label: "Point brightness", min: 0, max: 2, value: g.pointOpacity, format: (x) => `${x.toFixed(2)}×`, onInput: (x) => v.setGlobal({ pointOpacity: x }) }),
       slider({ label: "Star glow", min: 0, max: 4, value: g.glow, format: (x) => (x <= 0.02 ? "Markers" : x.toFixed(2)), onInput: (x) => v.setGlobal({ glow: x }) }),
@@ -14017,6 +14365,12 @@ class AppUI {
       { title: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
       { title: this.theme === "dark" ? "Switch to light theme" : "Switch to dark theme", icon: this.theme === "dark" ? "sun" : "moon", run: () => this.applyTheme(this.theme === "dark" ? "light" : "dark") },
       { title: v.controls.autoOrbit ? "Stop auto-orbit" : "Auto-orbit camera", icon: "orbit", shortcut: "O", run: () => this.setAutoOrbit(!v.controls.autoOrbit) },
+      ...["lsr", "sun", "free"].filter((k) => k !== v.anchor.kind && (k === "free" || v.anchorAvailable({ kind: k }))).map((k) => ({
+        title: k === "free" ? "Free the camera (no anchor)" : `Anchor camera to ${anchorLabel({ kind: k })}`,
+        icon: k === "free" ? "orbit" : "target",
+        keywords: "camera anchor lock follow centre center pivot frame reference lsr sun local standard of rest",
+        run: () => this.setCameraAnchor(k),
+      })),
       ...(tl.count > 1 ? [{ title: v.state.global.trails > 0 ? "Hide motion trails" : "Show motion trails", icon: "trail", shortcut: "J", keywords: "streaks motion history comet", run: () => this.toggleTrails() }] : []),
       { title: "Hide interface (zen)", icon: "expand", shortcut: "Z", run: () => this.setZen(this.root.dataset.zen !== "true") },
       { title: this.mode === "focus" ? "Detailed mode" : "Focus mode", sub: this.mode === "focus" ? MODES[1].desc : MODES[0].desc, icon: "sidebar", shortcut: "U", keywords: "mode layout panels simple minimal focus detailed", run: () => this.toggleMode() },
@@ -14125,7 +14479,7 @@ class AppUI {
 
   showHelp() {
     const groups = [
-      ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⇧ Drag"], ["Zoom toward cursor", "Scroll"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
+      ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⇧ Drag"], ["Zoom (keeps the camera anchor centred)", "Scroll"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view and re-anchor", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
       ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
       ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Motion trails", "J"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
       ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Fly to object", "Double-click"], ["Measure separation", "⇧ Click"], ["Lasso", "L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
@@ -14314,12 +14668,15 @@ class AppUI {
     const dt = this._lastKeyMotion ? Math.min(Math.max((now - this._lastKeyMotion) / 1000, 0), 0.1) : 1 / 60;
     this._lastKeyMotion = now;
     const c = v.controls;
+    const sky = v.state.view.mode === "sky";
+    // Flying (Shift+W/A/S/D) or moving up and down (R/F) leaves the anchor.
+    if (!sky && ((this.shiftDown && ["w", "a", "s", "d"].some((k) => keys.has(k))) || keys.has("r") || keys.has("f"))) v.releaseAnchor();
     keyMotion(pose, keys, {
       dt,
       fast: this.shiftDown,
-      sky: v.state.view.mode === "sky",
+      sky,
       maxSpan: v.world.maxSpan,
-      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFovFor(v.state.view.mode === "sky" ? "sky" : "galactic"),
+      minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFovFor(sky ? "sky" : "galactic"),
     });
     v.renderer.markInteraction();
     v._onCameraChange();
@@ -14382,6 +14739,17 @@ function installApi(root, viewer, ui) {
     play: () => viewer.timeline.play(),
     pause: () => viewer.timeline.pause(),
     setViewMode: (m) => ui.setViewMode(m === "sky" ? "sky" : "3d"),
+    // What the camera orbits, zooms toward and moves with through time:
+    // {kind: "lsr" | "sun" | "free"} or {kind: "object", trace, index}.
+    get cameraAnchor() { return { ...viewer.anchor }; },
+    setCameraAnchor: (a) => {
+      const anchor = a && typeof a === "object" && a.kind === undefined ? { kind: "object", ...a } : a;
+      if (anchor === "free" || anchor?.kind === "free") {
+        viewer.releaseAnchor();
+        return Promise.resolve({ done: true });
+      }
+      return viewer.setAnchor(anchor);
+    },
     // Whole-viewer States, the same snapshots saved views use.
     getState: () => ui.plugins.find((p) => p.name === "states")?.api().capture() ?? null,
     applyState: (s, opts) => ui.plugins.find((p) => p.name === "states")?.applyState(s, opts) ?? Promise.resolve(),

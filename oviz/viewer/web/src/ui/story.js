@@ -331,6 +331,8 @@ export class StoryPlugin {
     if (pose) {
       Object.assign(this.viewer.renderer.camera.pose, pose);
       this.viewer.state.view.pose = this.viewer.renderer.camera.pose;
+      // Stopped mid-flight: the view's anchor holds only if the camera is on it.
+      this.viewer.reconcileAnchor?.();
     }
     this.viewer.renderer.release("state-transition");
     // An interrupted transition still arrives: fire the same events so the
@@ -353,7 +355,6 @@ export class StoryPlugin {
     this.renderPresenter();
     v.timeline.pause();
     const keepCamera = it.camera === "keep";
-    if (!keepCamera) this.ui.following = null;
     const transition = makeTransition(v, this.sky, it.state, { keepCamera });
     const spec = it.transition || this.project.defaultTransition;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -375,7 +376,6 @@ export class StoryPlugin {
     this.active = -1;
     this.markActive();
     v.timeline.pause();
-    this.ui.following = null;
     const transition = makeTransition(v, this.sky, state, { keepCamera });
     const spec = this.project.defaultTransition;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;

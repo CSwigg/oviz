@@ -27,6 +27,10 @@ The viewer uses:
   work, and an idle figure costs nothing.
 - **Smooth time.** Cluster positions are interpolated between the stored
   frames, so playback and scrubbing are continuous at any speed.
+- **Anchored camera.** By default the camera is anchored to the Local Standard
+  of Rest, the origin of the LSR-centred frame. It orbits and zooms about the
+  LSR, and the Sun and the clusters move around a steady view. You can anchor
+  it to the Sun or follow any cluster instead.
 - **Find anything.** Press ⌘K to search every cluster (including catalogue
   aliases), layer, saved view and action.
 - **Inspect.** Click an object for its age today and at time *t*, member count,

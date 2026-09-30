@@ -2,7 +2,7 @@
 //
 // The state object is plain JSON so it can be captured into a State,
 // serialized into an export, diffed and interpolated. Shape:
-//   { version, group, time: {frame, speed}, view: {mode, pose},
+//   { version, group, time: {frame, speed}, view: {mode, pose, anchor},
 //     traces: {key: {visible, opacity, sizeScale, colorMode, colormap, color}},
 //     volumes: {stateKey: {...}}, images: {key: {visible, opacity}},
 //     global: {...}, sky: {...} }
@@ -84,7 +84,7 @@ export function initialViewerState(manifest) {
     version: STATE_VERSION,
     group,
     time: { frame: manifest.time?.initialIndex ?? 0, speed: 1 },
-    view: { mode: "3d", pose: makePose() },
+    view: { mode: "3d", pose: makePose(), anchor: { kind: "free" } }, // the viewer sets pose and anchor
     traces: {},
     volumes: {},
     images: {},
@@ -222,6 +222,8 @@ export function legacySnapshotToState(snap, manifest, base) {
   if (Number.isFinite(fv)) st.time.frame = fv;
   const mode = gc.camera_view_mode === "earth" ? "sky" : "3d";
   st.view.mode = mode;
+  // Classic States had no camera anchor: applying one infers it from the pose.
+  delete st.view.anchor;
   const cam = snap.camera;
   if (cam && cam.position && cam.target) {
     const p = [cam.position.x, cam.position.y, cam.position.z].map(Number);

@@ -3,18 +3,23 @@
 // Galactic mode: drag orbits, right/shift/two-finger drag pans, wheel and
 // pinch zoom toward the cursor. Sky mode: drag grabs the sky (the point under
 // the cursor stays under the cursor), wheel/pinch change the field of view.
+// While the camera is anchored (see anchor.js) zooming keeps the orbit centre
+// on the anchor instead, and panning first frees the camera (`onRelease`).
 
 import { DEG, clamp } from "../core/math.js";
 import { forwardFromAngles, PITCH_LIMIT } from "./camera.js";
 
 export class Controls {
-  constructor(element, renderer, { onChange, onInteractStart, onInteractEnd } = {}) {
+  constructor(element, renderer, { onChange, onInteractStart, onInteractEnd, anchored, onRelease } = {}) {
     this.el = element;
     this.renderer = renderer;
     this.camera = renderer.camera;
     this.onChange = onChange || (() => {});
     this.onInteractStart = onInteractStart || (() => {});
     this.onInteractEnd = onInteractEnd || (() => {});
+    // Whether the orbit centre is held on a camera anchor, and how to let go.
+    this.anchored = anchored || (() => false);
+    this.onRelease = onRelease || (() => {});
     this.mode = "galactic"; // "galactic" | "sky"
     this.enabled = true;
     this.minDistance = 1;
@@ -67,11 +72,12 @@ export class Controls {
     const pts = [...this.pointers.values()];
     if (pts.length >= 2) {
       const [a, b] = pts;
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
       this.gesture = {
         kind: "pinch",
         dist: Math.hypot(a.x - b.x, a.y - b.y),
-        cx: (a.x + b.x) / 2,
-        cy: (a.y + b.y) / 2,
+        cx, cy,
+        sx: cx, sy: cy, // where the fingers started (anchored pinches ignore small drift)
       };
     } else if (pts.length === 1) {
       const p = pts[0];
@@ -102,8 +108,10 @@ export class Controls {
       const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
       const factor = g.dist > 0 ? g.dist / dist : 1;
       this.zoomAt(factor, cx, cy);
-      if (this.mode !== "sky") this.pan(cx - g.cx, cy - g.cy);
-      else this.lookDrag(cx - g.cx, cy - g.cy);
+      if (this.mode === "sky") this.lookDrag(cx - g.cx, cy - g.cy);
+      // Anchored, a pinch only zooms: the fingers' centre wanders a little in
+      // any pinch, so only a deliberate two-finger drag pans (and frees).
+      else if (!this.anchored() || Math.hypot(cx - g.sx, cy - g.sy) > 32) this.pan(cx - g.cx, cy - g.cy);
       g.dist = dist; g.cx = cx; g.cy = cy;
     } else if (g.kind === "pan") {
       this.pan(dx, dy);
@@ -168,6 +176,8 @@ export class Controls {
   }
 
   pan(dx, dy) {
+    // Moving the orbit centre off the anchor frees the camera.
+    if (this.anchored()) this.onRelease();
     const p = this.pose;
     const cam = this.camera;
     const scale = cam.pixelScale(Math.max(p.distance, 1));
@@ -187,7 +197,10 @@ export class Controls {
     return Math.min(this.maxFov, (2 * Math.atan(Math.tan(75 * DEG) / aspect)) / DEG);
   }
 
-  /** Zoom by `factor` (<1 zooms in) keeping the point under (x, y) fixed. */
+  /**
+   * Zoom by `factor` (<1 zooms in) keeping the point under (x, y) fixed, or,
+   * while anchored, keeping the anchor at the centre of the view.
+   */
   zoomAt(factor, x, y) {
     const p = this.pose;
     if (this.mode === "sky" || p.distance <= 1e-6) {
@@ -206,7 +219,7 @@ export class Controls {
     }
     const next = clamp(p.distance * factor, this.minDistance, this.maxDistance);
     const actual = next / p.distance;
-    if (x != null) {
+    if (x != null && !this.anchored()) {
       // Move the target toward the cursor ray so zoom follows the pointer.
       const cam = this.camera;
       const ray = cam.ray(x, y);
