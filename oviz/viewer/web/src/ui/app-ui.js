@@ -27,6 +27,7 @@ import { LayoutManager } from "./layout.js";
 import { CompactLegend } from "./legend.js";
 import { IdleFade } from "./idle.js";
 import { buildArModel } from "../ar/model.js";
+import { WidgetHost } from "./widgets.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
@@ -70,6 +71,10 @@ export class AppUI {
     this.ui.append(this.layers.el, this.inspector.el, this.hovercard.el);
     this.reticle = new SelectionReticle(this);
     this.buildExtras();
+    // Floating tool panels that plugins register (Relative SFH, Birth tree…).
+    this.widgets = new WidgetHost(this);
+    this.widgets.onChange(() => { this.widgetsBtn.hidden = !this.widgets.available().length; });
+    viewer.stateExtensions.set("widgets", { capture: () => this.widgets.capture(), apply: (s) => this.widgets.apply(s) });
     this.layout = new LayoutManager(this);
     this.overlays = new Set();
     this.idle = new IdleFade(this);
@@ -135,12 +140,14 @@ export class AppUI {
       icon("search"), h("span", { class: "ov-grow" }, "Search clusters, layers, actions…"), kbd(`${MOD === "⌘" ? "⌘" : "Ctrl"}`), kbd("K"));
     this.layersBtn = iconButton("layers", "Layers", () => this.setLayersOpen(!this.layersOpen), { shortcut: "⇧L" });
     this.statesBtn = iconButton("bookmark", "Views & story", () => this.plugins.find((p) => p.name === "states")?.toggle(), { shortcut: "Y" });
+    this.widgetsBtn = iconButton("widgets", "Widgets", (e) => this.widgetsMenu(e.currentTarget));
+    this.widgetsBtn.hidden = true;
     this.shotBtn = iconButton("camera", "Screenshot", (e) => this.captureMenu(e.currentTarget), { shortcut: "I" });
     this.shareBtn = iconButton("share", "Share & export", (e) => this.shareMenu(e.currentTarget));
     this.settingsBtn = iconButton("sliders", "Display settings", (e) => this.settingsMenu(e.currentTarget));
     this.helpBtn = iconButton("help", "Shortcuts & help", () => this.showHelp(), { shortcut: "?" });
     this.toolbar = h("div", { class: "ov-toolbar ov-glass", role: "toolbar", "aria-label": "Figure tools" },
-      this.layersBtn, this.statesBtn, h("span", { class: "ov-toolbar-sep" }),
+      this.layersBtn, this.statesBtn, this.widgetsBtn, h("span", { class: "ov-toolbar-sep" }),
       this.shotBtn, this.shareBtn, this.settingsBtn, this.helpBtn);
     this.top = h("header", { class: "ov-top ov-chrome" }, this.brand, this.search, this.toolbar);
     this.ui.append(this.top);
@@ -689,6 +696,8 @@ export class AppUI {
       { label: "Screenshot or video…", icon: "camera", shortcut: "I", run: () => this.captureMenu(anchor) },
       { label: "Share & export…", icon: "share", run: () => this.shareMenu(anchor) },
       { label: "Display settings…", icon: "sliders", run: () => this.settingsMenu(anchor) },
+      ...(this.widgets.available().length ? [{ label: "Widgets…", icon: "widgets", run: () => this.widgetsMenu(anchor) }] : []),
+      ...this.plugins.flatMap((p) => p.moreItems?.() || []),
       "-",
       ...(lasso ? [{ label: "Lasso select", icon: "wand", shortcut: "L", run: () => lasso.arm(true) }] : []),
       ...(this.canFullscreen ? [{ label: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() }] : []),
@@ -956,8 +965,20 @@ export class AppUI {
       toggle({ label: "Auto-orbit camera", checked: !!v.controls.autoOrbit, onChange: (x) => this.setAutoOrbit(x) }),
       slider({ label: "Field of view", min: 10, max: 100, step: 1, value: v.pose.fov, format: (x) => `${Math.round(x)}°`, onInput: (x) => { v.pose.fov = x; v.renderer.invalidate(); } }),
       toggle({ label: "Performance overlay", checked: !!this.perfEl, onChange: (x) => this.setPerfOverlay(x) }),
+      ...this.plugins.flatMap((p) => p.settingsRows?.() || []),
     );
     this.menu(anchor, [{ body }], { title: "Display" });
+  }
+
+  /** The Widgets menu: every tool panel this figure offers, ticked when open. */
+  widgetsMenu(anchor) {
+    this.menu(anchor, this.widgets.menuItems(), { title: "Widgets" });
+  }
+
+  /** Plugins add a button to the toolbar (before the separator). */
+  addToolbarButton(btn) {
+    this.toolbar.insertBefore(btn, this.toolbar.querySelector(".ov-toolbar-sep"));
+    return btn;
   }
 
   // ------------------------------------------------------------- modes
@@ -1098,6 +1119,7 @@ export class AppUI {
     if (this.manifest.sky?.enabled) {
       list.splice(2, 0, { title: v.state.view.mode === "sky" ? "Switch to Galactic 3D" : "Switch to Sky view", icon: v.state.view.mode === "sky" ? "cube" : "globe", shortcut: "V", pinned: true, run: () => this.setViewMode(v.state.view.mode === "sky" ? "3d" : "sky") });
     }
+    list.push(...this.widgets.commands());
     for (const p of this.plugins) list.push(...(p.commands?.() || []));
     return list;
   }
@@ -1200,6 +1222,7 @@ export class AppUI {
       ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Fly to object", "Double-click"], ["Measure separation", "⇧ Click"], ["Lasso", "L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
       ["Views & presenting", [["Save current view", "N"], ["Present", "P"], ["Next / previous view", "→ ←"], ["Views panel", "Y"], ["Save figure", `${MOD} S`]]],
       ["Capture", [["Screenshot", "I"], ["Hide interface", "Z"], ["Fullscreen", "M"], ["Focus / detailed mode", "U"], ["This help", "?"]]],
+      ...this.plugins.flatMap((p) => p.helpGroups?.() || []),
     ];
     const grid = h("div", { class: "ov-help-grid" }, groups.map(([title, rows]) => h("div", { class: "ov-help-group" },
       h("h4", null, title),

@@ -1,0 +1,32 @@
+/* --------------------------------------------------------------- widgets
+   Floating tool panels (src/ui/widgets.js): dragged by their title, resized
+   from the corner, bottom sheets on phones. */
+.ov-widgets { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.ov-widgets > .ov-widget { pointer-events: auto; }
+.ov-widget { z-index: 5; }
+.ov-widget[data-open="false"] { transform: translateY(8px) scale(0.985); }
+.ov-widget-head { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ov-widget[data-dragging="true"] { transition: none; }
+.ov-widget[data-dragging="true"] .ov-widget-head { cursor: grabbing; }
+.ov-widget-actions { display: flex; align-items: center; gap: 2px; }
+.ov-widget-body { position: relative; flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.ov-widget-grip {
+  position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px;
+  cursor: nwse-resize; touch-action: none; opacity: 0.55;
+  background:
+    linear-gradient(135deg, transparent 55%, var(--ov-line-strong) 55%, var(--ov-line-strong) 62%, transparent 62%),
+    linear-gradient(135deg, transparent 72%, var(--ov-line-strong) 72%, var(--ov-line-strong) 79%, transparent 79%);
+}
+.ov-widget-grip:hover { opacity: 1; }
+
+@media (max-width: 720px) {
+  .ov-widget {
+    left: var(--ov-gutter) !important; right: var(--ov-gutter); top: auto !important;
+    width: auto !important; height: min(56vh, 460px) !important;
+    bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom) + 52px);
+    border-radius: 20px;
+  }
+  .ov-widget[data-open="false"] { transform: translateY(24px); }
+  .ov-widget-head { cursor: default; }
+  .ov-widget-grip { display: none; }
+}

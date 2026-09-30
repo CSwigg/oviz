@@ -81,6 +81,7 @@ const ICONS = {
   more: '<circle cx="5" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.4" fill="currentColor" stroke="none"/>',
   minus: '<path d="M4.5 10h11"/>',
   menu: '<path d="M4 6h12"/><path d="M4 10h12"/><path d="M4 14h12"/>',
+  widgets: '<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/>',
   sidebar: '<rect x="3.5" y="4.5" width="13" height="11" rx="2"/><path d="M8 4.5v11"/>',
 };
 
