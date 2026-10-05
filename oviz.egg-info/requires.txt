@@ -1,6 +1,0 @@
-numpy
-galpy
-astropy
-pandas
-plotly
-dash
