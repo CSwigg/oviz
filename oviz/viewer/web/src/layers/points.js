@@ -14,6 +14,13 @@ import { createProgram, createBuffer, createVAO, createTexture2D } from "../engi
 import { FRAME_GLSL, packFrameTexture, packScalarTexture, frameOffset } from "../engine/frames.js";
 import { parseColor } from "../core/color.js";
 
+// A click picks the point itself, not its glow: the pick disc is the core's,
+// out to where the core profile has fallen to ~3% of its peak (in the core
+// texture's radius units), at least PICK_MIN_PX across. pick()'s search
+// radius then forgives near misses on small points.
+export const POINT_PICK_CORE = 0.06;
+export const PICK_MIN_PX = 3;
+
 const VERT = `
 ${FRAME_GLSL}
 layout(location = 0) in vec2 aCorner;
@@ -22,7 +29,8 @@ layout(location = 2) in vec3 aColor;
 layout(location = 3) in vec4 aStatic;   // opacity, scalar, ageNow, starsFactor
 layout(location = 4) in float aSizeMax;
 layout(location = 5) in float aSymbol;
-layout(location = 6) in float aState;   // 0 normal, 1 dimmed, 2 selected, 3 hidden
+layout(location = 6) in float aState;   // state bits (below)
+layout(location = 7) in vec2 aLasso;    // lasso level before / after a State change
 
 uniform mat4 uViewProj;
 uniform mat4 uView;
@@ -51,6 +59,19 @@ uniform int uHasAux;
 uniform int uHasAge;
 uniform float uPickMinPx;
 uniform float uMemberFade;
+uniform vec2 uLassoMix;
+
+// The lasso: y is the object's level in the selection (1 shown, ½ dimmed,
+// 0 hidden), x the weight it was drawn with when a State change began. The
+// change blends one into the other: what leaves the selection fades out
+// early in the flight, what joins fades in as it lands (uLassoMix:
+// fade-out, fade-in progress; 1, 1 at rest, where only the level counts).
+// Starting from the weight drawn, not the last level, lets an interrupted
+// change carry on from where it was.
+float lassoWeight(vec2 levels) {
+  float b = levels.y > 0.75 ? 1.0 : levels.y > 0.25 ? uDimOpacity : 0.0;
+  return mix(levels.x, b, b < levels.x ? uLassoMix.x : uLassoMix.y);
+}
 
 out vec2 vUv;
 out vec3 vColor;
@@ -105,10 +126,12 @@ void main() {
   float stars = pow(max(aStatic.w, 1e-6), uStarsExp);
   float eff = opacity * uOpacityScale * p.w;
   // State bits: 1 dimmed / 2 hidden (distribution filter), 4 replaced by
-  // member stars in Sky view, 8 dimmed / 16 hidden (lasso selection).
+  // member stars in Sky view, 32 dimmed (birth tree highlight). The lasso
+  // (bits 8 / 16, for the CPU's readers) draws through aLasso, which can
+  // blend; dimmed by both counts once.
   int st = int(aState + 0.5);
-  if ((st & 18) != 0) eff = 0.0;
-  else if ((st & 9) != 0) eff *= uDimOpacity;
+  float bitW = (st & 2) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
+  eff *= min(bitW, lassoWeight(aLasso));
   if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
   vec4 center = uViewProj * vec4(p.xyz + uOffset, 1.0);
   if (size <= 0.0 || eff <= 0.001 || p.w <= 0.0 || center.w <= 0.0) {
@@ -118,11 +141,13 @@ void main() {
   float scale = max(size * uSizeScale * stars * uPointScale, uPointScale * 0.5 * uGlobalSize);
   bool hovered = index == uHover;
   float quadWorld;
+  float coreRatio = 1.0;  // quad radius over the core's
   if (uGlow > 0.02) {
     float glowSize = scale * (3.15 + 0.70 * uGlow) * (hovered ? 1.08 * uHoverBoost : 1.0);
     float coreSize = scale * (2.65 + 0.18 * uGlow) * (hovered ? 1.22 * uHoverBoost : 1.0);
     quadWorld = max(glowSize, coreSize);
-    vCoreRatio = quadWorld / max(coreSize, 1e-6);
+    coreRatio = quadWorld / max(coreSize, 1e-6);
+    vCoreRatio = coreRatio;
     vGlowA = clamp(eff * (0.34 + 0.18 * uGlow), 0.0, 0.78);
     vCoreA = clamp(eff * (1.0 + 0.24 * uGlow), 0.0, 1.0);
   } else {
@@ -134,7 +159,8 @@ void main() {
   float viewZ = -(uView * vec4(p.xyz + uOffset, 1.0)).z;
   float px = quadWorld * 0.5 * uViewport.y * uProjY / max(viewZ, 1e-6);
   #ifdef PICK
-  px = max(px * (uGlow > 0.02 ? 0.45 : 1.0), uPickMinPx);
+  // The point, not its glow (see POINT_PICK_CORE); a symbol is its own shape.
+  px = max(uGlow > 0.02 ? px * ${POINT_PICK_CORE} / coreRatio : px, uPickMinPx);
   #else
   // Keep sub-pixel stars stable: clamp the footprint and conserve flux.
   if (px < uMinPx) {
@@ -230,6 +256,7 @@ layout(location = 1) in float aIndex;
 layout(location = 2) in vec3 aColor;
 layout(location = 3) in vec4 aStatic;   // opacity, scalar, ageNow, starsFactor
 layout(location = 6) in float aState;
+layout(location = 7) in vec2 aLasso;
 
 uniform mat4 uViewProj;
 uniform vec2 uViewport;
@@ -249,6 +276,19 @@ uniform float uMemberFade;
 uniform highp sampler2D uAuxTex;     // per-frame opacity, colour value
 uniform int uAuxFrames;
 uniform int uHasAux;
+uniform vec2 uLassoMix;
+
+// The lasso: y is the object's level in the selection (1 shown, ½ dimmed,
+// 0 hidden), x the weight it was drawn with when a State change began. The
+// change blends one into the other: what leaves the selection fades out
+// early in the flight, what joins fades in as it lands (uLassoMix:
+// fade-out, fade-in progress; 1, 1 at rest, where only the level counts).
+// Starting from the weight drawn, not the last level, lets an interrupted
+// change carry on from where it was.
+float lassoWeight(vec2 levels) {
+  float b = levels.y > 0.75 ? 1.0 : levels.y > 0.25 ? uDimOpacity : 0.0;
+  return mix(levels.x, b, b < levels.x ? uLassoMix.x : uLassoMix.y);
+}
 
 out vec3 vColor;
 out float vScalar;
@@ -282,8 +322,8 @@ void main() {
   }
   float eff = opacity * uOpacityScale * pres;
   int st = int(aState + 0.5);
-  if ((st & 18) != 0) eff = 0.0;
-  else if ((st & 9) != 0) eff *= uDimOpacity;
+  float bitW = (st & 2) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
+  eff *= min(bitW, lassoWeight(aLasso));
   if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
   if (uHasAge == 1 && aStatic.z == aStatic.z && aStatic.z > -1e29) {
     // No trail before the object was born.
@@ -357,6 +397,11 @@ const PSF = {
     + 0.035 * (1 + (r / 0.32) ** 2) ** -3.0,
   "member-core": (r) => Math.exp(-0.5 * (r / 0.055) ** 2) + 0.16 * (1 + (r / 0.12) ** 2) ** -2.8,
 };
+
+/** A star sprite's radial profile (halo, core, member-halo, member-core) at r in sprite radii. */
+export function starProfile(kind, r) {
+  return PSF[kind](r);
+}
 
 function psfTexture(gl, kind, size = 512) {
   // Tabulate the radial profile once, then fill the image by lookup; the
@@ -484,6 +529,8 @@ class PointBatch {
     if (data.symbol) for (let i = 0; i < N; i++) symbol[i] = data.symbol[i];
     else symbol.fill(Math.max(0, (pts.symbols || []).indexOf(trace.symbol)));
     this.state = new Uint8Array(N);
+    // Per object, the weight a lasso fade starts from and the selection's level (see aLasso).
+    this.lasso = new Uint8Array(N * 2).fill(255);
     this.buffers = {
       quad: createBuffer(gl, QUAD),
       index: createBuffer(gl, index),
@@ -492,6 +539,7 @@ class PointBatch {
       sizeMax: createBuffer(gl, sizeMax),
       symbol: createBuffer(gl, symbol),
       state: createBuffer(gl, this.state, gl.DYNAMIC_DRAW),
+      lasso: createBuffer(gl, this.lasso, gl.DYNAMIC_DRAW),
     };
     const b = this.buffers;
     this.vao = createVAO(gl, [
@@ -502,7 +550,38 @@ class PointBatch {
       { loc: 4, buffer: b.sizeMax, size: 1, divisor: 1 },
       { loc: 5, buffer: b.symbol, size: 1, divisor: 1 },
       { loc: 6, buffer: b.state, size: 1, type: gl.UNSIGNED_BYTE, divisor: 1 },
+      { loc: 7, buffer: b.lasso, size: 2, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
     ]);
+  }
+
+  /**
+   * The lasso per object: `to` its level in the selection (255 shown, 128
+   * dimmed, 0 hidden; null shows all) and, while a fade plays, `from` the
+   * weight it starts from (0–255, as `lassoDrawn` gives; null at rest).
+   */
+  setLasso(to, from = null) {
+    const n = this.count, l = this.lasso;
+    for (let i = 0; i < n; i++) {
+      const level = to ? to[i] : 255;
+      l[i * 2] = from ? from[i] : level;
+      l[i * 2 + 1] = level;
+    }
+    this.lassoVersion = (this.lassoVersion || 0) + 1;
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.lasso);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, l);
+  }
+
+  /** The lasso's opacity weight of object `i` now, as the shader draws it (for CPU readers such as member stars). */
+  lassoWeight(i, mix, dim) {
+    return lassoBlend(this.lasso[i * 2], this.lasso[i * 2 + 1], mix, dim);
+  }
+
+  /** Every object's lasso weight as drawn now (0–255): where a new fade starts. */
+  lassoDrawn(mix, dim) {
+    const out = new Uint8Array(this.count);
+    for (let i = 0; i < out.length; i++) out[i] = Math.round(255 * this.lassoWeight(i, mix, dim));
+    return out;
   }
 
   /** Replace the bits in `mask` with `values` (Uint8Array, same length). */
@@ -536,6 +615,7 @@ export class PointsLayer {
     this.pickProgram = createProgram(gl, VERT, FRAG, { label: "points-pick", defines: { PICK: 1 } });
     this.trailProgram = null; // compiled on first use
     this.trailBuffer = null;
+    this.lassoMix = [1, 1];
     this.textures = starTextures(gl);
     this.cmapTextures = new Map();
     this.fallbackCmap = createTexture2D(gl, {
@@ -585,10 +665,17 @@ export class PointsLayer {
     prog.i("uHover", style.hover ?? -1);
     prog.f("uHoverBoost", 1.0);
     prog.f("uMinPx", 1.25 * frame.dpr);
-    prog.f("uPickMinPx", 9 * frame.dpr);
+    prog.f("uPickMinPx", PICK_MIN_PX * frame.dpr);
     prog.f("uDimOpacity", style.dimOpacity ?? 0.16);
     prog.i("uHasAge", batch.hasAge ? 1 : 0);
     prog.f("uMemberFade", global.memberFade ?? 0);
+    prog.v2("uLassoMix", this.lassoMix[0], this.lassoMix[1]);
+  }
+
+  /** How far a State change's lasso fade has got: fade-out and fade-in, 0–1 (1, 1 at rest). */
+  setLassoMix(out, inn) {
+    this.lassoMix[0] = out;
+    this.lassoMix[1] = inn;
   }
 
   /** Motion trails, drawn under the points. */
@@ -611,6 +698,7 @@ export class PointsLayer {
     prog.f("uFrame", p.frame).f("uTime", p.time).f("uSpan", tr.span).f("uMyrPerFrame", tr.myrPerFrame);
     prog.f("uWidthPx", (1.2 + 0.8 * Math.min(p.pointSize, 3)) * frame.dpr);
     prog.f("uMemberFade", p.memberFade ?? 0);
+    prog.v2("uLassoMix", this.lassoMix[0], this.lassoMix[1]);
     prog.f("uStrength", Math.min(1.6, 0.55 + 0.35 * p.glow));
     for (const batch of this.batches) {
       if (batch.posFrames <= 1) continue;
@@ -624,6 +712,7 @@ export class PointsLayer {
           { loc: 2, buffer: b.color, size: 3, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
           { loc: 3, buffer: b.stat, size: 4, divisor: 1 },
           { loc: 6, buffer: b.state, size: 1, type: gl.UNSIGNED_BYTE, divisor: 1 },
+          { loc: 7, buffer: b.lasso, size: 2, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
         ]);
       }
       prog.tex("uFrameTex", batch.frameTex.texture);
@@ -717,4 +806,15 @@ export class PointsLayer {
     this.cmapTextures.clear();
     this.gl.deleteTexture(this.fallbackCmap);
   }
+}
+
+/**
+ * The shader's lasso weight on the CPU: from `a`, the weight a fade starts
+ * from (0–255), toward the selection's level `b` (255 shown, 128 dimmed,
+ * 0 hidden), by the fade-out (`mix[0]`, while the weight falls) or fade-in
+ * progress (`mix[1]`).
+ */
+export function lassoBlend(a, b, mix, dim) {
+  const wa = a / 255, wb = b > 191 ? 1 : b > 63 ? dim : 0;
+  return wa + (wb - wa) * (wb < wa ? mix[0] : mix[1]);
 }

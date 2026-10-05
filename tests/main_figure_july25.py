@@ -509,17 +509,20 @@ def build_state_only_scene(
     if drop_full_cluster_catalog:
         drop_trace_by_name(scene, FULL_CLUSTER_CATALOG_TRACE_NAME)
     states = scene.get("states")
-    if isinstance(states, dict):
-        states["items"] = []
-        states["assets"] = {}
-        states["revision"] = 0
-        states["synchronized_revision"] = 0
-        # This figure is published read-only: never read back or write a
-        # local IndexedDB authoring draft. A stale draft from an earlier
-        # build was being auto-applied over the exported scene (hiding
-        # volumes and spiking memory), which is not something a visitor to
-        # a public URL should ever hit.
-        states["autosave_drafts"] = False
+    if not isinstance(states, dict):
+        # An Oviz-viewer source scene has no States block yet (ThreeJSFigure
+        # adds one when it writes): start it so the settings below hold.
+        states = scene["states"] = {}
+    states["items"] = []
+    states["assets"] = {}
+    states["revision"] = 0
+    states["synchronized_revision"] = 0
+    # This figure is published read-only: never read back or write a
+    # local IndexedDB authoring draft. A stale draft from an earlier
+    # build was being auto-applied over the exported scene (hiding
+    # volumes and spiking memory), which is not something a visitor to
+    # a public URL should ever hit.
+    states["autosave_drafts"] = False
     scene["deck"] = {
         "schema_version": 2,
         "available": True,

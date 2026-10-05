@@ -75,6 +75,25 @@ def _integrate_orbit_in_requested_order(orbit, time, potential):
 
     return values
 
+def reference_potential(potential, reference_frame_center=None):
+    """Return the potential a reference-frame orbit is integrated in.
+
+    The default frame follows the Local Standard of Rest, a circular orbit,
+    which only the axisymmetric part of the potential has: non-axisymmetric
+    terms (spiral arms, a bar) are left out of it, so the LSR stays at the
+    origin of a frame whose Galactic centre circles it at R0. A custom frame
+    centre (a focus group's orbit) is an object and feels the whole potential.
+    """
+    if potential is None:
+        return MWPotential2014
+    if reference_frame_center is not None:
+        return potential
+    parts = list(potential) if isinstance(potential, (list, tuple)) else [potential]
+    axisymmetric = [part for part in parts if not getattr(part, "isNonAxi", False)]
+    if not axisymmetric or len(axisymmetric) == len(parts):
+        return potential
+    return axisymmetric
+
 def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236., ro=8.122, zo=0.0208):
     """
     Get the coordinates of the center orbit.
@@ -83,6 +102,7 @@ def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236
     - time (array): Array of time points.
     - reference_frame_center (tuple): Center of the reference frame.
     - potential (galpy potential, optional): Galactic potential to use. Defaults to MWPotential2014.
+      The default (LSR) frame uses only its axisymmetric part (see reference_potential).
     - vo (float, optional): Circular velocity at the solar radius in km/s. Defaults to 236.
     - ro (float, optional): Solar radius in kpc. Defaults to 8.122.
     - zo (float, optional): Solar height above the galactic plane in kpc. Defaults to 0.0208.
@@ -91,9 +111,8 @@ def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236
     tuple: Coordinates of the center orbit (x, y, z).
     """
     time = normalize_time_grid(time)
-    if potential is None:
-        potential = MWPotential2014
-        
+    potential = reference_potential(potential, reference_frame_center)
+
     if reference_frame_center is None:
         rf_coords = [0, 0, 0, -11.1, -12.24, -7.25]
     else:

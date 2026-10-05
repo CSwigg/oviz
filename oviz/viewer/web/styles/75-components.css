@@ -44,9 +44,12 @@
 .ov-legend-item[data-visible="false"] .ov-legend-name { text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.55); }
 .ov-legend-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.4); }
 .ov-legend-dot[data-ramp] { width: 18px; height: 8px; border-radius: 3px; }
+.ov-legend-dot[data-kind="volume"] { width: 10px; height: 10px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28), 0 0 0 2px rgba(0, 0, 0, 0.35); }
 .ov-legend-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ov-legend .ov-legend-more { height: 22px; padding: 0 8px 0 23px; border: 0; background: transparent; color: rgba(255, 255, 255, 0.62); font: 500 12px/1 var(--ov-font); text-shadow: var(--ov-on-sky-shadow); }
 .ov-legend .ov-legend-more:hover { color: #fff; }
+/* The hide/show-all row is for touch screens (85-modes-mobile). */
+.ov-legend .ov-legend-all { display: none; }
 
 /* ---- Selection callout: a small label card beside the object ------- */
 .ov-callout {

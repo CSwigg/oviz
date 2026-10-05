@@ -83,6 +83,7 @@ const ICONS = {
   menu: '<path d="M4 6h12"/><path d="M4 10h12"/><path d="M4 14h12"/>',
   widgets: '<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/>',
   sidebar: '<rect x="3.5" y="4.5" width="13" height="11" rx="2"/><path d="M8 4.5v11"/>',
+  chart: '<path d="M3.5 16.5h13"/><path d="m3.8 13.6 3.4-4.1 3 2.6 3.4-5.6 2.9 3.6"/>',
 };
 
 export function icon(name, cls = "") {
@@ -197,6 +198,21 @@ export function copyText(text) {
   document.execCommand("copy");
   ta.remove();
   return Promise.resolve();
+}
+
+/**
+ * Copy text that is still being made (a promise) without losing the click:
+ * Safari only lets the page write to the clipboard during the gesture, so
+ * the clipboard item is handed over now and filled in when the text is ready.
+ */
+export function copyTextLater(textPromise) {
+  if (typeof ClipboardItem === "function" && navigator.clipboard?.write) {
+    try {
+      const item = new ClipboardItem({ "text/plain": textPromise.then((t) => new Blob([t], { type: "text/plain" })) });
+      return navigator.clipboard.write([item]).catch(() => textPromise.then(copyText));
+    } catch (_) { /* older ClipboardItem: copy when ready */ }
+  }
+  return textPromise.then(copyText);
 }
 
 export function downloadBlob(blob, filename) {

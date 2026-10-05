@@ -7,9 +7,11 @@ import { Timeline } from "../../oviz/viewer/web/src/app/timeline.js";
 import { cpuFramePosition, frameOffset } from "../../oviz/viewer/web/src/engine/frames.js";
 import { unshuffle } from "../../oviz/viewer/web/src/core/loader.js";
 import { poseFromEyeTarget, poseEye, lerpPose, makePose } from "../../oviz/viewer/web/src/engine/camera.js";
-import { encodeViewHash, decodeViewHash } from "../../oviz/viewer/web/src/app/viewhash.js";
+import { encodeViewHash, decodeViewHash, encodeStatePart, decodeStatePart, encodeViewsPart, decodeViewsPart } from "../../oviz/viewer/web/src/app/viewhash.js";
 import { normalizeAnchor, encodeAnchor, decodeAnchor, sameAnchor, inferAnchor, LSR_POINT } from "../../oviz/viewer/web/src/engine/anchor.js";
 import { fuzzyScore } from "../../oviz/viewer/web/src/ui/dom.js";
+import { lassoBlend } from "../../oviz/viewer/web/src/layers/points.js";
+import { lassoFade } from "../../oviz/viewer/web/src/ui/lasso.js";
 
 const close = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≉ ${b}`);
 
@@ -120,6 +122,122 @@ test("view links encode and decode", () => {
   assert.equal(v.group, "Clusters & Families");
   assert.deepEqual(v.pose.target, [1.2, 4.6, 7.9]);
   assert.equal(decodeViewHash("#nothing=1"), null);
+  assert.equal(v.selection, undefined); // plain links keep no selection
+});
+
+test("view links keep layers, lasso selections with their outline, and the selected object", () => {
+  const viewer = { pose: { target: [0, 0, 0], distance: 900, yaw: 0.5, pitch: 0.3, fov: 60 }, timeline: { time: 0 }, state: { view: { mode: "3d" }, group: "All" } };
+  const dense = Array.from({ length: 700 }, (_, i) => i * 1.6 | 0); // most of a 1163-object trace
+  const sparse = [5, 9, 300, 4000, 70000];
+  // A hand-drawn loop: 240 points on a circle, which the link simplifies.
+  const loop = Array.from({ length: 240 }, (_, i) => [0.3 * Math.cos(i / 240 * 2 * Math.PI) - 0.1, 0.4 * Math.sin(i / 240 * 2 * Math.PI) + 0.05]);
+  const vp = [1.2, 0, 0, 0, 0, 1.8, 0.1, 0.1, 0, -0.3, -1.0002, -1, 5, -7, 899.5, 900];
+  const extra = { layers: [true, false, true, true, false, false], lasso: { selection: [[1, dense], [7, sparse]], isolate: true, filterOff: false, mask: { polygon: loop, vp } }, object: { trace: 1, index: 42 } };
+  const hash = encodeViewHash(viewer, extra);
+  assert.match(hash, /&s=h,1:b[\w-]+,7:i[\w-]+/); // a bitmap for the dense set, gaps for the sparse one
+  assert.ok(hash.length < 1200, `link is ${hash.length} characters`);
+  const v = decodeViewHash(`#${hash}`);
+  assert.deepEqual(v.layers, extra.layers);
+  assert.equal(v.isolate, true);
+  assert.equal(v.filterOff, false);
+  assert.deepEqual(v.selection, [[1, [...new Set(dense)]], [7, sparse]]);
+  assert.deepEqual(v.object, { trace: 1, index: 42 });
+  // The outline comes back within a pixel or so (simplified, 16-bit), the camera exactly (float32).
+  assert.ok(v.mask.polygon.length >= 12 && v.mask.polygon.length < 120, `${v.mask.polygon.length} outline points`);
+  for (const [x, y] of v.mask.polygon) close(Math.hypot((x + 0.1) / 0.3, (y - 0.05) / 0.4), 1, 0.02);
+  vp.forEach((x, i) => close(v.mask.vp[i], Math.fround(x), 1e-9));
+  // A lasso around dust alone (no objects), dimming the rest with its filter off.
+  const dust = decodeViewHash(`#${encodeViewHash(viewer, { lasso: { selection: [], isolate: false, filterOff: true, mask: { polygon: [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]], vp } } })}`);
+  assert.deepEqual(dust.selection, []);
+  assert.equal(dust.isolate, false);
+  assert.equal(dust.filterOff, true);
+  assert.deepEqual(dust.mask.polygon.map(([x, y]) => [+x.toFixed(3), +y.toFixed(3)]), [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]]);
+  // Garbled parts are dropped, not fatal: bad sets one by one, bad escapes whole.
+  const bad = decodeViewHash("#t=0&c=0,0,0,900,0.5,0.3,60&s=h,1:b***,x:i00,2:iAQ&k=zz&o=a:b&l=12");
+  assert.deepEqual(bad.selection, [[2, [1]]]); // "AQ" is one gap of 1
+  assert.equal(bad.mask, undefined);
+  assert.equal(bad.object, undefined);
+  assert.equal(bad.layers, undefined);
+  const escapes = decodeViewHash("#t=0&c=0,0,0,900,0.5,0.3,60&s=h,1:b%E0%A4%A&k=%%");
+  assert.equal(escapes.selection, undefined);
+  assert.equal(escapes.mask, undefined);
+  assert.equal(escapes.time, 0);
+});
+
+test("view links carry the whole State: every property comes back as sent", async () => {
+  const layer = (key, visible, opacity) => ({ key, survey: key, label: key.split("/")[1], opacity, visible });
+  const base = {
+    version: 2, group: "All",
+    view: { mode: "3d", pose: { target: [0, 0, 0], distance: 6053.098765, yaw: 1.5707963, pitch: -1.43818, fov: 60 }, anchor: { kind: "lsr" } },
+    time: { frame: 60, speed: 1, playing: true, direction: 1 },
+    traces: { a: { visible: true, inGroup: true }, b: { visible: true, inGroup: true, opacity: 0.8 } },
+    volumes: { dust: { visible: true, vmin: 0, vmax: 0.1, opacity: 0.9, colormap: "Greys", stretch: "asinh" } },
+    images: { mw: { visible: true, opacity: 1 } },
+    global: { pointSize: 1, glow: 0.6, grid: true, labels: true, trails: 0, lassoVolumes: true },
+    sky: { layers: [layer("P/PLANCK", false, 1), layer("P/Mellinger", true, 0.23), layer("P/DSS2", true, 1), layer("P/2MASS", false, 1)], backgroundVisible: true, members: "stars" },
+    ext: { lasso: null, filter: null, notes: [], widgets: null, ui: { selection: null, theme: "dark" } },
+  };
+  const cur = JSON.parse(JSON.stringify(base));
+  Object.assign(cur.view, { mode: "sky", pose: { target: [0, 0, 0], distance: 0, yaw: 1.2345678, pitch: 0.0123, fov: 24.5 }, returnPose: { target: [10, 20, 0], distance: 900, yaw: 0.5, pitch: 0.4, fov: 60 } });
+  cur.time = { frame: 47.5, speed: 2 }; // paused: playing and direction are gone
+  cur.traces.a.color = "#33ccff";
+  cur.traces.b.visible = false;
+  Object.assign(cur.volumes.dust, { vmax: 0.07, colormap: "magma" });
+  cur.global.glow = 1.25;
+  cur.sky.layers[0] = { ...cur.sky.layers[0], visible: true, opacity: 0.4, stretch: "log" };
+  cur.sky.layers[1].visible = false;
+  cur.sky.layers.push(layer("P/XMM/PN/color", true, 0.5)); // a survey added from the picker
+  cur.sky.lens = { l: 80, b: -2, sizeDeg: 9, survey: "P/2MASS", opacity: 0.8 };
+  cur.sky.members = "clusters";
+  const selected = Array.from({ length: 700 }, (_, i) => i * 1.6 | 0);
+  const loop = Array.from({ length: 200 }, (_, i) => [0.3 * Math.cos(i / 200 * 2 * Math.PI), 0.4 * Math.sin(i / 200 * 2 * Math.PI)]);
+  cur.ext.lasso = { selection: { "trace-3": selected, "trace-6": [0] }, isolate: true, filterOff: false, mask: { polygon: loop, vp: Array.from({ length: 16 }, (_, i) => (i % 5 ? 0.0125 * i : 1.0001)) } };
+  cur.ext.filter = { param: "nStars", range: [1, 3], mode: "hide" };
+  cur.ext.notes = [{ id: "n1", text: "Orion", anchor: { pos: [100, -20, 5] }, color: "#ffffff" }];
+  cur.ext.ui = { selection: { trace: "trace-3", index: 42 }, theme: "dark", layers: true };
+
+  const part = await encodeStatePart(cur, base);
+  assert.match(part, /^1z[\w-]+$/);
+  assert.ok(part.length < 1100, `state part is ${part.length} characters`);
+  const got = await decodeStatePart(part, base);
+  // Equal up to 7 significant digits, except the outline (simplified to about a pixel).
+  const lassoGot = got.ext.lasso, lassoCur = cur.ext.lasso;
+  for (const [x, y] of lassoGot.mask.polygon) close(Math.hypot(x / 0.3, y / 0.4), 1, 0.02);
+  delete lassoGot.mask.polygon;
+  const want = JSON.parse(JSON.stringify(cur));
+  delete want.ext.lasso.mask.polygon;
+  want.ext.lasso.selection["trace-3"] = [...new Set(lassoCur.selection["trace-3"])];
+  const near = (a, b, path = "") => {
+    if (typeof a === "number" && typeof b === "number") return assert.ok(Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b)), `${path}: ${a} vs ${b}`);
+    if (Array.isArray(b)) { assert.ok(Array.isArray(a), `${path} is an array`); assert.equal(a.length, b.length, `${path} length`); return b.forEach((x, i) => near(a[i], x, `${path}[${i}]`)); }
+    if (b && typeof b === "object") { assert.deepEqual(Object.keys(a).sort(), Object.keys(b).sort(), `${path} keys`); return Object.keys(b).forEach((k) => near(a[k], b[k], `${path}.${k}`)); }
+    assert.equal(a, b, path);
+  };
+  near(got, want);
+  assert.equal(got.time.playing, undefined); // a property the view no longer has is gone
+  // The receiver's base is not changed in place.
+  assert.equal(base.view.mode, "3d");
+  // Nothing changed: no state part at all.
+  assert.equal(await encodeStatePart(JSON.parse(JSON.stringify(base)), base), "");
+  // A link carries it as x= and keeps the readable camera and time.
+  const viewer = { pose: cur.view.pose, timeline: { time: -12.5 }, state: { view: { mode: "sky" }, group: "All" } };
+  const hv = decodeViewHash(`#${encodeViewHash(viewer, { state: part })}`);
+  assert.equal(hv.state, part);
+  assert.equal(hv.mode, "sky");
+  // Unreadable parts are refused, not fatal.
+  assert.equal(await decodeStatePart("1zAAAA", base), null);
+  assert.equal(await decodeStatePart("nope", base), null);
+  assert.equal(decodeViewHash("#t=0&c=0,0,0,1,0,0,60&x=1z***").state, undefined);
+});
+
+test("the longitude grid fades out within a Myr of the present day", async () => {
+  const { presentDayFade } = await import("../../oviz/viewer/web/src/app/timeline.js");
+  assert.equal(presentDayFade(0), 1);
+  close(presentDayFade(-0.5), 0.5);
+  close(presentDayFade(0.5), 0.5);
+  assert.equal(presentDayFade(-1), 0);
+  assert.equal(presentDayFade(-12), 0);
+  assert.ok(presentDayFade(-0.2) > presentDayFade(-0.4));
 });
 
 test("fuzzy search prefers prefix and word matches", () => {
@@ -352,4 +470,119 @@ test("view links carry the camera anchor", () => {
   assert.ok(encodeViewHash(viewer).includes("a=lsr"));
   assert.equal(decodeViewHash("#t=0&a=bogus").anchor, undefined);
   assert.equal(decodeViewHash("#t=0").anchor, undefined);
+});
+
+test("frame stepping stops at the ends even when playback loops (classic)", () => {
+  const tl = new Timeline([0, 1, 2], { initialIndex: 2 });
+  tl.loop = true;
+  tl.step(1);
+  assert.equal(tl.frame, 2);
+  tl.step(-5);
+  assert.equal(tl.frame, 0);
+});
+
+test("view links carry the saved views and can open presenting them", async () => {
+  const base = {
+    version: 2, group: "All", time: { frame: 60, speed: 1 },
+    view: { mode: "3d", pose: { target: [0, 0, 0], distance: 6053.1, yaw: 1.5708, pitch: -1.4382, fov: 60 }, anchor: { kind: "lsr" } },
+    traces: { a: { visible: true }, b: { visible: true } },
+    volumes: { dust: { visible: true, opacity: 1, vmax: 0.07 } },
+    global: { pointSize: 1, glow: 0.6 }, sky: { layers: [], members: "stars" }, ext: {},
+  };
+  const views = [0, 1, 2, 3, 4, 5].map((i) => {
+    const state = JSON.parse(JSON.stringify(base));
+    state.time.frame = 60 - 10 * i;
+    state.view.pose = { ...state.view.pose, distance: 6053.1 / (1 + i), yaw: 1.5708 + 0.3 * i };
+    if (i % 2) state.traces.b.visible = false;
+    if (i === 3) state.view.mode = "sky";
+    return { name: `View ${i + 1}`, caption: i === 2 ? "The Radcliffe Wave forms" : "", camera: i === 4 ? "keep" : "follow", transition: i === 1 ? { duration_ms: 2500, easing: "linear" } : null, thumb: "data:image/jpeg;base64,AAAA", state };
+  });
+  const part = await encodeViewsPart(views, base, { duration_ms: 1800, easing: "easeInOutCubic" });
+  assert.match(part, /^1z[\w-]+$/);
+  assert.ok(part.length < 700, `views part is ${part.length} characters`);
+  const got = await decodeViewsPart(part, base);
+  // States arrive exactly, up to the links' 7 significant digits.
+  const near = (a, b, path = "") => {
+    if (typeof a === "number" && typeof b === "number") return assert.ok(Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b)), `${path}: ${a} vs ${b}`);
+    if (Array.isArray(b)) { assert.equal(a.length, b.length, `${path} length`); return b.forEach((x, i) => near(a[i], x, `${path}[${i}]`)); }
+    if (b && typeof b === "object") { assert.deepEqual(Object.keys(a).sort(), Object.keys(b).sort(), `${path} keys`); return Object.keys(b).forEach((k) => near(a[k], b[k], `${path}.${k}`)); }
+    assert.equal(a, b, path);
+  };
+  assert.equal(got.items.length, 6);
+  assert.deepEqual(got.defaultTransition, { duration_ms: 1800, easing: "easeInOutCubic" });
+  got.items.forEach((it, i) => {
+    assert.equal(it.name, views[i].name);
+    assert.equal(it.caption, views[i].caption);
+    assert.equal(it.camera, views[i].camera);
+    assert.deepEqual(it.transition, views[i].transition);
+    near(it.state, views[i].state, `view ${i + 1}`);
+    assert.equal(it.thumb, undefined); // thumbnails stay behind and are redrawn on visiting
+  });
+  // A presentation link: the views travel as w= and p= says where to start.
+  const viewer = { pose: base.view.pose, timeline: { time: 0 }, state: { view: { mode: "3d" }, group: "All" } };
+  const hv = decodeViewHash(`#${encodeViewHash(viewer, { views: part, present: 1 })}`);
+  assert.equal(hv.views, part);
+  assert.equal(hv.present, 1);
+  assert.equal(decodeViewHash(`#${encodeViewHash(viewer, { views: part })}`).present, undefined);
+  // No views: no w= part; unreadable parts are refused, not fatal.
+  assert.equal(await encodeViewsPart([], base), "");
+  assert.equal(await decodeViewsPart("1zNOT-DEFLATE", base), null);
+  assert.equal(decodeViewHash("#t=0&c=0,0,0,1,0,0,60&w=bad!").views, undefined);
+});
+
+test("a State change crossfades one lasso selection into the next", () => {
+  const dim = 0.16;
+  // A fade starts from the weight drawn (0–255) toward the level (255
+  // shown, 128 dimmed, 0 hidden); from what the level already draws,
+  // nothing moves whatever the mix, and at rest only the level counts.
+  assert.equal(lassoBlend(255, 255, [0, 0], dim), 1);
+  close(lassoBlend(Math.round(255 * dim), 128, [0.3, 0.7], dim), dim, 2e-3);
+  assert.equal(lassoBlend(0, 0, [0.5, 0.5], dim), 0);
+  assert.equal(lassoBlend(0, 128, [1, 1], dim), dim);
+  assert.equal(lassoBlend(255, 0, [1, 1], dim), 0);
+  // Fades: out over the first three quarters, in over the last three,
+  // eased, never both gone mid-way, and exact at both ends.
+  assert.deepEqual(lassoFade(0), [0, 0]);
+  assert.deepEqual(lassoFade(1), [1, 1]);
+  const [out, inn] = lassoFade(0.5);
+  close(out, 0.7407, 1e-3);
+  close(inn, 0.2593, 1e-3);
+  let prevOut = -1, prevIn = -1;
+  for (let i = 0; i <= 20; i++) {
+    const [o, n] = lassoFade(i / 20);
+    assert.ok(o >= prevOut && n >= prevIn, "fades only move forward");
+    assert.ok(o >= n - 1e-9, "the old selection leaves before the new one arrives");
+    prevOut = o; prevIn = n;
+  }
+  // An object leaving the selection follows the fade-out, one joining the
+  // fade-in; one dimmed in the next view stops at the dim level.
+  const mid = lassoFade(0.5);
+  close(lassoBlend(255, 0, mid, dim), 1 - mid[0]);
+  close(lassoBlend(0, 255, mid, dim), mid[1]);
+  close(lassoBlend(0, 128, lassoFade(1), dim), dim);
+  assert.ok(lassoBlend(255, 0, mid, dim) + lassoBlend(0, 255, mid, dim) > 0.5, "no blink mid-way");
+});
+
+test("a lasso fade cut short carries on from what it drew", () => {
+  const dim = 0.16;
+  // Shown → hidden, hidden → shown and shown → dimmed, interrupted at 40 %
+  // of the flight by a change to another selection.
+  const cases = [[255, 0, 255], [0, 255, 0], [255, 128, 0], [0, 255, 128]];
+  const cut = lassoFade(0.4);
+  for (const [from, to, next] of cases) {
+    const drawn = lassoBlend(from, to, cut, dim);
+    const start = Math.round(255 * drawn); // what PointBatch.lassoDrawn hands the next fade
+    // The next fade begins where the last one was (within a byte) …
+    close(lassoBlend(start, next, lassoFade(0), dim), drawn, 1 / 255);
+    // … moves only toward its own level …
+    const target = next > 191 ? 1 : next > 63 ? dim : 0;
+    let prev = lassoBlend(start, next, lassoFade(0), dim);
+    for (let i = 1; i <= 20; i++) {
+      const w = lassoBlend(start, next, lassoFade(i / 20), dim);
+      assert.ok(Math.abs(target - w) <= Math.abs(target - prev) + 1e-9, `${from}→${to}→${next} heads for its level`);
+      prev = w;
+    }
+    // … and lands on it exactly.
+    assert.equal(lassoBlend(start, next, lassoFade(1), dim), target);
+  }
 });

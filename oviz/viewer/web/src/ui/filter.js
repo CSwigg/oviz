@@ -28,7 +28,8 @@ export class FilterPlugin {
   attach(ui) {
     this.ui = ui;
     const v = (this.viewer = ui.viewer);
-    this.traces = v.traces.filter((t) => t.points && t.showInLegend && t.points.count > 1);
+    // Objects only: samples of a surface or model (not pickable) have no distribution to filter.
+    this.traces = v.traces.filter((t) => t.points && t.showInLegend && t.pickable !== false && t.points.count > 1);
     this.params = PARAMS.filter((p) => !p.needs || this.traces.some((t) => t.points[p.needs]));
     if (!this.traces.length || !this.params.length) return;
     this.param = this.params[0];
@@ -53,6 +54,7 @@ export class FilterPlugin {
   section() {
     if (!this.param) return null;
     const sel = h("select", { "aria-label": "Quantity" }, this.params.map((p) => h("option", { value: p.key, selected: p === this.param }, p.label)));
+    this.sel = sel;
     sel.addEventListener("change", () => {
       this.param = this.params.find((p) => p.key === sel.value);
       this.setRange(null);
@@ -82,6 +84,7 @@ export class FilterPlugin {
     const t = v.timeline.time;
     const key = this.param.key;
     const meta = key === "dist" ? v.objectMetaSync(trace.key) : null;
+    const sun = v.sunPosition();
     for (let i = 0; i < N; i++) {
       let x = NaN;
       if (key === "ageNow") x = d.ageNow ? d.ageNow[i] : NaN;
@@ -89,7 +92,7 @@ export class FilterPlugin {
       else if (key === "nStars") x = d.nStars && d.nStars[i] >= 0 ? d.nStars[i] : NaN;
       else if (key === "dist" || key === "z") {
         const p = v.objectPosition(trace.key, i);
-        if (p) x = key === "z" ? p[2] : Math.hypot(p[0], p[1], p[2]);
+        if (p) x = key === "z" ? p[2] : Math.hypot(p[0] - sun[0], p[1] - sun[1], p[2] - sun[2]);
         if (key === "dist" && Math.abs(t) < 1e-6 && meta?.dist?.[i] != null) x = meta.dist[i];
       }
       out[i] = x;
@@ -232,6 +235,11 @@ export class FilterPlugin {
     this.update();
   }
 
+  /** Keep the panel's quantity menu on the current parameter (other tools set it too). */
+  syncSelect() {
+    if (this.sel && this.param && this.sel.value !== this.param.key) this.sel.value = this.param.key;
+  }
+
   /** Push dim/hide bits into every point batch. */
   apply() {
     const v = this.viewer;
@@ -286,6 +294,7 @@ export class FilterPlugin {
     this.param = this.params.find((p) => p.key === f.param) || this.param;
     this.mode = f.mode === "hide" ? "hide" : "dim";
     this.range = Array.isArray(f.range) ? f.range.slice(0, 2) : null;
+    this.syncSelect();
     this.update();
   }
 }

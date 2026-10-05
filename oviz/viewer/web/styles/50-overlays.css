@@ -92,20 +92,6 @@
 .ov-pop-sep { height: 1px; margin: 6px 4px; background: var(--ov-line); }
 .ov-pop-body { display: grid; gap: 12px; padding: 8px 10px 10px; }
 
-/* ---- Hover card -------------------------------------------------- */
-.ov-hovercard {
-  position: absolute; z-index: 30; left: 0; top: 0;
-  display: flex; align-items: center; gap: 9px;
-  padding: 7px 11px 7px 9px; border-radius: 10px;
-  pointer-events: none; background: var(--ov-surface-strong);
-  font: 500 12.5px/1.2 var(--ov-font);
-  white-space: nowrap;
-  opacity: 0; transition: opacity 120ms;
-}
-.ov-hovercard[data-show="true"] { opacity: 1; }
-.ov-hovercard .ov-swatch { width: 8px; height: 8px; }
-.ov-hovercard small { font: 500 11.5px/1 var(--ov-font); color: var(--ov-text-3); font-variant-numeric: tabular-nums; }
-
 /* ---- Dialog ------------------------------------------------------ */
 .ov-dialog-grid { display: grid; gap: 14px; }
 .ov-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
@@ -140,4 +126,7 @@
   animation: ov-toast-in 240ms var(--ov-ease);
 }
 .ov-selbar-count { display: inline-flex; align-items: center; gap: 6px; margin-right: 6px; font: 650 12.5px/1 var(--ov-font); color: var(--ov-sky); font-variant-numeric: tabular-nums; }
+.ov-selbar-what { display: inline-flex; gap: 0.35em; }
+.ov-selbar-dust { font-weight: 550; color: var(--ov-text-2); }
+.ov-selbar .ov-btn-short { display: none; }
 .ov-root[data-story="true"] .ov-selbar { bottom: calc(var(--ov-gutter) * 3 + var(--ov-dock-h) + 200px + var(--ov-safe-bottom)); }

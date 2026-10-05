@@ -698,23 +698,24 @@ def build_threejs_scene_spec(
 
         trace_keys.append((trace_key, trace_json.get("name")))
         if trace_spec.get("showlegend"):
-            legend_items.append(
-                {
-                    "key": trace_key,
-                    "name": trace_spec.get("name") or trace_key,
-                    "color": trace_spec.get("legend_color"),
-                    "kind": "trace",
-                    "has_points": bool(trace_spec.get("points")),
-                    "has_segments": bool(trace_spec.get("segments")),
-                    "has_labels": bool(trace_spec.get("labels")),
-                    "has_n_stars": bool(trace_spec.get("has_n_stars")),
-                    "size_by_n_stars_default": bool(trace_spec.get("size_by_n_stars_default")),
-                    "default_color": trace_spec.get("legend_color"),
-                    "default_opacity": float(trace_spec.get("default_opacity", 1.0)),
-                    "default_point_size": trace_spec.get("default_point_size"),
-                    "color_by": copy.deepcopy(trace_spec.get("color_by")),
-                }
-            )
+            legend_item = {
+                "key": trace_key,
+                "name": trace_spec.get("name") or trace_key,
+                "color": trace_spec.get("legend_color"),
+                "kind": "trace",
+                "has_points": bool(trace_spec.get("points")),
+                "has_segments": bool(trace_spec.get("segments")),
+                "has_labels": bool(trace_spec.get("labels")),
+                "has_n_stars": bool(trace_spec.get("has_n_stars")),
+                "size_by_n_stars_default": bool(trace_spec.get("size_by_n_stars_default")),
+                "default_color": trace_spec.get("legend_color"),
+                "default_opacity": float(trace_spec.get("default_opacity", 1.0)),
+                "default_point_size": trace_spec.get("default_point_size"),
+                "color_by": copy.deepcopy(trace_spec.get("color_by")),
+            }
+            if trace_spec.get("role"):
+                legend_item["role"] = trace_spec["role"]
+            legend_items.append(legend_item)
 
     trace_key_by_name = {
         str(trace_name): trace_key

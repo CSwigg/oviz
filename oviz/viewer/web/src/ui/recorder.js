@@ -66,7 +66,7 @@ export class RecorderPlugin {
     const recorder = new MediaRecorder(stream, { mimeType: mime || undefined, videoBitsPerSecond: 16_000_000 });
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
-    const bg = "#04060a";
+    const bg = "#000";
     const sky = this.ui.plugins.find((p) => p.name === "sky");
     // The video keeps its starting size; if the canvas is resized mid-take
     // (fullscreen, a rotated phone) frames are scaled into it, never dropped.

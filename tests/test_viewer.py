@@ -281,6 +281,141 @@ class CompileEdgeCaseTests(unittest.TestCase):
         self.assertEqual(spec["initial_state"], legacy)  # the scene spec itself is untouched
 
 
+class LegacyVolumeCompileTests(unittest.TestCase):
+    """The ccSN figure's volume kinds: gzip voxels, event KDEs, colour fields."""
+
+    BOUNDS = {"x": [-10, 10], "y": [-10, 10], "z": [-10, 10]}
+
+    def test_gzip_uint8_voxels_decode(self):
+        vox = np.arange(64, dtype=np.uint8)
+        spec = _spec_with_rings()
+        spec["volumes"] = {"layers": [{
+            "key": "dust", "shape": {"x": 4, "y": 4, "z": 4}, "bounds": self.BOUNDS,
+            "data_encoding": "gzip_uint8",
+            "data_b64": base64.b64encode(gzip.compress(vox.tobytes())).decode(),
+        }]}
+        bundle = compile_scene_spec(spec)
+        np.testing.assert_array_equal(bundle.decode(bundle.manifest["volumes"][0]["data"]["blob"]).ravel(), vox)
+
+    def test_event_kde_ships_sorted_events_recipe_and_float_initial_volume(self):
+        events = np.array([[-1.0, 0, 0, 0], [-5.0, 1, 1, 1], [0.0, 2, 2, 2]], dtype="<f4")
+        initial = np.linspace(0, 1, 64, dtype="<f4")
+        spec = _spec_with_rings()
+        spec["procedural_kde_sources"] = {"sn": {
+            "encoding": "float32_le_interleaved_txyz", "stride": 4,
+            "events_b64": base64.b64encode(events.tobytes()).decode(),
+            "shape": {"x": 4, "y": 4, "z": 4}, "bounds": self.BOUNDS, "data_max": 8.0,
+            "surface_rate_per_scalar_myr_kpc2": 1.6, "rolling_window_myr": 10.0,
+            "initial_frame_time_myr": 0.0, "initial_volume_b64": base64.b64encode(initial.tobytes()).decode(),
+        }}
+        spec["volumes"] = {"layers": [{
+            "key": "kde", "shape": {"x": 4, "y": 4, "z": 4}, "bounds": self.BOUNDS, "data_b64": "",
+            "data_encoding": "procedural_kde_float32", "data_range": [0, 8],
+            "procedural_kde_source_key": "sn", "procedural_kde_sigma_vox": 0.8,
+            "procedural_kde_halo_sigma_vox": 2.4, "procedural_kde_core_weight": 0.78,
+            "procedural_kde_default_rolling_window_myr": 10.0, "procedural_kde_time_sample_myr": 2.0,
+            "procedural_kde_window_options_myr": [1, 5, 10], "procedural_kde_data_max": 8.0,
+        }]}
+        bundle = compile_scene_spec(spec)
+        vol = bundle.manifest["volumes"][0]
+        proc = vol["procedural"]
+        self.assertEqual(proc["kind"], "event-kde")
+        self.assertEqual((proc["coreSigmaVox"], proc["haloSigmaVox"], proc["coreWeight"]), (0.8, 2.4, 0.78))
+        self.assertEqual((proc["windowMyr"], proc["sampleMyr"], proc["dataMax"]), (10.0, 2.0, 8.0))
+        self.assertEqual(proc["windowOptions"], [1.0, 5.0, 10.0])
+        np.testing.assert_array_equal(bundle.decode(proc["events"]["blob"])[:, 0], [-5.0, -1.0, 0.0])
+        np.testing.assert_array_equal(bundle.decode(vol["data"]["blob"]).ravel(), initial)
+        self.assertEqual(proc["initialTimeMyr"], 0.0)
+        self.assertEqual(vol["colorbar"]["scale"], 1.6)
+        self.assertTrue(vol["colorbar"]["perWindow"])
+
+    def test_colour_field_note_and_segment_colours_carry_over(self):
+        spec = _spec_with_rings()
+        vox = base64.b64encode(np.arange(64, dtype=np.uint8).tobytes()).decode()
+        spec["volumes"] = {"layers": [{
+            "key": "hi", "shape": {"x": 4, "y": 4, "z": 4}, "bounds": self.BOUNDS, "data_b64": vox,
+            "color_data_b64": vox, "color_range_kms": [-20, 20], "display_note": "Present day.",
+            "fixed_display_encoding": True,
+        }]}
+        for frame in spec["frames"]:
+            ring = frame["traces"][1]
+            ring["segment_colors"] = ["#ff0000"] * (len(ring["segments"]) - 1) + ["#0000ff"]
+        bundle = compile_scene_spec(spec)
+        vol = bundle.manifest["volumes"][0]
+        self.assertIn("colorData", vol)
+        self.assertEqual(vol["colorbar"]["range"], [-20.0, 20.0])
+        self.assertEqual((vol["note"], vol["fixedDisplay"]), ("Present day.", True))
+        ring = next(t for t in bundle.manifest["traces"] if t["key"] == "trace-1")
+        rgb = bundle.decode(ring["lines"]["segmentColors"]["blob"])
+        np.testing.assert_array_equal(rgb[0], [255, 0, 0])
+        np.testing.assert_array_equal(rgb[-1], [0, 0, 255])
+
+
+class ParityCompileTests(unittest.TestCase):
+    """Classic features the viewer rebuilds: widgets, Actions, focus group, Sky thumbnails."""
+
+    def test_widget_settings_actions_and_focus_group_carry_over(self):
+        spec = _spec_with_rings()
+        spec["dendrogram"] = {
+            "enabled": True, "title": "Birth Tree", "default_trace_key": "trace-0",
+            "default_threshold_mode": "distance_pc", "default_connection_mode": "birth_to_birth",
+            "default_threshold_pc": 80.0, "default_threshold_age_myr": 3.0, "entries": [{"heavy": True}],
+        }
+        spec["age_kde"] = {"enabled": True, "title": "Relative SFH", "bandwidth_myr": 1.5, "x_range": [-2.0, 0.0], "cluster_points": [1, 2]}
+        spec["cluster_filter"] = {
+            "enabled": True, "default_parameter_key": "age_now_myr", "entries": [{"heavy": True}],
+            "parameters": [{"key": "age_now_myr", "min": 1.0, "max": 90.0}, {"key": "n_stars", "min": 5.0, "max": None}],
+        }
+        step = {"type": "time", "direction": "forward", "stop_after_frames": 1, "start": "after_previous", "delay_ms": 0, "interval_ms": 240}
+        spec["actions"] = {"enabled": True, "items": [{"key": "a", "label": "Go", "description": "", "steps": [step]}]}
+        spec["initial_state"] = {"global_controls": {"focus_trace_key": "trace-0"}}
+        m = compile_scene_spec(spec).manifest
+        self.assertEqual(m["widgets"]["birthTree"], {
+            "title": "Birth Tree", "defaultTrace": "trace-0", "mode": "distance_pc",
+            "links": "birth_to_birth", "thresholdPc": 80.0, "thresholdAgeMyr": 3.0,
+        })
+        # Only settings travel: the viewer rebuilds the data from the traces.
+        self.assertEqual(m["widgets"]["ageKde"], {"title": "Relative SFH", "bandwidthMyr": 1.5, "xRange": [-2.0, 0.0]})
+        # Classic filter extents, so full-range classic filters convert to none.
+        self.assertEqual(m["widgets"]["clusterFilter"], {"extents": {"age_now_myr": [1.0, 90.0]}})
+        self.assertEqual(m["actions"][0]["label"], "Go")
+        self.assertEqual(m["actions"][0]["steps"][0]["stop_after_frames"], 1)
+        self.assertEqual(m["animation"]["focusTrace"], "trace-0")
+        spec["actions"]["enabled"] = False
+        spec.pop("dendrogram")
+        m2 = compile_scene_spec(spec).manifest
+        self.assertEqual(m2["actions"], [])
+        self.assertNotIn("birthTree", m2["widgets"])
+
+    def test_longitude_grid_is_marked_present_day_only(self):
+        spec = _spec_with_rings()
+        for frame in spec["frames"]:
+            for trace in frame["traces"]:
+                if trace["key"] == "trace-1":
+                    trace["name"] = "Galactic Quadrants"
+        m = compile_scene_spec(spec).manifest
+        flags = {t["name"]: t.get("presentDayOnly", False) for t in m["traces"]}
+        self.assertTrue(flags["Galactic Quadrants"])  # drawn from today's Sun
+        self.assertFalse(flags["Ring label"])  # radius circles stay at every time
+
+    def test_sky_figures_ship_a_thumbnail_for_every_curated_survey(self):
+        spec = _spec_with_rings()
+        spec["sky_panel"] = {"enabled": True, "survey": "P/DSS2/color"}
+        html = render_bundle_html(compile_scene_spec(spec))
+        manifest = json.loads(unescape(re.search(r'id="oviz-manifest">(.*?)</script>', html, re.S).group(1)).replace("\\u003c", "<"))
+        thumbs = manifest["sky"]["thumbs"]
+        catalog = (REPO / "oviz/viewer/web/src/sky/catalog.js").read_text()
+        ids = re.findall(r'\{ id: "([^"]+)", label:', catalog)
+        self.assertGreaterEqual(len(ids), 12)
+        key = lambda i: re.sub(r"[^a-z0-9.-]+", "_", re.sub(r"^cds/", "", i.lower()))
+        for i in ids:
+            self.assertIn(key(i), thumbs, i)
+            self.assertTrue(thumbs[key(i)].startswith("data:image/jpeg;base64,"))
+        # Figures without Sky carry none.
+        plain = render_bundle_html(compile_scene_spec(_spec_with_rings()))
+        self.assertNotIn("data:image/jpeg;base64", plain)
+
+
 class HtmlTests(unittest.TestCase):
     def test_html_is_self_contained_and_script_safe(self):
         bundle = compile_scene_spec(_spec_with_rings())
@@ -462,6 +597,105 @@ class IntegrationTests(unittest.TestCase):
         for mode in VIEWER_MODES:
             self.assertIn(f'id: "{mode}"', runtime)
             self.assertIn(f'[data-oviz-mode="{mode}"]', css)
+
+    def test_guide_traces_get_their_own_switches_not_rows_of_the_key(self):
+        guide = {
+            "type": "scatter3d", "name": "Length guide", "mode": "lines+text",
+            "x": [0.0, 100.0, None, 50.0], "y": [0.0, 0.0, None, 0.0], "z": [0.0, 0.0, None, -20.0],
+            "text": ["", "", "", "≈100 pc"], "line": {"color": "#ffffff", "width": 1.0, "dash": "longdash"},
+            "meta": {"oviz_role": "guide"},
+        }
+        data = {"type": "scatter3d", "name": "Cloud", "mode": "markers", "x": [1.0], "y": [2.0], "z": [3.0]}
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(time=np.array([0.0, -1.0]), show=False, static_traces=[guide, data],
+                            static_traces_times=[[0.0, -1.0], [0.0, -1.0]])
+        items = {i["name"]: i for i in fig.scene_spec["legend"]["items"]}
+        self.assertEqual(items["Length guide"]["role"], "guide")
+        self.assertNotIn("role", items["Cloud"])  # other traces' scene specs are unchanged
+        traces = {t["name"]: t for t in fig.bundle.manifest["traces"]}
+        self.assertEqual(traces["Length guide"]["role"], "guide")
+        self.assertTrue(traces["Length guide"]["showInLegend"])
+        self.assertEqual(traces["Length guide"]["labels"]["text"], ["≈100 pc"])
+        self.assertNotIn("role", traces["Cloud"])
+        # The layers panel lists guides under Guides; the key and T leave them out.
+        runtime = build.bundle_js()
+        self.assertIn('t.role !== "guide"', runtime)
+        self.assertIn("guideTraces()", runtime)
+
+    def test_surface_samples_are_not_picked_and_3d_context_leaves_sky(self):
+        shell = {
+            "type": "scatter3d", "name": "Shell", "mode": "markers",
+            "x": [100.0, -100.0], "y": [0.0, 0.0], "z": [0.0, 0.0], "hoverinfo": "skip",
+            "meta": {"oviz_pickable": False, "oviz_hide_in_sky": True},
+        }
+        data = {"type": "scatter3d", "name": "Cloud", "mode": "markers", "x": [1.0], "y": [2.0], "z": [3.0]}
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(time=np.array([0.0, -1.0]), show=False, static_traces=[shell, data],
+                            static_traces_times=[[0.0, -1.0], [0.0, -1.0]])
+        traces = {t["name"]: t for t in fig.bundle.manifest["traces"]}
+        self.assertIs(traces["Shell"]["pickable"], False)
+        self.assertIs(traces["Shell"]["skyHidden"], True)
+        self.assertNotIn("pickable", traces["Cloud"])
+        self.assertNotIn("skyHidden", traces["Cloud"])
+        runtime = build.bundle_js()
+        # Not picked (no hover, click, lasso, search or distribution filter) ...
+        self.assertIn("pickable: trace.pickable !== false", runtime)
+        self.assertIn("trace.pickable === false", runtime)
+        # ... and, like the Sun, left out of Sky view and its key.
+        self.assertIn("trace.key === this.world.sunTrace || trace.skyHidden", runtime)
+        self.assertIn("!(sky && t.skyHidden)", runtime)
+
+    def test_figures_without_a_timeline_get_a_compact_bar(self):
+        css = build.bundle_css()
+        # Narrow desktops and phones: the bare bar hugs its buttons.
+        self.assertGreaterEqual(css.count(".ov-dock.ov-bar-only {"), 2)
+        self.assertIn(".ov-dock.ov-bar-only { justify-self: center; }", css)
+        self.assertIn(".ov-dock.ov-bar-only { width: auto; justify-self: center;", css)
+        runtime = build.bundle_js()
+        # Only figures with clusters invite a click for details.
+        self.assertIn('clusters ? " · click a cluster for details" : ""', runtime)
+        # Sky-start figures open in Sky (see tests/viewer_js/state.test.mjs).
+        self.assertIn("this.applySkyStart();", runtime)
+
+    def test_make_plot_adds_the_sun_by_default(self):
+        import pandas as pd
+        from oviz import Trace, TraceCollection
+
+        def rows(**cols):
+            base = {"name": ["A", "B"], "age_myr": [10.0, 30.0], "x": [100.0, -50.0], "y": [20.0, 80.0],
+                    "z": [5.0, -10.0], "U": [-10.0, -12.0], "V": [-15.0, -14.0], "W": [-7.0, -6.0]}
+            base.update(cols)
+            return pd.DataFrame(base)
+
+        time = np.array([0.0, -5.0, -10.0])
+        tc = TraceCollection([Trace(rows(), "Clusters", color="#e34a4a")])
+        viz = Animate3D(tc, figure_theme="dark", trace_grouping_dict={"Clusters": ["Clusters"]})
+        m = viz.make_plot(time=time, show=False).bundle.manifest
+        sun = next(t for t in m["traces"] if t["name"] == "Sun")
+        self.assertEqual(m["world"]["sunTrace"], sun["key"])
+        self.assertEqual(m["traces"][0]["name"], "Sun")  # first in the key, like the scripts' Suns
+        # The Sun is in every layer group, though no group lists it.
+        for group in m["groups"]["order"]:
+            self.assertIs(m["groups"]["visibility"][group][sun["key"]], True)
+        # The user's collection is not changed: same traces, order and indices.
+        self.assertEqual([c.data_name for c in tc.clusters], ["Clusters"])
+        self.assertIs(viz.data_collection, tc)
+        # Never twice; not with show_sun=False; and the classic viewer is unchanged.
+        again = viz.make_plot(time=time, show=False).bundle.manifest
+        self.assertEqual([t["name"] for t in again["traces"]].count("Sun"), 1)
+        off = viz.make_plot(time=time, show=False, show_sun=False).bundle.manifest
+        self.assertNotIn("Sun", [t["name"] for t in off["traces"]])
+        viz.make_plot(time=time, show=False, viewer="classic")
+        self.assertNotIn("Sun", [t["name"] for t in viz.fig["frames"][0]["traces"]])
+        self.assertEqual([c.data_name for c in tc.clusters], ["Clusters"])
+        # Data that bring their own Sun keep theirs.
+        own = Trace(rows(name=["Sun", "Sun"], z=[27.0, 27.0]).iloc[:1], "Sun", color="yellow")
+        tc2 = TraceCollection([own, Trace(rows(), "Clusters")])
+        m2 = Animate3D(tc2, figure_theme="dark").make_plot(time=time, show=False).bundle.manifest
+        self.assertEqual([t["name"] for t in m2["traces"]].count("Sun"), 1)
+        # The runtime leaves the Sun out in Sky view (the eye is at the Sun).
+        runtime = build.bundle_js()
+        self.assertIn("(trace.key === this.world.sunTrace || trace.skyHidden)) visible = false", runtime)
 
     def test_camera_anchor_defaults_to_the_lsr_and_is_validated(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")

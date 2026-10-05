@@ -1,7 +1,6 @@
 // Selection inspector + hover card.
 
 import { h, icon, iconButton, clear, fmt, fmtInt, copyText } from "./dom.js";
-import { formatDistance } from "../core/math.js";
 
 export class Inspector {
   constructor(ui) {
@@ -181,12 +180,13 @@ class DistanceTrack {
     const F = trace?.points?.position?.frames || 1;
     if (tl.count <= 1 || F <= 1 || /^sun$/i.test(String(trace.name).trim())) return null;
     const dist = new Float64Array(F).fill(NaN);
-    const eye = v.skyEye();
     let n = 0;
     for (let f = 0; f < F; f++) {
       const p = v.objectPosition(hit.trace, hit.index, f);
       if (!p) continue;
-      dist[f] = Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]);
+      // From where the Sun is at that time, not from the LSR (the origin).
+      const sun = v.sunPosition(f);
+      dist[f] = Math.hypot(p[0] - sun[0], p[1] - sun[1], p[2] - sun[2]);
       n++;
     }
     if (n < 2) return null;
@@ -351,48 +351,4 @@ function sanitize(html) {
   };
   walk(tpl.content);
   return tpl.innerHTML;
-}
-
-export class HoverCard {
-  constructor(ui) {
-    this.ui = ui;
-    this.el = h("div", { class: "ov-hovercard ov-glass", role: "status" });
-    this.swatch = h("span", { class: "ov-swatch" });
-    this.name = h("span");
-    this.sub = h("small");
-    this.el.append(this.swatch, this.name, this.sub);
-  }
-
-  show(hit, x, y) {
-    const v = this.ui.viewer;
-    if (!hit) {
-      this.el.dataset.show = "false";
-      return;
-    }
-    let name, sub, color;
-    if (hit.kind === "member") {
-      name = `${hit.member.cluster} member`;
-      sub = `${fmt(hit.member.dist, 0)} pc`;
-      color = hit.member.color;
-    } else {
-      const meta = v.objectMetaSync(hit.trace);
-      if (!meta) v.objectMeta(hit.trace).then(() => this.ui.refreshHover());
-      const d = v.describeObject(hit.trace, hit.index);
-      if (!d) return;
-      name = d.name;
-      const parts = [];
-      if (d.ageAt != null) parts.push(d.ageAt < 0 ? "unborn" : `${fmt(d.ageAt, d.ageAt >= 100 ? 0 : 1)} Myr`);
-      if (d.dist != null && Math.abs(v.timeline.time) < 1e-6) parts.push(formatDistance(d.dist));
-      sub = parts.join(" · ");
-      color = d.color;
-    }
-    this.swatch.style.color = color;
-    this.name.textContent = name;
-    this.sub.textContent = sub;
-    this.el.dataset.show = "true";
-    const W = this.ui.root.clientWidth;
-    const w = this.el.offsetWidth;
-    const px = x + 16 + w > W - 8 ? x - w - 14 : x + 16;
-    this.el.style.transform = `translate3d(${px}px, ${y + 14}px, 0)`;
-  }
 }

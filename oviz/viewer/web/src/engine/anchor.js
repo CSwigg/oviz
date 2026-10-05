@@ -10,12 +10,18 @@
 //                                   the clusters move around it.
 //   {kind: "sun"}                   the Sun's track (the figure's "Sun" trace).
 //   {kind: "object", trace, index}  any object's track ("Follow").
+//   {kind: "layer", trace}          the median of a layer's objects: a
+//                                   frame moving with a group (the classic
+//                                   viewer's "focus group").
 //   {kind: "free"}                  no anchor: the wheel zooms toward the
 //                                   cursor and the camera stays where it is.
 //
-// While anchored, zooming keeps the anchor at the centre of the view, and
-// the camera moves by the anchor's own displacement as time changes, so it
-// never jumps. Panning or flying elsewhere frees the camera; Home re-anchors.
+// The anchor is the camera's frame. While anchored, zooming keeps the orbit
+// centre in the middle of the view, and the camera moves by the anchor's
+// own displacement as time changes, so it never jumps. Panning and flights
+// keep the anchor: the orbit centre may sit off it, and the camera keeps
+// that offset. A double-click on a cluster anchors to it; one anywhere else
+// returns to the LSR. Home re-anchors and resets the view.
 
 /** The LSR in scene coordinates (the origin of Oviz's LSR-centred frame). */
 export const LSR_POINT = Object.freeze([0, 0, 0]);
@@ -32,18 +38,21 @@ export function normalizeAnchor(a) {
     if (typeof a.trace !== "string" || !a.trace || !Number.isInteger(index) || index < 0) return null;
     return { kind, trace: a.trace, index };
   }
+  if (kind === "layer") return typeof a.trace === "string" && a.trace ? { kind, trace: a.trace } : null;
   return SIMPLE_KINDS.includes(kind) ? { kind } : null;
 }
 
-/** Compact text form (view links): lsr, sun, free, or o:<trace>:<index>. */
+/** Compact text form (view links): lsr, sun, free, o:<trace>:<index> or l:<trace>. */
 export function encodeAnchor(a) {
   const n = normalizeAnchor(a);
   if (!n) return "";
+  if (n.kind === "layer") return `l:${n.trace}`;
   return n.kind === "object" ? `o:${n.trace}:${n.index}` : n.kind;
 }
 
 export function decodeAnchor(s) {
   const text = String(s ?? "").trim();
+  if (text.startsWith("l:")) return text.length > 2 ? { kind: "layer", trace: text.slice(2) } : null;
   if (text.startsWith("o:")) {
     const i = text.lastIndexOf(":");
     const index = Number(text.slice(i + 1));
@@ -79,6 +88,7 @@ export function anchorLabel(a, objectName = "") {
     case "lsr": return "the LSR";
     case "sun": return "the Sun";
     case "object": return objectName || "the selected object";
+    case "layer": return objectName ? `the ${objectName} median` : "the layer median";
     default: return "";
   }
 }

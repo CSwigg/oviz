@@ -82,7 +82,11 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
     per-frame.
   - Per-object attributes are stored once.
   - Volumes keep raw uint8 voxels plus a precomputed occupancy grid.
-  - Nothing scientific is recomputed.
+  - Nothing scientific is recomputed, with one exception: event-density
+    volumes (legacy `procedural_kde_float32`) ship their events, and
+    `web/src/layers/kde.js` rebuilds the density per time sample exactly as
+    the classic runtime did (bit-identical; float voxels, snapped down in
+    time). Keep it bit-identical to the classic kernel.
 - `oviz/viewer/web/src` holds real ES modules (`core/`, `engine/`, `layers/`,
   `sky/`, `app/`, `ui/`). `oviz/viewer/build.py` bundles them into one script:
   each module gets its own scope, only named relative imports are allowed, and
@@ -113,12 +117,21 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
 - The camera has an anchor (`src/engine/anchor.js`). It defaults to the LSR,
   which is the origin of Oviz's LSR-centred frame. The other anchors are the
   Sun, a followed object, and free.
-  - While anchored, zoom keeps the anchor centred.
+  - While anchored, zoom keeps the orbit centre in the middle of the view.
   - Time moves the camera by the anchor's displacement; it never snaps.
-  - Pans and flights elsewhere free the camera; Home re-anchors it.
+  - The anchor is a frame: pans and flights keep it, with the orbit centre
+    offset from it. Double-click on a cluster anchors to it; double-click
+    anywhere else returns to the LSR. Home re-anchors and resets the view.
   - States and view links carry the anchor. Older ones infer it from the pose.
-- Per-object GPU state is a bitfield: 1 = dimmed, 2 = hidden, 4 = replaced by
-  member stars.
+- Per-object GPU state is a bitfield: 1 = dimmed, 2 = hidden (the filter),
+  4 = replaced by member stars, 8 / 16 = dimmed / hidden by a lasso, 32 =
+  dimmed by the Birth tree. The point shader dims on 1 and 32.
+- The shaders draw the lasso from a per-object pair (`aLasso`): the weight a
+  fade starts from and the level in the selection. Bits 8 / 16 serve the
+  CPU's readers. A State extension may return `transition(from, to)` with
+  `step(t, raw)`; the lasso uses it to crossfade selections, and volumes
+  blend their lasso clips (`blendMask`). A fade starts from what is drawn, so
+  an interrupted State change carries on without a jump.
 - A lost WebGL context must be recoverable. New GPU resources must be
   recreated in `Viewer._restoreGPU` or on the `gpu-restored` event.
 
@@ -148,6 +161,12 @@ python -m http.server 8812 --bind 127.0.0.1 --directory /tmp
   `tests/main_figure.py`.
 - Generate stored figures with compact payloads and keep
   `tests/main_figure.html` below 100 MB.
+- The October 1 figure (`oviz_figures/oviz_oct1.html` on the website) is
+  `tests/main_figure_oct1.py`. It uses the July 25 clusters in the Khalil et al.
+  (2025) spiral potential, with Khalil and Castro-Ginard arm traces that start
+  hidden. A plain run re-wraps the stored science source
+  (`tests/main_figure_oct1_source.html`) with the current viewer in seconds.
+  `--rebuild-source` re-runs the science.
 - Preserve unrelated dirty and untracked files. Stage only the source, focused
   tests, and canonical artifact required by the task.
 

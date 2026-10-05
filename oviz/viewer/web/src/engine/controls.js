@@ -1,25 +1,25 @@
 // Pointer, wheel, touch and keyboard navigation with inertia.
 //
-// Galactic mode: drag orbits, right/shift/two-finger drag pans, wheel and
+// Galactic mode: drag orbits, right/Ctrl/two-finger drag pans, wheel and
 // pinch zoom toward the cursor. Sky mode: drag grabs the sky (the point under
 // the cursor stays under the cursor), wheel/pinch change the field of view.
 // While the camera is anchored (see anchor.js) zooming keeps the orbit centre
-// on the anchor instead, and panning first frees the camera (`onRelease`).
+// in the middle of the view instead, and panning moves the orbit centre
+// within the anchor's frame (the camera stays anchored).
 
 import { DEG, clamp } from "../core/math.js";
 import { forwardFromAngles, PITCH_LIMIT } from "./camera.js";
 
 export class Controls {
-  constructor(element, renderer, { onChange, onInteractStart, onInteractEnd, anchored, onRelease } = {}) {
+  constructor(element, renderer, { onChange, onInteractStart, onInteractEnd, anchored } = {}) {
     this.el = element;
     this.renderer = renderer;
     this.camera = renderer.camera;
     this.onChange = onChange || (() => {});
     this.onInteractStart = onInteractStart || (() => {});
     this.onInteractEnd = onInteractEnd || (() => {});
-    // Whether the orbit centre is held on a camera anchor, and how to let go.
+    // Whether the camera is anchored (zoom then keeps the orbit centre).
     this.anchored = anchored || (() => false);
-    this.onRelease = onRelease || (() => {});
     this.mode = "galactic"; // "galactic" | "sky"
     this.enabled = true;
     this.minDistance = 1;
@@ -32,6 +32,7 @@ export class Controls {
     this.pointers = new Map();
     this.gesture = null;
     this.autoOrbit = 0; // rad/s
+    this.speed = 1; // scroll (and key) speed multiplier, as the classic setting
     this._lastMove = 0;
     this._bind();
   }
@@ -40,6 +41,8 @@ export class Controls {
     const el = this.el;
     el.style.touchAction = "none";
     el.addEventListener("pointerdown", (e) => this._down(e));
+    // A middle press zooms: keep the browser from starting autoscroll.
+    el.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
     el.addEventListener("pointermove", (e) => this._move(e));
     el.addEventListener("pointerup", (e) => this._up(e));
     el.addEventListener("pointercancel", (e) => this._up(e));
@@ -60,8 +63,7 @@ export class Controls {
 
   _down(e) {
     if (!this.enabled) return;
-    if (e.button === 1) return;
-    this.el.setPointerCapture?.(e.pointerId);
+    try { this.el.setPointerCapture?.(e.pointerId); } catch (_) { /* a synthetic or finished pointer */ }
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button, shift: e.shiftKey });
     this.stop();
     this._startGesture(e);
@@ -81,8 +83,11 @@ export class Controls {
       };
     } else if (pts.length === 1) {
       const p = pts[0];
-      const pan = p.button === 2 || p.shift || (e && (e.ctrlKey || e.metaKey));
-      this.gesture = { kind: pan && this.mode !== "sky" ? "pan" : "rotate", x: p.x, y: p.y };
+      // Right-drag and Ctrl/⌘-drag pan; Shift+drag is the lasso (classic).
+      const pan = p.button === 2 || (e && (e.ctrlKey || e.metaKey));
+      // Middle-drag zooms (OrbitControls' dolly button in the classic viewer).
+      const dolly = p.button === 1;
+      this.gesture = { kind: dolly ? "dolly" : pan && this.mode !== "sky" ? "pan" : "rotate", x: p.x, y: p.y, sx: p.x, sy: p.y };
     } else {
       this.gesture = null;
     }
@@ -113,6 +118,10 @@ export class Controls {
       // any pinch, so only a deliberate two-finger drag pans (and frees).
       else if (!this.anchored() || Math.hypot(cx - g.sx, cy - g.sy) > 32) this.pan(cx - g.cx, cy - g.cy);
       g.dist = dist; g.cx = cx; g.cy = cy;
+    } else if (g.kind === "dolly") {
+      // Drag down to zoom out, up to zoom in, about where the drag began.
+      const rect = this.el.getBoundingClientRect();
+      this.zoomAt(Math.exp(clamp(dy, -80, 80) * 0.006 * this.speed), g.sx - rect.left, g.sy - rect.top);
     } else if (g.kind === "pan") {
       this.pan(dx, dy);
       const k = 16 / dt;
@@ -152,7 +161,7 @@ export class Controls {
     if (e.deltaMode === 1) dy *= 16;
     else if (e.deltaMode === 2) dy *= 400;
     // Trackpad pinch arrives as ctrl+wheel with small deltas.
-    const intensity = e.ctrlKey ? 0.012 : 0.0016;
+    const intensity = (e.ctrlKey ? 0.012 : 0.0016) * this.speed;
     const factor = Math.exp(clamp(dy, -240, 240) * intensity);
     const rect = this.el.getBoundingClientRect();
     this.zoomAt(factor, e.clientX - rect.left, e.clientY - rect.top);
@@ -176,8 +185,8 @@ export class Controls {
   }
 
   pan(dx, dy) {
-    // Moving the orbit centre off the anchor frees the camera.
-    if (this.anchored()) this.onRelease();
+    // The orbit centre moves within the anchor's frame: an anchored camera
+    // keeps its anchor and the offset as the anchor moves through time.
     const p = this.pose;
     const cam = this.camera;
     const scale = cam.pixelScale(Math.max(p.distance, 1));
@@ -199,7 +208,7 @@ export class Controls {
 
   /**
    * Zoom by `factor` (<1 zooms in) keeping the point under (x, y) fixed, or,
-   * while anchored, keeping the anchor at the centre of the view.
+   * while anchored, keeping the orbit centre in the middle of the view.
    */
   zoomAt(factor, x, y) {
     const p = this.pose;
@@ -289,7 +298,9 @@ export class Controls {
  * Sky: W/A/S/D turn the gaze (slower when zoomed in), Q/E widen / narrow the
  * field of view. Shift is 4× faster (3× for turning in Sky view).
  */
-export function keyMotion(pose, keys, { dt, fast = false, sky = false, maxSpan = 1, minDistance = 1, maxDistance = 2e5, minFov = 0.2, maxFov = 130 } = {}) {
+export function keyMotion(pose, keys, { dt: dt0, fast = false, sky = false, maxSpan = 1, minDistance = 1, maxDistance = 2e5, minFov = 0.2, maxFov = 130, speed = 1 } = {}) {
+  // The classic scroll-speed setting scales the keys too.
+  const dt = dt0 * (Number.isFinite(speed) && speed > 0 ? speed : 1);
   if (sky) {
     const turn = Math.min(1, pose.fov / 60) * (fast ? 3 : 1);
     if (keys.has("a")) pose.yaw += 1.4 * dt * turn;

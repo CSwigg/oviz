@@ -21,6 +21,9 @@ const SURVEY_ALIASES = new Map([
   ["GLIMPSE360", "https://irsa.ipac.caltech.edu/data/hips/Spitzer/GLIMPSE360"],
 ]);
 
+// Hidden overlays kept attached so showing them again is instant.
+const MAX_HIDDEN = 6;
+
 let loading = null;
 let proxyInstalled = false;
 
@@ -41,8 +44,14 @@ function installCorsProxy() {
 }
 
 export function loadAladin() {
-  if (window.A?.aladin) return Promise.resolve(window.A);
   if (loading) return loading;
+  // The script can be on the page before its WebAssembly core is ready:
+  // always wait for A.init, or Aladin starts half-initialised.
+  if (window.A?.aladin) {
+    loading = Promise.resolve(window.A.init).then(() => window.A);
+    loading.catch(() => { loading = null; });
+    return loading;
+  }
   installCorsProxy();
   loading = new Promise((resolve, reject) => {
     const tryUrl = (i) => {
@@ -75,12 +84,23 @@ export class AladinSky {
     this.aladin = null;
     this.ready = false;
     this.base = null;
-    this.overlays = new Map(); // key → {name, hips, opacity}
-    this.order = [];
+    this.overlays = new Map(); // key → {name, hips, opacity, used}
+    this.order = []; // attached overlays, bottom → top
+    this.failed = new Map(); // layer key → load error
+    this.tries = new Map(); // layer key → failed attempts so far
     this.lastSig = "";
   }
 
-  async init({ survey = "P/DSS2/color", fov = 60 } = {}) {
+  /** Start Aladin once, however many callers ask at the same time. */
+  init(opts = {}) {
+    if (!this._init) {
+      this._init = this._start(opts);
+      this._init.catch(() => { this._init = null; });
+    }
+    return this._init;
+  }
+
+  async _start({ survey = "P/DSS2/color", fov = 60 } = {}) {
     const A = await loadAladin();
     if (this.aladin) return this.aladin;
     const div = document.createElement("div");
@@ -153,76 +173,155 @@ export class AladinSky {
     const A = window.A;
     const a = this.aladin;
     const url = resolveSurvey(id);
-    if (typeof a.newImageSurvey === "function") return a.newImageSurvey(url, { name: id, ...opts });
     if (typeof A.imageHiPS === "function") return A.imageHiPS(url, { name: id, ...opts });
+    if (typeof a.newImageSurvey === "function") return a.newImageSurvey(url, { name: id, ...opts });
     if (typeof A.HiPS === "function") return A.HiPS(url, { name: id, ...opts });
     return url;
   }
 
   /**
-   * Apply a layer stack (top first). The bottom visible layer is the base;
-   * the rest are overlays with their own opacity. Attach/detach is
-   * incremental so visible layers never blink during State transitions.
+   * Apply a layer stack (top first). Aladin's base layer keeps the survey it
+   * opened with and stands in for that survey whenever it is the bottom
+   * visible layer; every other survey is an overlay. Overlays stay attached
+   * (at zero opacity) once used, so switching, blending and State
+   * crossfades change opacities instead of re-downloading tiles. Only an
+   * order change re-attaches the layers above it.
    */
   applyStack(layers, { backgroundVisible = true } = {}) {
     const a = this.aladin;
     if (!a) return;
-    const visible = layers.filter((l) => l.visible !== false && (l.opacity ?? 1) > 0.001 && backgroundVisible);
-    const bottom = visible[visible.length - 1];
-    const baseId = bottom ? resolveSurvey(bottom.survey || bottom.key) : null;
-    if (baseId && baseId !== this.base) {
-      try {
-        (a.setImageSurvey || a.setBaseImageLayer).call(a, baseId);
-        this.base = baseId;
-      } catch (err) {
-        console.warn("Oviz sky: base survey failed", baseId, err);
-      }
+    const shown = (l) => backgroundVisible && l.visible !== false && (l.opacity ?? 1) > 0.001;
+    const visible = layers.filter(shown).reverse(); // bottom → top
+    const bottom = visible[0];
+    const onBase = bottom && resolveSurvey(bottom.survey || bottom.key) === this.base ? bottom : null;
+    this._applyBase(onBase);
+    const want = visible.filter((l) => l !== onBase).map((l) => l.key);
+    const byKey = new Map(layers.map((l) => [l.key, l]));
+    // Aladin adds overlays on top: keep the attached ones already in the
+    // wanted order and re-attach the rest above them.
+    let last = -1;
+    let from = want.length;
+    for (let i = 0; i < want.length; i++) {
+      const pos = this.order.indexOf(want[i]);
+      if (pos < 0 || pos < last) { from = i; break; }
+      last = pos;
     }
-    try {
-      const baseLayer = a.getBaseImageLayer?.();
-      baseLayer?.setOpacity?.(bottom ? Math.min(1, bottom.opacity ?? 1) : 0);
-    } catch (_) { /* ignore */ }
-    const overlays = visible.slice(0, -1).reverse(); // bottom → top
-    const wantKeys = overlays.map((l) => l.key);
-    // Aladin always adds an overlay on top of the stack. Keep the attached
-    // layers that already sit in the wanted order, and detach everything
-    // above the first difference so it is re-added in order below.
-    let keep = 0;
-    while (keep < this.order.length && keep < wantKeys.length && this.order[keep] === wantKeys[keep]) keep++;
-    for (const key of this.order.slice(keep)) {
+    for (const key of want.slice(from)) if (this.overlays.has(key)) this._detach(key);
+    for (const key of want.slice(from)) this._attach(byKey.get(key));
+    const wanted = new Set(want);
+    const now = performance.now();
+    for (const key of this.order) {
       const o = this.overlays.get(key);
-      if (o) this._detach(key, o);
-    }
-    for (const [key, o] of this.overlays) {
-      if (!wantKeys.includes(key)) this._detach(key, o);
-    }
-    const attached = this.order.slice(0, keep);
-    for (const l of overlays) {
-      let o = this.overlays.get(l.key);
-      const opacity = Math.min(1, Math.max(0, l.opacity ?? 1));
-      if (!o) {
-        const name = `ov-${l.key}`;
-        const hips = this._makeHiPS(l.survey || l.key, {});
-        try { hips?.setOpacity?.(opacity); } catch (_) { /* not ready */ }
-        try {
-          if (typeof a.addImageLayer === "function") a.addImageLayer(hips, name);
-          else a.setOverlayImageLayer(hips, name);
-        } catch (err) {
-          console.warn("Oviz sky: overlay failed", l.key, err);
-          continue;
-        }
-        o = { name, hips, opacity: -1 };
-        this.overlays.set(l.key, o);
-        attached.push(l.key);
-      }
+      const l = byKey.get(key);
+      const on = wanted.has(key) && l;
+      const opacity = on ? Math.min(1, Math.max(0, l.opacity ?? 1)) : 0;
       if (Math.abs(o.opacity - opacity) > 1e-4) {
         o.opacity = opacity;
         this._setOpacity(o, opacity);
       }
-      this._applyStyle(o, l);
+      if (on) {
+        o.used = now;
+        this._applyStyle(o, l, () => a.getOverlayImageLayer?.(o.name));
+      }
     }
-    // The real stack (an overlay that failed to attach is not in it).
-    this.order = attached;
+    this._trim(wanted);
+  }
+
+  /** Opacity and style of the base layer (0 when another survey is at the bottom). */
+  _applyBase(l) {
+    const a = this.aladin;
+    const opacity = l ? Math.min(1, Math.max(0, l.opacity ?? 1)) : 0;
+    const layer = (() => { try { return a.getBaseImageLayer?.(); } catch (_) { return null; } })();
+    if (!layer) {
+      // The base loads asynchronously at start: try again shortly.
+      clearTimeout(this._baseRetry);
+      this._baseRetry = setTimeout(() => this._applyBase(l), 250);
+      return;
+    }
+    if (Math.abs((this.baseOpacity ?? -1) - opacity) > 1e-4) {
+      try { layer.setOpacity?.(opacity); this.baseOpacity = opacity; } catch (_) { /* not ready */ }
+    }
+    if (l) this._applyStyle((this._baseStyle ||= {}), l, () => layer);
+  }
+
+  _attach(l) {
+    if (!l) return;
+    const a = this.aladin;
+    const key = l.key;
+    const name = `ov-${key}`;
+    const settle = (ok, err) => {
+      if (this.overlays.get(key)?.hips !== hips) return; // replaced meanwhile
+      if (ok) {
+        this.tries.delete(key);
+        if (this.failed.delete(key)) this.onLayerStatus?.(key, "ready");
+        return;
+      }
+      if (this.failed.has(key)) return;
+      // A slow or busy server: attach again (twice) before calling the
+      // survey unavailable.
+      const tries = (this.tries.get(key) || 0) + 1;
+      this.tries.set(key, tries);
+      if (tries <= 2) {
+        setTimeout(() => {
+          if (this.overlays.get(key)?.hips !== hips) return;
+          this._detach(key);
+          this.onNeedApply?.();
+        }, 1200 * tries);
+        return;
+      }
+      this.failed.set(key, err || new Error("unavailable"));
+      this.onLayerStatus?.(key, "error", err);
+    };
+    // Aladin's metadata query decides (it moves on to a mirror when a server
+    // fails, and reports that failure first); the callbacks are a fallback.
+    const verdict = (err) => {
+      const q = hips?.query;
+      if (q && typeof q.then === "function") q.then(() => settle(true), (e) => settle(false, e || err));
+      else settle(false, err);
+    };
+    const hips = this._makeHiPS(l.survey || key, {
+      successCallback: () => settle(true),
+      errorCallback: (err) => verdict(err),
+    });
+    const q = hips?.query;
+    if (q && typeof q.then === "function") q.then(() => settle(true), () => {});
+    try { hips?.setOpacity?.(0); } catch (_) { /* not ready */ }
+    try {
+      if (typeof a.addImageLayer === "function") a.addImageLayer(hips, name);
+      else a.setOverlayImageLayer(hips, name);
+    } catch (err) {
+      console.warn("Oviz sky: overlay failed", key, err);
+      this.failed.set(key, err);
+      this.onLayerStatus?.(key, "error", err);
+      return;
+    }
+    this.overlays.set(key, { name, hips, opacity: 0, used: performance.now() });
+    this.order.push(key);
+  }
+
+  /**
+   * Attach a survey hidden (opacity 0) ahead of need, e.g. the backgrounds
+   * saved views switch to, so their tiles are in when a transition shows them.
+   */
+  preload(l) {
+    if (!this.aladin || !l?.key || this.overlays.has(l.key)) return;
+    if (resolveSurvey(l.survey || l.key) === this.base) return;
+    this._attach({ key: l.key, survey: l.survey || l.key });
+    const o = this.overlays.get(l.key);
+    if (o) o.used = 0; // first to go if the cache is full
+  }
+
+  /** Let go of a survey taken out of the figure (hidden ones stay cached). */
+  forget(key) {
+    if (this.overlays.has(key)) this._detach(key);
+  }
+
+  /** Keep at most MAX_HIDDEN hidden overlays attached (the most recently shown). */
+  _trim(wanted) {
+    const hidden = this.order.filter((k) => !wanted.has(k));
+    if (hidden.length <= MAX_HIDDEN) return;
+    hidden.sort((x, y) => this.overlays.get(x).used - this.overlays.get(y).used);
+    for (const key of hidden.slice(0, hidden.length - MAX_HIDDEN)) this._detach(key);
   }
 
   _setOpacity(o, opacity) {
@@ -232,28 +331,35 @@ export class AladinSky {
     const target = layer || o.hips;
     try { target?.setOpacity?.(opacity); } catch (_) { /* retried next apply */ }
     if (!layer) setTimeout(() => {
-      try { a.getOverlayImageLayer?.(o.name)?.setOpacity?.(opacity); } catch (_) { /* ignore */ }
+      try { a.getOverlayImageLayer?.(o.name)?.setOpacity?.(o.opacity); } catch (_) { /* ignore */ }
     }, 250);
   }
 
-  _applyStyle(o, l) {
-    const a = this.aladin;
-    let layer = null;
-    try { layer = a.getOverlayImageLayer?.(o.name); } catch (_) { return; }
-    if (!layer) return;
+  /** Stretch, colormap and cuts of a layer (base or overlay). */
+  _applyStyle(o, l, getLayer) {
     const sig = `${l.stretch || ""}|${l.colormap || ""}|${l.cut_min ?? ""}|${l.cut_max ?? ""}`;
     if (o.styleSig === sig) return;
+    let layer = null;
+    try { layer = getLayer(); } catch (_) { layer = null; }
+    if (!layer) return;
     o.styleSig = sig;
     try {
-      if (l.colormap) layer.setColormap?.(l.colormap, { stretch: l.stretch || "linear" });
-      else if (l.stretch) layer.setColormap?.("native", { stretch: l.stretch });
+      if (l.colormap || l.stretch || o.styled) {
+        layer.setColormap?.(l.colormap || "native", { stretch: l.stretch || "linear" });
+        o.styled = true;
+      }
+      // Like the classic viewer, cuts apply only when both ends are set.
       if (Number.isFinite(l.cut_min) && Number.isFinite(l.cut_max) && l.cut_max > l.cut_min) layer.setCuts?.(l.cut_min, l.cut_max);
     } catch (_) { /* optional features */ }
   }
 
-  _detach(key, o) {
-    try { this.aladin.removeImageLayer?.(o.name); } catch (_) { /* ignore */ }
+  _detach(key) {
+    const o = this.overlays.get(key);
+    if (o) {
+      try { this.aladin.removeImageLayer?.(o.name); } catch (_) { /* ignore */ }
+    }
     this.overlays.delete(key);
+    this.order = this.order.filter((k) => k !== key);
   }
 
   /** Draw the current Aladin view into a 2D canvas (for screenshots). */

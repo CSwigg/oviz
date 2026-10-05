@@ -18,7 +18,7 @@ export class Palette {
     const v = this.viewer;
     const items = [];
     for (const trace of v.traces) {
-      if (!trace.points || !trace.showInLegend) continue;
+      if (!trace.points || !trace.showInLegend || trace.pickable === false) continue;
       const meta = await v.objectMeta(trace.key);
       const names = meta.name || [];
       for (let i = 0; i < names.length; i++) {
@@ -113,6 +113,9 @@ export class Palette {
     for (const c of this.commands()) push(c, `${c.title} ${c.keywords || ""}`);
     for (const s of this.ui.stateItems()) push({ group: "Views", ...s }, s.title);
     for (const l of this.ui.layerItems()) push({ group: "Layers", ...l }, `${l.title} layer`);
+    // Query-dependent entries from plugins (e.g. finding a name on the sky)
+    // always show, below the figure's own matches.
+    if (q) for (const p of this.ui.plugins) for (const it of p.searchItems?.(q) || []) results.push({ group: "Sky", score: 1, ...it });
     if (q && this.index) {
       const objs = [];
       for (const o of this.index) {
@@ -143,7 +146,7 @@ export class Palette {
       // Curated default view: a few actions, then views and layers.
       results.forEach((r) => { r.score = r.group === "Views" ? 3 : r.group === "Actions" ? (r.pinned ? 4 : 1) : 2; });
     }
-    const order = { Objects: 0, Views: 1, Layers: 2, Actions: 3 };
+    const order = { Objects: 0, Views: 1, Layers: 2, Actions: 3, Sky: 4 };
     results.sort((a, b) => (q ? b.score - a.score : (order[a.group] - order[b.group]) || b.score - a.score));
     const top = q ? results.slice(0, 60) : results.filter((r) => r.group !== "Layers" || results.length < 30).slice(0, 40);
     // Group while keeping score order within groups.

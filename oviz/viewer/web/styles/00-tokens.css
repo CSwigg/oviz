@@ -9,11 +9,12 @@
   --ov-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
   --ov-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
-  --ov-bg: #04060a;
-  --ov-bg-glow: radial-gradient(120% 90% at 50% 40%, #0b1120 0%, #05070c 55%, #020305 100%);
-  /* The data stage stays a night sky in every theme: additive starlight
-     and emission volumes are calibrated against a dark background. */
-  --ov-stage: radial-gradient(120% 90% at 50% 40%, #0b1120 0%, #05070c 55%, #020305 100%);
+  --ov-bg: #000;
+  --ov-bg-glow: #000;
+  /* The data stage is pure black in every theme: additive starlight and
+     emission volumes are calibrated against it, and no tint may colour
+     the data. */
+  --ov-stage: #000;
 
   /* Glass: bars and buttons are the most see-through, panels and menus a
      little denser so text stays easy to read. */

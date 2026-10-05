@@ -47,6 +47,9 @@
   .ov-colorbars { display: none; }
   .ov-scale { padding: 7px 10px 8px; min-width: 76px; }
   .ov-scale-sub { display: none; }
+  /* The Sky credit goes above the scale, clear of the Sky switches. */
+  .ov-scale-row { flex-direction: column-reverse; align-items: flex-start; gap: 2px; }
+  .ov-sky-credit { padding: 0 10px; }
   .ov-dock { width: 100%; min-width: 0; padding: 0 10px 0 6px; border-radius: 18px; gap: 4px; }
   .ov-dock [aria-label="Previous frame"], .ov-dock [aria-label="Next frame"], .ov-dock [aria-label="Loop playback"] { display: none; }
   .ov-time-read { min-width: 76px; }
@@ -66,9 +69,17 @@
   .ov-palette { top: calc(10px + var(--ov-safe-top)); border-radius: 16px; }
   .ov-palette-foot { display: none; }
   .ov-toasts { top: calc(58px + var(--ov-safe-top)); }
-  .ov-hovercard { display: none; }
   .ov-rec-pill { top: calc(58px + var(--ov-safe-top)); }
   .ov-selbar { bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom) + 52px); max-width: calc(100vw - 2 * var(--ov-gutter)); }
+  /* The count over the dust it holds; Frame and CSV as icons. The key
+     steps up above the bar while a selection shows. */
+  .ov-selbar-what { display: grid; gap: 3px; min-width: 0; white-space: nowrap; }
+  .ov-selbar-dust { max-width: 180px; overflow: hidden; text-overflow: ellipsis; font: 500 11px/1.1 var(--ov-font); }
+  .ov-selbar .ov-btn-text, .ov-selbar-count > .ov-icon { display: none; }
+  .ov-selbar .ov-btn-short { display: inline; }
+  /* Centred between the gutters (left: 50% would leave it half the width). */
+  .ov-selbar { left: var(--ov-gutter); right: var(--ov-gutter); transform: none; width: fit-content; margin-inline: auto; gap: 5px; padding-left: 16px; }
+  .ov-root[data-lasso-selection="true"] .ov-legend { margin-bottom: 58px; }
 }
 
 /* The smallest phones: the 3D/Sky switch shows icons only, so the corner
@@ -92,4 +103,22 @@
 @media (max-height: 460px) and (max-width: 960px) {
   .ov-layers, .ov-inspector { max-height: calc(100vh - 140px); }
   .ov-scale, .ov-colorbars, .ov-stream { display: none; }
+}
+
+/* Phones: no backdrop blur. iOS Safari can drop (reload) pages that stack
+   many blurred layers over WebGL, which the classic viewer avoided the
+   same way; denser surfaces keep text readable without it. */
+@media (pointer: coarse) and (max-width: 960px) {
+  :root {
+    --ov-blur: none;
+    --ov-surface: rgba(20, 23, 31, 0.74);
+    --ov-surface-strong: rgba(20, 23, 31, 0.86);
+  }
+  [data-oviz-theme="light"] {
+    --ov-surface: rgba(255, 255, 255, 0.84);
+    --ov-surface-strong: rgba(255, 255, 255, 0.92);
+  }
+}
+@media (pointer: coarse) and (max-width: 960px) {
+  .ov-label--note { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(8, 10, 15, 0.82); }
 }

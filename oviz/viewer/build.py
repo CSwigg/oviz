@@ -22,6 +22,7 @@ subtly broken figure.
 
 from __future__ import annotations
 
+import base64
 import bisect
 import functools
 import re
@@ -30,6 +31,7 @@ from pathlib import Path
 WEB_ROOT = Path(__file__).resolve().parent / "web"
 SRC_ROOT = WEB_ROOT / "src"
 STYLE_ROOT = WEB_ROOT / "styles"
+SKY_THUMB_ROOT = WEB_ROOT / "assets" / "sky"
 ENTRY_MODULE = "app/main.js"
 
 _IMPORT_RE = re.compile(
@@ -345,6 +347,27 @@ def bundle_css() -> str:
 
     files = sorted(STYLE_ROOT.glob("*.css"))
     return "\n".join(f.read_text(encoding="utf-8").strip() + "\n" for f in files)
+
+
+@functools.lru_cache(maxsize=2)
+def _sky_thumbnails_cached(fingerprint: tuple) -> tuple:
+    return tuple(
+        (name, "data:image/jpeg;base64," + base64.b64encode((SKY_THUMB_ROOT / name).read_bytes()).decode("ascii"))
+        for name, _ in fingerprint
+    )
+
+
+def sky_thumbnails() -> dict[str, str]:
+    """All-sky thumbnails of the Sky background picker's surveys.
+
+    Keys are file stems (``p_dss2_color``, as ``thumbKey`` in
+    ``web/src/sky/catalog.js`` derives them); values are JPEG data URIs.
+    Regenerate the files with ``scripts/make_sky_thumbnails.py``.
+    """
+
+    files = sorted(SKY_THUMB_ROOT.glob("*.jpg"))
+    pairs = _sky_thumbnails_cached(tuple((p.name, p.stat().st_mtime_ns) for p in files))
+    return {Path(name).stem: uri for name, uri in pairs}
 
 
 def template_html() -> str:

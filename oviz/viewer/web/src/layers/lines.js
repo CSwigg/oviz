@@ -11,6 +11,7 @@ ${FRAME_GLSL}
 layout(location = 0) in vec2 aCorner;     // x: 0 start / 1 end, y: -1..1 side
 layout(location = 1) in float aSegment;
 layout(location = 2) in vec2 aArc;
+layout(location = 3) in vec3 aColor;      // per-segment colour (when uSegColor)
 uniform mat4 uViewProj;
 uniform vec2 uViewport;
 uniform highp sampler2D uFrameTex;
@@ -19,7 +20,10 @@ uniform int uFrames;
 uniform float uFrame;
 uniform vec3 uOffset;
 uniform float uWidth;
+uniform vec3 uColor;
+uniform int uSegColor;
 out float vSide;
+out vec3 vColor;
 out float vArc;
 out float vHalf;
 
@@ -50,6 +54,7 @@ void main() {
   vSide = aCorner.y * half_;
   vHalf = half_;
   vArc = aCorner.x < 0.5 ? aArc.x : aArc.y;
+  vColor = uSegColor == 1 ? aColor : uColor;
 }
 `;
 
@@ -57,7 +62,7 @@ const FRAG = `
 in float vSide;
 in float vArc;
 in float vHalf;
-uniform vec3 uColor;
+in vec3 vColor;
 uniform float uOpacity;
 uniform float uWidth;
 uniform vec2 uDash;   // dash length, gap length (world units); 0 = solid
@@ -74,7 +79,7 @@ void main() {
   }
   a *= uOpacity;
   if (a < 0.003) discard;
-  outColor = vec4(uColor * a, a);
+  outColor = vec4(vColor * a, a);
 }
 `;
 
@@ -106,18 +111,27 @@ export class LinesLayer {
     if (data.arc) arc.set(data.arc.subarray(0, S * 2));
     const segBuf = createBuffer(gl, seg);
     const arcBuf = createBuffer(gl, arc);
-    const vao = createVAO(gl, [
+    const attrs = [
       { loc: 0, buffer: this.cornerBuffer, size: 2 },
       { loc: 1, buffer: segBuf, size: 1, divisor: 1 },
       { loc: 2, buffer: arcBuf, size: 2, divisor: 1 },
-    ]);
+    ];
+    const buffers = [segBuf, arcBuf];
+    if (data.segmentColors) {
+      const rgb = new Uint8Array(S * 3);
+      rgb.set(data.segmentColors.subarray(0, S * 3));
+      const colorBuf = createBuffer(gl, rgb);
+      attrs.push({ loc: 3, buffer: colorBuf, size: 3, divisor: 1, type: gl.UNSIGNED_BYTE, normalized: true });
+      buffers.push(colorBuf);
+    }
+    const vao = createVAO(gl, attrs);
     // Dash lengths relative to the line's total extent.
     let total = 0;
     for (let i = 0; i < arc.length; i++) total = Math.max(total, arc[i]);
     const unit = total > 0 ? total / 160 : 1;
     const dash = { solid: [0, 0], dash: [unit * 2.2, unit * 1.4], dot: [unit * 0.45, unit * 0.9], dashdot: [unit * 2, unit], longdash: [unit * 4, unit * 1.4] }[L.dash] || [0, 0];
     const batch = {
-      key: trace.key, trace, count: S, frameTex, posFrames, vao, buffers: [segBuf, arcBuf],
+      key: trace.key, trace, count: S, frameTex, posFrames, vao, buffers, segmentColors: !!data.segmentColors,
       offsets: data.offset || null, dash, color: parseColor(L.color || trace.color),
     };
     this.batches.push(batch);
@@ -158,7 +172,8 @@ export class LinesLayer {
       const off = frameOffset(b.offsets, p.frame);
       prog.v3("uOffset", off[0], off[1], off[2]);
       prog.f("uWidth", Math.max(0.6, (lineStyle.width || 1) * (style.sizeScale || 1)) * frame.dpr);
-      prog.v3("uColor", c[0], c[1], c[2]).f("uOpacity", opacity);
+      // A colour picked for the layer replaces its per-segment colours.
+      prog.v3("uColor", c[0], c[1], c[2]).f("uOpacity", opacity).i("uSegColor", b.segmentColors && !style.colorOverride ? 1 : 0);
       prog.v2("uDash", b.dash[0], b.dash[1]);
       gl.bindVertexArray(b.vao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, b.count);

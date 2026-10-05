@@ -26,7 +26,8 @@ export class TimelineDock {
       return;
     }
     this.back = iconButton("stepBack", "Previous frame", () => { tl.pause(); tl.step(-1); }, { shortcut: "←" });
-    this.playBtn = iconButton("play", "Play", () => this.togglePlay(), { cls: "ov-play", shortcut: "Space" });
+    // Click plays forward (Shift+click backward), like Space and ⇧ Space.
+    this.playBtn = iconButton("play", "Play", (e) => this.togglePlay(e?.shiftKey ? -1 : 1), { cls: "ov-play", shortcut: "Space" });
     this.fwd = iconButton("stepFwd", "Next frame", () => { tl.pause(); tl.step(1); }, { shortcut: "→" });
     this.timeValue = h("div", { class: "ov-time-value" });
     this.timeCaption = h("div", { class: "ov-time-caption" }, "Time");
@@ -47,22 +48,30 @@ export class TimelineDock {
     v.on("theme", heat);
   }
 
-  togglePlay() {
+  /**
+   * Space: play forward, or pause (classic Oviz). From the last frame
+   * forward play starts over at the first; `direction` −1 (⇧ Space)
+   * plays backward, from the first frame over at the last.
+   */
+  togglePlay(direction = 1) {
     const tl = this.tl;
-    if (tl.playing) tl.pause();
-    else {
-      // Play toward the present when starting from the past, and vice versa.
-      const dir = tl.frame >= tl.count - 1 ? -1 : tl.direction || 1;
-      tl.play(dir);
-    }
+    // Space pauses whatever is playing; ⇧ Space reverses forward playback.
+    if (tl.playing && (direction >= 0 || tl.direction < 0)) tl.pause();
+    else tl.play(direction < 0 ? -1 : 1);
   }
 
   speedMenu(anchor) {
-    this.ui.menu(anchor, SPEEDS.map((s) => ({
-      label: `${s}×`,
-      checked: this.tl.speed === s,
-      run: () => { this.tl.speed = s; this.sync(); },
-    })), { title: "Playback speed", align: "center", above: true });
+    const tl = this.tl;
+    this.ui.menu(anchor, [
+      ...SPEEDS.map((s) => ({
+        label: `${s}×`,
+        checked: tl.speed === s,
+        run: () => { tl.speed = s; this.sync(); },
+      })),
+      "-",
+      { label: "Play forward", icon: "play", shortcut: "Space", run: () => tl.play(1) },
+      { label: "Play backward", icon: "stepBack", shortcut: "⇧ Space", run: () => tl.play(-1) },
+    ], { title: "Playback speed", align: "center", above: true });
   }
 
   cycleSpeed(dir) {

@@ -6,6 +6,9 @@
   .ov-panel[data-dragging="true"] { transition: none !important; }
 
   .ov-dock { width: 100%; padding: 0 6px; }
+  /* Without a timeline the bar is a few buttons: a centred pill, not a
+     slab across the screen. */
+  .ov-dock.ov-bar-only { width: auto; justify-self: center; padding: 0 8px; }
   .ov-scrub { flex: 1; width: auto; min-width: 56px; margin: 0 4px; }
   .ov-time-read { min-width: 60px; padding: 0 2px 0 8px; }
   .ov-time-caption, .ov-speed, .ov-scrub-tick-label { display: none !important; }
@@ -23,4 +26,25 @@
   :is(.ov-bottom-left, .ov-bottom-right) { transition: opacity 160ms var(--ov-ease); }
   .ov-root:is([data-callout="true"], [data-story="true"], [data-layers="true"], [data-details="true"]) :is(.ov-bottom-left, .ov-bottom-right) { opacity: 0; pointer-events: none; }
   .ov-legend .ov-legend-item { height: 22px; font-size: 12px; }
+}
+
+/* Touch screens: key rows a finger can hit, a tap toggles (a long press
+   shows one layer alone), and a first row hides or shows every layer,
+   since there is no T key. Desktop pointers keep the compact key. */
+@media (pointer: coarse) {
+  .ov-legend { gap: 0; }
+  .ov-legend .ov-legend-item {
+    height: 34px; padding: 0 12px 0 8px; gap: 10px; font-size: 13.5px;
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  }
+  .ov-legend .ov-legend-item:hover { background: transparent; }
+  .ov-legend .ov-legend-item:active { background: rgba(10, 12, 16, 0.45); }
+  .ov-legend .ov-legend-all { display: inline-flex; color: rgba(255, 255, 255, 0.74); }
+  .ov-legend-all-icon { flex: none; display: inline-flex; justify-content: center; width: 10px; }
+  .ov-legend-all-icon .ov-icon { flex: none; width: 16px; height: 16px; }
+  .ov-legend-all-icon .ov-icon svg { width: 16px; height: 16px; }
+  .ov-legend .ov-legend-more { height: 32px; padding-left: 28px; font-size: 12.5px; }
+}
+@media (pointer: coarse) and (max-height: 460px) {
+  .ov-legend .ov-legend-item { height: 28px; font-size: 12.5px; }
 }

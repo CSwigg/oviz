@@ -23,6 +23,7 @@ and volume windows are carried over value-for-value from the spec.
 from __future__ import annotations
 
 import base64
+import gzip
 import io
 import math
 import re
@@ -46,6 +47,10 @@ _ICRS_TO_GAL = np.array(
 )
 
 SYMBOLS = ["circle", "square", "diamond", "cross", "x", "triangle-up", "star", "circle-open"]
+# Reference traces drawn from the Sun as it is today (the classic viewer's
+# present-day grid): they mean nothing at other times, so they fade out
+# within a Myr of t = 0.
+PRESENT_DAY_REFERENCE_NAMES = frozenset({"Galactic Quadrants", "Galactic l Labels"})
 
 
 class CompileError(ValueError):
@@ -276,6 +281,20 @@ class _TraceCompiler:
             "sizeByStarsDefault": bool(pick("size_by_n_stars_default", False)),
             "hasStars": bool(pick("has_n_stars", False)),
         }
+        if name in PRESENT_DAY_REFERENCE_NAMES:
+            spec["presentDayOnly"] = True
+        if spec["showInLegend"] and pick("role") == "guide":
+            # An annotation (meta={"oviz_role": "guide"}): its own switch under
+            # Guides in the layers panel, never a row of the key.
+            spec["role"] = "guide"
+        if pick("pickable") is False:
+            # Samples of a surface or model (meta={"oviz_pickable": False}):
+            # not clicked, hovered, lassoed or searched.
+            spec["pickable"] = False
+        if pick("hide_in_sky") is True:
+            # 3D-only context (meta={"oviz_hide_in_sky": True}): left out of
+            # Sky view like the Sun, and back as it was in 3D.
+            spec["skyHidden"] = True
         color_by = legend_item.get("color_by") or pick("color_by")
         if isinstance(color_by, dict) and color_by.get("mode"):
             names, renamed = self.colormaps.add_options(color_by.get("colormap_options"))
@@ -514,7 +533,7 @@ class _TraceCompiler:
         r, g, b_, a = parse_color(color)
         opacity = _num(ref.get("opacity"), _num(ref.get("default_opacity"), 1.0)) * a
         pos = _fill_absent_frames(pos, spec.get("presence"))
-        return {
+        out = {
             "count": S,
             "position": _position_channel(self.builder, pos, f"{key}-lines", CRITICAL, allow_rigid=True),
             "arc": {"blob": self.builder.array(arc, "f32", hint=f"{key}-arc", priority=CRITICAL)},
@@ -523,6 +542,15 @@ class _TraceCompiler:
             "dash": str(line.get("dash") or "solid"),
             "opacity": opacity,
         }
+        seg_colors = ref.get("segment_colors")
+        if isinstance(seg_colors, list) and seg_colors and len(seg_colors) == counts[fref]:
+            # One colour per segment (e.g. each cloud outline in its own colour).
+            rgb = np.zeros((S, 3), dtype=np.uint8)
+            for s_, c in enumerate(seg_colors):
+                r_, g_, bb, _ = parse_color(c)
+                rgb[s_] = [round(r_ * 255), round(g_ * 255), round(bb * 255)]
+            out["segmentColors"] = {"blob": self.builder.array(rgb, "u8", hint=f"{key}-segment-colors", priority=CRITICAL)}
+        return out
 
     # -- labels ---------------------------------------------------------------
 
@@ -681,12 +709,14 @@ def _volume_bytes(layer: dict[str, Any]) -> tuple[np.ndarray, np.ndarray | None]
                 return None
             return out
         if b64:
-            data = np.frombuffer(base64.b64decode(b64), dtype=np.uint8)
+            raw = base64.b64decode(b64)
         elif isinstance(slabs, list) and slabs:
-            parts = [base64.b64decode(s.get("data_b64") if isinstance(s, dict) else s) for s in slabs]
-            data = np.frombuffer(b"".join(parts), dtype=np.uint8)
+            raw = b"".join(base64.b64decode(s.get("data_b64") if isinstance(s, dict) else s) for s in slabs)
         else:
             return None
+        if encoding.startswith("gzip"):
+            raw = gzip.decompress(raw)
+        data = np.frombuffer(raw, dtype=np.uint8)
         if data.size != nx * ny * nz:
             raise CompileError(
                 f"Volume {layer.get('key')!r}: {data.size} bytes for shape {nx}x{ny}x{nz}"
@@ -735,12 +765,96 @@ def occupancy_grid(vol: np.ndarray, max_blocks: int = 64) -> np.ndarray | None:
     return np.ascontiguousarray(out)
 
 
+def _f32_payload(b64: Any) -> np.ndarray:
+    raw = base64.b64decode(str(b64 or ""))
+    return np.frombuffer(raw[: len(raw) - len(raw) % 4], dtype="<f4")
+
+
+def _procedural_kde(builder: BundleBuilder, layer: dict[str, Any],
+                    sources: dict[str, Any]) -> tuple[dict[str, Any], np.ndarray | None]:
+    """A legacy ``procedural_kde_float32`` layer: the events and the recipe.
+
+    The viewer rebuilds the density from the events at each time sample
+    (``web/src/layers/kde.js``), as the classic runtime did: cloud-in-cell
+    deposits of the events in a trailing window, a core + halo Gaussian
+    mixture, normalised by ``dataMax``. Also return the source's
+    precomputed volume for its initial time (float32, z-y-x), if any.
+    """
+
+    key = str(layer.get("procedural_kde_source_key") or "")
+    src = sources.get(key) if isinstance(sources, dict) else None
+    if not isinstance(src, dict):
+        raise CompileError(f"Volume {layer.get('key')!r}: procedural KDE source {key!r} not found")
+    stride = int(src.get("stride") or 4)
+    events = _f32_payload(src.get("events_b64"))
+    if stride != 4 or str(src.get("encoding") or "float32_le_interleaved_txyz") != "float32_le_interleaved_txyz":
+        raise CompileError(f"Volume {layer.get('key')!r}: unsupported KDE event encoding")
+    events = events[: events.size - events.size % 4].reshape(-1, 4)
+    # The viewer finds each window by binary search over time.
+    events = events[np.argsort(events[:, 0], kind="stable")]
+    window = _num(layer.get("procedural_kde_default_rolling_window_myr"),
+                  _num(layer.get("procedural_kde_rolling_window_myr"), _num(src.get("rolling_window_myr"), 10.0)))
+    options = layer.get("procedural_kde_window_options_myr") or src.get("rolling_window_options_myr") or []
+    core = max(0.0, _num(layer.get("procedural_kde_sigma_vox"), _num(src.get("core_sigma_vox"), 0.0)))
+    out = {
+        "kind": "event-kde",
+        "events": {"blob": builder.array(events, "f32", hint=f"kde-{key}-events", priority=DEFERRED)},
+        "eventCount": int(events.shape[0]),
+        "coreSigmaVox": core,
+        "haloSigmaVox": max(core, _num(layer.get("procedural_kde_halo_sigma_vox"), _num(src.get("halo_sigma_vox"), core))),
+        "coreWeight": min(1.0, max(0.0, _num(layer.get("procedural_kde_core_weight"), _num(src.get("core_weight"), 1.0)))),
+        "windowMyr": window,
+        "windowOptions": [float(x) for x in options if _num(x) > 0],
+        "sampleMyr": max(0.0, _num(layer.get("procedural_kde_time_sample_myr"), 0.0)),
+        "dataMax": max(1e-6, _num(layer.get("procedural_kde_data_max"), _num(src.get("data_max"), 1.0))),
+        "depositionScale": max(1e-12, _num(layer.get("procedural_kde_deposition_scale"), _num(src.get("deposition_scale"), 1.0))),
+    }
+    initial = None
+    if src.get("initial_volume_b64") and math.isfinite(_num(src.get("initial_frame_time_myr"))):
+        initial = _f32_payload(src.get("initial_volume_b64"))
+        out["initialTimeMyr"] = _num(src.get("initial_frame_time_myr"))
+        out["initialWindowMyr"] = _num(src.get("rolling_window_myr"), window)
+    return out, initial
+
+
+def _volume_colorbar(layer: dict[str, Any], sources: dict[str, Any]) -> dict[str, Any] | None:
+    """The colour scale a legacy figure drew beside a volume, if any."""
+
+    if isinstance(layer.get("colorbar"), dict):
+        return _clean_json(layer["colorbar"])
+    src = (sources or {}).get(str(layer.get("procedural_kde_source_key") or "")) or {}
+    rate = _num(layer.get("surface_rate_per_scalar_myr_kpc2"), _num(src.get("surface_rate_per_scalar_myr_kpc2")))
+    if math.isfinite(rate) and rate > 0:
+        # Classic ccSN figures: the window in surface rate, which scales
+        # inversely with the KDE's time window.
+        return {"label": "ccSNe surface rate", "unit": "Myr⁻¹ kpc⁻²", "scale": rate, "perWindow": True}
+    kms = layer.get("color_range_kms")
+    if isinstance(kms, (list, tuple)) and len(kms) == 2:
+        return {"label": "H I vₗₒₛ − vᵣₒₜ", "unit": "km/s", "range": [_num(kms[0]), _num(kms[1])]}
+    return None
+
+
 def _compile_volume(builder: BundleBuilder, layer: dict[str, Any], colormaps: _ColormapRegistry,
-                    presence: list[int] | None, co_rotation: float) -> tuple[dict[str, Any], dict[str, str]]:
+                    presence: list[int] | None, co_rotation: float,
+                    sources: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, str]]:
     """Compile one volume layer; also return its colormap renames."""
 
-    scalar, validity = _volume_bytes(layer)
-    nz, ny, nx = scalar.shape
+    procedural = None
+    if str(layer.get("data_encoding") or "") == "procedural_kde_float32":
+        procedural, initial = _procedural_kde(builder, layer, sources or {})
+        src = (sources or {}).get(str(layer.get("procedural_kde_source_key") or "")) or {}
+        shape = src.get("shape") or layer.get("shape") or {}
+        nx, ny, nz = int(shape.get("x", 0)), int(shape.get("y", 0)), int(shape.get("z", 0))
+        if min(nx, ny, nz) <= 0:
+            raise CompileError(f"Volume {layer.get('key')!r} has no shape")
+        if initial is not None and initial.size != nx * ny * nz:
+            initial = None
+            procedural.pop("initialTimeMyr", None)
+        layer = {**layer, "bounds": src.get("bounds") or layer.get("bounds")}
+        scalar, validity = None, None
+    else:
+        scalar, validity = _volume_bytes(layer)
+        nz, ny, nx = scalar.shape
     bounds = layer.get("bounds") or {}
     names, renamed = colormaps.add_options(layer.get("colormap_options"))
     defaults = dict(layer.get("default_controls") or {})
@@ -756,7 +870,6 @@ def _compile_volume(builder: BundleBuilder, layer: dict[str, Any], colormaps: _C
             [float(bounds.get("x", [-0.5, 0.5])[0]), float(bounds.get("y", [-0.5, 0.5])[0]), float(bounds.get("z", [-0.5, 0.5])[0])],
             [float(bounds.get("x", [-0.5, 0.5])[1]), float(bounds.get("y", [-0.5, 0.5])[1]), float(bounds.get("z", [-0.5, 0.5])[1])],
         ],
-        "data": {"blob": builder.array(scalar, "u8", hint=f"vol-{layer.get('key')}", priority=DEFERRED, shuffle=False)},
         "dataRange": [_num(data_range[0], 0.0), _num(data_range[1], 1.0)],
         "unit": str(layer.get("value_unit") or ""),
         "legendColor": css_hex(layer.get("legend_color") or "#888888"),
@@ -775,7 +888,27 @@ def _compile_volume(builder: BundleBuilder, layer: dict[str, Any], colormaps: _C
         "renderOrder": _num(layer.get("render_order"), 0.0),
         "opticalModel": "legacy-texture-space",
     }
-    occ = occupancy_grid(scalar)
+    if procedural is not None:
+        out["procedural"] = procedural
+        if initial is not None:
+            # Float voxels: the KDE's low tail lies below one uint8 step.
+            out["data"] = {"blob": builder.array(initial.reshape(nz, ny, nx), "f32", hint=f"vol-{layer.get('key')}", priority=DEFERRED)}
+    else:
+        out["data"] = {"blob": builder.array(scalar, "u8", hint=f"vol-{layer.get('key')}", priority=DEFERRED, shuffle=False)}
+    if layer.get("color_data_b64"):
+        # Velocity (or any second quantity) colours the volume; the stored
+        # value is colour × density so trilinear filtering weights by density.
+        color = _volume_bytes({"shape": layer.get("shape"), "data_b64": layer["color_data_b64"],
+                               "data_encoding": layer.get("color_data_encoding") or "uint8", "key": layer.get("key")})[0]
+        out["colorData"] = {"blob": builder.array(color, "u8", hint=f"vol-{layer.get('key')}-color", priority=DEFERRED, shuffle=False)}
+    colorbar = _volume_colorbar(layer, sources or {})
+    if colorbar:
+        out["colorbar"] = colorbar
+    if layer.get("display_note"):
+        out["note"] = str(layer["display_note"])
+    if layer.get("fixed_display_encoding"):
+        out["fixedDisplay"] = True
+    occ = occupancy_grid(scalar) if scalar is not None else None
     if occ is not None:
         gz, gy, gx = occ.shape
         out["occupancy"] = {
@@ -989,6 +1122,48 @@ def _camera_from_spec(spec: dict[str, Any], center: list[float], max_span: float
     return {"position": pos, "target": list(center), "fov": fov}
 
 
+def _widget_settings(spec: dict[str, Any]) -> dict[str, Any]:
+    """Settings of the classic analysis widgets (the viewer computes their data).
+
+    The Birth tree (classic "Dendrogram") and the Relative SFH (classic "Age
+    KDE") are rebuilt in the viewer from the trace data already in the
+    bundle, so only their titles and defaults are carried over.
+    """
+
+    out: dict[str, Any] = {}
+    d = spec.get("dendrogram")
+    if isinstance(d, dict) and d.get("enabled"):
+        out["birthTree"] = {
+            "title": str(d.get("title") or "Birth tree"),
+            "defaultTrace": d.get("default_trace_key"),
+            "mode": "birth_age_myr" if d.get("default_threshold_mode") == "birth_age_myr" else "distance_pc",
+            "links": "birth_to_birth" if d.get("default_connection_mode") == "birth_to_birth" else "birth_to_older_track",
+            "thresholdPc": _num(d.get("default_threshold_pc"), 100.0),
+            "thresholdAgeMyr": _num(d.get("default_threshold_age_myr"), 5.0),
+        }
+    a = spec.get("age_kde")
+    if isinstance(a, dict) and a.get("enabled"):
+        xr = a.get("x_range") if isinstance(a.get("x_range"), (list, tuple)) and len(a.get("x_range")) == 2 else None
+        out["ageKde"] = {
+            "title": str(a.get("title") or "Relative SFH"),
+            "bandwidthMyr": _num(a.get("bandwidth_myr"), 2.0),
+            "xRange": [_num(xr[0], -60.0), _num(xr[1], 0.0)] if xr else None,
+        }
+    c = spec.get("cluster_filter")
+    if isinstance(c, dict) and c.get("enabled"):
+        # Each parameter's full range, so a classic State whose filter spans
+        # all of it converts to no filter at all.
+        extents = {}
+        for p in c.get("parameters") or []:
+            if isinstance(p, dict) and p.get("key"):
+                lo, hi = _num(p.get("min")), _num(p.get("max"))
+                if math.isfinite(lo) and math.isfinite(hi):
+                    extents[str(p["key"])] = [lo, hi]
+        if extents:
+            out["clusterFilter"] = {"extents": extents}
+    return out
+
+
 def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bundle:
     """Convert a legacy Three.js scene spec into a viewer :class:`Bundle`."""
 
@@ -1098,7 +1273,8 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
             continue
         pres = volume_presence.get(str(layer.get("key")))
         presence = None if pres is None or len(pres) == len(frames) else sorted(pres)
-        volume, renamed = _compile_volume(builder, layer, colormaps, presence, co_rotation)
+        volume, renamed = _compile_volume(builder, layer, colormaps, presence, co_rotation,
+                                          spec.get("procedural_kde_sources") or {})
         volumes.append(volume)
         volume_colormaps.setdefault(volume["stateKey"], renamed)
 
@@ -1121,6 +1297,13 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
             "memberMinScreenPx": _num(sky_panel.get("member_min_screen_size_px"), 0.0),
             "showMembers": bool(sky_panel.get("show_cluster_members_in_sky", bool(members))),
             "fullOpacityScalePc": _num(sky_dome.get("full_opacity_scale_bar_pc"), 120.0),
+            # The classic sky aperture, rebuilt as the sky lens.
+            "aperture": {
+                "enabled": bool((sky_dome.get("aperture") or {}).get("enabled", True)),
+                "defaultSizeDeg": _num((sky_dome.get("aperture") or {}).get("default_size_deg"), 14.0),
+                "minSizeDeg": _num((sky_dome.get("aperture") or {}).get("min_size_deg"), 3.0),
+                "maxSizeDeg": _num((sky_dome.get("aperture") or {}).get("max_size_deg"), 48.0),
+            },
             "fadeOutScalePc": _num(sky_dome.get("fade_out_scale_bar_pc"), 360.0),
             "members": members,
         }
@@ -1147,6 +1330,7 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
         "sunTrace": sun_key,
         "galacticCenter": gc or [8122.0, 0.0, 0.0],
         "showAxes": bool(spec.get("show_axes", False)),
+        "axisTitles": {k: str(((spec.get("axes") or {}).get(k) or {}).get("title") or f"{k.upper()} (pc)") for k in "xyz"},
     }
 
     animation = spec.get("animation") or {}
@@ -1179,6 +1363,9 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
             "fadeTimeMyr": _num(animation.get("fade_in_time_default"), 0.0),
             "fadeInOut": bool(animation.get("fade_in_and_out_default", False)),
             "fadeByOpacity": bool(animation.get("fade_opacity_by_birth_time_default", False)),
+            # The classic "focus group": a layer whose median the view follows.
+            "focusTrace": str(((init.get("global_controls") or {}).get("focus_trace_key")
+                               or animation.get("focus_trace_key_default") or "")) or None,
         },
         "traces": traces,
         "images": images,
@@ -1187,6 +1374,10 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
         "sky": sky,
         "initialState": initial_state,
         "states": states,
+        "widgets": _widget_settings(spec),
+        # Classic Actions (normalised by oviz/threejs_actions.py): buttons
+        # that run steps (a State, a legend group, a camera move, playing time).
+        "actions": _clean_json((spec.get("actions") or {}).get("items") or []) if (spec.get("actions") or {}).get("enabled") else [],
         "legacy": {
             "decorations": extra_decorations,
             "exportProfile": spec.get("export_profile"),

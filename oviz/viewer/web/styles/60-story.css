@@ -47,7 +47,7 @@
 .ov-card[data-over="true"] { box-shadow: -3px 0 0 var(--ov-accent); }
 .ov-card-thumb {
   position: relative; aspect-ratio: 16 / 9; width: 100%;
-  background: #05070b center / cover no-repeat;
+  background: #000 center / cover no-repeat;
   display: grid; place-items: center;
 }
 .ov-card-mode { font: 650 11px/1 var(--ov-font); color: var(--ov-text-3); letter-spacing: 0.08em; text-transform: uppercase; }
@@ -100,7 +100,31 @@
 .ov-present-dot:hover { background: var(--ov-text-3); }
 .ov-present-dot[aria-current="step"] { background: var(--ov-accent); transform: scale(1.35); }
 .ov-present-exit { align-self: start; }
-.ov-root[data-presenting="true"] .ov-labels .ov-label--dyn { display: none; }
+.ov-present-time { font: 550 11.5px/1.2 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text-3); }
+.ov-present-time[hidden] { display: none; }
+/* Presenting keeps the scale bar and colour bars, as the classic viewer did
+   (the rest of the bar gives way to the presenter). */
+.ov-root[data-presenting="true"] .ov-bottom.ov-chrome { opacity: 1; transform: none; pointer-events: none; }
+.ov-root[data-presenting="true"] .ov-bottom > :not(.ov-bottom-left) { visibility: hidden; }
+.ov-root[data-presenting="true"] .ov-bottom-left > .ov-stream { visibility: hidden; }
+.ov-root[data-presenting="true"] .ov-labels .ov-label--sel,
+.ov-root[data-presenting="true"] .ov-labels .ov-label--measure { display: none; }
+/* The key while presenting: only the layers in view, small and quiet like
+   a printed figure key, and not clickable (the presenter owns the screen).
+   No struck-through hidden layers, no hide-all row, no "more" link. */
+.ov-root[data-presenting="true"] .ov-legend { pointer-events: none; gap: 0; opacity: 0.88; transition: opacity 320ms var(--ov-ease); }
+/* Where the presenter would cover the key and scale (phones), they sit just above it. */
+.ov-root[data-presenting="true"] .ov-bottom-left { transform: translateY(calc(-1 * var(--ov-key-lift, 0px))); transition: transform 320ms var(--ov-ease); }
+.ov-root[data-presenting="true"] .ov-legend :is(.ov-legend-all, .ov-legend-more),
+.ov-root[data-presenting="true"] .ov-legend .ov-legend-item:is([data-visible="false"], [data-drawn="false"]) { display: none; }
+.ov-root[data-presenting="true"] .ov-legend .ov-legend-item {
+  height: 19px; max-width: 220px; padding: 0 4px; gap: 7px;
+  font: 500 11.5px/1 var(--ov-font); color: rgba(255, 255, 255, 0.82);
+  background: transparent;
+}
+.ov-root[data-presenting="true"] .ov-legend-dot { width: 7px; height: 7px; }
+.ov-root[data-presenting="true"] .ov-legend-dot[data-ramp] { width: 14px; height: 6px; border-radius: 2px; }
+.ov-root[data-presenting="true"] .ov-legend-dot[data-kind="volume"] { width: 8px; height: 8px; border-radius: 2px; }
 .ov-root[data-story="true"] .ov-layers,
 .ov-root[data-story="true"] .ov-inspector {
   max-height: calc(100% - 52px - var(--ov-dock-h) - 3 * var(--ov-gutter) - 24px - 200px - var(--ov-safe-top) - var(--ov-safe-bottom));

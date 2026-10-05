@@ -26,6 +26,40 @@ objects. :class:`oviz.Animate3D` and its alias :class:`oviz.Scene3D` build the
 time frames and return a :class:`oviz.threejs_figure.ThreeJSFigure`.
 
 
+Potentials and spiral arms
+--------------------------
+
+Orbits use galpy's MWPotential2014 unless the scene is given another
+``potential``. :func:`oviz.spiral_models.khalil2025_potential` adds the two
+spiral modes of Khalil et al. (2025): MWPotential2014 plus their m = 2 and
+m = 3 spirals as galpy ``SpiralArmsPotential`` terms. In the Galactic plane
+these reproduce the authors' released SPIBACK spiral potential exactly. The
+model leaves out their bar, their own axisymmetric background, and the modes'
+radial cutoffs. The default LSR frame keeps its circular orbit in the
+axisymmetric part of any potential.
+
+``make_plot(spiral_arm_models=...)`` draws published arms. Each model is one
+line trace holding all of its arms, turning at its pattern speeds through the
+timeline. The traces start hidden, and Sky view leaves them out.
+
+.. code-block:: python
+
+   from oviz.spiral_models import CASTRO_GINARD2021_ARMS, KHALIL2025_ARMS, khalil2025_potential
+
+   scene = Scene3D(TraceCollection([trace]), figure_theme="dark", potential=khalil2025_potential())
+   figure = scene.make_plot(
+       time=time_myr,
+       galactic_mode=True,
+       spiral_arm_models=(KHALIL2025_ARMS, CASTRO_GINARD2021_ARMS),
+   )
+
+``KHALIL2025_ARMS`` are the troughs of the two modes (m = 2: Crux-Scutum, Local
+and Outer arms at 13.1 km/s/kpc; m = 3: Carina-Sagittarius and Perseus at
+16.4 km/s/kpc). ``CASTRO_GINARD2021_ARMS`` are the Perseus, Local, Sagittarius
+and Scutum segments fitted to young open clusters and masers. Each segment
+turns at its own pattern speed: 17.8, 33.8, 26.1 and 49.8 km/s/kpc.
+
+
 Viewer model
 ------------
 

@@ -1,11 +1,12 @@
 // "Views & story": saved States as a filmstrip, presentation mode, drafts
 // and self-export.
 
-import { h, icon, iconButton, clear, kbd, MOD, localStorageGet, localStorageSet } from "./dom.js";
-import { slider, toggle } from "./controls.js";
-import { captureState, importStates, exportStatesBlock, makeTransition, easing, uid } from "../app/states.js";
+import { h, icon, iconButton, clear, kbd, MOD } from "./dom.js";
+import { slider, toggle, select } from "./controls.js";
+import { captureState, importStates, exportStatesBlock, makeTransition, easing, uid, readTransition } from "../app/states.js";
 import { cloneJson } from "../app/state.js";
 import { buildExportHtml, saveHtml } from "../app/export.js";
+import { readDraft, writeDraft, deleteDraft } from "../app/drafts.js";
 import { clamp } from "../core/math.js";
 import { clonePose } from "../engine/camera.js";
 
@@ -31,6 +32,15 @@ export class StoryPlugin {
     // The user grabbing the camera (drag, wheel, keys, a flight, 3D/Sky)
     // ends a running transition; the camera stays where it is.
     v.on("camera-takeover", () => this.takeover());
+    // Keep drafts when the tab goes away, and warn before leaving only when
+    // unsaved views are not safely in this browser.
+    window.addEventListener("pagehide", () => this.flushDraft());
+    window.addEventListener("beforeunload", (e) => {
+      if (!this.dirty || this.readOnly || !this.project.items.length) return;
+      if (this.project.autosave !== false && this.draftSaved) return;
+      e.preventDefault();
+      e.returnValue = "";
+    });
   }
 
   afterBoot() {
@@ -42,10 +52,14 @@ export class StoryPlugin {
       t.finish();
       this.afterArrive(t);
       this.project.items = [];
+      // Home returns to the saved view, as the figure opened (classic).
+      const home = v.state.view.mode === "sky" ? v.returnPose : v.pose;
+      if (home) v.homePose = clonePose(home);
+      if (v.state.view.mode !== "sky" && v.state.view.anchor) v.defaultAnchor = { ...v.state.view.anchor };
     }
     this.homeState = captureState(v, this.sky);
-    this.restoreDraft();
     this.render();
+    this.restoreDraft().then(() => this.render());
     // Present-only exports open straight into the first view. (The legacy
     // `default_mode` flag only chose the drawer tab, so it does not.)
     if (this.readOnly && this.project.items.length) {
@@ -62,12 +76,13 @@ export class StoryPlugin {
     this.count = h("span", { class: "ov-story-count" });
     this.addBtn = h("button", { class: "ov-btn ov-btn--primary ov-btn--sm", type: "button", "aria-label": "Save view", onclick: () => this.add() }, icon("plus"), h("span", { class: "ov-btn-label" }, "Save view"));
     this.presentBtn = h("button", { class: "ov-btn ov-btn--sm", type: "button", "aria-label": "Present", onclick: () => this.present(true) }, icon("present"), h("span", { class: "ov-btn-label" }, "Present"));
-    this.exportBtn = h("button", { class: "ov-btn ov-btn--sm ov-btn--ghost", type: "button", "aria-label": "Export", onclick: (e) => ui.menu(e.currentTarget, this.exportMenuItems(), { title: "Export", above: true }) }, icon("download"), h("span", { class: "ov-btn-label" }, "Export"));
+    this.homeBtn = iconButton("home", "Original view (the figure as it opened)", () => this.goHome());
+    this.exportBtn = h("button", { class: "ov-btn ov-btn--sm ov-btn--ghost", type: "button", "aria-label": "Export", onclick: (e) => ui.menu(e.currentTarget, [...this.linkMenuItems(), ...(this.project.items.length ? ["-"] : []), ...this.exportMenuItems()], { title: "Share & export", above: true }) }, icon("download"), h("span", { class: "ov-btn-label" }, "Export"));
     this.settingsBtn = iconButton("sliders", "Transition timing", (e) => this.timingMenu(e.currentTarget));
     const head = h("div", { class: "ov-story-head" },
       h("span", { class: "ov-story-title" }, "Story"), this.count,
       h("span", { class: "ov-grow" }),
-      this.readOnly ? null : this.addBtn, this.presentBtn, this.readOnly ? null : this.exportBtn, this.readOnly ? null : this.settingsBtn,
+      this.readOnly ? null : this.addBtn, this.presentBtn, this.homeBtn, this.readOnly ? null : this.exportBtn, this.readOnly ? null : this.settingsBtn,
       iconButton("close", "Close", () => this.toggle(false), { shortcut: "Y" }));
     this.strip = h("div", { class: "ov-story-strip", role: "list" });
     this.status = h("div", { class: "ov-story-status" });
@@ -150,16 +165,37 @@ export class StoryPlugin {
       { label: "Rename…", icon: "edit", run: () => this.rename(i) },
       { label: "Edit caption…", icon: "edit", run: () => this.editCaption(i) },
       { label: it.camera === "keep" ? "Camera: keep current" : "Camera: fly to saved", icon: "follow", run: () => { it.camera = it.camera === "keep" ? "follow" : "keep"; this.changed(); } },
+      { label: "Transition…", icon: "play", run: () => this.editTransition(i) },
       { label: "Duplicate", icon: "copy", run: () => this.duplicate(i) },
+      ...(i > 0 ? [{ label: "Move earlier", icon: "stepBack", run: () => this.move(i, i - 1) }] : []),
+      ...(i < this.project.items.length - 1 ? [{ label: "Move later", icon: "stepFwd", run: () => this.move(i, i + 1) }] : []),
       "-",
       { label: "Delete", icon: "trash", run: () => this.remove(i) },
     ], { title: it.name, above: true, align: "left" });
   }
 
+  /** How the story flies into this view: its own length and easing, or the story's. */
+  editTransition(i) {
+    const it = this.project.items[i];
+    const def = this.project.defaultTransition;
+    const own = !!it.transition;
+    const cur = { duration_ms: it.transition?.duration_ms ?? def.duration_ms, easing: it.transition?.easing ?? def.easing };
+    const apply = () => { it.transition = { ...cur }; this.changed(); };
+    const body = h("div", { class: "ov-dialog-grid" },
+      h("div", { class: "ov-note" }, own ? "This view has its own transition." : "This view uses the story's transition until you change it here."),
+      slider({ label: "Length", min: 0, max: 20, step: 0.1, value: cur.duration_ms / 1000, format: (x) => `${x.toFixed(1)} s`, onChange: (x) => { cur.duration_ms = Math.round(x * 1000); apply(); } }),
+      select({ label: "Easing", value: cur.easing, options: [
+        { value: "easeInOutCubic", label: "Smooth (ease in and out)" }, { value: "easeInOutQuad", label: "Gentle" },
+        { value: "easeOutCubic", label: "Ease out" }, { value: "linear", label: "Linear" },
+      ], onChange: (x) => { cur.easing = x; apply(); } }),
+      h("div", null, h("button", { class: "ov-btn ov-btn--ghost", type: "button", onclick: () => { it.transition = null; this.changed(); this.ui.closeSheet(); } }, "Use the story's transition")));
+    this.ui.sheet(`Transition · ${it.name}`, body);
+  }
+
   timingMenu(anchor) {
     const dt = this.project.defaultTransition;
     const body = h("div", { class: "ov-pop-body" },
-      slider({ label: "Transition length", min: 0, max: 6, step: 0.1, value: dt.duration_ms / 1000, format: (x) => `${x.toFixed(1)} s`, onChange: (x) => { dt.duration_ms = Math.round(x * 1000); this.changed(); } }),
+      slider({ label: "Transition length", min: 0, max: 20, step: 0.1, value: dt.duration_ms / 1000, format: (x) => `${x.toFixed(1)} s`, onChange: (x) => { dt.duration_ms = Math.round(x * 1000); this.changed(); } }),
       toggle({ label: "Autosave drafts in this browser", checked: this.project.autosave !== false, onChange: (x) => { this.project.autosave = x; this.changed(); } }),
     );
     this.ui.menu(anchor, [{ body }], { title: "Story settings", above: true });
@@ -167,7 +203,8 @@ export class StoryPlugin {
 
   // ------------------------------------------------------------ editing
 
-  async add() {
+  /** Save the current view. The N key saves quietly (classic); the button opens the story. */
+  async add({ open = true } = {}) {
     if (this.readOnly) return;
     const v = this.viewer;
     // A transition in flight would be captured half-blended: land it first.
@@ -179,7 +216,7 @@ export class StoryPlugin {
     this.active = this.project.items.length - 1;
     it.thumb = await this.thumbnail();
     this.changed();
-    if (this.el.dataset.open !== "true") this.toggle(true);
+    if (open && this.el.dataset.open !== "true") this.toggle(true);
     this.ui.toast(`Saved view ${n}`, { icon: icon("bookmark"), action: { label: "Undo", run: () => this.remove(this.project.items.indexOf(it), { silent: true }) } });
   }
 
@@ -277,6 +314,12 @@ export class StoryPlugin {
     this.render();
     this.saveDraft();
     this.renderPresenter();
+    this.emitDom("oviz:states-changed", { count: this.project.items.length });
+  }
+
+  /** DOM events for pages that embed the figure (classic Oviz fired these too). */
+  emitDom(type, detail) {
+    try { this.ui.root.dispatchEvent(new CustomEvent(type, { detail, bubbles: true })); } catch (_) { /* old browsers */ }
   }
 
   async thumbnail() {
@@ -287,7 +330,7 @@ export class StoryPlugin {
       const c = document.createElement("canvas");
       c.width = W; c.height = H;
       const ctx = c.getContext("2d");
-      ctx.fillStyle = "#05070b";
+      ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, W, H);
       const src = r.canvas;
       const scale = Math.max(W / src.width, H / src.height);
@@ -362,6 +405,7 @@ export class StoryPlugin {
     const ease = easing(spec.easing);
     if (this.presenting) this.renderProgress(dur);
     v.emit("state-transition-start", { index: i, id: it.id });
+    this._target = { index: i + 1, id: it.id };
     return this.runTransition(transition, dur, ease);
   }
 
@@ -386,7 +430,11 @@ export class StoryPlugin {
   /** Animate a transition over `dur` ms; resolves once it has arrived exactly. */
   runTransition(transition, dur, ease) {
     const v = this.viewer;
-    return new Promise((resolve) => {
+    const which = this._target || { index: null, id: null };
+    this._target = null;
+    this.emitDom("oviz:transition-start", which);
+    return new Promise((resolve0) => {
+      const resolve = () => { this.emitDom("oviz:transition-end", which); resolve0(); };
       if (dur <= 0) {
         transition.finish();
         this.afterArrive(transition);
@@ -396,7 +444,7 @@ export class StoryPlugin {
       const start = performance.now();
       const off = v.addAnimator((now) => {
         const raw = clamp((now - start) / dur, 0, 1);
-        transition.step(ease(raw));
+        transition.step(ease(raw), raw);
         if (raw >= 1) {
           this.running = null;
           off();
@@ -439,19 +487,22 @@ export class StoryPlugin {
   next() { return this.goTo(this.active + 1); }
   previous() { return this.goTo(this.active < 0 ? 0 : this.active - 1); }
 
-  goHome() {
-    if (!this.homeState) return;
+  /** Back to the figure as it opened (classic "Original"), with the usual transition. */
+  goHome({ instant = false } = {}) {
+    if (!this.homeState) return Promise.resolve();
     const v = this.viewer;
+    if (this.running) this.cancel({ keepCamera: !this.running.transition.modeChange });
     this.active = -1;
     this.markActive();
+    this.renderPresenter();
+    v.timeline.pause();
     const t = makeTransition(v, this.sky, this.homeState);
-    const start = performance.now();
-    const off = v.addAnimator((now) => {
-      const raw = clamp((now - start) / 1100, 0, 1);
-      t.step(easeIO(raw));
-      if (raw >= 1) { off(); t.finish(); this.afterArrive(t); v.renderer.release("state-transition"); }
-    });
-    v.renderer.hold("state-transition");
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const spec = this.project.defaultTransition;
+    const dur = instant || reduce ? 0 : Math.max(0, spec.duration_ms) * (t.modeChange ? 1.35 : 1);
+    v.emit("state-transition-start", { index: -1, id: "original" });
+    this._target = { index: 0, id: "original" };
+    return this.runTransition(t, dur, easeIO);
   }
 
   // ------------------------------------------------------------ presentation
@@ -464,7 +515,9 @@ export class StoryPlugin {
     this.pPrev = iconButton("stepBack", "Previous view", () => this.previous(), { shortcut: "←" });
     this.pNext = iconButton("stepFwd", "Next view", () => this.next(), { shortcut: "→" });
     this.pExit = h("button", { class: "ov-btn ov-btn--ghost ov-btn--sm", type: "button", onclick: () => this.present(false) }, this.readOnly ? "Explore" : "Exit", kbd("Esc"));
-    this.pText = h("div", { class: "ov-present-text" }, this.pTitle, this.pCaption, this.pDots);
+    // The time of the view (and of playing time), as the classic time bar showed.
+    this.pTime = h("div", { class: "ov-present-time", "aria-live": "off" });
+    this.pText = h("div", { class: "ov-present-text" }, this.pTitle, this.pCaption, this.pTime, this.pDots);
     this.presenter = h("div", { class: "ov-present ov-glass", "data-open": "false", role: "region", "aria-label": "Presentation" },
       this.pPrev,
       this.pText,
@@ -487,6 +540,22 @@ export class StoryPlugin {
     ui.root.addEventListener("pointermove", wake, { passive: true });
     this.pReel.addEventListener("pointerenter", () => clearTimeout(idleTimer));
     this.pReel.addEventListener("pointerleave", wake);
+    const tl = this.viewer.timeline;
+    this.pTime.hidden = tl.count <= 1;
+    tl.on(() => { if (this.presenting) this.syncPresenterTime(); });
+    window.addEventListener("resize", () => { if (this.presenting) requestAnimationFrame(() => this.liftKey()); });
+  }
+
+  syncPresenterTime() {
+    const tl = this.viewer.timeline;
+    if (tl.count <= 1) return;
+    const t = tl.time;
+    const text = Math.abs(t) < 1e-6 ? "Present day" : this.ui.formatTime(t);
+    const playing = tl.playing ? (tl.direction < 0 ? " · playing backward" : " · playing") : "";
+    this.pTime.textContent = `${text}${playing}`;
+    // A view named after its time needs no second readout until time moves.
+    const title = this.pTitle.textContent || "";
+    this.pTime.hidden = !tl.playing && title.includes(this.ui.formatTime(t));
   }
 
   present(on, { startAt = null, instant = false } = {}) {
@@ -499,11 +568,15 @@ export class StoryPlugin {
     this.pReel.dataset.open = String(on);
     this.pReel.dataset.idle = "true";
     this.ui.setZen(on);
+    // The key shows only the layers in view while presenting.
+    this.ui.legend?.render();
+    if (!on) this.liftKey();
     if (on) {
       this.toggle(false);
       const i = startAt ?? (this.active >= 0 ? this.active : 0);
       this.goTo(i, { instant });
       this.renderPresenter();
+      this.syncPresenterTime();
     }
   }
 
@@ -528,7 +601,29 @@ export class StoryPlugin {
     }
     this.renderProgress();
     this.renderReel();
-    requestAnimationFrame(() => this.ui.root.style.setProperty("--ov-present-h", `${this.presenter.offsetHeight}px`));
+    requestAnimationFrame(() => {
+      this.ui.root.style.setProperty("--ov-present-h", `${this.presenter.offsetHeight}px`);
+      this.liftKey();
+    });
+  }
+
+  /**
+   * Where the presenter would cover the key and scale bar (phones, narrow
+   * windows), they step up just above it; elsewhere they stay put.
+   */
+  liftKey() {
+    const root = this.ui.root;
+    const bl = this.ui.bottomLeft;
+    const cur = parseFloat(root.style.getPropertyValue("--ov-key-lift")) || 0;
+    let lift = 0;
+    const host = bl?.offsetParent;
+    if (this.presenting && host) {
+      // Layout offsets ignore the lift's own (animating) transform.
+      const a = this.presenter.getBoundingClientRect(), hr = host.getBoundingClientRect();
+      const left = hr.left + bl.offsetLeft, bottom = hr.top + bl.offsetTop + bl.offsetHeight;
+      if (a.left < left + bl.offsetWidth && left < a.right) lift = Math.max(0, Math.round(bottom - a.top + 10));
+    }
+    if (lift !== cur) root.style.setProperty("--ov-key-lift", `${lift}px`);
   }
 
   renderProgress(durationMs = 0) {
@@ -598,7 +693,7 @@ export class StoryPlugin {
       else this.present(true);
       return true;
     }
-    if ((k === "n" || k === "N") && !this.readOnly) { this.add(); return true; }
+    if ((k === "n" || k === "N") && !this.readOnly) { this.add({ open: false }); return true; }
     if (k === "y" || k === "Y") { this.toggle(); return true; }
     return false;
   }
@@ -619,12 +714,46 @@ export class StoryPlugin {
     const list = [
       { title: "Present story", icon: "present", shortcut: "P", run: () => this.present(true) },
       { title: "Open views & story", icon: "bookmark", shortcut: "Y", run: () => this.toggle(true) },
+      { title: "Go to the original view", sub: "The figure as it opened: camera, time, layers and Sky", icon: "home", keywords: "reset states story start initial first", run: () => this.goHome() },
     ];
+    // ("Copy link to this view" carries the views already.)
+    list.push(...this.linkMenuItems().slice(1).map((x) => ({ title: x.label, icon: x.icon, keywords: "share url link presentation story views", run: x.run })));
     if (!this.readOnly) {
       list.unshift({ title: "Save current view", icon: "plus", shortcut: "N", pinned: true, run: () => this.add() });
       list.push(...this.exportMenuItems().filter((x) => x !== "-").map((x) => ({ title: x.label, icon: x.icon, run: x.run })));
     }
     return list;
+  }
+
+  /**
+   * Views that came with a shared link (see app/viewhash.js encodeViewsPart):
+   * they replace the story for this visit, and autosave apart from the
+   * views this browser keeps for the figure.
+   */
+  loadShared({ items, defaultTransition }) {
+    if (!Array.isArray(items) || !items.length) return;
+    this.sharedSession = true;
+    this.project.items = items.map((it) => ({
+      id: uid(), name: it.name, caption: it.caption || "", thumb: "",
+      camera: it.camera === "keep" ? "keep" : "follow",
+      transition: readTransition(it.transition), state: it.state,
+    }));
+    if (defaultTransition) this.project.defaultTransition = readTransition(defaultTransition, this.project.defaultTransition);
+    this.active = -1;
+    this.dirty = false;
+    this.ui.statesBtn.hidden = false;
+    this.render();
+    this.renderPresenter();
+  }
+
+  /** Links that carry the views: to explore them, or to open presenting them. */
+  linkMenuItems() {
+    const n = this.project.items.length;
+    if (!n) return [];
+    return [
+      { label: "Copy link with these views", icon: "share", run: () => this.ui.copyViewLink() },
+      { label: "Copy presentation link", icon: "present", run: () => this.ui.copyPresentationLink() },
+    ];
   }
 
   exportMenuItems() {
@@ -676,26 +805,40 @@ export class StoryPlugin {
   // ------------------------------------------------------------ drafts
 
   draftKey() {
-    return `oviz.draft.${this.project.projectId}`;
+    // Views opened from a shared link autosave apart from this browser's own.
+    return `oviz.draft.${this.project.projectId}${this.sharedSession ? ".shared" : ""}`;
   }
 
   saveDraft() {
     if (this.readOnly || this.project.autosave === false) return;
+    this.draftSaved = false;
     clearTimeout(this._draftTimer);
-    this._draftTimer = setTimeout(() => {
-      const payload = { savedAt: Date.now(), items: this.project.items, defaultTransition: this.project.defaultTransition };
-      localStorageSet(this.draftKey(), JSON.stringify(payload));
-    }, 300);
+    this._draftTimer = setTimeout(() => this.flushDraft(), 300);
+  }
+
+  /** Write the draft now (IndexedDB, else localStorage); say so once if it fails. */
+  flushDraft() {
+    clearTimeout(this._draftTimer);
+    if (this.readOnly || this.project.autosave === false || !this.dirty) return Promise.resolve();
+    const payload = { savedAt: Date.now(), items: this.project.items, defaultTransition: this.project.defaultTransition };
+    return writeDraft(this.draftKey(), JSON.stringify(payload)).then((ok) => {
+      this.draftSaved = ok;
+      if (!ok && !this._draftWarned) {
+        this._draftWarned = true;
+        this.ui.toast(`Your views could not be autosaved in this browser: save the figure (${MOD === "⌘" ? "⌘" : "Ctrl"} S) to keep them`, { icon: icon("bookmark"), ms: 6000 });
+      }
+    });
   }
 
   clearDraft() {
-    try { localStorage.removeItem(this.draftKey()); } catch (_) { /* ignore */ }
+    deleteDraft(this.draftKey());
   }
 
-  restoreDraft() {
-    if (this.readOnly || this.project.autosave === false) return;
-    const raw = localStorageGet(this.draftKey());
-    if (!raw) return;
+  async restoreDraft() {
+    if (this.readOnly || this.project.autosave === false || this.sharedSession) return;
+    const raw = await readDraft(this.draftKey());
+    // A shared link's views arrived meanwhile: they win.
+    if (!raw || this.sharedSession) return;
     try {
       const d = JSON.parse(raw);
       if (!Array.isArray(d.items)) return;
@@ -718,16 +861,34 @@ export class StoryPlugin {
 
   // ------------------------------------------------------------ public API
 
+  /** A view by 1-based index, id or name; −1 when there is none. */
+  indexOf(target) {
+    const items = this.project.items;
+    if (typeof target === "number") return target >= 1 && target <= items.length ? target - 1 : -1;
+    return items.findIndex((x) => x.id === target || x.name === target);
+  }
+
   api() {
     return {
       list: () => this.project.items.map((it, i) => ({ index: i + 1, id: it.id, name: it.name })),
       goTo: (target) => {
+        if (target === "original") return this.goHome();
         const i = typeof target === "number" ? target - 1 : this.project.items.findIndex((x) => x.id === target || x.name === target);
         return i >= 0 && i < this.project.items.length ? this.goTo(i) : Promise.resolve();
       },
+      original: (opts) => this.goHome(opts),
       next: () => this.next(),
       previous: () => this.previous(),
-      add: () => this.add(),
+      add: () => this.add({ open: false }),
+      // Editing by 1-based index, id or name (classic Oviz.get(id).states).
+      update: (target) => { const i = this.indexOf(target); return i >= 0 ? this.update(i) : Promise.resolve(); },
+      rename: (target, name) => { const i = this.indexOf(target); if (i >= 0 && String(name || "").trim()) { this.project.items[i].name = String(name).trim(); this.changed(); } },
+      duplicate: (target) => { const i = this.indexOf(target); if (i >= 0) this.duplicate(i); },
+      move: (target, to) => { const i = this.indexOf(target); const j = Number(to) - 1; if (i >= 0 && Number.isInteger(j) && j >= 0 && j < this.project.items.length) this.move(i, j); },
+      remove: (target) => { const i = this.indexOf(target); if (i >= 0) this.remove(i, { silent: true }); },
+      setCameraBehavior: (target, behavior) => { const i = this.indexOf(target); if (i >= 0) { this.project.items[i].camera = behavior === "keep" ? "keep" : "follow"; this.changed(); } },
+      save: () => this.saveDocument(),
+      activeIndex: () => (this.active >= 0 ? this.active + 1 : 0),
       capture: () => captureState(this.viewer, this.sky),
       present: (on = true) => this.present(on),
       exportHtml: (opts = {}) => (opts.download === false ? buildExportHtml(this.manifestForExport(opts), { theme: this.ui.theme }) : this.exportHtml(opts)),

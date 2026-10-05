@@ -7,7 +7,7 @@
 
 import { clonePose, lerpPose, makePose, sanitizePose } from "../engine/camera.js";
 import { normalizeAnchor } from "../engine/anchor.js";
-import { cloneJson, legacySnapshotToState, STATE_VERSION } from "./state.js";
+import { cloneJson, legacySnapshotToState, STATE_VERSION, autoOrbitRate } from "./state.js";
 import { clamp, lerp, easeInOutCubic } from "../core/math.js";
 
 const EASINGS = {
@@ -26,7 +26,12 @@ export function captureState(viewer, sky) {
   const s = cloneJson(viewer.state);
   s.version = STATE_VERSION;
   s.view = { mode: viewer.state.view.mode, pose: clonePose(viewer.pose), anchor: cloneJson(viewer.state.view.anchor || { kind: "free" }) };
-  s.time = { frame: viewer.timeline.frame, speed: viewer.timeline.speed };
+  // A Sky view remembers the 3D view it came from, so V returns there.
+  if (s.view.mode === "sky" && viewer.returnPose) s.view.returnPose = clonePose(viewer.returnPose);
+  const tl = viewer.timeline;
+  s.time = { frame: tl.frame, speed: tl.speed };
+  // Playing time is part of the view (classic playback_state): it resumes on arrival.
+  if (tl.playing) { s.time.playing = true; s.time.direction = tl.direction < 0 ? -1 : 1; }
   if (sky) s.sky = sky.captureState();
   // Plugins (e.g. the distribution filter) contribute their own state.
   s.ext = {};
@@ -35,7 +40,7 @@ export function captureState(viewer, sky) {
 }
 
 /** A transition spec, accepting `duration` as an alias (as Python does). */
-function readTransition(t, fallback = null) {
+export function readTransition(t, fallback = null) {
   if (!t || typeof t !== "object") return fallback;
   const ms = Number(t.duration_ms ?? t.duration);
   return {
@@ -116,7 +121,8 @@ function resolvedTraceOpacity(viewer, st, key) {
 
 /**
  * Build an interpolator from the live state to `target`. Returns
- * {step(t) → applies the blended state, finish() → applies target exactly}.
+ * {step(t, raw) → applies the blended state (t eased, raw the linear
+ * progress), finish() → applies target exactly}.
  */
 export function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
   // A camera flight or fling still in progress would override the State's
@@ -155,8 +161,15 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
   // Leaving Sky: member stars fade out as the camera leaves the Sun, not
   // after it has flown all the way into 3D.
   if (modeChange && from.view.mode === "sky") sky?.revealMembers?.(false);
+  // Plugins may animate their part of the change too (the lasso fades from
+  // one selection to the next); their apply still lands it exactly.
+  const extSteps = [];
+  for (const [name, ext] of viewer.stateExtensions || []) {
+    const tr = ext.transition?.(from.ext?.[name] ?? null, to.ext ? to.ext[name] ?? null : null);
+    if (tr?.step) extSteps.push(tr);
+  }
 
-  function step(t) {
+  function step(t, raw = t) {
     const st = viewer.state;
     // Camera ("keep" States leave the live camera alone entirely).
     if (!keepCamera) {
@@ -191,6 +204,7 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
       if (!cur) continue;
       const d = t < 0.5 ? a : b;
       Object.assign(cur, { stretch: d.stretch, colormap: d.colormap, showAllTimes: d.showAllTimes, lightingMode: d.lightingMode });
+      if (d.kdeTimeWindowMyr != null) cur.kdeTimeWindowMyr = d.kdeTimeWindowMyr;
       for (const f of ["vmin", "vmax", "alphaCoef", "steps"]) cur[f] = lerp(Number(a[f]), Number(b[f]), t);
       if (a.visible && b.visible) { cur.visible = true; cur.opacity = lerp(a.opacity, b.opacity, t); }
       else if (a.visible) { cur.visible = t < 1; cur.opacity = a.opacity * (1 - t); }
@@ -215,21 +229,26 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
       if (a.visible !== b.visible) { cur.visible = true; cur.opacity = a.visible ? 1 - t : t; }
       else { cur.visible = b.visible; cur.opacity = lerp(a.opacity ?? 1, b.opacity ?? 1, t); }
     }
-    // Sky layers: crossfade opacities over the union stack.
+    // Sky layers: the target's layers (on top of the union stack) fade in
+    // over the outgoing ones, which hold until the last stretch, so a change
+    // of background is (1 − t)·A + t·B instead of dimming through black.
     if (sky && (skyA.length || skyB.length)) {
+      const onA = from.sky?.backgroundVisible !== false, onB = to.sky?.backgroundVisible !== false;
+      const hold = 1 - smoothstepT(0.7, 1, t);
       const layers = skyKeys.map((k) => {
         const a = skyByKeyA.get(k), b = skyByKeyB.get(k);
         const base = cloneJson(b || a);
-        const oa = a && a.visible !== false ? a.opacity ?? 1 : 0;
-        const ob = b && b.visible !== false ? b.opacity ?? 1 : 0;
-        base.opacity = lerp(oa, ob, t);
+        const oa = onA && a && a.visible !== false ? a.opacity ?? 1 : 0;
+        const ob = onB && b && b.visible !== false ? b.opacity ?? 1 : 0;
+        base.opacity = b ? lerp(oa, ob, t) : oa * hold;
         base.visible = base.opacity > 0.001;
         return base;
       });
       viewer.state.sky.layers = layers;
-      viewer.state.sky.backgroundVisible = (t < 0.5 ? from.sky : to.sky)?.backgroundVisible !== false;
+      viewer.state.sky.backgroundVisible = onA || onB;
       sky.throttledApply();
     }
+    for (const tr of extSteps) tr.step(t, raw);
     viewer.renderer.markInteraction();
     viewer.invalidatePick();
   }
@@ -254,17 +273,26 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
     viewer._anchorLast = viewer.anchorPoint?.() ?? null;
     if (anchorChanged) viewer.emit?.("anchor", { anchor: st.view.anchor, released: false });
     if (Number.isFinite(to.time?.speed)) viewer.timeline.speed = to.time.speed;
+    if (to.view.mode === "sky" && to.view.returnPose) viewer.returnPose = clonePose(to.view.returnPose);
     if (sky && to.sky) sky.applyState(to.sky);
     for (const [name, ext] of viewer.stateExtensions || []) ext.apply(to.ext ? to.ext[name] ?? null : null);
     // Auto-orbit is camera behaviour: "keep" views leave it as it was.
     if (keepCamera) st.global.autoOrbit = !!from.global?.autoOrbit;
-    viewer.controls.autoOrbit = st.global.autoOrbit ? 0.06 : 0;
+    viewer.controls.autoOrbit = autoOrbitRate(st.global);
+    viewer.controls.speed = st.global.navSpeed ?? 1;
+    // A view saved while time played plays on from its frame.
+    if (to.time?.playing) viewer.timeline.play(to.time.direction < 0 ? -1 : 1);
     viewer.volumes.invalidate();
     viewer.invalidatePick();
     viewer.renderer.invalidate();
   }
 
   return { step, finish, modeChange, keepCamera, from, to };
+}
+
+function smoothstepT(e0, e1, x) {
+  const t = clamp((x - e0) / (e1 - e0), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 export function easing(name) {

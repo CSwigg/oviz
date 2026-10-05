@@ -59,11 +59,8 @@ function anchoredControls(anchored) {
   camera.pose = makePose({ target: [0, 0, 0], distance: 1000, yaw: 0.3, pitch: 0.5, fov: 45 });
   camera.update();
   const renderer = { camera, beforeRender: [], invalidate() {}, markInteraction() {}, hold() {}, continuous: new Set() };
-  const state = { anchored, released: 0 };
-  const controls = new Controls(el, renderer, {
-    anchored: () => state.anchored,
-    onRelease: () => { state.anchored = false; state.released++; },
-  });
+  const state = { anchored };
+  const controls = new Controls(el, renderer, { anchored: () => state.anchored });
   return { controls, camera, state };
 }
 
@@ -78,11 +75,30 @@ test("anchored zoom keeps the anchor centred; free zoom follows the pointer", ()
   assert.equal(f.camera.pose.distance, 500);
 });
 
-test("panning frees an anchored camera, then moves it", () => {
+test("panning keeps the anchor and moves the orbit centre within its frame", () => {
   const a = anchoredControls(true);
   a.controls.pan(40, 0);
-  assert.equal(a.state.released, 1);
-  assert.ok(Math.hypot(...a.camera.pose.target) > 1);
-  a.controls.pan(40, 0);
-  assert.equal(a.state.released, 1, "releases once");
+  assert.equal(a.state.anchored, true);
+  const t = a.camera.pose.target.slice();
+  assert.ok(Math.hypot(...t) > 1, "the orbit centre moved");
+  // Anchored zoom then keeps that centre in the middle of the view.
+  a.controls.zoomAt(0.5, 700, 120);
+  assert.deepEqual(a.camera.pose.target, t);
+  assert.equal(a.camera.pose.distance, 500);
+});
+
+test("the scroll-speed setting scales key motion too (classic)", () => {
+  const base = { target: [0, 0, 0], distance: 100, yaw: 0, pitch: 0, fov: 45 };
+  const a = keyMotion({ ...base, target: [0, 0, 0] }, new Set(["e"]), { dt: 0.1 });
+  const b = keyMotion({ ...base, target: [0, 0, 0] }, new Set(["e"]), { dt: 0.1, speed: 2 });
+  assert.ok(Math.abs(Math.log(100 / b.distance) - 2 * Math.log(100 / a.distance)) < 1e-9);
+});
+
+test("layer anchors (classic focus group) encode, decode and label", async () => {
+  const { normalizeAnchor, encodeAnchor, decodeAnchor, anchorLabel } = await import("../../oviz/viewer/web/src/engine/anchor.js");
+  assert.deepEqual(normalizeAnchor({ kind: "layer", trace: "trace-5" }), { kind: "layer", trace: "trace-5" });
+  assert.equal(normalizeAnchor({ kind: "layer" }), null);
+  assert.equal(encodeAnchor({ kind: "layer", trace: "trace-5" }), "l:trace-5");
+  assert.deepEqual(decodeAnchor("l:trace-5"), { kind: "layer", trace: "trace-5" });
+  assert.equal(anchorLabel({ kind: "layer", trace: "t" }, "Alpha Persei Family"), "the Alpha Persei Family median");
 });

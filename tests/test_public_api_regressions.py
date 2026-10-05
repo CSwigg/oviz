@@ -135,9 +135,10 @@ def test_repeated_make_plot_reintegrates_changed_grid_and_refreshes_sizes(monkey
 
     collection = TraceCollection([_trace()])
     scene = Animate3D(collection, figure_theme="dark", ro=7.5, vo=210.0)
-    scene.make_plot(time=[0.0, -1.0], show=False, show_gc_line=False)
+    # (show_sun=False: the default Sun is integrated too, which would add calls.)
+    scene.make_plot(time=[0.0, -1.0], show=False, show_gc_line=False, show_sun=False)
     first_sizes = collection.get_cluster(0).df_int["size"].copy()
-    scene.make_plot(time=[-2.0, 0.0, -1.0], show=False, show_gc_line=False)
+    scene.make_plot(time=[-2.0, 0.0, -1.0], show=False, show_gc_line=False, show_sun=False)
 
     assert integration_calls == [([0.0, -1.0], 7.5, 210.0), ([-2.0, 0.0, -1.0], 7.5, 210.0)]
     assert rotation_calls == [(7.5, 210.0), (7.5, 210.0)]

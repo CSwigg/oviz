@@ -25,6 +25,10 @@ export function installApi(root, viewer, ui) {
     getState: () => ui.plugins.find((p) => p.name === "states")?.api().capture() ?? null,
     applyState: (s, opts) => ui.plugins.find((p) => p.name === "states")?.applyState(s, opts) ?? Promise.resolve(),
     screenshot: (opts) => viewer.renderer.capture(opts),
+    // A link to the current view (everything in it), as "Copy link to this view" makes.
+    viewLink: (opts) => ui.viewLinkUrl(opts),
+    // A link that opens presenting the saved views (they travel in the link).
+    presentationLink: () => ui.viewLinkUrl({ present: true }),
     // The current view as a USDZ for AR Quick Look: {blob, summary}.
     // {moment: true} for a still of the current time instead of the time-lapse.
     arModel: (opts) => ui.arModel(opts),
@@ -38,10 +42,43 @@ export function installApi(root, viewer, ui) {
       timing: viewer.timing,
     }),
   };
+  installMessageBridge(api);
   const registry = (window.Oviz ||= { __viewers: new Map() });
   registry.__viewers ||= new Map();
   registry.__viewers.set(root.id, api);
   registry.viewer = api;
   registry.get = (id) => registry.__viewers.get(id || root.id);
   return api;
+}
+
+/**
+ * Commands from the page embedding this figure in an iframe (the classic
+ * Oviz postMessage bridge). The parent posts `{ type: "oviz", command,
+ * args, id }` to the frame and gets `{ type: "oviz:done", command, id }`
+ * back when it has run. Only the parent window is heard, and only these
+ * named commands exist (nothing is evaluated).
+ */
+function installMessageBridge(api) {
+  if (window.parent === window) return;
+  const commands = {
+    goTo: (target) => api.states?.goTo(target),
+    next: () => api.states?.next(),
+    previous: () => api.states?.previous(),
+    original: () => api.states?.original?.(),
+    present: (on = true) => api.states?.present(on !== false),
+    setTime: (t) => api.setTime(t),
+    play: () => api.play(),
+    pause: () => api.pause(),
+    setViewMode: (m) => api.setViewMode(m),
+  };
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    const d = e.data;
+    if (!d || typeof d !== "object" || d.type !== "oviz" || !Object.prototype.hasOwnProperty.call(commands, d.command)) return;
+    const args = Array.isArray(d.args) ? d.args : d.args === undefined ? [] : [d.args];
+    Promise.resolve()
+      .then(() => commands[d.command](...args))
+      .then(() => window.parent.postMessage({ type: "oviz:done", command: d.command, id: d.id ?? null }, "*"))
+      .catch(() => {});
+  });
 }

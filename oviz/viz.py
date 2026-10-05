@@ -128,6 +128,47 @@ GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES = {
     'Clusters (< 60 Myr)',
     'R = 8.12 kpc',
 }
+SUN_TRACE_NAME = 'Sun'
+
+
+def _default_sun_trace():
+    """The Sun as a one-object trace at the origin of heliocentric coordinates.
+
+    Its orbit is integrated like any cluster's, so in the LSR-centred frame it
+    moves with the Sun's peculiar motion. It matches the Sun traces the
+    figure scripts build (yellow, 4–8 px, always born).
+    """
+    from .traces import Trace
+
+    sun = pd.DataFrame({
+        'name': [SUN_TRACE_NAME], 'age_myr': [4600.0], 'n_stars': [1],
+        'x': [0.0], 'y': [0.0], 'z': [0.0], 'U': [0.0], 'V': [0.0], 'W': [0.0],
+    })
+    return Trace(
+        sun, data_name=SUN_TRACE_NAME, min_size=4.0, max_size=8.0, color='yellow',
+        opacity=1.0, marker_style='circle', show_tracks=False, size_by_n_stars=False,
+    )
+
+
+class _CollectionWithSun:
+    """The user's trace collection plus Oviz's default Sun (listed first), for
+    building one figure. The user's collection itself is never changed: its
+    traces, their order and indices stay as they were."""
+
+    def __init__(self, base, sun):
+        self.base = base
+        self.sun = sun
+
+    def get_all_clusters(self):
+        return [self.sun, *self.base.get_all_clusters()]
+
+    def get_cluster(self, identifier):
+        if isinstance(identifier, str) and identifier == self.sun.data_name:
+            return self.sun
+        return self.base.get_cluster(identifier)
+
+    def __getattr__(self, name):
+        return getattr(self.base, name)
 
 
 def _galactic_simple_allowed_trace_names(plot):
@@ -286,6 +327,7 @@ class Animate3D:
         show_galactic_guides=True,
         show_galactic_center_circles=True,
         include_spiral_arms=False,
+        spiral_arm_models=None,
         show_age_kde_inset=False,
         age_kde_bandwidth_myr=3.0,
         camera_zoom_factor=1.0,
@@ -307,6 +349,7 @@ class Animate3D:
         viewer=None,
         viewer_mode=None,
         camera_anchor=None,
+        show_sun=True,
     ):
         """Integrate the data, build timeline frames, and return a figure.
 
@@ -350,6 +393,17 @@ class Animate3D:
             it), so the Sun and the clusters move around a steady camera.
             ``"sun"`` rides along with the Sun trace; ``"free"`` zooms toward
             the pointer. Readers change it under Display settings.
+        show_sun : bool, default True
+            Oviz viewer only: add the Sun (a one-object "Sun" trace at the
+            heliocentric origin, integrated like the clusters) when the data
+            have no trace named "Sun". It shows in every layer group and is
+            left out in Sky view, which looks out from the Sun.
+        spiral_arm_models : sequence, optional
+            Published spiral arms to draw (from ``oviz.spiral_models``, e.g.
+            ``KHALIL2025_ARMS`` and ``CASTRO_GINARD2021_ARMS``). Each model is
+            one line trace holding all of its arms, turning at its pattern
+            speeds through the timeline. The traces start hidden (listed in
+            every layer group, switched off) and are left out in Sky view.
         show : bool
             Display the figure after construction.
         save_name : path-like, optional
@@ -373,6 +427,11 @@ class Animate3D:
         # viewer can anchor its camera there; a focus group's orbit is not it.
         self.frame_is_lsr = reference_frame_center is None
         self.camera_anchor = camera_anchor
+        self.spiral_arm_models = tuple(spiral_arm_models or ())
+        # Oviz figures always have the Sun (the classic viewer stays as it was).
+        if isinstance(self.data_collection, _CollectionWithSun):
+            self.data_collection = self.data_collection.base
+        default_sun = self._default_sun_for(bool(show_sun) and self.viewer_name == 'oviz')
 
         # Re-integrate whenever the requested grid differs from the cached one.
         # Orbit frames and marker sizes are both functions of this timeline.
@@ -402,6 +461,9 @@ class Animate3D:
             fade_in_and_disp,
             disp_time
         )
+        if default_sun is not None:
+            self._prepare_default_sun(default_sun, reference_frame_center, fade_in_time, fade_in_and_out, fade_in_and_disp, disp_time)
+            self.data_collection = _CollectionWithSun(self.data_collection, default_sun)
 
         # Prepare time arrays and figure layout
         self.time = np.array(self.data_collection.time, dtype=np.float64)
@@ -586,6 +648,8 @@ class Animate3D:
         if save_name:
             self.figure.write_html(save_name)
 
+        if isinstance(self.data_collection, _CollectionWithSun):
+            self.data_collection = self.data_collection.base
         return self.figure
 
     def _coordFIX_to_coordROT(self, x_gc_pc, y_gc_pc, z_gc_pc, time_myr):
@@ -952,6 +1016,31 @@ class Animate3D:
             )
 
         return traces
+
+    def _spiral_arm_model_trace(self, model, t, x_rf, y_rf, z_rf, coord_system='centered'):
+        """One published arm model (``oviz.spiral_models``) at time t: all its arms in one line trace."""
+        from .spiral_models import spiral_arm_coordinates
+
+        helio, galcen = spiral_arm_coordinates(model, float(t), ro=self.ro, zo=self.zo)
+        if coord_system == 'rot':
+            x_vals, y_vals, z_vals = self._coordFIX_to_coordROT(*galcen, float(t))
+        else:
+            x_vals = helio[0] - float(x_rf)
+            y_vals = helio[1] - float(y_rf)
+            z_vals = helio[2] - float(z_rf)
+        return _scatter3d(
+            x=x_vals,
+            y=y_vals,
+            z=z_vals,
+            mode='lines',
+            line=dict(color=model.color, width=float(model.width), dash=model.dash),
+            opacity=float(model.opacity),
+            name=model.name,
+            showlegend=True,
+            hoverinfo='skip',
+            # Arms in the Galactic plane are 3D context; Sky view leaves them out.
+            meta={'oviz_hide_in_sky': True},
+        )
 
     def _kde_trace_name(self, trace_name):
         return f'{KDE_TRACE_PREFIX}{trace_name}'
@@ -1534,6 +1623,37 @@ class Animate3D:
             )
         ]
 
+    def _default_sun_for(self, wanted):
+        """Oviz's default Sun for this plot, or None: only when wanted, for a
+        real trace collection (not a test double), and only when the data
+        bring no trace named "Sun" of their own."""
+        from .traces import TraceCollection
+
+        base = self.data_collection
+        if not wanted or not isinstance(base, TraceCollection):
+            self._default_sun = None
+            return None
+        if any(str(getattr(c, 'data_name', '')).strip().lower() == 'sun' for c in base.get_all_clusters()):
+            self._default_sun = None
+            return None
+        if getattr(self, '_default_sun', None) is None:
+            self._default_sun = _default_sun_trace()
+        return self._default_sun
+
+    def _prepare_default_sun(self, sun, reference_frame_center, fade_in_time, fade_in_and_out, fade_in_and_disp, disp_time):
+        """Integrate the default Sun on the collection's time grid and frame
+        (again only when either changed) and size it like the other traces."""
+        time = np.asarray(self.data_collection.time, dtype=float)
+        key = (time.tobytes(), repr(reference_frame_center), self.vo, self.ro, self.zo, id(self.potential))
+        if getattr(self, '_default_sun_key', None) != key:
+            sun.integrate_orbits(
+                time, reference_frame_center=reference_frame_center,
+                potential=self.potential, vo=self.vo, ro=self.ro, zo=self.zo,
+            )
+            self._default_sun_key = key
+        if not sun.sizes_set:
+            sun.set_age_based_sizes(fade_in_time, fade_in_and_out, fade_in_and_disp, disp_time)
+
     def set_focus(self, focus_group):
         """
         Returns median coordinates of a focus group if provided; otherwise returns None.
@@ -1568,6 +1688,7 @@ class Animate3D:
           check if the corresponding base name is in grouping; if so, return "legendonly" when
           static_traces_legendonly is True, otherwise return True; if not, return False.
         - Galactic reference overlays (GC, radius circles/labels, guide overlays) always return True.
+        - Published spiral-arm models are listed in every group but start hidden ("legendonly").
         - For non‑static traces, return True if the trace name is in grouping.
         """
         if trace_name is None:
@@ -1575,6 +1696,9 @@ class Animate3D:
 
         if trace_name == KDE_TIME_MARKER_TRACE_NAME:
             return True
+
+        if any(trace_name == model.name for model in getattr(self, 'spiral_arm_models', ())):
+            return "legendonly"
 
         kde_source_trace = self._kde_source_trace_name(trace_name)
         if kde_source_trace is not None:
@@ -1597,6 +1721,10 @@ class Animate3D:
                     return True
             else:
                 return False
+
+        # The default Sun is in every group, as the guides are.
+        if trace_name == SUN_TRACE_NAME and getattr(self, '_default_sun', None) is not None:
+            return True
 
         # In galactic mode, GC and galactic radius circles/labels stay visible.
         if trace_name == 'GC':
@@ -1820,6 +1948,11 @@ class Animate3D:
                 self._build_spiral_arm_traces(
                     t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
                 )
+            )
+
+        for model in getattr(self, 'spiral_arm_models', ()):
+            scatter_list.append(
+                self._spiral_arm_model_trace(model, t, x_rf, y_rf, z_rf, coord_system=coord_system)
             )
 
         if self.show_age_kde_inset:
@@ -2708,6 +2841,18 @@ class Animate3D:
             'showlegend': bool(trace_json.get('showlegend', True)),
             'size_by_n_stars_default': bool(trace_meta.get('size_by_n_stars')),
         }
+        # meta={"oviz_role": "guide"}: an annotation (labels, a length bar, a
+        # model curve) that the Oviz viewer lists under Guides, not as data.
+        if str(trace_meta.get('oviz_role') or '').strip().lower() == 'guide':
+            spec['role'] = 'guide'
+        # meta={"oviz_pickable": False}: points that sample a surface or a
+        # model rather than objects; drawn, but never clicked or lassoed.
+        if trace_meta.get('oviz_pickable') is False:
+            spec['pickable'] = False
+        # meta={"oviz_hide_in_sky": True}: 3D-only context (a shell around the
+        # Sun, say) that Sky view, looking out from the Sun, leaves out.
+        if trace_meta.get('oviz_hide_in_sky') is True:
+            spec['hide_in_sky'] = True
         legend_color = None
 
         if 'lines' in mode:

@@ -46,10 +46,14 @@
   .ov-bottom-right { display: grid; grid-template-columns: auto auto; justify-items: end; align-items: end; gap: 8px; }
   .ov-bottom-right > :first-child { grid-column: 1 / -1; }
   .ov-bottom-right > :first-child:empty { display: none; }
+  /* The Sky background chip over the member switch: one narrow column. */
+  .ov-sky-extras { flex-direction: column-reverse; align-items: flex-end; }
 }
 @media (min-width: 721px) and (max-width: 1180px) {
   .ov-bottom { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ov-dock { width: auto; min-width: 0; }
+  /* Without a timeline the bar holds a few buttons: it hugs them, centred. */
+  .ov-dock.ov-bar-only { justify-self: center; }
   .ov-colorbar { min-width: 0; max-width: 220px; }
 }
 @media (min-width: 721px) and (max-width: 980px) {

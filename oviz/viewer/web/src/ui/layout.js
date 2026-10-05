@@ -68,7 +68,7 @@ const LAYOUTS = {
     if (ui.hasSky) lm.move(ui.viewToggle, bar);
     lm.move(ui.modeBtn, bar);
     lm.move(ui.moreBtn, bar);
-    lm.move(ui.legend.el, ui.bottomLeft, ui.scale);
+    lm.move(ui.legend.el, ui.bottomLeft, ui.scaleRow);
   },
 
   /**
@@ -80,6 +80,6 @@ const LAYOUTS = {
     const bar = timeBar(lm, ui);
     if (!ui.dock.el.hidden) lm.add(sep(), bar);
     lm.move(ui.modeBtn, bar);
-    lm.move(ui.legend.el, ui.bottomLeft, ui.scale);
+    lm.move(ui.legend.el, ui.bottomLeft, ui.scaleRow);
   },
 };

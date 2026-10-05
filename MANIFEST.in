@@ -1,2 +1,2 @@
 include oviz/themes/*.yaml
-recursive-include oviz/viewer/web *.js *.css *.html
+recursive-include oviz/viewer/web *.js *.css *.html *.jpg

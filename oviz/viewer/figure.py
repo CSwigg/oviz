@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from .build import bundle_css, bundle_js, template_html
+from .build import bundle_css, bundle_js, sky_thumbnails, template_html
 from .bundle import Bundle, encode_base64_lines
 from .compile import compile_scene_spec
 
@@ -111,6 +111,10 @@ def render_bundle_html(bundle: Bundle, *, title: str | None = None, theme: str =
     camera_anchor = _check_anchor(camera_anchor)
     manifest = dict(bundle.manifest)
     manifest["blobs"] = [b.descriptor() for b in bundle.blobs]
+    if manifest.get("sky"):
+        # Sky figures carry the background picker's survey thumbnails
+        # (about 4 kB each) so the picker opens instantly, even offline.
+        manifest["sky"] = {**manifest["sky"], "thumbs": sky_thumbnails()}
     manifest["viewer"] = {"version": VIEWER_VERSION, "mode": mode}
     if camera_anchor:
         manifest["viewer"]["cameraAnchor"] = camera_anchor

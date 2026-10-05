@@ -75,13 +75,9 @@ export class Timeline {
     this.setFrame(this.timeToFrame(t), opts);
   }
 
+  /** Step whole frames; like the classic viewer this stops at the ends (Loop is for playback). */
   step(n = 1) {
-    const target = Math.round(this.frame) + n;
-    if (this.loop && this.count > 1) {
-      this.setFrame(((target % this.count) + this.count) % this.count);
-    } else {
-      this.setFrame(target);
-    }
+    this.setFrame(Math.round(this.frame) + n);
   }
 
   play(direction = this.direction) {
@@ -171,6 +167,16 @@ export function birthProfile(timeline, ageArrays, bins = 96) {
     out[i] = acc;
   }
   return out;
+}
+
+/**
+ * Visibility (0–1) of what is drawn from the present-day Sun, such as the
+ * Galactic longitude grid: 1 at t = 0, smoothly gone 1 Myr either side
+ * (the classic viewer's present-day fade).
+ */
+export function presentDayFade(t) {
+  const x = Math.min(Math.abs(Number(t) || 0), 1);
+  return 1 - x * x * (3 - 2 * x);
 }
 
 /**

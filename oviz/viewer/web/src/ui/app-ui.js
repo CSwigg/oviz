@@ -1,20 +1,22 @@
 // The application shell: wires panels, dock, overlays, shortcuts and modes.
 
-import { h, icon, iconButton, kbd, isEditable, controlConsumesKey, MOD, downloadBlob, copyText, clear, localStorageGet, localStorageSet } from "./dom.js";
+import { h, icon, iconButton, kbd, isEditable, controlConsumesKey, MOD, downloadBlob, copyTextLater, clear, localStorageGet, localStorageSet } from "./dom.js";
 import { slider, toggle, miniSeg, installTooltips, createToasts } from "./controls.js";
 import { LayersPanel } from "./layers.js";
 import { TimelineDock } from "./dock.js";
-import { Inspector, HoverCard } from "./inspector.js";
+import { Inspector } from "./inspector.js";
 import { Palette } from "./palette.js";
 import { lutGradient } from "../core/color.js";
 import { rafThrottle } from "../core/emitter.js";
 import { formatAngle, formatDistance, clamp } from "../core/math.js";
 import { clonePose } from "../engine/camera.js";
 import { anchorLabel } from "../engine/anchor.js";
+import { autoOrbitRate, initialViewerState, skyStartView } from "../app/state.js";
 import { keyMotion } from "../engine/controls.js";
 import { cpuFramePosition, frameOffset } from "../engine/frames.js";
 import { SkyPlugin } from "../sky/sky.js";
-import { encodeViewHash, decodeViewHash } from "../app/viewhash.js";
+import { encodeViewHash, decodeViewHash, encodeStatePart, decodeStatePart, encodeViewsPart, decodeViewsPart } from "../app/viewhash.js";
+import { captureState } from "../app/states.js";
 import { StoryPlugin, figureId } from "./story.js";
 import { RecorderPlugin } from "./recorder.js";
 import { FilterPlugin } from "./filter.js";
@@ -28,6 +30,10 @@ import { CompactLegend } from "./legend.js";
 import { IdleFade } from "./idle.js";
 import { buildArModel } from "../ar/model.js";
 import { WidgetHost } from "./widgets.js";
+import { BirthTreePlugin } from "./birthtree.js";
+import { SfhPlugin } from "./sfh.js";
+import { ActionsPlugin } from "./actions.js";
+import { AxesPlugin } from "./axes.js";
 
 export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
@@ -37,6 +43,10 @@ export function mountUI(root, viewer) {
   ui.use(new LassoPlugin());
   ui.use(new StoryPlugin());
   ui.use(new RecorderPlugin());
+  ui.use(new BirthTreePlugin());
+  ui.use(new SfhPlugin());
+  ui.use(new ActionsPlugin());
+  ui.use(new AxesPlugin());
   ui.layers.render();
   ui.applyLayout();
   return ui;
@@ -65,10 +75,9 @@ export class AppUI {
     this.layers = new LayersPanel(this);
     this.inspector = new Inspector(this);
     this.dock = new TimelineDock(this);
-    this.hovercard = new HoverCard(this);
     this.palette = new Palette(this);
     this.buildBottom();
-    this.ui.append(this.layers.el, this.inspector.el, this.hovercard.el);
+    this.ui.append(this.layers.el, this.inspector.el);
     this.reticle = new SelectionReticle(this);
     this.buildExtras();
     // Floating tool panels that plugins register (Relative SFH, Birth tree…).
@@ -89,6 +98,7 @@ export class AppUI {
     this.bindViewer();
     // The authored theme, unless someone switched theme on this figure.
     this.themeKey = `oviz.theme.${figureId(this.manifest)}`;
+    document.documentElement.dataset.ovizFigureTheme ||= document.documentElement.dataset.ovizTheme || "dark";
     this.applyTheme(localStorageGet(this.themeKey) || document.documentElement.dataset.ovizTheme || "dark", { remember: false });
     this.setLayersOpen(window.innerWidth > 720 && this.modeConfig.layersOpen);
   }
@@ -149,7 +159,10 @@ export class AppUI {
     this.toolbar = h("div", { class: "ov-toolbar ov-glass", role: "toolbar", "aria-label": "Figure tools" },
       this.layersBtn, this.statesBtn, this.widgetsBtn, h("span", { class: "ov-toolbar-sep" }),
       this.shotBtn, this.shareBtn, this.settingsBtn, this.helpBtn);
-    this.top = h("header", { class: "ov-top ov-chrome" }, this.brand, this.search, this.toolbar);
+    // Touch screens have no Z key: one tap hides the interface (the
+    // "Show interface" pill brings it back).
+    this.zenBtn = iconButton("eyeOff", "Hide interface", () => this.setZen(true), { cls: "ov-glass ov-zen-btn" });
+    this.top = h("header", { class: "ov-top ov-chrome" }, this.brand, this.zenBtn, this.search, this.toolbar);
     this.ui.append(this.top);
   }
 
@@ -161,7 +174,9 @@ export class AppUI {
       this.scaleSub = h("div", { class: "ov-scale-sub" }));
     this.colorbars = h("div", { class: "ov-colorbars" });
     this.stream = h("div", { class: "ov-stream ov-glass", "data-done": "true" }, h("span", { class: "ov-spinner" }), h("span", null, "Loading volumes…"));
-    const left = h("div", { class: "ov-bottom-left" }, this.stream, this.colorbars, this.scale);
+    // The scale's row also holds the Sky imagery credit.
+    this.scaleRow = h("div", { class: "ov-scale-row" }, this.scale);
+    const left = h("div", { class: "ov-bottom-left" }, this.stream, this.colorbars, this.scaleRow);
     this.bottomLeft = left;
     const hasSky = (this.hasSky = !!this.manifest.sky?.enabled);
     this.viewSeg = h("div", { class: "ov-seg ov-seg--view ov-glass", role: "group", "aria-label": "View" });
@@ -175,7 +190,7 @@ export class AppUI {
     this.homeBtn = iconButton("home", "Reset view", () => v.resetView(), { shortcut: "Home", cls: "ov-glass" });
     this.fsBtn = iconButton("expand", "Fullscreen", () => this.toggleFullscreen(), { shortcut: "M", cls: "ov-glass" });
     this.fsBtn.hidden = !this.canFullscreen;
-    this.skyExtras = h("div", { class: "ov-corner-btns" });
+    this.skyExtras = h("div", { class: "ov-corner-btns ov-sky-extras" });
     this.cornerBtns = h("div", { class: "ov-corner-btns" }, this.homeBtn, this.fsBtn);
     const right = h("div", { class: "ov-bottom-right" }, this.skyExtras, this.viewSeg, this.cornerBtns);
     this.bottomRight = right;
@@ -189,10 +204,17 @@ export class AppUI {
 
   bindViewer() {
     const v = this.viewer;
+    // Classic Oviz: any drag, scroll, key or reset takes the camera and
+    // stops auto-orbit.
+    v.on("user-camera", () => { if (v.state.global.autoOrbit) this.setAutoOrbit(false); });
     const updateScale = rafThrottle(() => this.updateScale());
     v.on("camera", updateScale);
     v.renderer.afterRender.push(() => updateScale());
     v.on("style", () => this.renderColorbars());
+    const colorbars = rafThrottle(() => this.renderColorbars());
+    v.on("volume", colorbars);
+    v.on("time", colorbars);
+    v.on("volume-ready", colorbars);
     v.on("viewmode", ({ mode }) => {
       // Member stars exist only in Sky view: a member selection ends with it.
       if (mode !== "sky" && this.selection?.kind === "member") this.select(null, { recordUndo: false });
@@ -200,6 +222,8 @@ export class AppUI {
       this.syncViewToggle();
       this.syncViewSeg();
       this.renderColorbars();
+      // The key drops the Sun in Sky view (the eye is at the Sun).
+      this.legend.render();
     });
     // The measurement line and its label follow both objects through time.
     const measure = rafThrottle(() => this.updateMeasure());
@@ -235,7 +259,12 @@ export class AppUI {
   }
 
   afterBoot() {
+    // First, so the opening State the plugins capture is the Sky view.
+    this.applySkyStart();
     for (const p of this.plugins) p.afterBoot?.();
+    // Figures that open orbiting (e.g. the website background profile).
+    if (this.viewer.state.global.autoOrbit) this.setAutoOrbit(true);
+    this.viewer.controls.speed = this.viewer.state.global.navSpeed ?? 1;
     const hv = decodeViewHash(location.hash);
     if (hv) this.applyViewHash(hv);
     else this.introFlight();
@@ -252,13 +281,34 @@ export class AppUI {
     }));
   }
 
+  /**
+   * Figures saved looking out from the Sun (the classic "earth" view, e.g.
+   * a sky-start export) open in Sky with that gaze and field of view. Home
+   * and V lead to the 3D view the figure names for leaving Sky.
+   */
+  applySkyStart() {
+    const v = this.viewer;
+    const start = skyStartView(this.manifest, v.state);
+    if (!start) return;
+    const back = start.returnPose ? clonePose(start.returnPose) : null;
+    if (back) v.homePose = clonePose(back);
+    v.setViewMode("sky", { animate: false });
+    v.setPose(start.pose);
+    if (back) v.returnPose = back;
+  }
+
   /** One gentle how-to line the first time someone opens a figure. */
   firstRunHint() {
     const story = this.plugins.find((p) => p.name === "states");
     if (story?.readOnly || localStorageGet("oviz.hint.v1")) return;
     localStorageSet("oviz.hint.v1", "1");
     const touch = window.matchMedia?.("(pointer: coarse)").matches;
-    const text = touch ? "Drag to orbit · pinch to zoom · tap a cluster for details" : "Drag to orbit · scroll to zoom · click a cluster for details";
+    // Only figures with clusters (objects with ages) have details to click.
+    const sun = this.manifest.world?.sunTrace;
+    const clusters = this.manifest.traces.some((t) => t.showInLegend && t.key !== sun && t.points?.ageNow?.blob);
+    const text = touch
+      ? `Drag to orbit · pinch to zoom${clusters ? " · tap a cluster for details" : ""}`
+      : `Drag to orbit · scroll to zoom${clusters ? " · click a cluster for details" : ""}`;
     setTimeout(() => this.toast(text, { icon: icon("info"), ms: 5200 }), 1600);
   }
 
@@ -283,15 +333,59 @@ export class AppUI {
 
   async applyViewHash(hv) {
     const v = this.viewer;
+    const story = this.plugins.find((p) => p.name === "states");
+    // A link with saved views brings the sender's story; a presentation
+    // link opens presenting it.
+    if (hv.views && story?.homeState) {
+      const shared = await decodeViewsPart(hv.views, story.homeState).catch(() => null);
+      if (shared?.items?.length) {
+        story.loadShared(shared);
+        if (hv.present) {
+          story.present(true, { startAt: Math.min(hv.present, shared.items.length) - 1, instant: true });
+          return;
+        }
+      }
+    }
+    // A link with the whole State: rebuilt over the figure's opening State
+    // and applied exactly, like a saved view.
+    if (hv.state && story?.homeState) {
+      const state = await decodeStatePart(hv.state, story.homeState).catch(() => null);
+      if (state?.view) {
+        await story.applyState(state, { instant: true });
+        return;
+      }
+    }
     if (hv.group && (this.manifest.groups?.order || []).includes(hv.group)) this.layers.setGroup(hv.group);
     if (hv.time != null) v.timeline.setTime(hv.time);
     if (hv.mode === "sky" && this.manifest.sky?.enabled) await v.setViewMode("sky", { animate: false });
+    // A 3D link into a figure that opens in Sky.
+    else if (hv.mode === "3d" && v.state.view.mode === "sky") await v.setViewMode("3d", { animate: false });
     if (hv.pose) {
       // The link's anchor (or, for older links, the one its pose implies);
       // a centre that is not on it leaves the camera free.
       const anchor = hv.anchor && v.anchorAvailable(hv.anchor) ? hv.anchor : v.inferAnchor(hv.pose);
       v.setAnchor(anchor, { fly: false });
       v.setPose({ ...v.pose, ...hv.pose });
+    }
+    // The layers it showed (after the group preset), only if the list still matches.
+    const items = this.layers.toggleItems("all");
+    if (hv.layers?.length === items.length) items.forEach((it, i) => this.layers.setItemVisible(it, hv.layers[i]));
+    // Its lasso selection: the objects by trace index, and the outline that clips the dust.
+    const lasso = this.plugins.find((p) => p.name === "lasso");
+    if (lasso && (hv.selection || hv.mask)) {
+      const selection = {};
+      for (const [ti, idx] of hv.selection || []) {
+        const t = v.traces[ti];
+        const ok = t?.points ? idx.filter((i) => i < t.points.count) : [];
+        if (ok.length) selection[t.key] = ok;
+      }
+      lasso.restore({ selection, isolate: hv.isolate !== false, filterOff: !!hv.filterOff, mask: hv.mask || null });
+    }
+    // Its selected object.
+    const t = hv.object ? v.traces[hv.object.trace] : null;
+    if (t?.points && hv.object.index < t.points.count) {
+      await v.objectMeta(t.key);
+      this.select({ trace: t.key, index: hv.object.index }, { recordUndo: false });
     }
   }
 
@@ -307,33 +401,42 @@ export class AppUI {
     const v = this.viewer;
     const canvas = v.canvas;
     let down = null;
-    const hoverAt = rafThrottle((x, y, cx, cy) => {
+    // Hovering only highlights an object (and shows a pointer); its name
+    // tag appears when it is clicked, so moving over the figure stays quiet.
+    const hoverAt = rafThrottle((x, y) => {
       if (v.controls.pointers.size) return;
       const hit = v.pick(x, y);
       v.setHover(hit);
       this.root.dataset.hovering = hit ? "true" : "false";
-      this.hovercard.show(hit, cx, cy);
-      this._lastHover = { hit, cx, cy };
     });
     canvas.addEventListener("pointermove", (e) => {
+      // How far the press has wandered: a drag that comes back (a closed
+      // lasso loop) is not a click.
+      if (down) down.far = Math.max(down.far, Math.hypot(e.clientX - down.x, e.clientY - down.y));
       if (e.pointerType === "touch") return;
       const r = canvas.getBoundingClientRect();
       const rr = this.root.getBoundingClientRect();
       hoverAt(e.clientX - r.left, e.clientY - r.top, e.clientX - rr.left, e.clientY - rr.top);
     });
+    // Keys work as soon as the pointer is over the figure (classic Oviz; it
+    // matters in iframes and notebooks), unless a field is being typed in.
+    canvas.addEventListener("pointerenter", (e) => {
+      if (e.pointerType === "touch") return;
+      const a = document.activeElement;
+      if (a && a !== document.body && a !== canvas && (isEditable(a) || this.root.contains(a))) return;
+      canvas.focus({ preventScroll: true });
+    });
     canvas.addEventListener("pointerleave", () => {
       v.setHover(null);
-      this.hovercard.show(null);
       this.root.dataset.hovering = "false";
     });
     canvas.addEventListener("pointerdown", (e) => {
-      down = { x: e.clientX, y: e.clientY, t: performance.now() };
-      this.hovercard.show(null);
+      down = { x: e.clientX, y: e.clientY, t: performance.now(), far: 0 };
       canvas.focus({ preventScroll: true });
     });
     canvas.addEventListener("pointerup", (e) => {
       if (!down) return;
-      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      const moved = Math.max(down.far, Math.hypot(e.clientX - down.x, e.clientY - down.y));
       const quick = performance.now() - down.t < 450;
       down = null;
       if (moved > 5 || !quick) return;
@@ -344,21 +447,25 @@ export class AppUI {
       if (e.shiftKey && hit && this.selection) this.measure(this.selection, hit);
       else this.select(hit);
     });
+    // Double-click sets the camera's frame, keeping the zoom. On a cluster
+    // the camera centres on it and moves with it through time; anywhere
+    // else it goes back to the LSR, centred on the dust, line or Milky Way
+    // plane under the pointer, or on the LSR itself over empty space. In
+    // Sky view a double-click turns to an object and does nothing on empty sky.
     canvas.addEventListener("dblclick", (e) => {
       const r = canvas.getBoundingClientRect();
-      const hit = v.pick(e.clientX - r.left, e.clientY - r.top);
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      const hit = v.pick(x, y);
+      const sky = v.state.view.mode === "sky";
       if (hit && hit.kind !== "member") {
         this.select(hit);
-        v.flyToObject(hit.trace, hit.index);
-      } else if (!hit) {
-        v.resetView();
+        if (sky) v.flyToObject(hit.trace, hit.index);
+        else this.followObject(hit);
+        return;
       }
+      if (sky || hit) return;
+      this.returnToLsr(v.pickSurface(x, y));
     });
-  }
-
-  refreshHover() {
-    const l = this._lastHover;
-    if (l) this.hovercard.show(l.hit, l.cx, l.cy);
   }
 
   get narrow() {
@@ -387,8 +494,8 @@ export class AppUI {
     } else if (hit && hit.kind === "member") {
       labels.setDynamic("selection", `${hit.member.cluster} member`, () => this.selectionPosition(hit), "ov-label--sel");
     }
-    // Deselecting stops following an object (Sun and LSR anchors stay).
-    if (!hit && v.anchor.kind === "object") v.releaseAnchor();
+    // The camera's frame outlives the selection: a followed cluster stays
+    // followed until a double-click elsewhere returns to the LSR.
     v.selected = hit;
     v.renderer.invalidate();
     this.viewer.emit("select", hit);
@@ -402,10 +509,14 @@ export class AppUI {
   captureUiState() {
     const sel = this.selection;
     const detailsOpen = this.inspector.el.dataset.open === "true";
+    const figureTheme = document.documentElement.dataset.ovizFigureTheme || "dark";
     return {
       selection: !sel ? null : sel.kind === "member" ? { kind: "member", index: sel.index } : { trace: sel.trace, index: sel.index },
       layers: this.narrow || !!this.layersOpen === !!this.modeConfig.layersOpen ? null : !!this.layersOpen,
       details: this.modeConfig.selection === "callout" && detailsOpen ? true : null,
+      // Classic States restored the theme and zen mode too.
+      theme: this.theme !== figureTheme ? this.theme : null,
+      zen: this.root.dataset.zen === "true" && this.root.dataset.presenting !== "true" ? true : null,
     };
   }
 
@@ -431,6 +542,8 @@ export class AppUI {
       if (hit && s.details) this.openDetails();
       else if (this.inspector.el.dataset.open === "true") this.inspector.show(null);
     }
+    if (s.theme === "light" || s.theme === "dark") this.applyTheme(s.theme, { remember: false });
+    if (this.root.dataset.presenting !== "true") this.setZen(!!s.zen);
   }
 
   /** Find an object by its (trace and) name, as classic States store it. */
@@ -480,7 +593,8 @@ export class AppUI {
     if (key === m.key) return m.text;
     m.key = key;
     const d = Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]);
-    const eye = v.skyEye();
+    // The angle as seen from the Sun (from the Sky camera in Sky view).
+    const eye = v.state.view.mode === "sky" ? v.skyEye() : v.sunPosition();
     const ua = norm([pa[0] - eye[0], pa[1] - eye[1], pa[2] - eye[2]]);
     const ub = norm([pb[0] - eye[0], pb[1] - eye[1], pb[2] - eye[2]]);
     const ang = Math.acos(clamp(ua[0] * ub[0] + ua[1] * ub[1] + ua[2] * ub[2], -1, 1)) * 180 / Math.PI;
@@ -569,17 +683,59 @@ export class AppUI {
     return null;
   }
 
-  /** Anchor the camera to an object (or let go of it): it moves with it through time. */
+  /** Anchor the camera to an object (or stop): it moves with it through time. */
   toggleFollow(hit) {
     const v = this.viewer;
     const f = this.following;
     if (!hit || (f && f.trace === hit.trace && f.index === hit.index)) {
-      if (f) v.releaseAnchor();
+      if (f) this.stopFollowing();
       return;
     }
     const sun = hit.trace === v.world.sunTrace && hit.index === 0;
     v.setAnchor(sun ? { kind: "sun" } : { kind: "object", trace: hit.trace, index: hit.index }, { distance: Math.min(v.pose.distance, 600) });
     this.toast("Following · the camera moves with it through time", { icon: icon("follow") });
+  }
+
+  /**
+   * Double-click on a cluster: its frame. The camera centres on it at the
+   * same zoom and moves with it through time.
+   */
+  followObject(hit) {
+    const v = this.viewer;
+    const sun = hit.trace === v.world.sunTrace && hit.index === 0;
+    const a = sun ? { kind: "sun" } : { kind: "object", trace: hit.trace, index: hit.index };
+    if (!v.anchorAvailable(a)) { v.recenter(v.objectPosition(hit.trace, hit.index)); return; }
+    const was = v.anchor;
+    v.setAnchor(a);
+    if (was.kind !== a.kind || was.trace !== a.trace || was.index !== a.index) {
+      this.toast(`Following ${anchorLabel(a, this.anchorName(a))} · double-click empty space to return to the LSR`, { icon: icon("follow"), ms: 2600 });
+    }
+  }
+
+  /**
+   * Double-click off a cluster: back to the LSR frame, centred on `point`
+   * (dust or a line under the pointer) or on the LSR itself. Figures
+   * without an LSR re-centre on the point, or reset the view.
+   */
+  returnToLsr(point) {
+    const v = this.viewer;
+    const lsr = { kind: "lsr" };
+    if (!v.anchorAvailable(lsr)) {
+      if (point) v.recenter(point);
+      else v.resetView();
+      return;
+    }
+    const was = v.anchor.kind;
+    v.setAnchor(lsr, { fly: !point });
+    if (point) v.recenter(point);
+    if (was !== "lsr") this.toast("Back to the LSR frame", { icon: icon("target"), ms: 1400 });
+  }
+
+  /** Stop moving with an object or layer: the LSR frame again, where the camera is. */
+  stopFollowing() {
+    const v = this.viewer;
+    if (v.anchorAvailable({ kind: "lsr" })) v.setAnchor({ kind: "lsr" }, { fly: false });
+    else v.releaseAnchor();
   }
 
   /** Anchor the camera to the LSR, the Sun or nothing ("free"). */
@@ -592,10 +748,25 @@ export class AppUI {
     this.toast(kind === "free" ? "Camera free · scroll zooms toward the pointer" : `Camera anchored to ${name}`, { icon: icon(kind === "free" ? "orbit" : "target"), ms: 1600 });
   }
 
-  /** Display name of an object anchor (empty for the others). */
+  /** Display name of an object or layer anchor (empty for the others). */
   anchorName(a) {
+    if (a?.kind === "layer") return this.viewer.traceByKey.get(a.trace)?.name || "";
     if (a?.kind !== "object") return "";
     return this.viewer.describeObject(a.trace, a.index)?.name || "";
+  }
+
+  /** Follow a whole layer: the camera moves with its median (classic focus group). */
+  followLayer(traceKey) {
+    const v = this.viewer;
+    const a = { kind: "layer", trace: traceKey };
+    if (v.anchor.kind === "layer" && v.anchor.trace === traceKey) {
+      this.stopFollowing();
+      this.toast("Stopped following the layer", { icon: icon("follow"), ms: 1400 });
+      return;
+    }
+    if (!v.anchorAvailable(a)) return;
+    v.setAnchor(a);
+    this.toast(`Following ${anchorLabel(a, this.anchorName(a))} · the camera moves with the group through time`, { icon: icon("follow"), ms: 2400 });
   }
 
   anchorField() {
@@ -606,20 +777,21 @@ export class AppUI {
     if (v.anchorAvailable({ kind: "sun" })) options.push({ value: "sun", label: "Sun" });
     options.push({ value: "free", label: "Free" });
     if (a.kind === "object") options.push({ value: "object", label: "Object" });
+    if (a.kind === "layer") options.push({ value: "layer", label: "Layer" });
     return miniSeg({
       label: "Camera anchor",
       hint: "What the camera orbits, zooms toward and moves with through time",
       value: a.kind,
       options,
-      onChange: (k) => { if (k !== "object") this.setCameraAnchor(k); },
+      onChange: (k) => { if (k !== "object" && k !== "layer") this.setCameraAnchor(k); },
     });
   }
 
   // ------------------------------------------------------------- modes
 
   setViewMode(mode) {
-    if (mode === "sky" && !this.manifest.sky?.enabled) return;
-    this.viewer.setViewMode(mode);
+    if (mode === "sky" && !this.manifest.sky?.enabled) return Promise.resolve();
+    return this.viewer.setViewMode(mode);
   }
 
   syncViewSeg() {
@@ -700,6 +872,7 @@ export class AppUI {
       ...this.plugins.flatMap((p) => p.moreItems?.() || []),
       "-",
       ...(lasso ? [{ label: "Lasso select", icon: "wand", shortcut: "L", run: () => lasso.arm(true) }] : []),
+      { label: "Hide interface", icon: "eyeOff", shortcut: "Z", run: () => this.setZen(true) },
       ...(this.canFullscreen ? [{ label: "Fullscreen", icon: "expand", shortcut: "M", run: () => this.toggleFullscreen() }] : []),
       ...(keyboard ? [{ label: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => this.showHelp() }] : []),
       { label: "About this figure", icon: "info", run: () => this.showAbout() },
@@ -707,7 +880,18 @@ export class AppUI {
   }
 
   setZen(on) {
+    const was = this.root.dataset.zen === "true";
     this.root.dataset.zen = String(on);
+    if (on) this.tooltips?.hide();
+    if (on && !was && !this._zenHinted && this.root.dataset.presenting !== "true" && !window.matchMedia?.("(hover: none)").matches) {
+      this._zenHinted = true;
+      this.toast("Interface hidden · press Z to bring it back", { icon: icon("eyeOff"), ms: 2400 });
+    }
+    // Touch screens have no Z or Esc: a small pill brings the interface back.
+    if (on && !this.zenExit) {
+      this.zenExit = h("button", { class: "ov-zen-exit ov-glass", type: "button", onclick: () => this.setZen(false) }, icon("collapse"), "Show interface");
+      this.ui.append(this.zenExit);
+    }
     this.refit();
   }
 
@@ -855,33 +1039,59 @@ export class AppUI {
 
   renderColorbars() {
     const v = this.viewer;
-    clear(this.colorbars);
+    const bars = [];
     for (const trace of v.traces) {
       const st = v.state.traces[trace.key] || {};
       const cb = trace.colorBy;
       if (!cb || !st.visible) continue;
       if ((st.colorMode || cb.defaultMode) !== "by_value") continue;
-      const lut = this.luts.get(st.colormap || cb.colormap);
-      if (!lut) continue;
+      const name = st.colormap || cb.colormap;
+      if (!this.luts.get(name)) continue;
+      bars.push({ dot: trace.legendColor, title: `${trace.name} · ${cb.label}`, name, lo: st.cmin ?? cb.cmin, hi: st.cmax ?? cb.cmax });
+    }
+    // Volumes that carry a colour scale, while they are drawn.
+    const drawn = new Set((v._volumeParams(v.timeline.frame, v.timeline.time).volumeDraws || []).filter((d) => d.fade > 0.5).map((d) => d.key));
+    const seen = new Set();
+    for (const spec of v.volumeSpecs || []) {
+      const cb = spec.colorbar;
+      if (!cb || !drawn.has(spec.key) || seen.has(spec.stateKey)) continue;
+      seen.add(spec.stateKey);
+      const vs = v.state.volumes[spec.stateKey] || {};
+      const name = vs.colormap || spec.colormaps[0];
+      if (!this.luts.get(name)) continue;
+      let lo, hi;
+      if (Array.isArray(cb.range)) [lo, hi] = cb.range;
+      else {
+        // A rate scale: per unit time, so a longer window means a lower rate.
+        const k = (Number(cb.scale) || 1) * (cb.perWindow && spec.procedural ? spec.procedural.windowMyr / (Number(vs.kdeTimeWindowMyr) || spec.procedural.windowMyr) : 1);
+        lo = Math.max(0, Number(vs.vmin) || 0) * k;
+        hi = Math.max(lo, Number(vs.vmax) || 0) * k;
+      }
+      bars.push({ dot: spec.legendColor, title: `${cb.label}${cb.unit ? ` (${cb.unit})` : ""}`, name, lo, hi });
+    }
+    const sig = JSON.stringify(bars.slice(0, 3));
+    if (sig === this._colorbarSig) return;
+    this._colorbarSig = sig;
+    clear(this.colorbars);
+    for (const b of bars.slice(0, 3)) {
       this.colorbars.append(h("div", { class: "ov-colorbar ov-glass" },
-        h("div", { class: "ov-colorbar-title" }, h("span", { class: "ov-colorbar-dot", style: { background: trace.legendColor } }), `${trace.name} · ${cb.label}`),
-        h("span", { class: "ov-colorbar-min" }, fmtNum(st.cmin ?? cb.cmin)),
-        h("div", { class: "ov-colorbar-ramp", style: { background: lutGradient(lut) } }),
-        h("span", { class: "ov-colorbar-max" }, fmtNum(st.cmax ?? cb.cmax))));
-      if (this.colorbars.children.length >= 3) break;
+        h("div", { class: "ov-colorbar-title" }, h("span", { class: "ov-colorbar-dot", style: { background: b.dot } }), b.title),
+        h("span", { class: "ov-colorbar-min" }, fmtNum(b.lo)),
+        h("div", { class: "ov-colorbar-ramp", style: { background: lutGradient(this.luts.get(b.name)) } }),
+        h("span", { class: "ov-colorbar-max" }, fmtNum(b.hi))));
     }
   }
 
   // ------------------------------------------------------------- menus
 
-  menu(anchor, items, { title, align = "right", above = false } = {}) {
+  menu(anchor, items, { title, align = "right", above = false, cls = "" } = {}) {
     // Pressing the button of the open menu closes it.
     if (this._menu?.anchor === anchor) { this.closeMenu(); return null; }
     this.closeMenu();
     this.tooltips?.hide();
     // Menus from the bar would open on top of a floating layers panel.
     if (this.layersOpen && this.layersFloating && !this.layers.el.contains(anchor)) this.setLayersOpen(false);
-    const pop = h("div", { class: "ov-pop ov-glass", role: "menu" });
+    const pop = h("div", { class: `ov-pop ov-glass ${cls}`.trim(), role: "menu" });
     if (title) pop.append(h("div", { class: "ov-pop-title" }, title));
     for (const it of items) {
       if (it === "-") { pop.append(h("div", { class: "ov-pop-sep" })); continue; }
@@ -962,12 +1172,29 @@ export class AppUI {
       toggle({ label: "Fade out after birth", checked: g.fadeInOut, onChange: (x) => v.setGlobal({ fadeInOut: x }) }),
       toggle({ label: "Size by member count", checked: g.sizeByStars, onChange: (x) => v.setGlobal({ sizeByStars: x }) }),
       v.timeline.count > 1 ? slider({ label: "Motion trails", min: 0, max: this.maxTrailMyr(), step: this.maxTrailMyr() / 60, value: g.trails || 0, format: (x) => (x <= 0 ? "Off" : `${x.toFixed(x >= 10 ? 0 : 1)} Myr`), onInput: (x) => v.setGlobal({ trails: x }) }) : null,
-      toggle({ label: "Auto-orbit camera", checked: !!v.controls.autoOrbit, onChange: (x) => this.setAutoOrbit(x) }),
-      slider({ label: "Field of view", min: 10, max: 100, step: 1, value: v.pose.fov, format: (x) => `${Math.round(x)}°`, onInput: (x) => { v.pose.fov = x; v.renderer.invalidate(); } }),
+      (this._orbitToggle = toggle({ label: "Auto-orbit camera", hint: "Any drag, scroll or key stops it", checked: !!v.controls.autoOrbit, onChange: (x) => this.setAutoOrbit(x) })),
+      slider({ label: "Orbit speed", min: 0.1, max: 4, value: g.autoOrbitSpeed ?? 1, scale: "log", format: (x) => `${x.toFixed(2)}×`, onInput: (x) => { g.autoOrbitSpeed = x; v.controls.autoOrbit = autoOrbitRate(g); } }),
+      miniSeg({ label: "Orbit direction", value: g.autoOrbitDirection < 0 ? -1 : 1, options: [{ value: 1, label: "Clockwise" }, { value: -1, label: "Anticlockwise" }], onChange: (d) => { g.autoOrbitDirection = d; v.controls.autoOrbit = autoOrbitRate(g); } }),
+      slider({ label: "Field of view", min: 1, max: 120, value: v.pose.fov, scale: "log", format: (x) => `${x < 10 ? x.toFixed(1) : Math.round(x)}°`, onInput: (x) => { v.pose.fov = Math.min(x, v.controls.maxFovFor()); v.renderer.invalidate(); } }),
+      slider({ label: "Scroll & key speed", min: 0.2, max: 4, value: g.navSpeed ?? 1, scale: "log", format: (x) => `${x.toFixed(2)}×`, onInput: (x) => { g.navSpeed = x; v.controls.speed = x; } }),
       toggle({ label: "Performance overlay", checked: !!this.perfEl, onChange: (x) => this.setPerfOverlay(x) }),
       ...this.plugins.flatMap((p) => p.settingsRows?.() || []),
+      h("button", { class: "ov-btn ov-btn--sm ov-btn--block", type: "button", onclick: () => { this.closeMenu(); this.resetDisplay(); } }, "Reset display settings"),
     );
     this.menu(anchor, [{ body }], { title: "Display" });
+  }
+
+  /** Back to the figure's own display settings (classic "Reset controls"). */
+  resetDisplay() {
+    const v = this.viewer;
+    const g0 = initialViewerState(v.manifest).global;
+    const keep = { grid: v.state.global.grid, gridOpacity: v.state.global.gridOpacity, labels: v.state.global.labels };
+    v.setGlobal({ ...g0, ...keep });
+    v.controls.speed = g0.navSpeed ?? 1;
+    this.setAutoOrbit(!!g0.autoOrbit);
+    const fov = v.homePose?.fov;
+    if (Number.isFinite(fov) && v.state.view.mode !== "sky") { v.pose.fov = fov; v.renderer.invalidate(); }
+    this.toast("Display settings reset", { icon: icon("sliders"), ms: 1200 });
   }
 
   /** The Widgets menu: every tool panel this figure offers, ticked when open. */
@@ -1028,8 +1255,10 @@ export class AppUI {
   }
 
   setAutoOrbit(on) {
-    this.viewer.controls.autoOrbit = on ? 0.06 : 0;
-    this.viewer.state.global.autoOrbit = on;
+    const g = this.viewer.state.global;
+    g.autoOrbit = !!on;
+    this.viewer.controls.autoOrbit = autoOrbitRate(g);
+    this._orbitToggle?.set(!!on);
     this.viewer.renderer.invalidate();
   }
 
@@ -1047,8 +1276,11 @@ export class AppUI {
   }
 
   shareMenu(anchor) {
+    const story = this.plugins.find((p) => p.name === "states");
+    const views = story?.project.items.length || 0;
     const items = [
-      { label: "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
+      { label: views ? "Copy link to this view (with the saved views)" : "Copy link to this view", icon: "share", run: () => this.copyViewLink() },
+      ...(views ? [{ label: "Copy presentation link", icon: "present", run: () => this.copyPresentationLink() }] : []),
       ...(this.canQuickLook ? this.arMenuItems() : []),
       { label: this.arHasTime ? "Save AR time-lapse (USDZ)" : "Save 3D model for AR (USDZ)", icon: "ar", run: () => this.saveArModel() },
       ...(this.arHasTime ? [{ label: "Save AR model of this moment (USDZ)", icon: "ar", run: () => this.saveArModel({ moment: true }) }] : []),
@@ -1064,7 +1296,7 @@ export class AppUI {
     try {
       const blob = await v.renderer.capture({
         scale,
-        background: sky?.captureBackground ? (ctx, w, h) => sky.captureBackground(ctx, w, h) : "#04060a",
+        background: sky?.captureBackground ? (ctx, w, h) => sky.captureBackground(ctx, w, h) : "#000",
       });
       if (clipboard && navigator.clipboard?.write) {
         await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
@@ -1081,9 +1313,76 @@ export class AppUI {
   }
 
   copyViewLink() {
+    const n = this.plugins.find((p) => p.name === "states")?.project.items.length || 0;
+    copyTextLater(this.viewLinkUrl())
+      .then(() => this.toast(n ? `Link copied · it opens this view and carries the ${n} saved view${n === 1 ? "" : "s"}` : "Link to this view copied", { icon: icon("share") }))
+      .catch(() => this.toast("Could not copy the link"));
+  }
+
+  /** A link that opens presenting the saved views from the first one. */
+  copyPresentationLink() {
+    const n = this.plugins.find((p) => p.name === "states")?.project.items.length || 0;
+    if (!n) { this.toast("Save a view with N first, then copy a presentation link"); return; }
+    copyTextLater(this.viewLinkUrl({ present: true }))
+      .then(() => this.toast(`Presentation link copied · it opens presenting ${n} view${n === 1 ? "" : "s"}`, { icon: icon("present") }))
+      .catch(() => this.toast("Could not copy the link"));
+  }
+
+  /**
+   * A link to this view: this page with the view in its hash, plus the saved
+   * views (`views: false` leaves them out); `present: true` makes it open
+   * presenting them from the first.
+   */
+  async viewLinkUrl(opts = {}) {
     const url = new URL(location.href);
-    url.hash = encodeViewHash(this.viewer);
-    copyText(url.toString()).then(() => this.toast("Link to this view copied", { icon: icon("share") }));
+    url.hash = await this.viewLinkHash(opts);
+    return url.toString();
+  }
+
+  /**
+   * The view link's hash: the camera and time in readable form, plus the
+   * whole State (what differs from how the figure opens), so every property
+   * of the view (layer styles, volumes, the Sky background, filters, the
+   * lasso, notes, widgets and panels) arrives as it was sent.
+   */
+  async viewLinkHash({ views = true, present = false } = {}) {
+    const story = this.plugins.find((p) => p.name === "states");
+    let state = "", shared = "";
+    if (story?.homeState) {
+      try { state = await encodeStatePart(captureState(this.viewer, this.sky), story.homeState); } catch (_) { state = ""; }
+      if (views && story.project.items.length) {
+        try { shared = await encodeViewsPart(story.project.items, story.homeState, story.project.defaultTransition); } catch (_) { shared = ""; }
+      }
+    }
+    const extra = state ? { state } : this.viewLinkExtras();
+    if (shared) {
+      extra.views = shared;
+      if (present) extra.present = 1;
+    }
+    return encodeViewHash(this.viewer, extra);
+  }
+
+  /**
+   * What a view link keeps beyond the camera and time: the layers shown
+   * (volumes too), the lasso selection with the outline that clips the
+   * dust, and the selected object. Traces go by their index in the figure.
+   */
+  viewLinkExtras() {
+    const v = this.viewer;
+    const index = new Map(v.traces.map((t, i) => [t.key, i]));
+    const extra = { layers: this.layers.toggleItems("all").map((it) => this.layers.itemVisible(it)) };
+    const lasso = this.plugins.find((p) => p.name === "lasso");
+    if (lasso?.selection) {
+      extra.lasso = {
+        selection: [...lasso.selection].filter(([key]) => index.has(key)).map(([key, idx]) => [index.get(key), Array.from(idx)]),
+        isolate: lasso.isolate,
+        filterOff: !!lasso.filterOff,
+        mask: lasso.mask,
+      };
+    }
+    const sel = this.selection;
+    if (sel && sel.kind !== "member" && index.has(sel.trace) && Number.isInteger(sel.index)) extra.object = { trace: index.get(sel.trace), index: sel.index };
+    return extra;
   }
 
   // ------------------------------------------------------------- palette sources
@@ -1092,7 +1391,8 @@ export class AppUI {
     const v = this.viewer;
     const tl = v.timeline;
     const list = [
-      { title: tl.playing ? "Pause" : "Play time", icon: tl.playing ? "pause" : "play", shortcut: "Space", pinned: true, run: () => this.dock.togglePlay() },
+      { title: tl.playing ? "Pause" : "Play time", icon: tl.playing ? "pause" : "play", shortcut: "Space", pinned: true, run: () => this.dock.togglePlay(tl.playing ? 0 : 1) },
+      ...(tl.count > 1 ? [{ title: "Play backward", icon: "stepBack", shortcut: "⇧ Space", keywords: "reverse rewind time past", run: () => tl.play(-1) }] : []),
       { title: "Reset view", icon: "home", shortcut: "Home", pinned: true, run: () => v.resetView() },
       { title: "Go to present day (t = 0)", icon: "target", keywords: "now zero", run: () => tl.setTime(0) },
       { title: this.layersOpen ? "Hide layers panel" : "Show layers panel", icon: "layers", shortcut: "⇧ L", run: () => this.setLayersOpen(!this.layersOpen) },
@@ -1132,6 +1432,11 @@ export class AppUI {
   layerItems() {
     const v = this.viewer;
     const items = [];
+    const all = this.layers.toggleItems("all");
+    if (all.length > 1) {
+      const anyOn = all.some((it) => this.layers.itemVisible(it));
+      items.push({ title: anyOn ? "Hide all layers" : "Show all layers", sub: this.manifest.volumes?.length ? "Data and volumes; showing again restores what was on" : "", icon: anyOn ? "eyeOff" : "eye", shortcut: "T", keywords: "toggle everything traces volumes", run: () => this.layers.toggleAll("all") });
+    }
     for (const t of v.traces) {
       if (!t.showInLegend || v.state.traces[t.key]?.inGroup === false) continue;
       const on = !!v.state.traces[t.key]?.visible;
@@ -1216,10 +1521,10 @@ export class AppUI {
 
   showHelp() {
     const groups = [
-      ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⇧ Drag"], ["Zoom (keeps the camera anchor centred)", "Scroll"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view and re-anchor", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
-      ["Time", [["Play / pause", "Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
-      ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all", "T"], ["Point size − / +", "[ ]"], ["Motion trails", "J"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
-      ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Fly to object", "Double-click"], ["Measure separation", "⇧ Click"], ["Lasso", "L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
+      ["Camera", [["Orbit", "Drag"], ["Pan", "Right-drag / ⌃ Drag"], ["Zoom about the centre", "Scroll / Middle-drag"], ["Orbit / tilt", "W A S D"], ["Fly (4× faster)", "⇧ W A S D"], ["Zoom out / in", "Q E"], ["Move up / down", "R F"], ["Reset view and re-anchor", "Home"], ["Auto-orbit", "O"], ["3D ⇄ Sky", "V"]]],
+      ["Time", [["Play / pause", "Space"], ["Play backward", "⇧ Space"], ["Step frame", "← →"], ["Step 5 frames", "⇧ ← →"], ["Slower / faster", "< >"], ["Present day", "0"]]],
+      ["Layers & display", [["Toggle layer 1–9", "1–9"], ["Solo layer", "⇧ 1–9"], ["Show / hide all (volumes too)", "T"], ["Point size − / +", "[ ]"], ["Motion trails", "J"], ["Galactic grid", "G"], ["Sky background", "B"], ["Layers panel", "⇧ L"]]],
+      ["Select", [["Search anything", `${MOD} K`], ["Select object", "Click"], ["Follow a cluster (its frame)", "Double-click"], ["Back to the LSR frame", "Double-click elsewhere"], ["Measure separation", "⇧ Click"], ["Lasso", "⇧ Drag / L"], ["Lasso filter on / off", "C"], ["Undo selection", `${MOD} Z`], ["Clear selection", "Esc"]]],
       ["Views & presenting", [["Save current view", "N"], ["Present", "P"], ["Next / previous view", "→ ←"], ["Views panel", "Y"], ["Save figure", `${MOD} S`]]],
       ["Capture", [["Screenshot", "I"], ["Hide interface", "Z"], ["Fullscreen", "M"], ["Focus / detailed mode", "U"], ["This help", "?"]]],
       ...this.plugins.flatMap((p) => p.helpGroups?.() || []),
@@ -1321,6 +1626,7 @@ export class AppUI {
           v._cancelTween();
           v.controls.stop();
           v.emit("camera-takeover", {});
+          v.emit("user-camera", {});
           v.renderer.hold("keys");
         }
         e.preventDefault();
@@ -1336,7 +1642,7 @@ export class AppUI {
       let handled = true;
       switch (lower) {
         // ---- classic Oviz keys
-        case " ": this.dock.togglePlay(); break;
+        case " ": this.dock.togglePlay(e.shiftKey ? -1 : 1); break;
         case "ArrowLeft": tl.pause(); tl.step(e.shiftKey ? -5 : -1); break;
         case "ArrowRight": tl.pause(); tl.step(e.shiftKey ? 5 : 1); break;
         case "?": this.showHelp(); break;
@@ -1346,7 +1652,7 @@ export class AppUI {
         case "j": this.toggleTrails(); break;
         case "u": this.toggleMode(); break;
         case "z": this.setZen(this.root.dataset.zen !== "true"); break;
-        case "t": this.layers.toggleAll(this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false)); break;
+        case "t": this.layers.toggleAll("all"); break;
         case "[": case "{": case "]": case "}": {
           const dir = k === "]" || k === "}" ? 1 : -1;
           const step = e.shiftKey ? 0.25 : 0.1;
@@ -1356,6 +1662,8 @@ export class AppUI {
         }
         case "Escape":
           if (this.closeMenu({ refocus: true }) || this.closeSheet()) break;
+          // An open layer editor closes first (classic), then the panel.
+          if (this.layersOpen && this.layers.expanded) { this.layers.expand(this.layers.expanded); break; }
           if (this.layersOpen && this.layersFloating) { this.setLayersOpen(false); break; }
           if (this.root.dataset.story === "true") { this.plugins.find((p) => p.name === "states")?.toggle(false); break; }
           if (this.root.dataset.zen === "true") { this.setZen(false); break; }
@@ -1379,13 +1687,7 @@ export class AppUI {
         case "l": if (e.shiftKey) this.setLayersOpen(!this.layersOpen); else handled = false; break;
         default:
           if (/^Digit[1-9]$/.test(e.code)) {
-            const n = Number(e.code.slice(5)) - 1;
-            const traces = this.manifest.traces.filter((t) => t.showInLegend && v.state.traces[t.key]?.inGroup !== false);
-            const t = traces[n];
-            if (t) {
-              if (e.shiftKey) this.layers.solo(t.key);
-              else v.setTraceStyle(t.key, { visible: !v.state.traces[t.key]?.visible });
-            }
+            this.layers.toggleItemByIndex(Number(e.code.slice(5)) - 1, { solo: e.shiftKey });
           } else handled = false;
       }
       if (handled) e.preventDefault();
@@ -1407,14 +1709,14 @@ export class AppUI {
     this._lastKeyMotion = now;
     const c = v.controls;
     const sky = v.state.view.mode === "sky";
-    // Flying (Shift+W/A/S/D) or moving up and down (R/F) leaves the anchor.
-    if (!sky && ((this.shiftDown && ["w", "a", "s", "d"].some((k) => keys.has(k))) || keys.has("r") || keys.has("f"))) v.releaseAnchor();
+    // Flying (Shift+W/A/S/D) and R/F move within the anchor's frame, like panning.
     keyMotion(pose, keys, {
       dt,
       fast: this.shiftDown,
       sky,
       maxSpan: v.world.maxSpan,
       minDistance: c.minDistance, maxDistance: c.maxDistance, minFov: c.minFov, maxFov: c.maxFovFor(sky ? "sky" : "galactic"),
+      speed: c.speed,
     });
     v.renderer.markInteraction();
     v._onCameraChange();

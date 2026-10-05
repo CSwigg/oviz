@@ -254,6 +254,7 @@
 .ov-scale-label { font: 500 11.5px/1 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-on-sky); }
 .ov-scale-bar { position: relative; height: 4px; border: 1.5px solid rgba(255, 255, 255, 0.72); border-top: 0; transition: width 200ms var(--ov-ease); }
 .ov-scale-sub { font: 500 10px/1 var(--ov-font); color: rgba(255, 255, 255, 0.6); font-variant-numeric: tabular-nums; }
+.ov-scale-row { display: flex; align-items: flex-end; gap: 14px; }
 
 .ov-colorbars { display: flex; flex-direction: column; gap: 8px; }
 .ov-colorbar {
@@ -291,3 +292,39 @@
 .ov-stream[data-done="true"] { opacity: 0; pointer-events: none; }
 .ov-spinner { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--ov-line-strong); border-top-color: var(--ov-text-2); animation: ov-spin 0.8s linear infinite; }
 @keyframes ov-spin { to { transform: rotate(360deg); } }
+
+/* Zen mode on touch screens: the one way back to the interface. */
+.ov-zen-exit {
+  position: absolute; right: calc(var(--ov-gutter) + var(--ov-safe-right)); bottom: calc(var(--ov-gutter) + var(--ov-safe-bottom));
+  display: none; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 10px; border-radius: 999px;
+  font: 550 12px/1 var(--ov-font); color: var(--ov-text); z-index: 12;
+}
+.ov-zen-exit .ov-icon { width: 16px; height: 16px; }
+@media (hover: none) { .ov-root[data-zen="true"]:not([data-presenting="true"]) .ov-zen-exit { display: inline-flex; } }
+/* ...and one tap hides it: a round button beside search on touch screens
+   only (desktop keeps Z and the More menu, and its top bar is unchanged).
+   It stays a grid, as every icon button is, so the eye sits centred. */
+.ov-zen-btn { display: none; }
+@media (hover: none) {
+  .ov-top { grid-template-columns: minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: auto; }
+  .ov-top .ov-zen-btn {
+    display: inline-grid; place-items: center; order: 3; width: 40px; height: 40px;
+    background: var(--ov-surface); border: 1px solid var(--ov-line);
+    -webkit-backdrop-filter: var(--ov-blur); backdrop-filter: var(--ov-blur);
+  }
+}
+
+/* Actions (classic action bar): a row of buttons under the top bar. */
+.ov-actions {
+  position: absolute; left: 50%; top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px; border-radius: 999px; z-index: 9;
+  max-width: calc(100vw - 2 * var(--ov-gutter));
+}
+.ov-action {
+  height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--ov-text-2);
+  font: 550 12.5px/1 var(--ov-font); white-space: nowrap; cursor: pointer; transition: background var(--ov-dur), color var(--ov-dur);
+}
+.ov-action:hover { background: var(--ov-hover); color: var(--ov-text); }
+.ov-action[aria-pressed="true"] { background: var(--ov-accent-soft); color: var(--ov-accent-strong); }
+/* With an action bar, messages appear under it rather than over it. */
+.ov-root[data-actions="true"] .ov-toasts { top: calc(64px + 46px + var(--ov-safe-top)); }

@@ -9,12 +9,14 @@ import { RenderTarget } from "../engine/gl.js";
 import { makePose, clonePose, poseFromEyeTarget, poseTween, forwardFromAngles, anglesFromForward, sanitizePose } from "../engine/camera.js";
 import { LSR_POINT, normalizeAnchor, sameAnchor, inferAnchor } from "../engine/anchor.js";
 import { cpuFramePosition, frameOffset, trailParams } from "../engine/frames.js";
+import { rayBox, volumeMedianDepth, rayPlaneRect, screenSegment } from "../engine/surface.js";
 import { PointsLayer, resetStarTextures } from "../layers/points.js";
 import { LinesLayer } from "../layers/lines.js";
 import { ImagesLayer } from "../layers/images.js";
 import { VolumesLayer } from "../layers/volumes.js";
+import { buildEventKde, kdeSampleTime, kdeWindow, kdeId, kdeSampleTimes } from "../layers/kde.js";
 import { LabelsOverlay } from "../layers/labels.js";
-import { Timeline } from "./timeline.js";
+import { Timeline, presentDayFade } from "./timeline.js";
 import { initialViewerState, clampVolumeState } from "./state.js";
 
 const SKY_FOV = 60;
@@ -57,9 +59,8 @@ export class Viewer extends Emitter {
     this.controls = new Controls(this.canvas, this.renderer, {
       onChange: () => this._onCameraChange(),
       // Grabbing the camera ends any flight or State transition.
-      onInteractStart: () => { this._cancelTween(); this.emit("camera-takeover", {}); },
+      onInteractStart: () => { this._cancelTween(); this.emit("camera-takeover", {}); this.emit("user-camera", {}); },
       anchored: () => this.anchored,
-      onRelease: () => this.releaseAnchor(),
     });
     this.controls.maxDistance = Math.max(this.world.maxSpan || 1e4, 1e3) * 8;
     this.labels = new LabelsOverlay(container);
@@ -119,7 +120,9 @@ export class Viewer extends Emitter {
         const ld = { position: await store.get(L.position.blob) };
         if (L.position.offset) ld.offset = await store.get(L.position.offset);
         if (L.arc?.blob) ld.arc = await store.get(L.arc.blob);
+        if (L.segmentColors?.blob) ld.segmentColors = await store.get(L.segmentColors.blob);
         this.lines.addTrace(trace, ld);
+        (this.lineData ||= new Map()).set(trace.key, ld);
       }
       if (trace.labels && labels) {
         const L = trace.labels;
@@ -142,6 +145,7 @@ export class Viewer extends Emitter {
     this._gpuGeneration = (this._gpuGeneration || 0) + 1;
     resetStarTextures();
     this.data.clear();
+    this.lineData?.clear();
     this.pickIds = [];
     this.pickTarget = new RenderTarget(this.gl, { depth: true, filter: this.gl.NEAREST });
     this._pickVersion++;
@@ -179,14 +183,21 @@ export class Viewer extends Emitter {
     const layer = this.volumes;
     for (const spec of specs) {
       try {
+        if (spec.procedural) {
+          await this._attachProceduralVolume(spec, gen, layer);
+          onEach?.(spec);
+          this.emit("volume-ready", spec);
+          continue;
+        }
         const data = await this.store.get(spec.data.blob);
+        const color = spec.colorData?.blob ? await this.store.get(spec.colorData.blob) : null;
         let occ = null;
         if (spec.occupancy?.blob) {
           const o = await this.store.get(spec.occupancy.blob);
           occ = { data: o, gx: spec.occupancy.dims[0], gy: spec.occupancy.dims[1], gz: spec.occupancy.dims[2] };
         }
         if (gen !== (this._gpuGeneration || 0) || layer !== this.volumes) return;
-        layer.addVolume(spec, data, occ);
+        layer.addVolume(spec, data, occ, color);
         this.renderer.invalidate();
         onEach?.(spec);
         this.emit("volume-ready", spec);
@@ -197,6 +208,88 @@ export class Viewer extends Emitter {
     }
   }
 
+  // ---------------------------------------------- rebuilt event densities
+
+  /**
+   * Load an event-KDE volume: its events, and the precomputed density for
+   * its initial time when the bundle has one (the classic first frame).
+   */
+  async _attachProceduralVolume(spec, gen, layer) {
+    const proc = spec.procedural;
+    const events = await this.store.get(proc.events.blob);
+    const initial = spec.data?.blob ? await this.store.get(spec.data.blob) : null;
+    if (gen !== (this._gpuGeneration || 0) || layer !== this.volumes) return;
+    (this._kde ||= new Map()).set(spec.key, { spec, events });
+    const vs = this.state.volumes[spec.stateKey];
+    const time = kdeSampleTime(proc, this.timeline.time);
+    const win = kdeWindow(proc, vs);
+    const initialId = initial && proc.initialTimeMyr != null ? kdeId(kdeSampleTime(proc, proc.initialTimeMyr), proc.initialWindowMyr ?? proc.windowMyr) : "";
+    if (initialId) layer.addVolume(spec, initial, null, null, initialId);
+    const id = kdeId(time, win);
+    if (id !== initialId) {
+      const built = this._buildKde(spec.key, time, win);
+      if (initialId) layer.useData(spec.key, id, built);
+      else layer.addVolume(spec, built, null, null, id);
+    }
+    this.renderer.invalidate();
+    this._prefetchKde();
+  }
+
+  _buildKde(key, time, win) {
+    const k = this._kde.get(key);
+    const t0 = performance.now();
+    const { data } = buildEventKde(k.events, k.spec.procedural, k.spec.dims, k.spec.bounds, time, win);
+    this.kdeLastBuildMs = performance.now() - t0;
+    this.canvas.dataset.kdeLastBuildMs = this.kdeLastBuildMs.toFixed(1);
+    return data;
+  }
+
+  /** Swap an event-KDE volume to `time`'s sample, building it if needed; its cache id. */
+  _ensureKde(spec, time, vs) {
+    const k = this._kde?.get(spec.key);
+    if (!k) return "";
+    const proc = spec.procedural;
+    const t = kdeSampleTime(proc, time), win = kdeWindow(proc, vs);
+    const id = kdeId(t, win);
+    if (!this.volumes.useData(spec.key, id)) {
+      this.volumes.useData(spec.key, id, this._buildKde(spec.key, t, win));
+      this._prefetchKde();
+    }
+    return id;
+  }
+
+  /**
+   * While the page is idle, build every sample of the visible event-KDE
+   * volumes nearest the current time first, so scrubbing only binds
+   * textures. Phones skip it (memory), as the classic runtime did.
+   */
+  _prefetchKde() {
+    if (this._kdePrefetching || isMobile() || !this._kde?.size) return;
+    this._kdePrefetching = true;
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 200));
+    const step = () => {
+      this._kdePrefetching = false;
+      for (const { spec } of this._kde.values()) {
+        const vs = this.state.volumes[spec.stateKey];
+        if (!vs?.visible || !this.volumes.volumes.has(spec.key)) continue;
+        const proc = spec.procedural, win = kdeWindow(proc, vs);
+        const now = this.timeline.time;
+        const todo = kdeSampleTimes(proc, this.timeline.times)
+          .filter((t) => !this.volumes.hasData(spec.key, kdeId(t, win)))
+          .sort((a, b) => Math.abs(a - now) - Math.abs(b - now));
+        if (!todo.length) continue;
+        const keep = this.volumes.volumes.get(spec.key).dataId;
+        this.volumes.useData(spec.key, kdeId(todo[0], win), this._buildKde(spec.key, todo[0], win));
+        // Building caches without showing it: restore the drawn sample.
+        this.volumes.useData(spec.key, keep);
+        this._kdePrefetching = true;
+        idle(step, { timeout: 4000 });
+        return;
+      }
+    };
+    idle(step, { timeout: 4000 });
+  }
+
   _applyInitialCamera() {
     const cam = this.manifest.camera || {};
     const pos = cam.position || [0, -800, 1500];
@@ -204,7 +297,9 @@ export class Viewer extends Emitter {
     const pose = poseFromEyeTarget(pos, tgt, cam.fov || 60);
     // The figure's camera anchor: the one it asks for, else the LSR when the
     // home view orbits it (Oviz scenes are LSR-centred), else none.
-    const asked = normalizeAnchor(this.manifest.viewer?.cameraAnchor);
+    // An explicit anchor, else the classic focus group (a layer's median).
+    const focus = this.manifest.animation?.focusTrace;
+    const asked = normalizeAnchor(this.manifest.viewer?.cameraAnchor) || (focus ? { kind: "layer", trace: String(focus) } : null);
     this.defaultAnchor = asked && this.anchorAvailable(asked) ? asked : this.inferAnchor(pose, { kind: "free" });
     if (this.defaultAnchor.kind === "lsr") pose.target = LSR_POINT.slice();
     this.state.view.anchor = { ...this.defaultAnchor };
@@ -283,15 +378,27 @@ export class Viewer extends Emitter {
     const memberMode = skyMode && this.skyMembersActive?.();
     for (const trace of this.traces) {
       const ts = st.traces[trace.key] || {};
-      const isReference = !trace.showInLegend;
-      let visible = ts.visible !== false;
+      // A legend-less trace keyed like a volume group (its outlines and
+      // labels) shows with that volume, not with the grid.
+      const companion = !trace.showInLegend ? st.volumes[trace.key] : null;
+      const isReference = !trace.showInLegend && !companion;
+      let visible = companion ? companion.visible === true && !skyMode : ts.visible !== false;
       if (isReference) visible = visible && g.grid !== false && !skyMode;
+      // Sky view looks out from the Sun: it is not drawn there, nor is the
+      // 3D-only context a figure marks (a shell around the Sun, say).
+      if (skyMode && (trace.key === this.world.sunTrace || trace.skyHidden)) visible = false;
       const defaultOpacity = trace.opacity > 1e-6 ? trace.opacity : 1;
       let starsExp = 0;
       if (trace.hasStars) starsExp = g.sizeByStars ? (trace.sizeByStarsDefault ? 0 : 1) : (trace.sizeByStarsDefault ? -1 : 0);
       const hoverIdx = this.hover && this.hover.trace === trace.key ? this.hover.index : -1;
       let opacityScale = (ts.opacity ?? trace.opacity) / defaultOpacity;
       if (isReference) opacityScale *= g.gridOpacity ?? 1;
+      // The longitude grid is drawn from today's Sun: it fades out within a
+      // Myr of the present day (classic).
+      if (trace.presentDayOnly) {
+        opacityScale *= presentDayFade(time);
+        visible = visible && opacityScale > 1e-3;
+      }
       styles.set(trace.key, {
         visible,
         presence: this._presenceWeight(trace, frame),
@@ -305,6 +412,8 @@ export class Viewer extends Emitter {
         colorOverride: ts.color || null,
         hover: hoverIdx,
         dimOpacity: 0.16,
+        // Samples of a surface or model are not picked (no hover, no click).
+        pickable: trace.pickable !== false,
       });
     }
     for (const [k, s] of this.extraStyles) styles.set(k, s);
@@ -342,7 +451,7 @@ export class Viewer extends Emitter {
     for (const trace of this.traces) {
       if (!trace.labels) continue;
       const ts = this.state.traces[trace.key] || {};
-      s += `${trace.key}:${ts.visible !== false}:${ts.opacity}:${ts.sizeScale};`;
+      s += `${trace.key}:${ts.visible !== false}:${this.state.volumes[trace.key]?.visible}:${ts.opacity}:${ts.sizeScale};`;
     }
     return s + this.state.global.grid + this.state.global.labels;
   }
@@ -394,9 +503,15 @@ export class Viewer extends Emitter {
         }
         weights.push([spec, w]);
       }
-      for (const [spec, w] of weights) {
+      for (const [spec, w0] of weights) {
+        // Sky view shows volumes only at the present day, like the classic
+        // viewer: the sky is seen from where the Sun is today.
+        const w = st.view.mode === "sky" ? w0 * clamp(1 - Math.abs(time) / dtFrame, 0, 1) : w0;
         if (w <= 0.002) continue;
         const vsClamped = clampVolumeState(spec, vs);
+        // Members of one group keep their own colours (e.g. each cloud)
+        // while the group shows one of its members' own colormaps.
+        if (specs.length > 1 && spec.defaults?.colormap && specs.some((m) => m.defaults?.colormap === vs.colormap)) vsClamped.colormap = spec.defaults.colormap;
         const [dmin, dmax] = spec.dataRange;
         const span = dmax - dmin;
         let low = span > 0 ? clamp((vsClamped.vmin - dmin) / span, 0, 1) : 0;
@@ -404,8 +519,9 @@ export class Viewer extends Emitter {
         if (!(high > low)) high = Math.min(1, low + 1e-6);
         const allTimes = vs.showAllTimes && spec.supportsShowAllTimes && spec.timeMyr == null;
         const angle = allTimes && spec.coRotate ? (spec.coRotationRate || 0) * (time - (spec.referenceTimeMyr || 0)) : 0;
+        const dataId = spec.procedural ? this._ensureKde(spec, time, vs) : "";
         draws.push({ key: spec.key, state: vsClamped, low, high, fade: w, angle, canSkip: true });
-        sig += `${spec.key}:${w.toFixed(3)}:${low}:${high}:${vsClamped.opacity}:${vsClamped.steps}:${vsClamped.alphaCoef}:${vsClamped.stretch}:${vsClamped.colormap}:${angle.toFixed(5)}:${vsClamped.lightingMode};`;
+        sig += `${spec.key}:${dataId}:${w.toFixed(3)}:${low}:${high}:${vsClamped.opacity}:${vsClamped.steps}:${vsClamped.alphaCoef}:${vsClamped.stretch}:${vsClamped.colormap}:${angle.toFixed(5)}:${vsClamped.lightingMode};`;
       }
     }
     return { frame, volumeDraws: draws, volumeSignature: sig };
@@ -435,13 +551,13 @@ export class Viewer extends Emitter {
   /**
    * Fly the camera to `pose`. Resolves {done: true} on arrival, or
    * {done: false} if the flight was interrupted (user input, a new flight).
-   * A flight whose orbit centre is not the camera anchor frees the camera.
+   * The camera keeps its anchor: the orbit centre may sit off it, and the
+   * camera keeps that offset as the anchor moves through time.
    */
   animateTo(pose, { duration = 1100, onDone, ease } = {}) {
     this.emit("camera-takeover", {});
     this._cancelTween();
     this.controls.stop();
-    this._keepAnchorFor(pose);
     const d = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : duration;
     const tween = poseTween(this.renderer.camera.pose, sanitizePose(clonePose(pose)), d, ease);
     this.tween = tween;
@@ -457,7 +573,6 @@ export class Viewer extends Emitter {
 
   setPose(pose) {
     this._cancelTween();
-    this._keepAnchorFor(pose);
     Object.assign(this.renderer.camera.pose, sanitizePose(clonePose(pose)));
     this._anchorLast = this.anchorPoint();
     this._onCameraChange();
@@ -466,6 +581,8 @@ export class Viewer extends Emitter {
 
   /** Fly home: the opening view, anchored the way the figure opens. */
   resetView() {
+    // Resetting is the reader taking the camera (it stops auto-orbit).
+    this.emit("user-camera", { reset: true });
     if (this.state.view.mode === "sky") {
       const p = clonePose(this.pose);
       p.fov = SKY_FOV;
@@ -514,6 +631,7 @@ export class Viewer extends Emitter {
       const t = this.traceByKey.get(a.trace);
       return !!t?.points && a.index < t.points.count;
     }
+    if (a.kind === "layer") return !!this.traceByKey.get(a.trace)?.points?.count;
     return true;
   }
 
@@ -529,6 +647,7 @@ export class Viewer extends Emitter {
     if (a.kind === "lsr") return this.hasLsr ? LSR_POINT.slice() : null;
     if (a.kind === "sun") return this.world.sunTrace ? this.objectPosition(this.world.sunTrace, 0, frame) : null;
     if (a.kind === "object") return this.objectPosition(a.trace, a.index, frame);
+    if (a.kind === "layer") return this.layerMedian(a.trace, frame);
     return null;
   }
 
@@ -551,7 +670,7 @@ export class Viewer extends Emitter {
     return this.animateTo(p, { duration });
   }
 
-  /** Let go of the anchor (panning or flying elsewhere); the camera stays put. */
+  /** Let go of the anchor ("free"): the camera stays put and moves with nothing. */
   releaseAnchor() {
     if (this.anchor.kind === "free") return;
     this._setAnchorState({ kind: "free" }, { released: true });
@@ -565,18 +684,9 @@ export class Viewer extends Emitter {
     if (changed) this.emit("anchor", { anchor: a, released });
   }
 
-  /** After the camera was placed by other means, keep the anchor only if it still orbits it. */
+  /** After the camera was placed by other means: track the anchor from where it is now. */
   reconcileAnchor() {
-    this._keepAnchorFor(this.pose);
     this._anchorLast = this.anchorPoint();
-  }
-
-  /** Free the camera when a flight or pose puts the orbit centre somewhere else. */
-  _keepAnchorFor(pose) {
-    if (!this.anchored || !(pose?.distance > 1e-6)) return;
-    const at = this.anchorPoint();
-    const t = pose.target;
-    if (!at || Math.hypot(t[0] - at[0], t[1] - at[1], t[2] - at[2]) > this.anchorTolerance) this.releaseAnchor();
   }
 
   /**
@@ -619,6 +729,101 @@ export class Viewer extends Emitter {
     return [p[0] + off[0], p[1] + off[1], p[2] + off[2]];
   }
 
+  /**
+   * The world point a double-click lands on when it misses every point, as
+   * classic Oviz re-centred there: the nearest visible line within `radius`
+   * pixels, the middle of the dust a volume shows along the ray, or an
+   * image plane in view. Null on empty space.
+   */
+  pickSurface(x, y, { radius = 6 } = {}) {
+    const cam = this.renderer.camera;
+    const { origin: o, dir: d } = cam.ray(x, y);
+    let best = null;
+    const consider = (t) => {
+      if (t > 1e-6 && (!best || t < best)) best = t;
+    };
+    const along = (p) => (p[0] - o[0]) * d[0] + (p[1] - o[1]) * d[1] + (p[2] - o[2]) * d[2];
+    const frame = this.timeline.frame;
+    // Lines: orbit tracks, the Galactic grid.
+    const styles = this.lines.params?.styles;
+    const sa = [0, 0, 0], sb = [0, 0, 0], wa = [0, 0, 0], wb = [0, 0, 0];
+    for (const [key, ld] of this.lineData || []) {
+      const st = styles?.get(key);
+      if (!st?.visible || !(st.presence > 0.001) || !(st.opacityScale > 0.002)) continue;
+      const L = this.traceByKey.get(key)?.lines;
+      if (!L) continue;
+      const S = L.count, F = L.position.frames || 1;
+      const off = frameOffset(ld.offset, frame);
+      for (let i = 0; i < S; i++) {
+        if (!cpuFramePosition(ld.position, F, 2 * S, 2 * i, frame, wa) || !cpuFramePosition(ld.position, F, 2 * S, 2 * i + 1, frame, wb)) continue;
+        for (let k = 0; k < 3; k++) { wa[k] += off[k]; wb[k] += off[k]; }
+        if (!cam.project(wa, sa) || !cam.project(wb, sb)) continue;
+        const hit = screenSegment(x, y, sa, sb);
+        if (hit.dist > radius) continue;
+        consider(along([wa[0] + (wb[0] - wa[0]) * hit.u, wa[1] + (wb[1] - wa[1]) * hit.u, wa[2] + (wb[2] - wa[2]) * hit.u]));
+      }
+    }
+    // Volumes: where half of what the ray sees lies.
+    for (const draw of this.volumes.params?.volumeDraws || []) {
+      const vol = this.volumes.volumes.get(draw.key);
+      if (!vol || !(draw.fade > 0.05)) continue;
+      const hit = rayBox(o, d, vol.boxMin, vol.boxMax, vol.center, draw.angle || 0);
+      const voxels = hit ? this.store.peek(vol.spec.data.blob) : null;
+      const t = volumeMedianDepth(hit, voxels, vol.spec.dims, vol.boxMin, vol.boxMax, draw.low, draw.high);
+      if (t != null) consider(t);
+    }
+    // Image planes (the face-on Milky Way) while they show.
+    for (const item of this.images.items || []) {
+      const st = this.images.params?.images?.get(item.key);
+      if (!st?.visible) continue;
+      const c = item.centers ? frameOffset(item.centers, frame) : [0, 0, 0];
+      const t = rayPlaneRect(o, d, c, item.spec.widthPc, item.spec.heightPc);
+      if (t != null && this._imageShowing(item)) consider(t);
+    }
+    return best == null ? null : [o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best];
+  }
+
+  /** Whether an image plane is drawn at the current zoom (it fades as the view closes in). */
+  _imageShowing(item) {
+    const s = item.spec;
+    const hide = s.hideBelowScalePc || 0, fade = s.fadeStartScalePc || 0;
+    const bar = this.images.params?.scaleBarPc;
+    return !(fade > hide && bar != null && bar <= hide);
+  }
+
+  /** Move the orbit centre to `point`, keeping the zoom and the viewing angle. */
+  recenter(point, { duration = 550 } = {}) {
+    if (!point || this.state.view.mode === "sky") return Promise.resolve({ done: false });
+    const p = clonePose(this.pose);
+    p.target = point.slice();
+    return this.animateTo(p, { duration });
+  }
+
+  /**
+   * Per-axis median of a layer's objects present at `frame` (the classic
+   * focus-group centre). Cached for the last frame asked.
+   */
+  layerMedian(traceKey, frame = this.timeline.frame) {
+    const key = `${traceKey}|${frame.toFixed(5)}`;
+    if (this._medianKey === key) return this._median?.slice() ?? null;
+    const trace = this.traceByKey.get(traceKey);
+    const N = trace?.points?.count || 0;
+    const xs = [], ys = [], zs = [];
+    for (let i = 0; i < N; i++) {
+      const p = this.objectPosition(traceKey, i, frame);
+      if (!p) continue;
+      xs.push(p[0]); ys.push(p[1]); zs.push(p[2]);
+    }
+    const med = (a) => {
+      a.sort((x, y) => x - y);
+      const m = a.length >> 1;
+      return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+    };
+    this._medianKey = key;
+    this._median = xs.length ? [med(xs), med(ys), med(zs)] : null;
+    return this._median?.slice() ?? null;
+  }
+
   flyToObject(traceKey, index, { distance } = {}) {
     const pos = this.objectPosition(traceKey, index);
     if (!pos) return Promise.resolve();
@@ -638,6 +843,22 @@ export class Viewer extends Emitter {
   }
 
   // -------------------------------------------------------------- view mode
+
+  /**
+   * Where the Sun is at `frame`. Positions are heliocentric at the present
+   * day (seen from the origin, objects sit at their catalogue l, b and
+   * distance), and the Sun moves away from there with its motion relative
+   * to the LSR: the origin plus the Sun trace's displacement since t = 0
+   * (the trace itself may carry a constant offset, e.g. its height above
+   * the plane). Distances "from the Sun" are measured from here.
+   */
+  sunPosition(frame = this.timeline.frame) {
+    const key = this.world.sunTrace;
+    if (!key) return [0, 0, 0];
+    const zero = this.manifest.time?.zeroIndex ?? this.timeline.zeroFrame();
+    const p = this.objectPosition(key, 0, frame), p0 = this.objectPosition(key, 0, zero);
+    return p && p0 ? [p[0] - p0[0], p[1] - p0[1], p[2] - p0[2]] : [0, 0, 0];
+  }
 
   skyEye() {
     return [0, 0, 0];
@@ -822,7 +1043,7 @@ export class Viewer extends Emitter {
       dec: meta.dec?.[index] ?? null,
       hover: meta.hover?.[index] || "",
       position: pos,
-      distanceFromSun: pos ? v3dist(pos, this.skyEye()) : null,
+      distanceFromSun: pos ? v3dist(pos, this.sunPosition()) : null,
     };
   }
 

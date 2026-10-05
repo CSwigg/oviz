@@ -10,6 +10,9 @@ import { createProgram, createBuffer, createVAO, createDataTexture, createTextur
 import { starTextures } from "../layers/points.js";
 
 const TEX_W = 1024;
+// A click picks the star, not its glow: the member core's disc, out to where
+// its profile has fallen to a few percent (in sprite radius units).
+export const MEMBER_PICK_CORE = 0.14;
 
 const VERT = `
 layout(location = 0) in vec2 aCorner;
@@ -48,7 +51,7 @@ void main() {
   float px = world * 0.5 * uViewport.y * uProjY / max(viewZ, 1e-3);
   float k = 1.0;
   #ifdef PICK
-  px = max(px, uMinPx * 3.0);
+  px = max(px * ${MEMBER_PICK_CORE}, uMinPx * 3.0);
   #else
   if (px < uMinPx) { k = (px / uMinPx); k *= k; px = uMinPx; }
   #endif
@@ -84,6 +87,73 @@ void main() {
 }
 `;
 
+// Motion arrows (classic Oviz): each member star's sky-plane motion in its
+// cluster's rest frame, drawn as 3 Myr of travel (at most 0.6 × its
+// distance), half as wide as 4.5e-4 × distance, with a head 2.6× wider.
+// Per cluster: length and width scales (0 length = no arrows).
+const ARROW_VERT = `
+layout(location = 1) in vec3 aPos;
+layout(location = 2) in vec3 aVel;
+layout(location = 3) in float aCluster;
+uniform mat4 uViewProj;
+uniform highp sampler2D uClusterState;   // dx, dy, dz, alpha
+uniform sampler2D uClusterColor;         // rgb, size
+uniform highp sampler2D uArrowStyle;     // length scale, width scale
+uniform float uTime;
+uniform float uInternal;
+uniform float uReveal;
+out vec4 vColor;
+void main() {
+  gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+  vColor = vec4(0.0);
+  if (aCluster < -0.5) return;
+  int c = int(aCluster + 0.5);
+  ivec2 tc = ivec2(c % ${TEX_W}, c / ${TEX_W});
+  vec4 style = texelFetch(uArrowStyle, tc, 0);
+  vec4 st = texelFetch(uClusterState, tc, 0);
+  float a = st.w * uReveal * 0.9;
+  if (style.x <= 0.0 || a <= 0.002) return;
+  vec3 p = aPos + st.xyz + aVel * uTime * uInternal;
+  float dist = length(p);
+  if (dist <= 1e-6) return;
+  vec3 radial = p / dist;
+  vec3 tang = aVel - radial * dot(aVel, radial);
+  float speed = length(tang);
+  if (speed <= 1e-9) return;
+  vec3 dir = tang / speed;
+  vec3 perp = cross(radial, dir);
+  if (dot(perp, perp) <= 1e-12) return;
+  perp = normalize(perp);
+  float len = min(speed * 3.0 * style.x, dist * 0.6);
+  float halfW = dist * 0.00045 * style.y;
+  float head = min(max(0.30 * len, halfW * 2.0), len * 0.6);
+  float shaft = max(len - head, 0.0);
+  vec3 s = p + dir * shaft;
+  vec3 tip = p + dir * len;
+  vec3 q;
+  int k = gl_VertexID;
+  // Shaft: (p+w, p−w, s−w), (p+w, s−w, s+w); head: (s+2.6w, s−2.6w, tip).
+  if (k == 0 || k == 3) q = p + perp * halfW;
+  else if (k == 1) q = p - perp * halfW;
+  else if (k == 2 || k == 4) q = s - perp * halfW;
+  else if (k == 5) q = s + perp * halfW;
+  else if (k == 6) q = s + perp * halfW * 2.6;
+  else if (k == 7) q = s - perp * halfW * 2.6;
+  else q = tip;
+  gl_Position = uViewProj * vec4(q, 1.0);
+  vColor = vec4(texelFetch(uClusterColor, tc, 0).rgb, a);
+}
+`;
+
+const ARROW_FRAG = `
+in vec4 vColor;
+out vec4 outColor;
+void main() {
+  if (vColor.a <= 0.002) discard;
+  outColor = vec4(vColor.rgb * vColor.a, vColor.a);
+}
+`;
+
 const QUAD = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 
 export class MembersLayer {
@@ -95,6 +165,7 @@ export class MembersLayer {
     this.clusterNames = clusters;
     this.program = createProgram(gl, VERT, FRAG, { label: "members" });
     this.pickProgram = createProgram(gl, VERT, FRAG, { label: "members-pick", defines: { PICK: 1 } });
+    this.arrowProgram = createProgram(gl, ARROW_VERT, ARROW_FRAG, { label: "member-arrows" });
     this.textures = starTextures(gl);
     this.positions = position;
     this.offsets = offsets;
@@ -127,6 +198,9 @@ export class MembersLayer {
     this.stateData = new Float32Array(TEX_W * texH * 4);
     this.colorData = new Uint8Array(TEX_W * texH * 4);
     this.stateTex = createDataTexture(gl, this.stateData, TEX_W, texH, 4);
+    this.arrowData = new Float32Array(TEX_W * texH * 4);
+    this.arrowTex = createDataTexture(gl, this.arrowData, TEX_W, texH, 4);
+    this.hasArrows = false;
     this.colorTex = createTexture2D(gl, { width: TEX_W, height: texH, internalFormat: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE, data: this.colorData, filter: gl.NEAREST });
     this.texH = texH;
     const buf = {
@@ -142,8 +216,28 @@ export class MembersLayer {
       { loc: 2, buffer: buf.vel, size: 3, divisor: 1 },
       { loc: 3, buffer: buf.cluster, size: 1, divisor: 1 },
     ]);
+    this.arrowVao = createVAO(gl, [
+      { loc: 1, buffer: buf.pos, size: 3, divisor: 1 },
+      { loc: 2, buffer: buf.vel, size: 3, divisor: 1 },
+      { loc: 3, buffer: buf.cluster, size: 1, divisor: 1 },
+    ]);
     this.params = null;
     this.visible = false;
+  }
+
+  /**
+   * Motion-arrow scales per cluster: `fill(data)` writes length and width
+   * scales at [c * 4], [c * 4 + 1] (0 length: no arrows for that cluster).
+   */
+  updateArrows(fill) {
+    const gl = this.gl;
+    this.arrowData.fill(0);
+    fill(this.arrowData);
+    let any = false;
+    for (let c = 0; c < this.clusterCount && !any; c++) any = this.arrowData[c * 4] > 0;
+    this.hasArrows = any;
+    gl.bindTexture(gl.TEXTURE_2D, this.arrowTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, TEX_W, this.texH, gl.RGBA, gl.FLOAT, this.arrowData);
   }
 
   /** Upload per-cluster displacement/alpha (Float32 ×4) and colour (u8 ×4). */
@@ -170,11 +264,21 @@ export class MembersLayer {
     const p = this.params;
     if (!p || p.reveal <= 0.002) return;
     const gl = this.gl;
-    const prog = this.program.use();
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.DEPTH_TEST);
     gl.depthMask(false);
+    if (this.hasArrows) {
+      // Arrows under the stars: 9 vertices (a shaft quad and a head) each.
+      const ap = this.arrowProgram.use();
+      ap.m4("uViewProj", frame.camera.viewProj);
+      ap.tex("uClusterState", this.stateTex).tex("uClusterColor", this.colorTex).tex("uArrowStyle", this.arrowTex);
+      ap.f("uTime", p.time).f("uInternal", p.internalMotion ? 1 : 0).f("uReveal", p.reveal);
+      gl.bindVertexArray(this.arrowVao);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 9, this.count);
+      gl.bindVertexArray(null);
+    }
+    const prog = this.program.use();
     this._uniforms(prog, frame);
     prog.tex("uHalo", this.textures.memberHalo).tex("uCore", this.textures.memberCore);
     gl.bindVertexArray(this.vao);
@@ -210,10 +314,13 @@ export class MembersLayer {
   dispose() {
     const gl = this.gl;
     gl.deleteVertexArray(this.vao);
+    gl.deleteVertexArray(this.arrowVao);
     for (const b of Object.values(this.buffers)) gl.deleteBuffer(b);
     gl.deleteTexture(this.stateTex);
     gl.deleteTexture(this.colorTex);
+    gl.deleteTexture(this.arrowTex);
     this.program.dispose();
     this.pickProgram.dispose();
+    this.arrowProgram.dispose();
   }
 }
