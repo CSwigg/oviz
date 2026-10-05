@@ -19,6 +19,7 @@ class SpiralArmTrace:
     between ``r_range`` and each point is then integrated as a test particle
     through the timeline. For the published arm models drawn by
     ``make_plot(spiral_arm_models=...)`` see :mod:`oviz.spiral_models`.
+    After :meth:`integrate_orbits`, ``df_int`` holds the integrated table.
 
     Parameters
     ----------
@@ -32,8 +33,6 @@ class SpiralArmTrace:
         Number of locus points.
     color, opacity, line_width, visible
         Display style.
-
-    After :meth:`integrate_orbits`, ``df_int`` holds the integrated table.
     """
 
     def __init__(self, spiral_potential, arm_name, r_range=(4.0, 12.0), n_points=200,
