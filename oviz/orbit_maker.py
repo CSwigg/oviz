@@ -136,9 +136,8 @@ def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236
     rf_orbit = Orbit(vxvv=rf_sc, solarmotion='schoenrich', ro=ro, vo=vo, zo=zo)
 
     integrated_values = _integrate_orbit_in_requested_order(rf_orbit, time, potential)
-    x_rf_int = integrated_values(lambda sc: sc.galactic.cartesian.x.value) * 1000
-    y_rf_int = integrated_values(lambda sc: sc.galactic.cartesian.y.value) * 1000
-    z_rf_int = integrated_values(lambda sc: sc.galactic.cartesian.z.value) * 1000
+    # One frame transform per branch gives x, y and z together.
+    x_rf_int, y_rf_int, z_rf_int = integrated_values(lambda sc: sc.galactic.cartesian.xyz.value) * 1000
 
     return (x_rf_int, y_rf_int, z_rf_int)
 
@@ -188,23 +187,17 @@ def create_orbit(coordinates, time, reference_frame_center=None, potential=None,
     orbit = Orbit(vxvv=sc, ro=ro, vo=vo, zo=zo, solarmotion='schoenrich')
 
     integrated_values = _integrate_orbit_in_requested_order(orbit, time, potential)
-    x_helio_int = integrated_values(lambda sc: sc.galactic.cartesian.x.value) * 1000
-    y_helio_int = integrated_values(lambda sc: sc.galactic.cartesian.y.value) * 1000
-    z_helio_int = integrated_values(lambda sc: sc.galactic.cartesian.z.value) * 1000
-    x_gc_int = integrated_values(lambda sc: sc.galactocentric.cartesian.x.value) * 1000
-    y_gc_int = integrated_values(lambda sc: sc.galactocentric.cartesian.y.value) * 1000
-    z_gc_int = integrated_values(lambda sc: sc.galactocentric.cartesian.z.value) * 1000
-
-    helio_coords = (x_helio_int, y_helio_int, z_helio_int)
-    galactocentric_coords = (x_gc_int, y_gc_int, z_gc_int)
+    # One frame transform per branch and frame gives x, y and z together.
+    helio_coords = tuple(integrated_values(lambda sc: sc.galactic.cartesian.xyz.value) * 1000)
+    galactocentric_coords = tuple(integrated_values(lambda sc: sc.galactocentric.cartesian.xyz.value) * 1000)
     x_int_c, y_int_c, z_int_c = center_orbit(helio_coords, time, reference_frame_center, potential, vo, ro, zo)
     centered_coords = (x_int_c, y_int_c, z_int_c)
 
-    # Construct galactocentric cylindrical coordinates, centered
+    # Galactocentric cylindrical coordinates of the frame-centred positions.
     sc_centered = SkyCoord(
         u=x_int_c*u.pc, v=y_int_c*u.pc, w=z_int_c*u.pc, frame='galactic', representation_type='cartesian')
-    R_gc_int_c, phi_gc_int_c, z_gc_int_c = sc_centered.galactocentric.represent_as('cylindrical').rho.value, sc_centered.galactocentric.represent_as('cylindrical').phi.value, sc_centered.galactocentric.represent_as('cylindrical').z.value
-    gc_cylindcrical_centered_coords = (R_gc_int_c, phi_gc_int_c, z_gc_int_c)
+    cylindrical = sc_centered.galactocentric.represent_as('cylindrical')
+    gc_cylindcrical_centered_coords = (cylindrical.rho.value, cylindrical.phi.value, cylindrical.z.value)
 
     return (centered_coords, helio_coords, galactocentric_coords, gc_cylindcrical_centered_coords)
 

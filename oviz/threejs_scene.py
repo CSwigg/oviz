@@ -517,9 +517,12 @@ def build_threejs_scene_spec(
             state_key = str(layer.get("state_key") or layer.get("key"))
             group_visibility[group_name][state_key] = "legendonly"
 
+    # Frames are only read here, so dict frames need no defensive copy.
     frames_by_time = {}
     for time_val, frame in zip(plot.time, frames):
-        frames_by_time[round(float(time_val), 12)] = frame.to_scene_json()
+        frames_by_time[round(float(time_val), 12)] = (
+            frame if isinstance(frame, dict) else frame.to_scene_json()
+        )
 
     frame_specs = []
     ordered_times = [float(t) for t in plot._ordered_slider_times()]

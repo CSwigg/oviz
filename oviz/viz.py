@@ -1,10 +1,13 @@
 """Build time-dependent Oviz scenes from traces, volumes, and sky layers."""
 
 import base64
+import contextlib
 import copy
 import functools
+import gc
 import importlib.resources
 import io
+import math
 from pathlib import Path
 
 import astropy.units as u
@@ -561,45 +564,39 @@ class Animate3D:
         # Build frames for each time step
         cluster_groups = self.data_collection.get_all_clusters()
         frames = []
+        present_day_cache = {}
 
-        for i, t_i in enumerate(self.time):
-            # Generate scatter traces for each cluster at time t_i
-            scatter_list = self._generate_scatter_list(
-                cluster_groups,
-                t_i,
-                x_rf_int[i],
-                y_rf_int[i],
-                z_rf_int[i],
-                show_gc_line,
-                galactic_mode,
-                show_galactic_guides=show_galactic_guides,
-                show_galactic_center_circles=show_galactic_center_circles,
-                include_spiral_arms=include_spiral_arms,
-                coord_system=self.coord_system
-            )
-            # Remove any 'visible' property so frames won't override grouping
-            for sc_tr in scatter_list:
-                sc_tr.pop('visible', None)
+        # Frames and the scene spec are millions of small, acyclic objects.
+        with _cyclic_gc_paused():
+            for i, t_i in enumerate(self.time):
+                traces = self._generate_scatter_list(
+                    cluster_groups,
+                    t_i,
+                    x_rf_int[i],
+                    y_rf_int[i],
+                    z_rf_int[i],
+                    show_gc_line,
+                    galactic_mode,
+                    show_galactic_guides=show_galactic_guides,
+                    show_galactic_center_circles=show_galactic_center_circles,
+                    include_spiral_arms=include_spiral_arms,
+                    coord_system=self.coord_system,
+                    present_day_cache=present_day_cache,
+                )
+                self._add_static_traces(
+                    traces, static_traces, static_traces_times,
+                    reference_frame_center, t_i
+                )
+                # Frames never override the legend group's visibility.
+                for trace in traces:
+                    trace.pop('visible', None)
+                # The traces are new for every frame, so the frame need not copy them.
+                frames.append(_frame(data=traces, name=str(t_i)))
 
-            # Create the frame dict
-            frame_data = {'data': scatter_list, 'name': str(t_i)}
+            # Initialize the figure at t=0 (base data)
+            self._initialize_figure(frames)
 
-            # Add static traces if they should appear at this time.
-            self._add_static_traces(
-                frame_data, static_traces, static_traces_times,
-                reference_frame_center, t_i
-            )
-
-            # Remove 'visible' from static traces too, for the same reason
-            for item in frame_data['data']:
-                item.pop('visible', None)
-
-            frames.append(_frame(frame_data))
-
-        # Initialize the figure at t=0 (base data)
-        self._initialize_figure(frames)
-
-        self._build_threejs_figure(frames)
+            self._build_threejs_figure(frames)
 
         # Show or save
         if show:
@@ -625,13 +622,16 @@ class Animate3D:
         show_galactic_guides=True,
         show_galactic_center_circles=True,
         include_spiral_arms=False,
-        coord_system='centered'
+        coord_system='centered',
+        present_day_cache=None,
     ):
         """All traces of the frame at time ``t``: one per cluster group, then the guides.
 
         ``x_rf, y_rf, z_rf`` is the reference frame's position at ``t``. Outside
         Galactic mode ``show_gc_line`` adds the R = 8.12 kpc circle; in Galactic
         mode the two ``show_galactic_*`` flags control the circles and guides.
+        ``present_day_cache`` (a dict) keeps each table's t = 0 sky quantities
+        between the frames of one build.
         """
         scatter_list = []
         x_col, y_col, z_col = _xyz_columns(coord_system)
@@ -651,25 +651,19 @@ class Animate3D:
             if df_t.empty:
                 continue
 
-            # Build present-day (t=0) sky quantities for click->sky-panel callbacks.
-            df_t0 = _rows_at_time(df_int, 0.0)
-            if len(df_t0) != len(df_t):
+            # Present-day (t = 0) sky quantities, for click -> Sky selections.
+            # They are the same in every frame, so one build computes them once.
+            cached = present_day_cache.get(id(df_int)) if present_day_cache is not None else None
+            if cached is None:
+                df_t0 = _rows_at_time(df_int, 0.0)
+                cached = (len(df_t0), _present_day_sky(df_t0, x_col, y_col, z_col))
+                if present_day_cache is not None:
+                    present_day_cache[id(df_int)] = cached
+            if cached[0] == len(df_t):
+                x0, y0, z0, l0, b0, dist0 = cached[1]
+            else:
                 # Fallback for any unexpected ordering/shape mismatch.
-                df_t0 = df_t
-
-            x0 = pd.to_numeric(df_t0[x_col], errors='coerce').to_numpy(dtype=float)
-            y0 = pd.to_numeric(df_t0[y_col], errors='coerce').to_numpy(dtype=float)
-            z0 = pd.to_numeric(df_t0[z_col], errors='coerce').to_numpy(dtype=float)
-
-            x_helio0 = pd.to_numeric(df_t0['x_helio'], errors='coerce').to_numpy(dtype=float)
-            y_helio0 = pd.to_numeric(df_t0['y_helio'], errors='coerce').to_numpy(dtype=float)
-            z_helio0 = pd.to_numeric(df_t0['z_helio'], errors='coerce').to_numpy(dtype=float)
-            dist0 = np.sqrt(x_helio0 ** 2 + y_helio0 ** 2 + z_helio0 ** 2)
-
-            with np.errstate(invalid='ignore', divide='ignore'):
-                l0 = np.rad2deg(np.arctan2(y_helio0, x_helio0))
-                l0 = np.mod(l0, 360.0)
-                b0 = np.rad2deg(np.arcsin(np.clip(z_helio0 / np.where(dist0 > 0, dist0, np.nan), -1.0, 1.0)))
+                x0, y0, z0, l0, b0, dist0 = _present_day_sky(df_t, x_col, y_col, z_col)
 
             if cluster_group.data_name.strip().lower() == 'sun':
                 sun_x = float(np.nanmedian(df_t[x_col].to_numpy(dtype=float)))
@@ -677,11 +671,14 @@ class Animate3D:
 
             age_at_t = df_t['age_myr'] + t
             age_present = df_t['age_myr']
+            # Literal pieces are joined first: each Series + str is a pass over the column.
             hovertext = (
-                '<b style="font-size:16px;">' + df_t['name'].str.replace('_', ' ').astype(str) + '</b>' + '<br>'  # Bold cluster name
-                + cluster_group.data_name + '<br>'  # Group name
-                + 'Age (now) = ' + age_present.round(1).astype(str) + ' Myr' + '<br>'
-                + 'Age (t) = ' + age_at_t.round(1).astype(str) + ' Myr' + '<br>'  # Cluster age at time t
+                '<b style="font-size:16px;">' + df_t['name'].str.replace('_', ' ').astype(str)
+                + ('</b><br>' + cluster_group.data_name + '<br>Age (now) = ')
+                + age_present.round(1).astype(str)
+                + ' Myr<br>Age (t) = '
+                + age_at_t.round(1).astype(str)
+                + ' Myr<br>'
             )
 
             if 'n_stars' in df_t.columns:
@@ -827,18 +824,27 @@ class Animate3D:
 
         return scatter_list
 
-    def _add_static_traces(self, frame, static_traces, static_traces_times, reference_frame_center, t):
-        """Append each static trace (``meta.static``) to the frame, or an empty one when hidden at ``t``.
+    def _add_static_traces(self, traces, static_traces, static_traces_times, reference_frame_center, t):
+        """Append each static trace (``meta.static``) to ``traces``, or an empty one when hidden at ``t``.
 
         ``static_traces_times[i]`` lists the times at which trace ``i`` shows.
         With a focus group, traces other than tracks are recentred on it.
         """
         for i, st in enumerate(static_traces):
+            trace_name = self._trace_name(st)
+            if t not in static_traces_times[i]:
+                traces.append(_scatter3d(
+                    x=[], y=[], z=[],
+                    name=trace_name,
+                    visible=False,
+                    meta={'static': True}
+                ))
+                continue
+
             st_copy = copy.deepcopy(st)
             existing_meta = st_copy.get('meta') if isinstance(st_copy, dict) else getattr(st_copy, 'meta', None)
             existing_meta = existing_meta if isinstance(existing_meta, dict) else {}
             st_copy['meta'] = {**existing_meta, 'static': True}
-            trace_name = self._trace_name(st_copy)
 
             # Re-center if focusing on a group (except for tracks)
             if (self.focus_group is not None) and trace_name and not trace_name.endswith('Track'):
@@ -846,34 +852,18 @@ class Animate3D:
                     axis_values = st_copy.get(axis_key) if isinstance(st_copy, dict) else getattr(st_copy, axis_key, None)
                     if axis_values is not None:
                         st_copy[axis_key] = np.array(axis_values) - reference_frame_center[axis_idx]
-
-            if t in static_traces_times[i]:
-                frame['data'].append(st_copy)
-            else:
-                frame['data'].append(_scatter3d(
-                    x=[], y=[], z=[],
-                    name=trace_name,
-                    visible=False,
-                    meta={'static': True}
-                ))
+            traces.append(st_copy)
 
     def _initialize_figure(self, frames):
         """Keep the t = 0 traces, with the first group's visibility, as ``initial_data``."""
         default_group_key = list(self.trace_grouping_dict.keys())[0]  # e.g. "All"
         grouping_0 = self.trace_grouping_dict[default_group_key]
 
-        # Find the frame for t=0
+        # A copy of the t = 0 frame's traces, which keep their own visibility.
         idx_zero = np.where(self.time == 0)[0][0]
-        starting_frame = copy.deepcopy(frames[idx_zero])
-
-        data_updated = []
-        for trace in starting_frame['data']:
-            trace_name = self._trace_name(trace)
-            visible_flag = self.get_visibility(trace_name, grouping_0)
-            self._set_trace_visible(trace, visible_flag)
-            data_updated.append(trace)
-
-        self.initial_data = copy.deepcopy(data_updated)
+        self.initial_data = copy.deepcopy(frames[idx_zero]['data'])
+        for trace in self.initial_data:
+            self._set_trace_visible(trace, self.get_visibility(self._trace_name(trace), grouping_0))
 
     def _ordered_slider_times(self):
         """Return times in the same order used by the time slider."""
@@ -1235,27 +1225,18 @@ class Animate3D:
         coord_system='centered',
     ):
         """Return z = ax + by + c for the transformed Galactocentric midplane."""
-        x_gc = np.array([0.0, 1000.0, 0.0], dtype=float)
-        y_gc = np.array([0.0, 0.0, 1000.0], dtype=float)
-        z_gc = np.zeros(3, dtype=float)
         if coord_system == 'rot':
             x_plane, y_plane, z_plane = self._coordFIX_to_coordROT(
-                x_gc,
-                y_gc,
-                z_gc,
+                np.array([0.0, 1000.0, 0.0], dtype=float),
+                np.array([0.0, 0.0, 1000.0], dtype=float),
+                np.zeros(3, dtype=float),
                 float(t),
             )
         else:
-            plane_coordinates = SkyCoord(
-                x=x_gc * u.pc,
-                y=y_gc * u.pc,
-                z=z_gc * u.pc,
-                frame='galactocentric',
-                representation_type='cartesian',
-            ).galactic.cartesian
-            x_plane = plane_coordinates.x.to_value(u.pc) - float(x_rf)
-            y_plane = plane_coordinates.y.to_value(u.pc) - float(y_rf)
-            z_plane = plane_coordinates.z.to_value(u.pc) - float(z_rf)
+            plane_x, plane_y, plane_z = _galactic_plane_points_pc()
+            x_plane = plane_x - float(x_rf)
+            y_plane = plane_y - float(y_rf)
+            z_plane = plane_z - float(z_rf)
         matrix = np.column_stack((
             np.asarray(x_plane, dtype=float),
             np.asarray(y_plane, dtype=float),
@@ -1791,17 +1772,22 @@ class Animate3D:
 
     def _build_threejs_scene_spec(self, frames):
         """Serialize the current animation into a renderer-agnostic scene spec."""
-        return build_threejs_scene_spec(
-            self,
-            frames,
-            trace_to_scene_json=_trace_to_scene_json,
-            coerce_range=_coerce_range,
-            format_time_label=_format_time_label,
-            coerce_float=_coerce_float,
-            file_to_data_url=_threejs_file_to_data_url,
-            catalog_from_frame_spec=_threejs_catalog_from_frame_spec,
-            annotate_point_motion_ranges=_annotate_threejs_point_motion_ranges,
-        )
+        # Every trace of every frame offers the same colormaps: sample them once per build.
+        self._colormap_options_cache = {}
+        try:
+            return build_threejs_scene_spec(
+                self,
+                frames,
+                trace_to_scene_json=_trace_to_scene_json,
+                coerce_range=_coerce_range,
+                format_time_label=_format_time_label,
+                coerce_float=_coerce_float,
+                file_to_data_url=_threejs_file_to_data_url,
+                catalog_from_frame_spec=_threejs_catalog_from_frame_spec,
+                annotate_point_motion_ranges=_annotate_threejs_point_motion_ranges,
+            )
+        finally:
+            self._colormap_options_cache = None
 
     def _build_threejs_sky_panel_spec(self, default_catalog=None):
         """Sky view settings and the member-star catalog per cluster."""
@@ -2005,38 +1991,39 @@ class Animate3D:
             if not isinstance(cluster_color, str) or not cluster_color:
                 cluster_color = '#ffffff'
 
-            working_df = data_df.copy()
-            if 'name' in working_df.columns:
-                working_df['__cluster_name'] = working_df['name'].astype(str)
+            # Rows per cluster, grouped as ``groupby(name.astype(str), sort=False)``
+            # does (missing names dropped), read from whole-column arrays.
+            if 'name' in data_df.columns:
+                keys = data_df[[]].copy()
+                keys['__cluster_name'] = data_df['name'].astype(str)
+                cluster_rows = keys.groupby('__cluster_name', sort=False).indices
             else:
-                working_df['__cluster_name'] = trace_name
-
-            if 'time' in working_df.columns:
-                working_df['__time_myr'] = pd.to_numeric(working_df['time'], errors='coerce')
+                cluster_rows = {trace_name: np.arange(len(data_df))}
+            if 'time' in data_df.columns:
+                time_values = pd.to_numeric(data_df['time'], errors='coerce').to_numpy(dtype=float)
             else:
-                working_df['__time_myr'] = 0.0
-            working_df['__age_now_myr'] = pd.to_numeric(working_df['age_myr'], errors='coerce')
-            working_df['__x'] = pd.to_numeric(working_df[x_col], errors='coerce')
-            working_df['__y'] = pd.to_numeric(working_df[y_col], errors='coerce')
-            working_df['__z'] = pd.to_numeric(working_df[z_col], errors='coerce')
+                time_values = np.zeros(len(data_df))
+            age_values_all = pd.to_numeric(data_df['age_myr'], errors='coerce').to_numpy(dtype=float)
+            x_values = pd.to_numeric(data_df[x_col], errors='coerce').to_numpy(dtype=float)
+            y_values = pd.to_numeric(data_df[y_col], errors='coerce').to_numpy(dtype=float)
+            z_values = pd.to_numeric(data_df[z_col], errors='coerce').to_numpy(dtype=float)
 
             trace_entry_count = 0
-            trace_age_values = pd.to_numeric(working_df['__age_now_myr'], errors='coerce').to_numpy(dtype=float)
-            trace_age_values = trace_age_values[np.isfinite(trace_age_values)]
+            trace_age_values = age_values_all[np.isfinite(age_values_all)]
             trace_max_age = float(np.nanmax(trace_age_values)) if trace_age_values.size else 0.0
 
-            for cluster_name, cluster_df in working_df.groupby('__cluster_name', sort=False):
-                age_values = pd.to_numeric(cluster_df['__age_now_myr'], errors='coerce').to_numpy(dtype=float)
+            for cluster_name, rows in cluster_rows.items():
+                age_values = age_values_all[rows]
                 age_values = age_values[np.isfinite(age_values)]
                 if age_values.size == 0:
                     continue
                 age_now = float(np.nanmax(age_values))
                 birth_time_myr = -age_now
 
-                time_samples = pd.to_numeric(cluster_df['__time_myr'], errors='coerce').to_numpy(dtype=float)
-                x_samples = pd.to_numeric(cluster_df['__x'], errors='coerce').to_numpy(dtype=float)
-                y_samples = pd.to_numeric(cluster_df['__y'], errors='coerce').to_numpy(dtype=float)
-                z_samples = pd.to_numeric(cluster_df['__z'], errors='coerce').to_numpy(dtype=float)
+                time_samples = time_values[rows]
+                x_samples = x_values[rows]
+                y_samples = y_values[rows]
+                z_samples = z_values[rows]
                 valid_mask = (
                     np.isfinite(time_samples)
                     & np.isfinite(x_samples)
@@ -2090,10 +2077,10 @@ class Animate3D:
                     'x_birth': birth_x,
                     'y_birth': birth_y,
                     'z_birth': birth_z,
-                    'time_samples': [float(value) for value in time_samples.tolist()],
-                    'x_samples': [float(value) for value in x_samples.tolist()],
-                    'y_samples': [float(value) for value in y_samples.tolist()],
-                    'z_samples': [float(value) for value in z_samples.tolist()],
+                    'time_samples': time_samples.tolist(),
+                    'x_samples': x_samples.tolist(),
+                    'y_samples': y_samples.tolist(),
+                    'z_samples': z_samples.tolist(),
                 })
                 trace_entry_count += 1
 
@@ -2402,30 +2389,32 @@ class Animate3D:
                         point_size_boost = 1.18
                     if not np.isclose(point_size_boost, 1.0):
                         for point in points:
-                            point_size = _coerce_float(point.get('size'), np.nan)
-                            if np.isfinite(point_size) and point_size > 0.0:
+                            point_size = _coerce_float(point.get('size'), math.nan)
+                            if math.isfinite(point_size) and point_size > 0.0:
                                 point['size'] = float(point_size * point_size_boost)
                 spec['points'] = points
                 point_sizes = [
                     float(point.get('size'))
                     for point in points
-                    if np.isfinite(point.get('size')) and float(point.get('size')) > 0.0
+                    if math.isfinite(point.get('size')) and float(point.get('size')) > 0.0
                 ]
                 if point_sizes:
                     spec['default_point_size'] = float(np.median(point_sizes))
                 spec['has_n_stars'] = any(
-                    np.isfinite(_coerce_float(point.get('n_stars'), np.nan)) for point in points
+                    math.isfinite(_coerce_float(point.get('n_stars'), math.nan)) for point in points
                 ) if not minimal_mode else False
                 point_opacities = [
                     float(point.get('opacity'))
                     for point in points
-                    if np.isfinite(point.get('opacity'))
+                    if math.isfinite(point.get('opacity'))
                 ]
                 if point_opacities:
                     spec['default_opacity'] = float(np.median(point_opacities))
                 if legend_color is None:
                     legend_color = points[0].get('color')
-                color_by = _threejs_trace_color_by_spec(trace_json, points)
+                color_by = _threejs_trace_color_by_spec(
+                    trace_json, points, colormap_cache=getattr(self, '_colormap_options_cache', None)
+                )
                 if color_by is not None:
                     spec['color_by'] = color_by
                     if color_by.get('default_color_mode') == 'by_value':
@@ -2521,7 +2510,24 @@ def plot_trace_tracks(sc, fade_in_time=0, coord_system='centered'):
     return tracks
 
 
-# Value coercion --------------------------------------------------------------
+# Small helpers ---------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _cyclic_gc_paused():
+    """Pause the cyclic garbage collector, restoring its previous state afterwards.
+
+    Building a scene creates millions of small dicts and lists without
+    reference cycles; full collections would only traverse them again.
+    Reference counting still frees everything as usual.
+    """
+    was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        yield
+    finally:
+        if was_enabled:
+            gc.enable()
 
 
 def _normalize_viewer_name(viewer):
@@ -2598,7 +2604,7 @@ def _coerce_float(value, default=0.0):
     """``float(value)`` when finite, else ``float(default)``."""
     try:
         out = float(value)
-        if np.isfinite(out):
+        if math.isfinite(out):
             return out
     except Exception:
         pass
@@ -2640,6 +2646,24 @@ def _threejs_file_to_data_url(path_value):
 
 
 # Integrated tables -----------------------------------------------------------
+
+
+def _present_day_sky(rows, x_col, y_col, z_col):
+    """Positions ``x, y, z`` and heliocentric ``l``, ``b`` (deg) and distance (pc) of table rows."""
+    x0 = pd.to_numeric(rows[x_col], errors='coerce').to_numpy(dtype=float)
+    y0 = pd.to_numeric(rows[y_col], errors='coerce').to_numpy(dtype=float)
+    z0 = pd.to_numeric(rows[z_col], errors='coerce').to_numpy(dtype=float)
+
+    x_helio0 = pd.to_numeric(rows['x_helio'], errors='coerce').to_numpy(dtype=float)
+    y_helio0 = pd.to_numeric(rows['y_helio'], errors='coerce').to_numpy(dtype=float)
+    z_helio0 = pd.to_numeric(rows['z_helio'], errors='coerce').to_numpy(dtype=float)
+    dist0 = np.sqrt(x_helio0 ** 2 + y_helio0 ** 2 + z_helio0 ** 2)
+
+    with np.errstate(invalid='ignore', divide='ignore'):
+        l0 = np.rad2deg(np.arctan2(y_helio0, x_helio0))
+        l0 = np.mod(l0, 360.0)
+        b0 = np.rad2deg(np.arcsin(np.clip(z_helio0 / np.where(dist0 > 0, dist0, np.nan), -1.0, 1.0)))
+    return x0, y0, z0, l0, b0, dist0
 
 
 def _xyz_columns(coord_system):
@@ -2726,6 +2750,26 @@ def _radius_circle_xyz_pc(radius_kpc, frame):
     for arr in xyz:
         arr.setflags(write=False)
     return tuple(xyz)
+
+
+@functools.lru_cache(maxsize=1)
+def _galactic_plane_points_pc():
+    """Galactic Cartesian pc of three points spanning the Galactocentric midplane.
+
+    The points (the Galactic centre and 1 kpc along x and y) never change,
+    so the astropy transform runs once instead of once per frame.
+    """
+    plane = SkyCoord(
+        x=np.array([0.0, 1000.0, 0.0]) * u.pc,
+        y=np.array([0.0, 0.0, 1000.0]) * u.pc,
+        z=np.zeros(3) * u.pc,
+        frame='galactocentric',
+        representation_type='cartesian',
+    ).galactic.cartesian
+    xyz = tuple(np.array(axis.to_value(u.pc), dtype=float) for axis in (plane.x, plane.y, plane.z))
+    for arr in xyz:
+        arr.setflags(write=False)
+    return xyz
 
 
 @functools.lru_cache(maxsize=1)
@@ -2947,8 +2991,11 @@ def _marker_numeric_color_values(marker, length):
     return np.asarray(numeric_values, dtype=float)
 
 
-def _threejs_trace_color_by_spec(trace_json, points):
-    """The trace's colour-by-value settings (scale, range, colormaps), or None without scalars."""
+def _threejs_trace_color_by_spec(trace_json, points, colormap_cache=None):
+    """The trace's colour-by-value settings (scale, range, colormaps), or None without scalars.
+
+    ``colormap_cache`` (a dict) reuses the sampled colormaps between calls.
+    """
     marker = trace_json.get('marker', {}) if isinstance(trace_json.get('marker'), dict) else {}
     trace_meta = trace_json.get('meta') if isinstance(trace_json.get('meta'), dict) else {}
     marker_color_scalars = _marker_numeric_color_values(marker, len(points))
@@ -2983,9 +3030,9 @@ def _threejs_trace_color_by_spec(trace_json, points):
     if not isinstance(selected_colormap, str):
         selected_colormap = DEFAULT_THREEJS_TRACE_COLORMAP
     try:
-        colormap_options = _build_threejs_volume_colormap_options(selected_colormap)
+        colormap_options = _trace_colormap_options(selected_colormap, colormap_cache)
     except ValueError:
-        colormap_options = _build_threejs_volume_colormap_options(DEFAULT_THREEJS_TRACE_COLORMAP)
+        colormap_options = _trace_colormap_options(DEFAULT_THREEJS_TRACE_COLORMAP, colormap_cache)
 
     default_color_mode = str(trace_meta.get('default_color_mode') or '').strip().lower()
     if default_color_mode not in ('fixed', 'by_value'):
@@ -3002,6 +3049,15 @@ def _threejs_trace_color_by_spec(trace_json, points):
         'legend_color': selected_option.get('legend_color'),
         'default_color_mode': default_color_mode,
     }
+
+
+def _trace_colormap_options(name, cache=None):
+    """Colormap options for colour-by-value traces, sampled once per ``cache``; each call gets copies."""
+    if cache is None:
+        return _build_threejs_volume_colormap_options(name)
+    if name not in cache:
+        cache[name] = _build_threejs_volume_colormap_options(name)
+    return [dict(option) for option in cache[name]]
 
 
 # Viewer primitives: points, line segments, labels, decorations ---------------
@@ -3038,7 +3094,7 @@ def _line_segments_from_trace(trace_json):
         except Exception:
             prev = None
             continue
-        if not all(np.isfinite(point)):
+        if not (math.isfinite(point[0]) and math.isfinite(point[1]) and math.isfinite(point[2])):
             prev = None
             continue
         if prev is not None:
@@ -3087,8 +3143,14 @@ def _points_from_trace(
         if custom_arr.ndim == 1:
             custom_arr = custom_arr.reshape(-1, 1)
         if custom_arr.ndim == 2 and custom_arr.shape[0] >= n_points:
-            custom_rows = [custom_arr[idx, :].tolist() for idx in range(n_points)]
+            custom_rows = custom_arr[:n_points].tolist()
 
+    # One vectorized clip of the products gives the same values as one clip per point.
+    opacities = np.clip(
+        np.asarray(marker_opacity, dtype=float) * np.asarray(color_opacity, dtype=float), 0.0, 1.0
+    ).tolist()
+    trace_name = trace_json.get('name')
+    isfinite = math.isfinite
     points = []
     for idx in range(n_points):
         try:
@@ -3097,48 +3159,52 @@ def _points_from_trace(
             z_val = float(z_vals[idx])
         except Exception:
             continue
-        if not np.isfinite(x_val) or not np.isfinite(y_val) or not np.isfinite(z_val):
+        if not (isfinite(x_val) and isfinite(y_val) and isfinite(z_val)):
             continue
 
-        points.append({
+        point = {
             'x': x_val,
             'y': y_val,
             'z': z_val,
             'size': float(max(sizes[idx], 0.0)),
             'symbol': symbols[idx],
             'color': colors[idx],
-            'opacity': float(np.clip(marker_opacity[idx] * color_opacity[idx], 0.0, 1.0)),
-        })
-        if color_scalars is not None and np.isfinite(color_scalars[idx]):
-            points[-1]['color_scalar'] = float(color_scalars[idx])
+            'opacity': opacities[idx],
+        }
+        points.append(point)
+        if color_scalars is not None and isfinite(color_scalars[idx]):
+            point['color_scalar'] = float(color_scalars[idx])
         if include_hovertext:
-            points[-1]['hovertext'] = str(hovertext[idx]) if hovertext[idx] is not None else ''
+            point['hovertext'] = str(hovertext[idx]) if hovertext[idx] is not None else ''
         if custom_rows is not None:
+            row = custom_rows[idx]
             if color_scalars is None:
-                age_at_t = _coerce_float(custom_rows[idx][CUSTOMDATA_IDX_AGE_AT_T], np.nan)
-                if np.isfinite(age_at_t):
-                    points[-1]['color_scalar'] = float(age_at_t)
-                    points[-1]['color_scalar_kind'] = 'age'
-            selection = _selection_from_customdata_row(custom_rows[idx])
+                age_at_t = _coerce_float(row[CUSTOMDATA_IDX_AGE_AT_T], math.nan)
+                if isfinite(age_at_t):
+                    point['color_scalar'] = age_at_t
+                    point['color_scalar_kind'] = 'age'
+            selection = _selection_from_customdata_row(row)
             if selection is not None:
-                selection['trace_name'] = trace_json.get('name')
+                selection['trace_name'] = trace_name
                 if include_motion:
                     motion = _motion_from_selection(selection)
                     if motion is not None:
-                        points[-1]['motion'] = motion
+                        point['motion'] = motion
                 if include_n_stars:
-                    n_stars = _coerce_float(selection.get('n_stars'), np.nan)
-                    if np.isfinite(n_stars):
-                        points[-1]['n_stars'] = float(n_stars)
+                    n_stars = _coerce_float(selection.get('n_stars'), math.nan)
+                    if isfinite(n_stars):
+                        point['n_stars'] = n_stars
             if include_selection:
-                points[-1]['selection'] = selection
+                point['selection'] = selection
 
     return points
 
 
 def _annotate_threejs_point_motion_ranges(frame_specs):
     """Add each moving object's size and opacity range over all frames to its ``motion`` records."""
-    motion_ranges = {}
+    isfinite = math.isfinite
+    ranges = {}  # motion key -> [size_min, size_max, opacity_min, opacity_max]
+    moving = []
     for frame_spec in frame_specs:
         for trace in frame_spec.get('traces', []):
             for point in trace.get('points', []):
@@ -3148,42 +3214,32 @@ def _annotate_threejs_point_motion_ranges(frame_specs):
                 motion_key = str(motion.get('key') or '').strip()
                 if not motion_key:
                     continue
-                entry = motion_ranges.setdefault(
-                    motion_key,
-                    {
-                        'size_min': np.inf,
-                        'size_max': -np.inf,
-                        'opacity_min': np.inf,
-                        'opacity_max': -np.inf,
-                    },
-                )
-                point_size = _coerce_float(point.get('size'), np.nan)
-                point_opacity = _coerce_float(point.get('opacity'), np.nan)
-                if np.isfinite(point_size):
-                    entry['size_min'] = min(entry['size_min'], point_size)
-                    entry['size_max'] = max(entry['size_max'], point_size)
-                if np.isfinite(point_opacity):
-                    entry['opacity_min'] = min(entry['opacity_min'], point_opacity)
-                    entry['opacity_max'] = max(entry['opacity_max'], point_opacity)
+                moving.append((motion, motion_key))
+                entry = ranges.get(motion_key)
+                if entry is None:
+                    entry = ranges[motion_key] = [math.inf, -math.inf, math.inf, -math.inf]
+                point_size = _coerce_float(point.get('size'), math.nan)
+                point_opacity = _coerce_float(point.get('opacity'), math.nan)
+                if isfinite(point_size):
+                    entry[0] = min(entry[0], point_size)
+                    entry[1] = max(entry[1], point_size)
+                if isfinite(point_opacity):
+                    entry[2] = min(entry[2], point_opacity)
+                    entry[3] = max(entry[3], point_opacity)
 
-    for frame_spec in frame_specs:
-        for trace in frame_spec.get('traces', []):
-            for point in trace.get('points', []):
-                motion = point.get('motion')
-                if not isinstance(motion, dict):
-                    continue
-                motion_key = str(motion.get('key') or '').strip()
-                ranges = motion_ranges.get(motion_key)
-                if not ranges:
-                    continue
-                size_min = ranges['size_min']
-                size_max = ranges['size_max']
-                opacity_min = ranges['opacity_min']
-                opacity_max = ranges['opacity_max']
-                motion['size_min'] = float(size_min) if np.isfinite(size_min) else float(_coerce_float(point.get('size'), 0.0))
-                motion['size_max'] = float(size_max) if np.isfinite(size_max) else float(_coerce_float(point.get('size'), 0.0))
-                motion['opacity_min'] = float(opacity_min) if np.isfinite(opacity_min) else float(_coerce_float(point.get('opacity'), 1.0))
-                motion['opacity_max'] = float(opacity_max) if np.isfinite(opacity_max) else float(_coerce_float(point.get('opacity'), 1.0))
+    # A key without one finite size (or opacity) falls back to 0 (or 1): no
+    # point of that object has a usable value of its own.
+    bounds = {
+        motion_key: {
+            'size_min': size_min if isfinite(size_min) else 0.0,
+            'size_max': size_max if isfinite(size_max) else 0.0,
+            'opacity_min': opacity_min if isfinite(opacity_min) else 1.0,
+            'opacity_max': opacity_max if isfinite(opacity_max) else 1.0,
+        }
+        for motion_key, (size_min, size_max, opacity_min, opacity_max) in ranges.items()
+    }
+    for motion, motion_key in moving:
+        motion.update(bounds[motion_key])
 
 
 def _labels_from_trace(trace_json):
@@ -3300,57 +3356,49 @@ def _selection_from_customdata_row(row):
         return None
 
     values = _as_object_list(row)
-    if len(values) <= CUSTOMDATA_IDX_Z0:
+    count = len(values)
+    if count <= CUSTOMDATA_IDX_Z0:
         return None
 
-    l_deg = _coerce_float(values[CUSTOMDATA_IDX_L0_DEG], np.nan)
-    b_deg = _coerce_float(values[CUSTOMDATA_IDX_B0_DEG], np.nan)
-    dist_pc = _coerce_float(values[CUSTOMDATA_IDX_DIST0_PC], np.nan)
-    x0 = _coerce_float(values[CUSTOMDATA_IDX_X0], np.nan)
-    y0 = _coerce_float(values[CUSTOMDATA_IDX_Y0], np.nan)
-    z0 = _coerce_float(values[CUSTOMDATA_IDX_Z0], np.nan)
-    if (not np.isfinite(l_deg)) or (not np.isfinite(b_deg)):
+    l_deg = _coerce_float(values[CUSTOMDATA_IDX_L0_DEG], math.nan)
+    b_deg = _coerce_float(values[CUSTOMDATA_IDX_B0_DEG], math.nan)
+    if not (math.isfinite(l_deg) and math.isfinite(b_deg)):
         return None
 
-    age_now = _coerce_float(values[CUSTOMDATA_IDX_AGE_NOW], np.nan)
-    age_at_t = _coerce_float(values[CUSTOMDATA_IDX_AGE_AT_T], np.nan)
-    click_time_myr = np.nan
-    if np.isfinite(age_now) and np.isfinite(age_at_t):
-        click_time_myr = float(age_at_t - age_now)
+    # _coerce_float gives finite numbers or NaN, so no further checks are needed.
+    age_now = _coerce_float(values[CUSTOMDATA_IDX_AGE_NOW], math.nan)
+    age_at_t = _coerce_float(values[CUSTOMDATA_IDX_AGE_AT_T], math.nan)
+    click_time_myr = age_at_t - age_now
     ra_deg, dec_deg = _galactic_to_icrs_deg(l_deg, b_deg)
 
     cluster_name = None
-    if len(values) > CUSTOMDATA_IDX_CLUSTER_NAME and values[CUSTOMDATA_IDX_CLUSTER_NAME] not in (None, ''):
+    if count > CUSTOMDATA_IDX_CLUSTER_NAME and values[CUSTOMDATA_IDX_CLUSTER_NAME] not in (None, ''):
         cluster_name = str(values[CUSTOMDATA_IDX_CLUSTER_NAME])
-
     cluster_color = None
-    if len(values) > CUSTOMDATA_IDX_CLUSTER_COLOR and values[CUSTOMDATA_IDX_CLUSTER_COLOR] not in (None, ''):
+    if count > CUSTOMDATA_IDX_CLUSTER_COLOR and values[CUSTOMDATA_IDX_CLUSTER_COLOR] not in (None, ''):
         cluster_color = str(values[CUSTOMDATA_IDX_CLUSTER_COLOR])
-    n_stars = np.nan
-    if len(values) > CUSTOMDATA_IDX_N_STARS:
-        n_stars = _coerce_float(values[CUSTOMDATA_IDX_N_STARS], np.nan)
+    n_stars = math.nan
+    if count > CUSTOMDATA_IDX_N_STARS:
+        n_stars = _coerce_float(values[CUSTOMDATA_IDX_N_STARS], math.nan)
     cluster_aliases = ''
-    if (
-        len(values) > CUSTOMDATA_IDX_CLUSTER_ALIASES
-        and values[CUSTOMDATA_IDX_CLUSTER_ALIASES] not in (None, '')
-    ):
+    if count > CUSTOMDATA_IDX_CLUSTER_ALIASES and values[CUSTOMDATA_IDX_CLUSTER_ALIASES] not in (None, ''):
         cluster_aliases = str(values[CUSTOMDATA_IDX_CLUSTER_ALIASES])
 
     return {
-        'l_deg': float(l_deg),
-        'b_deg': float(b_deg),
-        'dist_pc': float(dist_pc) if np.isfinite(dist_pc) else np.nan,
-        'x0': float(x0) if np.isfinite(x0) else np.nan,
-        'y0': float(y0) if np.isfinite(y0) else np.nan,
-        'z0': float(z0) if np.isfinite(z0) else np.nan,
-        'age_now_myr': float(age_now) if np.isfinite(age_now) else np.nan,
-        'age_at_t_myr': float(age_at_t) if np.isfinite(age_at_t) else np.nan,
-        'click_time_myr': float(click_time_myr) if np.isfinite(click_time_myr) else np.nan,
-        'ra_deg': float(ra_deg) if np.isfinite(ra_deg) else np.nan,
-        'dec_deg': float(dec_deg) if np.isfinite(dec_deg) else np.nan,
+        'l_deg': l_deg,
+        'b_deg': b_deg,
+        'dist_pc': _coerce_float(values[CUSTOMDATA_IDX_DIST0_PC], math.nan),
+        'x0': _coerce_float(values[CUSTOMDATA_IDX_X0], math.nan),
+        'y0': _coerce_float(values[CUSTOMDATA_IDX_Y0], math.nan),
+        'z0': _coerce_float(values[CUSTOMDATA_IDX_Z0], math.nan),
+        'age_now_myr': age_now,
+        'age_at_t_myr': age_at_t,
+        'click_time_myr': click_time_myr if math.isfinite(click_time_myr) else math.nan,
+        'ra_deg': ra_deg,
+        'dec_deg': dec_deg,
         'cluster_name': cluster_name,
         'cluster_color': cluster_color,
-        'n_stars': float(n_stars) if np.isfinite(n_stars) else np.nan,
+        'n_stars': n_stars,
         'name_all': cluster_aliases,
     }
 
@@ -3364,15 +3412,15 @@ def _selection_identity_key(selection):
     if cluster_name:
         return cluster_name
 
-    x0 = _coerce_float(selection.get('x0'), np.nan)
-    y0 = _coerce_float(selection.get('y0'), np.nan)
-    z0 = _coerce_float(selection.get('z0'), np.nan)
-    if np.isfinite(x0) and np.isfinite(y0) and np.isfinite(z0):
+    x0 = _coerce_float(selection.get('x0'), math.nan)
+    y0 = _coerce_float(selection.get('y0'), math.nan)
+    z0 = _coerce_float(selection.get('z0'), math.nan)
+    if math.isfinite(x0) and math.isfinite(y0) and math.isfinite(z0):
         return f'{x0:.6f}|{y0:.6f}|{z0:.6f}'
 
-    ra_deg = _coerce_float(selection.get('ra_deg'), np.nan)
-    dec_deg = _coerce_float(selection.get('dec_deg'), np.nan)
-    if np.isfinite(ra_deg) and np.isfinite(dec_deg):
+    ra_deg = _coerce_float(selection.get('ra_deg'), math.nan)
+    dec_deg = _coerce_float(selection.get('dec_deg'), math.nan)
+    if math.isfinite(ra_deg) and math.isfinite(dec_deg):
         return f'{ra_deg:.6f}|{dec_deg:.6f}'
 
     return str(selection.get('trace_name') or '').strip()
@@ -3383,9 +3431,9 @@ def _motion_from_selection(selection):
     if not isinstance(selection, dict):
         return None
 
-    age_now_myr = _coerce_float(selection.get('age_now_myr'), np.nan)
-    age_at_t_myr = _coerce_float(selection.get('age_at_t_myr'), np.nan)
-    if (not np.isfinite(age_now_myr)) or (not np.isfinite(age_at_t_myr)):
+    age_now_myr = _coerce_float(selection.get('age_now_myr'), math.nan)
+    age_at_t_myr = _coerce_float(selection.get('age_at_t_myr'), math.nan)
+    if not (math.isfinite(age_now_myr) and math.isfinite(age_at_t_myr)):
         return None
 
     return {
