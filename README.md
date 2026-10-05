@@ -20,6 +20,8 @@ as a presentation.
 pip install git+https://github.com/CSwigg/oviz.git
 ```
 
+Oviz needs Python 3.10 or newer.
+
 ## Make a figure
 
 ```python

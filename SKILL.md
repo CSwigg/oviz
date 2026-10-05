@@ -11,9 +11,10 @@ written as a WebGL2 viewer. In the figure, readers scrub time, orbit in 3D,
 switch to the sky, inspect objects, lasso, and present saved views. Nobody
 needs Python to open it.
 
-The worked reference is `tests/main_figure_oct1.py` (the "October 1 figure",
-live at https://cswigg.github.io/cam_website/oviz_figures/oviz_oct1.html). It
-shows:
+The worked reference is `tests/main_figure_oct1.py` in the repository
+(https://github.com/CSwigg/oviz; `tests/` is not part of a pip install). It
+builds the "October 1 figure", live at
+https://cswigg.github.io/cam_website/oviz_figures/oviz_oct1.html:
 - young clusters integrated in a spiral potential;
 - 3D dust and Hα volumes;
 - Sky member stars;
@@ -28,9 +29,10 @@ Read it when you need a full-scale example. This file distils how it works.
 pip install git+https://github.com/CSwigg/oviz.git   # or: pip install -e . in a clone
 ```
 
-Oviz needs Python ≥ 3.10; pip brings in NumPy, pandas, Astropy, galpy and
-SciPy. Checking a figure needs a browser (Chrome works headless). Sky imagery
-needs network access; the 3D scene does not.
+Oviz needs Python ≥ 3.10; pip installs the rest (NumPy, pandas, Astropy,
+galpy, SciPy, Matplotlib and a few small packages). Checking a figure needs a
+browser (Chrome works headless). Sky imagery needs network access; the 3D
+scene does not.
 
 ## 1. Prepare the data
 
@@ -42,11 +44,12 @@ Getting them wrong silently produces wrong orbits.
 | `x, y, z` | heliocentric Galactic Cartesian position, pc. x points to the Galactic centre, y to l = 90°, z to the north Galactic pole |
 | `U, V, W` | heliocentric velocity, km/s, same axes. Not corrected for solar motion: Oviz applies Schönrich et al. (2010) itself |
 | `name` | unique object name (used for search, links and member matching) |
-| `age_myr` | age in Myr. Objects fade in at birth when time runs back |
+| `age_myr` | age in Myr. Going back in time, each object fades out over the `fade_in_time` (default 5 Myr) before its birth |
 | `n_stars` | optional: member count, for size scaling (`size_by_n_stars=True`) |
 
 Objects without velocities (a fixed catalogue, a cloud outline) go in
-`Layer(df, layer_name, assume_stationary=True)` instead of `Trace`.
+`Layer(df, layer_name, assume_stationary=True)` (`from oviz import Layer,
+LayerCollection`) instead of `Trace`.
 
 ## 2. Build the scene
 
@@ -61,7 +64,7 @@ scene = Scene3D(TraceCollection([older, young]), figure_theme="dark",
                 potential=khalil2025_potential())   # omit for MWPotential2014
 
 figure = scene.make_plot(
-    time=np.arange(0, -61, -1.0),        # Myr; must contain 0; 1 Myr steps are plenty
+    time=np.arange(0, -61, -1.0),        # Myr; evenly spaced, must contain 0; 1 Myr steps are plenty
     galactic_mode=True,                  # Galaxy-scale guides (GC, radius rings)
     enable_sky_panel=True,               # the registered sky view
     volumes=[dust_volume],               # see section 3
@@ -77,11 +80,12 @@ figure.write_html("figure.html")
 Paper exports.
 
 Other options worth knowing:
+- `figure_theme`: `"dark"`, `"gray"`, `"light"` or `"solarized_light"`.
 - `viewer_mode="detailed"`: open with every panel visible (default `"focus"`).
 - `camera_anchor="lsr" | "sun" | "free"`: what the camera orbits and follows
   through time (default: the LSR).
-- `show_sun=True`: adds the Sun as a trace.
-- `fade_in_time`: Myr over which objects fade in at birth.
+- `show_sun=False`: leave out the Sun, which is added by default.
+- `fade_in_time`: Myr over which objects fade in before their birth.
 
 Potentials:
 - The default is galpy's MWPotential2014 at R0 = 8.122 kpc, v0 = 236 km/s.
@@ -107,21 +111,30 @@ dust_volume = {"name": "Edenhofer+2024 Dust", "path": "mean_and_std_xyz.fits", "
 Or pass an array: `{"name": ..., "data": cube_zyx, "bounds": {"x": [-1250, 1250], "y": [...], "z": [...]}}`.
 The cube is ordered (z, y, x) and the bounds are heliocentric pc.
 
-`max_resolution` downsamples the cube. Keep cubes at or under 512³ for desktop
-and expect phones to stride further. Hidden or present-day-only volumes still
-ship in the file, so mind the size.
+- An array volume needs `bounds`. Without them each voxel counts as 1 pc
+  around the Sun, so a 64³ cube spans only ±32 pc.
+- A FITS cube takes its extent from the header (`CRPIX`, `CRVAL`, `CDELT` in
+  pc on each axis) and ignores `bounds`. Without those keys it falls back to
+  1 pc voxels. `clip_bounds` (same shape as `bounds`) crops it.
+- `max_resolution` downsamples the cube. Keep cubes at or under 512³ for
+  desktop and expect phones to stride further. Hidden or present-day-only
+  volumes still ship in the file, so mind the size.
 
 ## 4. Sky view members
 
-`cluster_members_file` is a CSV (or anything pandas reads) with one row per
+`cluster_members_file` is a CSV (read with `pandas.read_csv`) with one row per
 star:
 - a cluster-name column (`name`, `cluster_name`, `cluster` or `group_name`)
-  matching the traces' `name`;
-- sky coordinates: `l`/`b` or `ra`/`dec`;
-- optionally `source_id`, `pmra`/`pmdec`, and `parallax` or a distance.
+  matching the traces' `name`, ignoring case and punctuation;
+- sky coordinates in degrees: `l`/`b` or `ra`/`dec`;
+- optionally `source_id`, `pmra`/`pmdec` (mas/yr), and `parallax` (mas) or a
+  distance in pc (`distance_pc`, `r_med_geo`, `dist_pc` or `distance`; other
+  names are ignored).
 
 In Sky view each cluster marker crossfades into its members. Members never
-appear in 3D, by design.
+appear in 3D, by design. A `ValueError` asking for "a readable
+cluster_members_file" means the file could not be read, lacks the name or
+coordinate columns, or no row matched a trace's object names.
 
 ## 5. Saved views and presentation
 
@@ -131,7 +144,8 @@ styles, volumes, selection and Sky layers.
   the story. **P** presents. **⌘S** saves a copy of the figure with its
   views, editable or present-only.
 - **From a script:** run the browser API on an open figure.
-  - `Oviz.viewer.states.add()`, `.goTo(i)` and `.present()`.
+  - `Oviz.viewer.states.add()`, `.goTo(target)` and `.present()`. `goTo`
+    takes a 1-based index, a view's id or name, or `"original"`.
   - `Oviz.viewer.getState()` and `applyState(s)`.
   - `Oviz.viewer.states.exportHtml({download: false})` returns the HTML of a
     figure that includes the views.
@@ -140,26 +154,33 @@ styles, volumes, selection and Sky layers.
 
 ## 6. Large builds: science once, viewer many times
 
-The October 1 build runs a slow science pipeline (catalog joins, orbit
-integration, volume resampling) once. It writes a classic-format source figure
-(`write_classic` in `tests/main_figure_oct1.py`). The viewer is then
-regenerated from that source in seconds:
+When data processing dominates (catalogue joins, orbit integration, volume
+resampling), run it once and keep the result as a classic-format source
+figure. The viewer is then regenerated from that source in seconds:
 
 ```python
-from oviz import upgrade_html
-upgrade_html("science_source.html", "figure.html", mode="focus", camera_anchor="lsr")
+from oviz import OvizFigure
+from oviz.viewer import compile_scene_spec, read_legacy_scene_spec
+
+scene.make_plot(..., viewer="classic").write_html("science_source.html")   # slow, once
+
+spec = read_legacy_scene_spec("science_source.html")                        # fast, every time
+# ...edit spec here: add traces, provenance, visibility...
+OvizFigure(bundle=compile_scene_spec(spec), mode="focus", camera_anchor="lsr").write_html("figure.html")
 ```
 
-Use the same pattern whenever data processing dominates and you are iterating
-on presentation. `python -m oviz.viewer.upgrade old.html new.html` also
-converts figures made by older Oviz versions, saved views included.
+Without edits, `oviz.upgrade_html("science_source.html", "figure.html")` does
+the same. `python -m oviz.viewer.upgrade old.html new.html` also converts
+figures made by older Oviz versions, saved views included. For a small edit to
+a fresh figure, change `figure.scene_spec` before `write_html`.
 
-You may need objects whose tracks come from elsewhere, such as the Oct 1
-pulsars traced back along their proper motions. Add them to every frame of
-the scene spec before compiling; `add_pulsar_traces` in
-`tests/main_figure_oct1.py` shows the shape. Keep one stable `key` per trace,
-give it a legend item, and set it to `"legendonly"` in every
-`group_visibility` entry so it starts hidden.
+To add objects whose tracks come from elsewhere, such as the October 1
+pulsars traced back along their proper motions, add them to every frame of the
+spec before compiling. `add_pulsar_traces` in `tests/main_figure_oct1.py`
+shows the shape. Keep one stable `key` per trace, give it a legend item, and
+set it to `"legendonly"` in every `group_visibility` entry so it starts
+hidden. The figure embeds the spec's `provenance` verbatim, so record input
+files by name and hash, not by local path.
 
 ## 7. Verify before you share
 
@@ -178,12 +199,13 @@ give it a legend item, and set it to `"legendonly"` in every
 
 ## Pitfalls
 
-- A time grid without 0, or one that isn't evenly spaced, fails or misaligns
-  frames. galpy needs evenly spaced times.
+- A time grid without 0 raises an error; an unevenly spaced one fails in
+  galpy.
 - Velocities already corrected to the LSR or Galactic rest frame give wrong
   orbits. Oviz expects heliocentric UVW.
-- Duplicate object names break member matching and search.
-- Figures embed whatever provenance you attach. Record file names and
-  versions, not absolute local paths.
+- Duplicate object names pass silently but confuse member matching, search
+  and links.
+- A member distance in kpc, or under an unrecognised column name, is read
+  wrongly or ignored without a warning.
 - Large HTML files are slow on phones. Keep volumes compact (`max_resolution`)
   and leave rarely used layers out rather than hidden.
