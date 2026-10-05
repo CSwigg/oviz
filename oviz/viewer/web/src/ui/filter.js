@@ -34,7 +34,7 @@ export class FilterPlugin {
     if (!this.traces.length || !this.params.length) return;
     this.param = this.params[0];
     const redraw = () => this.scheduleUpdate();
-    v.on("time", () => { if (this.param?.key === "ageAt" || this.param?.key === "dist" || this.param?.key === "z") redraw(); });
+    v.on("time", () => { if (this.param?.key === "ageAt" || this.param?.key === "dist" || this.param?.key === "z") this.onTime(); });
     v.on("style", redraw);
     v.on("gpu-restored", redraw);
     v.on("theme", redraw); // axis text and range colours follow the theme
@@ -100,6 +100,21 @@ export class FilterPlugin {
     return out;
   }
 
+  /**
+   * Time moved the values. A range follows them at once (it dims or hides
+   * objects); a histogram out of sight (the layers panel closed) waits for
+   * `refresh`, so playback does not redraw it every frame.
+   */
+  onTime() {
+    if (this.range || this.ui.layersOpen) this.scheduleUpdate();
+    else this._stale = true;
+  }
+
+  /** The layers panel opened: catch the histogram up with time. */
+  refresh() {
+    if (this._stale) this.scheduleUpdate();
+  }
+
   scheduleUpdate() {
     if (this._queued) return;
     this._queued = true;
@@ -111,6 +126,7 @@ export class FilterPlugin {
 
   update() {
     if (!this.canvas || !this.canvas.isConnected) return;
+    this._stale = false;
     const v = this.viewer;
     const visible = this.traces.filter((t) => v.state.traces[t.key]?.visible);
     const series = visible.map((t) => ({ trace: t, values: this.values(t) }));
@@ -245,7 +261,7 @@ export class FilterPlugin {
     const v = this.viewer;
     const log = this.axis?.log;
     const tf = (x) => (log ? Math.log10(Math.max(x, 1e-9)) : x);
-    let kept = 0, total = 0;
+    let kept = 0, total = 0, changed = false;
     for (const s of this.series || []) {
       const batch = v.points.byKey.get(s.trace.key);
       if (!batch) continue;
@@ -259,16 +275,18 @@ export class FilterPlugin {
           total++;
         }
       }
-      batch.setStateBits(3, bits);
+      changed = batch.setStateBits(3, bits) || changed;
     }
     // Hidden layers keep no stale filter bits.
     for (const t of this.traces) {
-      if (!(this.series || []).some((s) => s.trace === t)) v.points.byKey.get(t.key)?.setStateBits(3, null);
+      if (!(this.series || []).some((s) => s.trace === t)) changed = v.points.byKey.get(t.key)?.setStateBits(3, null) || changed;
     }
     this.kept = kept;
     this.total = total;
-    v.invalidatePick();
-    v.renderer.invalidate();
+    if (changed) {
+      v.invalidatePick();
+      v.renderer.invalidate();
+    }
     this.renderReadout();
   }
 

@@ -242,10 +242,19 @@ export class TimelineDock {
     this.scrub.el.setAttribute("aria-valuenow", tl.time.toFixed(2));
     this.scrub.el.setAttribute("aria-valuetext", this.ui.formatTime(tl.time));
     if (this.scrub.el.dataset.dragging === "true") this.setBubble(f, this.ui.formatTime(tl.time));
+    // This runs every frame of playback: rebuild text and buttons (and
+    // re-parse the play icon) only when what they show changes.
     const t = tl.time;
     const [num, unit] = splitTime(t);
-    this.timeValue.replaceChildren(num, h("small", null, unit));
-    this.timeCaption.textContent = Math.abs(t) < 1e-6 ? "Present day" : t < 0 ? "Before present" : "After present";
+    if (num !== this._shownTime) {
+      this._shownTime = num;
+      this.timeValue.replaceChildren(num, h("small", null, unit));
+    }
+    const caption = Math.abs(t) < 1e-6 ? "Present day" : t < 0 ? "Before present" : "After present";
+    if (caption !== this.timeCaption.textContent) this.timeCaption.textContent = caption;
+    const transport = `${tl.playing}|${tl.speed}|${tl.loop}`;
+    if (transport === this._shownTransport) return;
+    this._shownTransport = transport;
     this.ui.root.dataset.playing = String(tl.playing);
     this.playBtn.replaceChildren(icon(tl.playing ? "pause" : "play"));
     this.playBtn.setAttribute("aria-label", tl.playing ? "Pause" : "Play");

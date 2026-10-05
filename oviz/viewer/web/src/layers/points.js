@@ -584,14 +584,24 @@ class PointBatch {
     return out;
   }
 
-  /** Replace the bits in `mask` with `values` (Uint8Array, same length). */
+  /**
+   * Replace the bits in `mask` with `values` (Uint8Array, same length; null
+   * clears them). Only a change uploads and bumps `stateVersion`; returns
+   * whether anything changed.
+   */
   setStateBits(mask, values) {
-    const gl = this.gl;
     const s = this.state;
+    let changed = false;
+    for (let i = 0; i < s.length; i++) {
+      const b = (s[i] & ~mask) | (values ? values[i] & mask : 0);
+      if (b !== s[i]) { s[i] = b; changed = true; }
+    }
+    if (!changed) return false;
     this.stateVersion = (this.stateVersion || 0) + 1;
-    for (let i = 0; i < s.length; i++) s[i] = (s[i] & ~mask) | (values ? values[i] & mask : 0);
+    const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.state);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, s);
+    return true;
   }
 
   dispose() {

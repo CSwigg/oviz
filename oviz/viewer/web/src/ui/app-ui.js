@@ -819,7 +819,10 @@ class AppUI {
     this.root.dataset.layers = String(open);
     this.idle?.wake();
     this.layersBtn.setAttribute("aria-pressed", String(open));
-    if (open) this.anchorLayers();
+    if (open) {
+      this.anchorLayers();
+      this.filter?.refresh();
+    }
   }
 
   /** Focus opens the layers as a popover above its button in the bar. */

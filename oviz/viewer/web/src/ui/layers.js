@@ -29,11 +29,16 @@ export class LayersPanel {
     v.on("volume", () => this.sync());
     v.on("global", () => this.sync());
     v.on("volume-ready", () => this.sync());
-    // Volumes shown only at the present day say so while time is elsewhere.
+    // Volumes shown only at the present day say so while time is elsewhere
+    // (the only part of the panel that time changes).
     let timeSync = 0;
     v.on("time", () => {
-      if (timeSync) return;
-      timeSync = requestAnimationFrame(() => { timeSync = 0; v._resolveParams?.(); this.sync(); });
+      if (timeSync || !v.volumeSpecs?.length) return;
+      timeSync = requestAnimationFrame(() => {
+        timeSync = 0;
+        v._resolveParams?.();
+        for (const r of this.rows.values()) if (r.kind === "volume") this.syncVolumeStatus(r);
+      });
     });
     v.on("viewmode", () => this.render());
     v.on("state-applied", () => {
@@ -440,14 +445,25 @@ export class LayersPanel {
     return wrap;
   }
 
-  /** "t = 0 only" when a visible volume is not drawn at this time (classic render-mode note). */
-  volumeTimeNote(spec, vs) {
+  /**
+   * A volume row's status: a spinner while it loads, or "t = 0 only" when it
+   * is visible but not drawn at this time (classic render-mode note). The
+   * DOM changes only when the status does.
+   */
+  syncVolumeStatus(r) {
     const v = this.viewer;
-    if (!vs.visible) return "";
-    const drawn = (v.volumes.params?.volumeDraws || []).some((d) => d.key === spec.key || v.volumeSpecs?.find((s) => s.key === d.key)?.stateKey === spec.stateKey);
-    if (drawn) return "";
-    const sky = v.state.view.mode === "sky";
-    return h("span", { class: "ov-faint", title: sky ? "Sky view shows volumes at the present day only (press 0)" : "Shown at the present day only (press 0), or turn on Show at every time" }, "t = 0 only");
+    const spec = r.spec;
+    let status = "";
+    if (!v.volumes.volumes.has(spec.key)) status = "loading";
+    else if (v.state.volumes[spec.stateKey]?.visible) {
+      const drawn = (v.volumes.params?.volumeDraws || []).some((d) => d.key === spec.key || v.volumeSpecs?.find((s) => s.key === d.key)?.stateKey === spec.stateKey);
+      if (!drawn) status = v.state.view.mode === "sky" ? "t0-sky" : "t0";
+    }
+    if (status === r.shownStatus) return;
+    r.shownStatus = status;
+    if (status === "loading") r.status.replaceChildren(h("span", { class: "ov-spinner", title: "Loading…" }));
+    else if (!status) r.status.replaceChildren("");
+    else r.status.replaceChildren(h("span", { class: "ov-faint", title: status === "t0-sky" ? "Sky view shows volumes at the present day only (press 0)" : "Shown at the present day only (press 0), or turn on Show at every time" }, "t = 0 only"));
   }
 
   // ---------------------------------------------------------------- reference
@@ -485,7 +501,7 @@ export class LayersPanel {
         const st = v.state.traces[key] || {};
         const visible = !!st.visible;
         r.row.dataset.visible = String(visible);
-        r.eye.replaceChildren(icon(visible ? "eye" : "eyeOff"));
+        if (r.shownVisible !== visible) { r.shownVisible = visible; r.eye.replaceChildren(icon(visible ? "eye" : "eyeOff")); }
         const cb = r.trace.colorBy;
         const mode = st.colorMode || cb?.defaultMode || "fixed";
         if (mode === "by_value" && cb) {
@@ -502,11 +518,10 @@ export class LayersPanel {
         const vs = v.state.volumes[key] || {};
         const visible = !!vs.visible;
         r.row.dataset.visible = String(visible);
-        r.eye.replaceChildren(icon(visible ? "eye" : "eyeOff"));
+        if (r.shownVisible !== visible) { r.shownVisible = visible; r.eye.replaceChildren(icon(visible ? "eye" : "eyeOff")); }
         const lut = this.lutFor.get(vs.colormap);
         r.swatch.style.background = lut ? lutGradient(lut, "135deg", 4) : r.spec.legendColor;
-        const loaded = v.volumes.volumes.has(r.spec.key);
-        r.status.replaceChildren(loaded ? this.volumeTimeNote(r.spec, vs) : h("span", { class: "ov-spinner", title: "Loading…" }));
+        this.syncVolumeStatus(r);
       }
     }
     this.syncSectionEyes();
