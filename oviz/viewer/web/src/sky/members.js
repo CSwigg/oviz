@@ -30,7 +30,6 @@ uniform float uInternal;
 uniform float uStarSize;
 uniform float uMinPx;
 uniform float uReveal;
-uniform float uGlow;
 out vec2 vUv;
 out vec3 vColor;
 out float vA;

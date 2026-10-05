@@ -2,7 +2,7 @@
 // visible layers, with a range brush that dims or hides everything outside.
 // Replaces the classic Age KDE and Cluster Filter widgets.
 
-import { h, clear } from "./dom.js";
+import { h } from "./dom.js";
 import { miniSeg } from "./controls.js";
 import { parseColor } from "../core/color.js";
 import { clamp } from "../core/math.js";

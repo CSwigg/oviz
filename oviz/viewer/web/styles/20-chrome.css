@@ -87,7 +87,6 @@
 .ov-ibtn.ov-glass { border-radius: var(--ov-pill); color: var(--ov-text); }
 
 /* Instant tooltips from data-tip */
-.ov-tipped { position: relative; }
 .ov-tip {
   position: fixed; z-index: 100;
   padding: 5px 8px;

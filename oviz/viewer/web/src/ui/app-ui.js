@@ -52,7 +52,7 @@ export function mountUI(root, viewer) {
   return ui;
 }
 
-export class AppUI {
+class AppUI {
   constructor(root, viewer) {
     this.root = root;
     this.viewer = viewer;

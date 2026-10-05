@@ -20,10 +20,6 @@ export function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-export function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3);
-}
-
 /** Shortest signed angular difference b - a in radians. */
 export function angleDelta(a, b) {
   let d = (b - a) % (2 * Math.PI);
@@ -34,56 +30,8 @@ export function angleDelta(a, b) {
 
 // ---- vec3 (plain arrays) -------------------------------------------------
 
-export function v3(x = 0, y = 0, z = 0) {
-  return [x, y, z];
-}
-
-export function v3add(a, b, out = [0, 0, 0]) {
-  out[0] = a[0] + b[0]; out[1] = a[1] + b[1]; out[2] = a[2] + b[2];
-  return out;
-}
-
-export function v3sub(a, b, out = [0, 0, 0]) {
-  out[0] = a[0] - b[0]; out[1] = a[1] - b[1]; out[2] = a[2] - b[2];
-  return out;
-}
-
-export function v3scale(a, s, out = [0, 0, 0]) {
-  out[0] = a[0] * s; out[1] = a[1] * s; out[2] = a[2] * s;
-  return out;
-}
-
-export function v3dot(a, b) {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-export function v3cross(a, b, out = [0, 0, 0]) {
-  const x = a[1] * b[2] - a[2] * b[1];
-  const y = a[2] * b[0] - a[0] * b[2];
-  const z = a[0] * b[1] - a[1] * b[0];
-  out[0] = x; out[1] = y; out[2] = z;
-  return out;
-}
-
-export function v3len(a) {
-  return Math.hypot(a[0], a[1], a[2]);
-}
-
 export function v3dist(a, b) {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-}
-
-export function v3norm(a, out = [0, 0, 0]) {
-  const l = v3len(a) || 1;
-  out[0] = a[0] / l; out[1] = a[1] / l; out[2] = a[2] / l;
-  return out;
-}
-
-export function v3lerp(a, b, t, out = [0, 0, 0]) {
-  out[0] = a[0] + (b[0] - a[0]) * t;
-  out[1] = a[1] + (b[1] - a[1]) * t;
-  out[2] = a[2] + (b[2] - a[2]) * t;
-  return out;
 }
 
 // ---- mat4 ---------------------------------------------------------------

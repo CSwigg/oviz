@@ -5,7 +5,7 @@
 // prefers-reduced-motion.
 
 const reduceQuery = typeof window !== "undefined" ? window.matchMedia?.("(prefers-reduced-motion: reduce)") : null;
-export const reducedMotion = () => !!reduceQuery?.matches;
+const reducedMotion = () => !!reduceQuery?.matches;
 
 let linearSupported = null;
 function supportsLinear() {
@@ -119,7 +119,7 @@ export function conceal(el, from) {
 }
 
 /** Items fall into place one after another. */
-export function cascade(nodes, { step = 14, max = 10, from = "translateY(-3px)" } = {}) {
+function cascade(nodes, { step = 14, max = 10, from = "translateY(-3px)" } = {}) {
   if (reducedMotion()) return;
   const s = springEasing(SPRINGS.pop);
   let i = 0;

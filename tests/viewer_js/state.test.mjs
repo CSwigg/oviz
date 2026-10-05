@@ -3,7 +3,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { initialViewerState, legacySnapshotToState, clampVolumeState, groupMode, toggleAllPlan, soloPlan, applyLegacySkyGroup, autoOrbitRate, skyStartView } from "../../oviz/viewer/web/src/app/state.js";
-import { stateDifferences, importStates, exportStatesBlock } from "../../oviz/viewer/web/src/app/states.js";
+import { importStates, exportStatesBlock } from "../../oviz/viewer/web/src/app/states.js";
+
+/** Paths where two states differ: numbers beyond a relative `eps`, anything else at all. */
+function stateDifferences(a, b, eps = 1e-6) {
+  const diffs = [];
+  const walk = (x, y, path) => {
+    if (typeof x === "number" && typeof y === "number") {
+      if (Math.abs(x - y) > eps * Math.max(1, Math.abs(x), Math.abs(y))) diffs.push(path);
+      return;
+    }
+    if (x && y && typeof x === "object" && typeof y === "object") {
+      for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) walk(x[k], y[k], `${path}.${k}`);
+      return;
+    }
+    if (x !== y && !(x == null && y == null)) diffs.push(path);
+  };
+  walk(a, b, "state");
+  return diffs;
+}
 
 const manifest = {
   time: { values: [-2, -1, 0], initialIndex: 2 },

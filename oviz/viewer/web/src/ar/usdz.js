@@ -39,7 +39,7 @@ function color(c) {
 }
 
 /** A USD prim name: letters, digits and underscores, not starting with a digit. */
-export function usdName(s) {
+function usdName(s) {
   const n = String(s || "Item").replace(/[^A-Za-z0-9_]/g, "_");
   return /^[A-Za-z_]/.test(n) ? n : `_${n}`;
 }
@@ -269,7 +269,7 @@ export function usdaGeometry(mesh) {
 
 let crcTable = null;
 
-export function crc32(bytes, crc = 0) {
+function crc32(bytes, crc = 0) {
   if (!crcTable) {
     crcTable = new Uint32Array(256);
     for (let n = 0; n < 256; n++) {
@@ -287,7 +287,7 @@ export function crc32(bytes, crc = 0) {
  * An uncompressed ZIP with every file's data 64-byte aligned (padding goes
  * in each local header's extra field), as the USDZ specification requires.
  */
-export function zipStored(files) {
+function zipStored(files) {
   const entries = [];
   let offset = 0;
   for (const f of files) {

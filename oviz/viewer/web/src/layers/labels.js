@@ -111,8 +111,4 @@ export class LabelsOverlay {
       }
     }
   }
-
-  setVisible(v) {
-    this.el.hidden = !v;
-  }
 }

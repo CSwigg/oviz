@@ -5,12 +5,12 @@
 // a branch highlights its descendants in 3D (the rest dims); clicking pins
 // it. Built from the trace data already in the figure.
 
-import { h, iconButton, clear } from "./dom.js";
+import { h, clear } from "./dom.js";
 import { select, numberInput } from "./controls.js";
 import { clamp } from "../core/math.js";
 import { rafThrottle } from "../core/emitter.js";
 
-export const TREE_BIT = 32; // per-object state bit: dimmed by the birth tree
+const TREE_BIT = 32; // per-object state bit: dimmed by the birth tree
 
 /**
  * Link clusters into a birth tree (the classic `buildDendrogramModel`).

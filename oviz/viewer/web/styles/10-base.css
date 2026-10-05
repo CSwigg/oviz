@@ -78,7 +78,6 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 .ov-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 .ov-mono { font-family: var(--ov-mono); font-size: 0.94em; }
-.ov-muted { color: var(--ov-text-2); }
 .ov-faint { color: var(--ov-text-3); }
 
 /* Boot */

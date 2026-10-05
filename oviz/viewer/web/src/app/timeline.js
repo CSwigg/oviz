@@ -134,15 +134,6 @@ export class Timeline {
   }
 }
 
-export function formatTime(t, unit = "Myr") {
-  const a = Math.abs(t);
-  const digits = a >= 100 ? 0 : a >= 10 ? 1 : 2;
-  let s = t.toFixed(digits);
-  if (/^-0(\.0+)?$/.test(s)) s = s.slice(1);
-  s = s.replace("-", "−");
-  return `${s} ${unit}`;
-}
-
 /**
  * How many objects were born in each of `bins` equal slices of the
  * timeline (birth time = −age). Births outside the timeline are ignored.

@@ -299,21 +299,3 @@ export function easing(name) {
   return EASINGS[name] || easeInOutCubic;
 }
 
-/** Numeric fidelity check used by tests and the debug overlay. */
-export function stateDifferences(a, b, eps = 1e-6) {
-  const diffs = [];
-  const walk = (x, y, path) => {
-    if (typeof x === "number" && typeof y === "number") {
-      if (Math.abs(x - y) > eps * Math.max(1, Math.abs(x), Math.abs(y))) diffs.push(path);
-      return;
-    }
-    if (x && y && typeof x === "object" && typeof y === "object") {
-      for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) walk(x[k], y[k], `${path}.${k}`);
-      return;
-    }
-    if (x !== y && !(x == null && y == null)) diffs.push(path);
-  };
-  walk(a, b, "state");
-  return diffs;
-}
-

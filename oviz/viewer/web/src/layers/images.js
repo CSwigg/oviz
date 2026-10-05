@@ -89,7 +89,7 @@ export class ImagesLayer {
   }
 }
 
-export function sampleFrames(values, frame) {
+function sampleFrames(values, frame) {
   const n = values.length;
   if (!n) return 1;
   const fc = Math.min(Math.max(frame, 0), n - 1);

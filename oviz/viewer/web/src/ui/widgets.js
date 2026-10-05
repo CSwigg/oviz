@@ -11,7 +11,7 @@
 // (one at a time). Which widgets are open, where, and each widget's own
 // `capture()` go into States.
 
-import { h, iconButton, clear } from "./dom.js";
+import { h, iconButton } from "./dom.js";
 import { clamp } from "../core/math.js";
 
 const GAP = 12;
@@ -235,11 +235,4 @@ export class WidgetHost {
       this.open(id, { rect, state: w?.state ?? null });
     }
   }
-}
-
-/** Clear and fill a widget body. */
-export function widgetContent(body, ...children) {
-  clear(body);
-  body.append(...children.filter(Boolean));
-  return body;
 }

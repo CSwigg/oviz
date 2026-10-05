@@ -25,7 +25,6 @@ uniform int uSegColor;
 out float vSide;
 out vec3 vColor;
 out float vArc;
-out float vHalf;
 
 void main() {
   int s = int(aSegment + 0.5);
@@ -52,7 +51,6 @@ void main() {
   vec2 sp = (aCorner.x < 0.5 ? sa : sb) + n * aCorner.y * half_ + dir * (aCorner.x < 0.5 ? -1.0 : 1.0) * 0.5;
   gl_Position = vec4(sp / (uViewport * 0.5) * c.w, c.z, c.w);
   vSide = aCorner.y * half_;
-  vHalf = half_;
   vArc = aCorner.x < 0.5 ? aArc.x : aArc.y;
   vColor = uSegColor == 1 ? aColor : uColor;
 }
@@ -61,7 +59,6 @@ void main() {
 const FRAG = `
 in float vSide;
 in float vArc;
-in float vHalf;
 in vec3 vColor;
 uniform float uOpacity;
 uniform float uWidth;

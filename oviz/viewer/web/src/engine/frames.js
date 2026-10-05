@@ -7,8 +7,8 @@
 
 import { createDataTexture } from "./gl.js";
 
-export const FRAME_TEX_WIDTH = 4096;
-export const ABSENT = 3.0e38; // sentinel for "object not present in frame"
+const FRAME_TEX_WIDTH = 4096;
+const ABSENT = 3.0e38; // sentinel for "object not present in frame"
 
 /**
  * Pack (frames, count, 3) positions plus an optional per-frame scalar into

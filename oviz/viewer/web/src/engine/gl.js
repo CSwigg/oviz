@@ -2,7 +2,7 @@
 // Everything here is stateless apart from the objects it returns, so the
 // render layers stay explicit about what they bind.
 
-export class GLError extends Error {}
+class GLError extends Error {}
 
 export function createContext(canvas, options = {}) {
   const gl = canvas.getContext("webgl2", {
@@ -87,7 +87,7 @@ export function createProgram(gl, vertexSource, fragmentSource, { label = "progr
   return new Program(gl, program, uniforms, attribs, label);
 }
 
-export class Program {
+class Program {
   constructor(gl, program, uniforms, attribs, label) {
     this.gl = gl;
     this.program = program;
@@ -114,14 +114,6 @@ export class Program {
     if (l != null) {
       if (b === undefined) this.gl.uniform3fv(l, a);
       else this.gl.uniform3f(l, a, b, c);
-    }
-    return this;
-  }
-  v4(name, a, b, c, d) {
-    const l = this.uniforms[name];
-    if (l != null) {
-      if (b === undefined) this.gl.uniform4fv(l, a);
-      else this.gl.uniform4f(l, a, b, c, d);
     }
     return this;
   }
@@ -293,7 +285,3 @@ void main() {
   vUv = p;
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
-
-export function drawFullscreen(gl) {
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
-}

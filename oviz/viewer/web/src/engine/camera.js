@@ -11,7 +11,7 @@ import {
   m4project, easeInOutCubic,
 } from "../core/math.js";
 
-export const UP = [0, 0, 1];
+const UP = [0, 0, 1];
 
 /** Orbits stop just short of straight up/down, where yaw is undefined. */
 export const PITCH_LIMIT = 89.5 * DEG;

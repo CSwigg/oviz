@@ -44,16 +44,11 @@ async function base64ToBytes(text) {
   }
 }
 
-export async function gunzip(bytes) {
+async function gunzip(bytes) {
   if (typeof DecompressionStream === "undefined") {
     throw new Error("This browser cannot decompress Oviz data (DecompressionStream missing).");
   }
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-export async function gzip(bytes) {
-  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -66,16 +61,6 @@ export function unshuffle(bytes, itemSize) {
     for (let i = 0, o = b; i < n; i++, o += itemSize) out[o] = bytes[plane + i];
   }
   return out;
-}
-
-export function bytesToBase64(bytes) {
-  if (typeof bytes.toBase64 === "function") return bytes.toBase64();
-  let s = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-  }
-  return btoa(s);
 }
 
 export class BundleStore {
@@ -145,11 +130,5 @@ export class BundleStore {
   async loadPriority(maxPriority) {
     const ids = [...this.descriptors.values()].filter((d) => (d.priority ?? 1) <= maxPriority).map((d) => d.id);
     await Promise.all(ids.map((id) => this.get(id)));
-  }
-
-  /** The raw base64 text of a blob (used when re-exporting the figure). */
-  blobScriptHtml(id) {
-    const el = blobElement(id, this.doc);
-    return el ? el.outerHTML : "";
   }
 }

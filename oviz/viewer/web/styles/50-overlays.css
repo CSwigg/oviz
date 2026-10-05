@@ -94,18 +94,6 @@
 
 /* ---- Dialog ------------------------------------------------------ */
 .ov-dialog-grid { display: grid; gap: 14px; }
-.ov-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-.ov-choice {
-  display: grid; gap: 6px; align-content: start;
-  padding: 14px; border-radius: 14px; text-align: left;
-  border: 1px solid var(--ov-line-strong); background: var(--ov-hover);
-  transition: border-color var(--ov-dur), background var(--ov-dur), transform 120ms;
-}
-.ov-choice:hover { border-color: var(--ov-accent-line); background: var(--ov-accent-soft); }
-.ov-choice:active { transform: scale(0.99); }
-.ov-choice-title { display: flex; align-items: center; gap: 8px; font: 650 13px/1.2 var(--ov-font); color: var(--ov-text); }
-.ov-choice-title .ov-icon { color: var(--ov-accent); }
-.ov-choice-desc { font: 450 12px/1.45 var(--ov-font); color: var(--ov-text-2); }
 
 /* ---- Recording pill ------------------------------------------------ */
 .ov-rec-pill {

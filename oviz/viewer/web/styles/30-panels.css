@@ -109,7 +109,6 @@
 .ov-row:hover .ov-eye, .ov-row[data-visible="false"] .ov-eye, .ov-row:focus-within .ov-eye { opacity: 1; }
 .ov-row .ov-chev .ov-icon { transition: transform 220ms var(--ov-ease); }
 .ov-row[data-expanded="true"] .ov-chev .ov-icon { transform: rotate(90deg); }
-.ov-row-loading { width: 10px; height: 10px; }
 
 .ov-editor {
   display: grid; gap: 10px;

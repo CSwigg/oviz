@@ -30,26 +30,8 @@ export function parseColor(value) {
   return out;
 }
 
-export function toHex(c) {
-  const [r, g, b] = parseColor(c);
-  const h = (v) => Math.round(Math.min(Math.max(v, 0), 1) * 255).toString(16).padStart(2, "0");
-  return `#${h(r)}${h(g)}${h(b)}`;
-}
-
-export function withAlpha(c, a) {
-  const [r, g, b] = parseColor(c);
-  return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
-}
-
-/** Relative luminance (sRGB, WCAG) for choosing readable text colours. */
-export function luminance(c) {
-  const lin = (v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
-  const [r, g, b] = parseColor(c);
-  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-}
-
 /** Sample an RGBA LUT (Uint8Array width*4) at u ∈ [0, 1] → CSS rgb(). */
-export function sampleLut(lut, u) {
+function sampleLut(lut, u) {
   const w = lut.length / 4;
   const x = Math.min(Math.max(u, 0), 1) * (w - 1);
   const i = Math.floor(x), j = Math.min(i + 1, w - 1), t = x - i;

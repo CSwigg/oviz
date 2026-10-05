@@ -2,7 +2,7 @@
 // the imperative API that the UI, States and the public JS API drive.
 
 import { Emitter } from "../core/emitter.js";
-import { clamp, DEG, v3dist, niceFloor } from "../core/math.js";
+import { clamp, v3dist, niceFloor } from "../core/math.js";
 import { Renderer } from "../engine/renderer.js";
 import { Controls } from "../engine/controls.js";
 import { RenderTarget } from "../engine/gl.js";
@@ -1084,16 +1084,12 @@ export class Viewer extends Emitter {
     return { value: nice, unit: "pc", px: (nice / pc) * px };
   }
 
-  fovDeg() {
-    return this.pose.fov;
-  }
-
   dispose() {
     this.renderer.dispose();
   }
 }
 
-export function isMobile() {
+function isMobile() {
   const ua = navigator.userAgent || "";
   return /iPhone|iPad|iPod|Android/i.test(ua) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
 }

@@ -40,7 +40,7 @@ export function upperBound(events, t) {
   return lo * 4;
 }
 
-export function gaussianKernel(sigmaVox) {
+function gaussianKernel(sigmaVox) {
   const sigma = Math.max(0, Number(sigmaVox) || 0);
   if (sigma <= 1e-6) return { values: new Float32Array([1]), radius: 0 };
   const radius = Math.max(1, Math.ceil(4 * sigma));
@@ -100,7 +100,7 @@ function blurAxis(input, nx, ny, nz, kernel, radius, axis, box) {
   return out;
 }
 
-export function gaussianBlur(input, nx, ny, nz, sigmaVox, box) {
+function gaussianBlur(input, nx, ny, nz, sigmaVox, box) {
   const k = gaussianKernel(sigmaVox);
   let out = blurAxis(input, nx, ny, nz, k.values, k.radius, 0, box);
   out = blurAxis(out, nx, ny, nz, k.values, k.radius, 1, box);

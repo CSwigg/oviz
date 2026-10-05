@@ -12,7 +12,7 @@ import { makePose, poseFromEyeTarget, clonePose } from "../engine/camera.js";
 
 export const STATE_VERSION = 2;
 
-export function defaultVolumeState(spec) {
+function defaultVolumeState(spec) {
   const d = spec.defaults || {};
   const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
   return {

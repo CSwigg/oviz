@@ -17,12 +17,12 @@ export function findSurveyLayer(layers, id) {
 }
 
 /** A new layer entry for survey `id` (hidden until shown). */
-export function newSurveyLayer(id, { label, opacity = 1 } = {}) {
+function newSurveyLayer(id, { label, opacity = 1 } = {}) {
   const info = surveyInfo(id);
   return { key: String(id), survey: String(id), label: label || info.label, opacity, visible: false };
 }
 
-export function isShown(l, backgroundVisible = true) {
+function isShown(l, backgroundVisible = true) {
   return backgroundVisible && l.visible !== false && (l.opacity ?? 1) > 0.001;
 }
 

@@ -6,7 +6,7 @@
 // each after its delay. Clicking the running action again returns to the
 // view it started from; any camera input interrupts it.
 
-import { h, icon } from "./dom.js";
+import { h } from "./dom.js";
 import { captureState, easing } from "../app/states.js";
 import { applyGroupDefaults, cloneState } from "../app/state.js";
 import { clonePose, poseFromEyeTarget } from "../engine/camera.js";

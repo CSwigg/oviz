@@ -534,7 +534,7 @@ function uniqueVolumes(specs) {
   return out;
 }
 
-export function formatSci(x) {
+function formatSci(x) {
   if (!Number.isFinite(x)) return "—";
   const a = Math.abs(x);
   if (a === 0) return "0";

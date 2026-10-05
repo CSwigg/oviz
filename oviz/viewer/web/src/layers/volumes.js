@@ -380,10 +380,6 @@ export class VolumesLayer {
     return { texture, vp: Float32Array.from(mask.vp), outside: clipOutside(mask), key };
   }
 
-  get hasContent() {
-    return this.volumes.size > 0;
-  }
-
   addColormap(name, bytes, width) {
     if (this.cmaps.has(name)) return;
     const gl = this.gl;
@@ -630,7 +626,7 @@ function dist2(a, b) {
  * trilinear tails at block borders are always covered. Used only when the
  * bundle did not ship a precomputed grid.
  */
-export function computeOccupancy(data, nx, ny, nz) {
+function computeOccupancy(data, nx, ny, nz) {
   const total = nx * ny * nz;
   if (total < (1 << 18)) return null;
   const gx = Math.min(64, nx), gy = Math.min(64, ny), gz = Math.min(64, nz);

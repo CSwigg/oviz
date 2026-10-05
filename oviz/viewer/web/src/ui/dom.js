@@ -121,7 +121,7 @@ export function kbd(text) {
   return h("kbd", { class: "ov-kbd" }, text);
 }
 
-export const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const MOD = isMac ? "⌘" : "Ctrl";
 
 /** Is the event target a text-editing element (so shortcuts should yield)? */
