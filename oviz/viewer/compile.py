@@ -54,7 +54,7 @@ PRESENT_DAY_REFERENCE_NAMES = frozenset({"Galactic Quadrants", "Galactic l Label
 
 
 class CompileError(ValueError):
-    pass
+    """Raised when a scene spec cannot be compiled."""
 
 
 def _num(value: Any, default: float = math.nan) -> float:
@@ -1444,4 +1444,5 @@ def _rename_state_colormaps(snapshot: Any, trace_names: dict[str, dict[str, str]
 
 
 def builder_blob_json(builder: BundleBuilder, blob_id: str) -> Any:
+    """Decode a JSON blob already added to ``builder``."""
     return Bundle(manifest={}, blobs=builder.blobs).decode(blob_id)

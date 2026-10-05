@@ -372,4 +372,6 @@ def sky_thumbnails() -> dict[str, str]:
 
 
 def template_html() -> str:
+    """The page skeleton (``web/template.html``) with its ``__PLACEHOLDER__`` slots."""
+
     return (WEB_ROOT / "template.html").read_text(encoding="utf-8")

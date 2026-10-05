@@ -104,6 +104,7 @@ def upgrade_html(src: str | Path, dst: str | Path, *, verbose: bool = False, mod
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Command-line entry point: ``python -m oviz.viewer.upgrade SOURCE OUTPUT``."""
     parser = argparse.ArgumentParser(description="Upgrade a legacy Oviz HTML figure to the new viewer.")
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)

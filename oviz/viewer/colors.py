@@ -97,6 +97,7 @@ def parse_color(value: object, default: tuple[float, float, float, float] = (1.0
 
 
 def css_hex(value: object, default: str = "#ffffff") -> str:
+    """``#rrggbb`` for any CSS-ish colour value, or ``default`` when it does not parse."""
     r, g, b, _ = parse_color(value, (-1.0, -1.0, -1.0, 1.0))
     if r < 0:
         return default

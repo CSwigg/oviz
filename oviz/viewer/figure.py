@@ -107,6 +107,8 @@ def _json_for_script(obj: Any) -> str:
 def render_bundle_html(bundle: Bundle, *, title: str | None = None, theme: str = "dark",
                        mode: str = "focus", ar_model: str | None = None,
                        camera_anchor: str | None = None, lsr_origin: bool = True) -> str:
+    """Render ``bundle`` as one standalone HTML page (runtime, styles, manifest and blobs inline)."""
+
     mode = _check_mode(mode)
     camera_anchor = _check_anchor(camera_anchor)
     manifest = dict(bundle.manifest)
@@ -195,21 +197,25 @@ class OvizFigure:
 
     # Mirror the classic figure's API so callers can switch transparently.
     def to_dict(self) -> dict[str, Any]:
+        """The scene spec (for a figure built from a bundle, its manifest)."""
         return self.scene_spec if self.scene_spec is not None else self.bundle.manifest
 
     def to_html(self, *, mode: str | None = None, ar_model: str | None = None,
                 camera_anchor: str | None = None, **_: Any) -> str:
+        """The figure as standalone HTML; the arguments override the figure's own options."""
         return render_bundle_html(self.bundle, title=self.title, theme=self.theme, mode=mode or self.mode,
                                   ar_model=ar_model or self.ar_model,
                                   camera_anchor=camera_anchor or self.camera_anchor,
                                   lsr_origin=self.lsr_origin)
 
     def write_html(self, file: str | Path, **kwargs: Any) -> Path:
+        """Write :meth:`to_html` (with ``kwargs``) to ``file`` and return its path."""
         path = Path(file)
         path.write_text(self.to_html(**kwargs), encoding="utf-8")
         return path
 
     def size_report(self) -> dict[str, Any]:
+        """Blob count and byte sizes of the compiled bundle."""
         return self.bundle.size_report()
 
     def _repr_html_(self) -> str:
@@ -226,6 +232,7 @@ class OvizFigure:
         )
 
     def show(self) -> str | None:
+        """Display inline in Jupyter, else open in a browser and return the temporary file's path."""
         try:
             from IPython.display import HTML, display
 

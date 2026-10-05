@@ -55,6 +55,8 @@ DEFERRED = 2
 
 @dataclass
 class Blob:
+    """One binary payload and how the viewer decodes it."""
+
     id: str
     payload: bytes
     dtype: str
@@ -65,6 +67,7 @@ class Blob:
     raw_bytes: int = 0
 
     def descriptor(self) -> dict[str, Any]:
+        """The manifest entry for this blob."""
         d: dict[str, Any] = {
             "id": self.id,
             "dtype": self.dtype,
@@ -85,6 +88,7 @@ def _gzip(data: bytes, level: int = 9) -> bytes:
 
 
 def byte_shuffle(data: bytes, itemsize: int) -> bytes:
+    """Byte-transpose ``data``: every item's first byte, then every second byte, ..."""
     if itemsize <= 1 or not data:
         return data
     arr = np.frombuffer(data, dtype=np.uint8).reshape(-1, itemsize)
@@ -92,6 +96,7 @@ def byte_shuffle(data: bytes, itemsize: int) -> bytes:
 
 
 def byte_unshuffle(data: bytes, itemsize: int) -> bytes:
+    """Undo :func:`byte_shuffle`."""
     if itemsize <= 1 or not data:
         return data
     arr = np.frombuffer(data, dtype=np.uint8).reshape(itemsize, -1)
@@ -130,6 +135,7 @@ class BundleBuilder:
         priority: int = NORMAL,
         shuffle: bool | None = None,
     ) -> str:
+        """Add a numeric array (little-endian, gzip, byte-shuffled by default); return its blob id."""
         np_dtype = _DTYPES[dtype]
         arr = np.ascontiguousarray(np.asarray(values, dtype=np_dtype))
         data = arr.astype(np.dtype(np_dtype).newbyteorder("<"), copy=False).tobytes()
@@ -153,6 +159,7 @@ class BundleBuilder:
         return self._register(key, make)
 
     def media(self, data: bytes, mime: str, *, hint: str = "", priority: int = NORMAL) -> str:
+        """Add already-compressed media (JPEG, PNG, ...) stored as is; return its blob id."""
         key = hashlib.sha1(data + mime.encode()).hexdigest()
 
         def make() -> Blob:
@@ -170,6 +177,7 @@ class BundleBuilder:
         return self._register(key, make)
 
     def json(self, obj: Any, *, hint: str = "", priority: int = NORMAL) -> str:
+        """Add a JSON value (gzip); return its blob id."""
         data = json.dumps(obj, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
         key = hashlib.sha1(data + b"json").hexdigest()
 
@@ -189,10 +197,13 @@ class BundleBuilder:
 
 @dataclass
 class Bundle:
+    """A compiled scene: the JSON manifest and the blobs it references."""
+
     manifest: dict[str, Any]
     blobs: list[Blob]
 
     def blob(self, blob_id: str) -> Blob:
+        """The blob with id ``blob_id``."""
         for b in self.blobs:
             if b.id == blob_id:
                 return b
@@ -213,6 +224,7 @@ class Bundle:
         return np.frombuffer(body, dtype=np_dtype).reshape(b.shape)
 
     def size_report(self) -> dict[str, Any]:
+        """Blob count, payload and base64 sizes, and the largest blobs."""
         rows = sorted(self.blobs, key=lambda b: -len(b.payload))
         total = sum(len(b.payload) for b in self.blobs)
         return {
@@ -224,6 +236,7 @@ class Bundle:
 
 
 def encode_base64_lines(data: bytes, width: int = 1 << 16) -> str:
+    """Base64 text of ``data`` in lines of ``width`` characters."""
     text = base64.b64encode(data).decode("ascii")
     if len(text) <= width:
         return text
