@@ -362,7 +362,8 @@ def sky_thumbnails() -> dict[str, str]:
 
     Keys are file stems (``p_dss2_color``, as ``thumbKey`` in
     ``web/src/sky/catalog.js`` derives them); values are JPEG data URIs.
-    Regenerate the files with ``scripts/make_sky_thumbnails.py``.
+    The files are 224×112 Galactic Mollweide renders from the CDS hips2fits
+    service, the request ``thumbnailUrl`` makes for surveys without one.
     """
 
     files = sorted(SKY_THUMB_ROOT.glob("*.jpg"))

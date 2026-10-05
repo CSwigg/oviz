@@ -30,9 +30,10 @@ export function rayBox(origin, dir, boxMin, boxMax, center = null, angle = 0) {
 
 /**
  * Where along a ray through a volume half of its (windowed) density lies:
- * the middle of what the eye sees there. `voxels` is the raw uint8 grid
- * (x fastest), `low`/`high` the display window in 0–1 of the raw range.
- * Returns the distance along the ray, or null when the ray sees no data.
+ * the middle of what the eye sees there. `voxels` is the grid (x fastest):
+ * raw uint8, or a Float32Array already in 0–1 (an event KDE's density).
+ * `low`/`high` is the display window in 0–1 of the raw range. Returns the
+ * distance along the ray, or null when the ray sees no data.
  */
 export function volumeMedianDepth(hit, voxels, dims, boxMin, boxMax, low = 0, high = 1, steps = 256) {
   if (!hit || !voxels) return null;
@@ -41,6 +42,7 @@ export function volumeMedianDepth(hit, voxels, dims, boxMin, boxMax, low = 0, hi
   const span = hit.far - hit.near;
   const dt = span / steps;
   const inv = 1 / Math.max(high - low, 1e-6);
+  const full = voxels instanceof Float32Array ? 1 : 255;
   const w = new Float32Array(steps);
   let total = 0;
   for (let i = 0; i < steps; i++) {
@@ -49,7 +51,7 @@ export function volumeMedianDepth(hit, voxels, dims, boxMin, boxMax, low = 0, hi
     const y = Math.floor(((o[1] + d[1] * t - boxMin[1]) / (boxMax[1] - boxMin[1])) * ny);
     const z = Math.floor(((o[2] + d[2] * t - boxMin[2]) / (boxMax[2] - boxMin[2])) * nz);
     if (x < 0 || y < 0 || z < 0 || x >= nx || y >= ny || z >= nz) continue;
-    const v = (voxels[x + nx * (y + ny * z)] / 255 - low) * inv;
+    const v = (voxels[x + nx * (y + ny * z)] / full - low) * inv;
     if (v <= 0) continue;
     w[i] = Math.min(v, 1);
     total += w[i];

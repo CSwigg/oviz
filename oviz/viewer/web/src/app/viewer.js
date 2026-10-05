@@ -768,7 +768,7 @@ export class Viewer extends Emitter {
       const vol = this.volumes.volumes.get(draw.key);
       if (!vol || !(draw.fade > 0.05)) continue;
       const hit = rayBox(o, d, vol.boxMin, vol.boxMax, vol.center, draw.angle || 0);
-      const voxels = hit ? this.store.peek(vol.spec.data.blob) : null;
+      const voxels = hit ? this._shownVoxels(vol.spec) : null;
       const t = volumeMedianDepth(hit, voxels, vol.spec.dims, vol.boxMin, vol.boxMax, draw.low, draw.high);
       if (t != null) consider(t);
     }
@@ -781,6 +781,20 @@ export class Viewer extends Emitter {
       if (t != null && this._imageShowing(item)) consider(t);
     }
     return best == null ? null : [o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best];
+  }
+
+  /**
+   * The voxels a volume shows now, on the CPU: its uint8 grid, or an event
+   * KDE's density at the current time, rebuilt (only the GPU keeps the
+   * built ones). Null until loaded.
+   */
+  _shownVoxels(spec) {
+    if (!spec.procedural) return (spec.data && this.store.peek(spec.data.blob)) || null;
+    const k = this._kde?.get(spec.key);
+    if (!k) return null;
+    const proc = spec.procedural;
+    const time = kdeSampleTime(proc, this.timeline.time);
+    return buildEventKde(k.events, proc, spec.dims, spec.bounds, time, kdeWindow(proc, this.state.volumes[spec.stateKey])).data;
   }
 
   /** Whether an image plane is drawn at the current zoom (it fades as the view closes in). */
