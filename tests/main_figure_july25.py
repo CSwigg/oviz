@@ -33,6 +33,7 @@ from main_figure_chronos_july4 import (  # noqa: E402
     CLUSTER_MEMBERS_PATH,
     JULY4_CHRONOS_RESULTS_PATH,
 )
+from figure_provenance import short_sha256  # noqa: E402
 from main_figure_new_chronos import (  # noqa: E402
     RATZENBOECK_SCOCEN_TRACE_NAME,
     run_main_figure as build_source_main_figure,
@@ -628,7 +629,7 @@ def build_state_only_scene(
         velocity_path = Path(cluster_velocities_path).expanduser().resolve()
         scene.setdefault("provenance", {})["cluster_velocities"] = {
             "filename": velocity_path.name,
-            "path": str(velocity_path),
+            "sha256": short_sha256(velocity_path),
             "release": "SDSS-V covariance audited",
         }
     if ratzenboeck_scocen_catalog_path is not None:
@@ -642,9 +643,9 @@ def build_state_only_scene(
         )
         provenance = {
             "catalog_filename": catalog_path.name,
-            "catalog_path": str(catalog_path),
+            "catalog_sha256": short_sha256(catalog_path),
             "metadata_filename": metadata_path.name if metadata_path else None,
-            "metadata_path": str(metadata_path) if metadata_path else None,
+            "metadata_sha256": short_sha256(metadata_path),
             "n_clusters": 37,
             "membership_reference": "Ratzenboeck et al. 2023, A&A 677, A59",
             "age_reference": "Ratzenboeck et al. 2023, A&A 678, A71",
@@ -666,7 +667,7 @@ def build_state_only_scene(
             sky_panel.setdefault("members_by_cluster", {}).update(sigma_members)
             provenance.update({
                 "member_catalog_filename": members_path.name,
-                "member_catalog_path": str(members_path),
+                "member_catalog_sha256": short_sha256(members_path),
                 "n_member_stars": RATZENBOECK_SCOCEN_MEMBER_COUNT,
                 "member_identifier": "Gaia source_id",
             })

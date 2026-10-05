@@ -18,11 +18,19 @@ or Follow in the inspector).
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from oviz.viewer.upgrade import upgrade_html
+from oviz.viewer.compile import compile_scene_spec
+from oviz.viewer.figure import OvizFigure
+from oviz.viewer.upgrade import read_legacy_scene_spec
 
 HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+
+from figure_provenance import hash_provenance_paths  # noqa: E402
+
 SOURCE_HTML = HERE / "main_figure_july25.html"
 OUTPUT_HTML = HERE / "main_figure_july25_rewrite.html"
 
@@ -34,7 +42,11 @@ def build_figure(source_html: Path = SOURCE_HTML, output_html: Path = OUTPUT_HTM
     output_html = Path(output_html).expanduser().resolve()
     if source_html == output_html:
         raise ValueError("Refusing to overwrite the classic source figure.")
-    return upgrade_html(source_html, output_html, verbose=True, mode=mode, camera_anchor="lsr")
+    # upgrade_html, with the local paths in the source's provenance replaced by hashes.
+    spec = hash_provenance_paths(read_legacy_scene_spec(source_html))
+    bundle = compile_scene_spec(spec)
+    out = OvizFigure(bundle=bundle, mode=mode, camera_anchor="lsr").write_html(output_html)
+    return {"output_bytes": out.stat().st_size, **bundle.size_report()}
 
 
 def main() -> None:

@@ -1,4 +1,6 @@
+import hashlib
 import importlib.util
+import json
 import re
 import shutil
 import subprocess
@@ -219,14 +221,17 @@ def test_ratzenboeck_scocen_member_catalog_keeps_all_gaia_sources():
 def test_state_only_scene_records_velocity_provenance(tmp_path):
     module = _load_module()
     velocity_path = tmp_path / "cluster_velocities_sdssv_covariance_audited.csv"
+    velocity_path.write_bytes(b"name,U,V,W\nA,1,2,3\n")
     source = {"volumes": {"layers": []}, "initial_state": {}}
 
     scene = module.build_state_only_scene(source, velocity_path)
 
     provenance = scene["provenance"]["cluster_velocities"]
     assert provenance["filename"] == velocity_path.name
-    assert provenance["path"] == str(velocity_path.resolve())
+    assert provenance["sha256"] == hashlib.sha256(velocity_path.read_bytes()).hexdigest()[:12]
     assert provenance["release"] == "SDSS-V covariance audited"
+    # Published figures never carry local paths.
+    assert str(tmp_path) not in json.dumps(scene["provenance"])
 
 
 def test_state_only_scene_keeps_optional_present_day_volumes_hidden_and_greyscale():
@@ -286,6 +291,7 @@ def test_state_only_scene_keeps_optional_present_day_volumes_hidden_and_greyscal
 def test_state_only_scene_records_ratzenboeck_scocen_provenance(tmp_path):
     module = _load_module()
     catalog_path = tmp_path / "ratzi_2022.csv"
+    catalog_path.write_bytes(b"name,age_myr\nA,1\n")
     metadata_path = tmp_path / "ratzenboeck_sigma_cluster_metadata.fits"
     source = {"volumes": {"layers": []}, "initial_state": {}}
 
@@ -297,7 +303,10 @@ def test_state_only_scene_records_ratzenboeck_scocen_provenance(tmp_path):
 
     provenance = scene["provenance"]["ratzenboeck_scocen"]
     assert provenance["catalog_filename"] == catalog_path.name
+    assert provenance["catalog_sha256"] == hashlib.sha256(catalog_path.read_bytes()).hexdigest()[:12]
     assert provenance["metadata_filename"] == metadata_path.name
+    assert provenance["metadata_sha256"] is None  # not on disk
+    assert str(tmp_path) not in json.dumps(scene["provenance"])
     assert provenance["n_clusters"] == 37
     assert "A&A 677, A59" in provenance["membership_reference"]
     assert "A&A 678, A71" in provenance["age_reference"]

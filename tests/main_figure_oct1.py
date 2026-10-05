@@ -15,7 +15,8 @@ with the camera anchored to the LSR, as ``tests/main_figure_oct1.html``. It is
 published as ``oviz_figures/oviz_oct1.html``.
 
 The viewer step also adds two pulsar traces, both hidden by default
-(``--no-pulsars`` leaves them out): the ATNF v2.8.1 pulsars with a measured
+(``--no-pulsars`` leaves them out; they are skipped when the table is not on
+this machine): the ATNF v2.8.1 pulsars with a measured
 proper motion (the web export ``PULSAR_TABLE``) within 3 kpc, with
 characteristic age tau_c < 1 Myr and 1-5 Myr. Each moves back along its
 plane-of-sky motion relative to local circular rotation (radial velocity
@@ -44,12 +45,13 @@ if str(HERE) not in sys.path:
 
 import main_figure_july25 as july  # noqa: E402
 import main_figure_new_chronos as source_runner  # noqa: E402
+from figure_provenance import hash_provenance_paths, short_sha256  # noqa: E402
 from oviz.spiral_models import CASTRO_GINARD2021_ARMS, KHALIL2025_ARMS, provenance  # noqa: E402
 from oviz.threejs_embed import scene_spec_jsonable  # noqa: E402
 from oviz.threejs_figure import ThreeJSFigure  # noqa: E402
 from oviz.viewer.compile import compile_scene_spec  # noqa: E402
 from oviz.viewer.figure import OvizFigure  # noqa: E402
-from oviz.viewer.upgrade import read_legacy_scene_spec, upgrade_html  # noqa: E402
+from oviz.viewer.upgrade import read_legacy_scene_spec  # noqa: E402
 
 SOURCE_HTML = HERE / "main_figure_oct1_source.html"
 OUTPUT_HTML = HERE / "main_figure_oct1.html"
@@ -250,7 +252,8 @@ def add_pulsar_traces(spec: dict, table_path: Path = PULSAR_TABLE) -> dict[str, 
             visibility[key] = "legendonly"
         counts[name] = len(rows)
     spec.setdefault("provenance", {})["pulsars"] = {
-        "table": str(table_path),
+        "table": Path(table_path).name,
+        "table_sha256": short_sha256(table_path),
         "query": "ATNF v2.8.1 web query, condition exist(PMRA): Name, PMRA, PMDec, Gl, Gb, P0, P1, Dist, Age",
         "selection": f"tau_c < {max(hi for _, _, (_, hi), _, _ in PULSAR_TRACES):g} Myr, catalogue distance "
                      f"<= {PULSAR_MAX_DIST_KPC:g} kpc",
@@ -265,16 +268,23 @@ def add_pulsar_traces(spec: dict, table_path: Path = PULSAR_TABLE) -> dict[str, 
 def build_figure(source_html: Path = SOURCE_HTML, output_html: Path = OUTPUT_HTML, *,
                  rebuild_source: bool = False, mode_ages_path: Path | None = None,
                  pulsars: Path | None = PULSAR_TABLE) -> dict:
-    """Write the October 1 figure, re-running the science first when asked or needed."""
+    """Write the October 1 figure, re-running the science first when asked or needed.
+
+    The pulsar traces are skipped when ``pulsars`` is the default table and it
+    is not on this machine.
+    """
     source_html = Path(source_html).expanduser().resolve()
     if rebuild_source or not source_html.exists():
         write_classic(build_source_scene(mode_ages_path=mode_ages_path), source_html)
         print(f"Wrote {source_html} ({source_html.stat().st_size / 2**20:.1f} MiB)")
-    if pulsars is None:
-        return upgrade_html(source_html, output_html, verbose=True, mode="focus", camera_anchor="lsr")
-    # upgrade_html, with the pulsar traces added to the scene before it is compiled.
-    spec = read_legacy_scene_spec(source_html)
-    print("Pulsar traces:", add_pulsar_traces(spec, Path(pulsars).expanduser()))
+    if pulsars is not None and Path(pulsars) == PULSAR_TABLE and not PULSAR_TABLE.exists():
+        print(f"Skipping the pulsar traces: {PULSAR_TABLE} not found (pass --pulsars PATH to add them).")
+        pulsars = None
+    # upgrade_html, with local paths in a stored source's provenance replaced
+    # by hashes and the pulsar traces added before the scene is compiled.
+    spec = hash_provenance_paths(read_legacy_scene_spec(source_html))
+    if pulsars is not None:
+        print("Pulsar traces:", add_pulsar_traces(spec, Path(pulsars).expanduser()))
     bundle = compile_scene_spec(spec)
     out = OvizFigure(bundle=bundle, mode="focus", camera_anchor="lsr").write_html(output_html)
     print(f"Wrote {out} ({out.stat().st_size / 2**20:.1f} MiB)")
@@ -291,7 +301,8 @@ def main() -> None:
     parser.add_argument("--baseline", type=Path, default=None, metavar="OUT",
                         help="write the unchanged July 25 science (no arms, MWPotential2014) here instead")
     parser.add_argument("--pulsars", type=Path, default=PULSAR_TABLE,
-                        help="ATNF proper-motion export for the two hidden pulsar traces")
+                        help="ATNF proper-motion export for the two hidden pulsar traces "
+                             "(the default is skipped when missing)")
     parser.add_argument("--no-pulsars", action="store_true", help="leave the pulsar traces out")
     args = parser.parse_args()
     if args.baseline is not None:
