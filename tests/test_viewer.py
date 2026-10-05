@@ -560,6 +560,8 @@ class RuntimeBuildTests(unittest.TestCase):
         self.assertGreater(shaders, 5)
 
     def test_node_unit_tests(self):
+        if not NODE:
+            self.skipTest("node is not installed")
         files = sorted(str(p) for p in (REPO / "tests" / "viewer_js").glob("*.test.mjs"))
         r = subprocess.run([NODE, "--test", *files], capture_output=True, text=True, cwd=REPO)
         self.assertEqual(r.returncode, 0, (r.stdout + r.stderr)[-4000:])

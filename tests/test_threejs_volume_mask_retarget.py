@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+
+import pytest
 
 from oviz.threejs_figure import ThreeJSFigure
 from oviz.threejs_runtime_states import THREEJS_STATE_RUNTIME_JS
 
 
 def _run_mask_component_runtime(body: str) -> dict:
+    if shutil.which("node") is None:
+        pytest.skip("node is not available")
     start = THREEJS_STATE_RUNTIME_JS.index(
         "const OVIZ_MAX_VOLUME_MASK_SOURCE_COMPONENTS = 4;"
     )

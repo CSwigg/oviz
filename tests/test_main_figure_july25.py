@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT_PATH = Path(__file__).with_name("main_figure_july25.py")
 ARTIFACT_PATH = SCRIPT_PATH.with_suffix(".html")
@@ -19,6 +21,13 @@ def _load_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _skip_without_local_data(*paths):
+    """Skip unless these local input files (not in the repository) exist."""
+    missing = [Path(path).name for path in paths if not Path(path).exists()]
+    if missing:
+        pytest.skip("needs local data that is not in the repository: " + ", ".join(missing))
 
 
 def test_build_scene_exposes_empty_slide_authoring_and_display_defaults():
@@ -206,6 +215,10 @@ def test_default_velocity_catalog_is_the_audited_sdssv_release():
 
 def test_ratzenboeck_scocen_member_catalog_keeps_all_gaia_sources():
     module = _load_module()
+    _skip_without_local_data(
+        module.DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
+        module.DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
+    )
     grouped = module.load_ratzenboeck_scocen_sky_members(
         module.DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
         module.DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
@@ -366,6 +379,21 @@ def test_velocity_source_build_forwards_the_selected_catalog(tmp_path, monkeypat
     )
 
 
+def test_july25_artifact_embeds_every_local_ratzenboeck_member():
+    module = _load_module()
+    _skip_without_local_data(
+        module.DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
+        module.DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
+    )
+    scene = module.read_embedded_scene_spec(ARTIFACT_PATH)
+    sigma_members = module.load_ratzenboeck_scocen_sky_members(
+        module.DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
+        module.DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
+    )
+    embedded_members = scene["sky_panel"]["members_by_cluster"]
+    assert sum(len(embedded_members[name]) for name in sigma_members) == 13_103
+
+
 def test_july25_artifact_keeps_presentation_and_adds_runtime_upgrades(tmp_path):
     module = _load_module()
     html = ARTIFACT_PATH.read_text(encoding="utf-8")
@@ -468,12 +496,6 @@ def test_july25_artifact_keeps_presentation_and_adds_runtime_upgrades(tmp_path):
     assert ratzenboeck_provenance["n_clusters"] == 37
     assert ratzenboeck_provenance["n_member_stars"] == 13_103
     assert ratzenboeck_provenance["member_identifier"] == "Gaia source_id"
-    sigma_members = module.load_ratzenboeck_scocen_sky_members(
-        module.DEFAULT_RATZENBOECK_SCOCEN_MEMBERS_PATH,
-        module.DEFAULT_RATZENBOECK_SCOCEN_METADATA_PATH,
-    )
-    embedded_members = scene["sky_panel"]["members_by_cluster"]
-    assert sum(len(embedded_members[name]) for name in sigma_members) == 13_103
     assert scene["group_visibility"]["All"][ratzenboeck_trace_key]
     edenhofer = next(
         layer
