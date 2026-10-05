@@ -1,72 +1,46 @@
 """Create time-dependent spiral-arm traces from galpy potentials."""
 
+import warnings
+from copy import deepcopy
+
 import numpy as np
 import pandas as pd
-from astropy.coordinates import SkyCoord
-import astropy.units as u
-from galpy.orbit import Orbit
 from galpy.potential import SpiralArmsPotential
-from copy import deepcopy
-import warnings
-warnings.filterwarnings("ignore")
 
 from . import orbit_maker
 
+warnings.filterwarnings("ignore")
+
+
 class SpiralArmTrace:
-    """
-    Class for creating animated spiral arm traces from galpy SpiralArmsPotential objects.
-    
-    This class extracts the spiral arm locus from SpiralArmsPotential and creates
-    a trace that can be animated in oviz visualizations, showing how the spiral 
-    pattern moves over time.
-    
+    """Points along one galpy ``SpiralArmsPotential`` arm, integrated like clusters.
+
+    The locus ``ln(R / r_ref) = -(phi - phi_ref) tan(alpha)`` is sampled
+    between ``r_range`` and each point is then integrated as a test particle
+    through the timeline. For the published arm models drawn by
+    ``make_plot(spiral_arm_models=...)`` see :mod:`oviz.spiral_models`.
+
     Parameters
     ----------
     spiral_potential : galpy.potential.SpiralArmsPotential
-        A galpy SpiralArmsPotential object defining the spiral arm
+        The arm's potential term.
     arm_name : str
-        Name for this spiral arm (e.g., "Carina-Sagittarius")
-    r_range : tuple, optional
-        Galactocentric radius range (min_r, max_r) in kpc. Default (4.0, 12.0)
-    n_points : int, optional
-        Number of points along the spiral arm. Default 200
-    color : str, optional
-        Color for the spiral arm trace. Default 'gray'
-    opacity : float, optional
-        Opacity of the spiral arm trace. Default 0.6
-    line_width : float, optional
-        Width of the spiral arm line. Default 2.0
-    
-    Attributes
-    ----------
-    arm_name : str
-        Name of the spiral arm
-    spiral_potential : galpy.potential.SpiralArmsPotential
-        The spiral arm potential object
-    df : pandas.DataFrame
-        DataFrame containing spiral arm coordinates in oviz format
-    coordinates : numpy.ndarray
-        Array of coordinates (x, y, z, U, V, W) of spiral arm points
-    color : str
-        Color of the spiral arm
-    opacity : float
-        Opacity of the spiral arm
-    line_width : float
-        Width of the spiral arm line
-    integrated : bool
-        Whether the spiral arm has been orbit-integrated
-    cluster_int_coords : tuple or None
-        Integrated coordinates if orbit integration has been performed
-    df_int : pandas.DataFrame or None
-        Integrated DataFrame if orbit integration has been performed
+        Label, e.g. ``"Carina-Sagittarius"``.
+    r_range : tuple of float
+        Galactocentric radii (kpc) the locus spans.
+    n_points : int
+        Number of locus points.
+    color, opacity, line_width, visible
+        Display style.
+
+    After :meth:`integrate_orbits`, ``df_int`` holds the integrated table.
     """
-    
-    def __init__(self, spiral_potential, arm_name, r_range=(4.0, 12.0), n_points=200, 
+
+    def __init__(self, spiral_potential, arm_name, r_range=(4.0, 12.0), n_points=200,
                  color='gray', opacity=0.6, line_width=2.0, visible=True):
-        
         if not isinstance(spiral_potential, SpiralArmsPotential):
             raise ValueError("spiral_potential must be a galpy SpiralArmsPotential object")
-            
+
         self.spiral_potential = spiral_potential
         self.arm_name = arm_name
         self.r_range = r_range
@@ -75,22 +49,17 @@ class SpiralArmTrace:
         self.opacity = opacity
         self.line_width = line_width
         self.visible = visible
-        
-        # Initialize as not integrated
+
         self.integrated = False
         self.cluster_int_coords = None
         self.df_int = None
-        
-        # Extract spiral arm parameters
+
         self._extract_arm_parameters()
-        
-        # Generate spiral arm locus
         self.df = self._generate_spiral_locus()
         self.coordinates = self.df[['x', 'y', 'z', 'U', 'V', 'W']].T.values
-        
+
     def _extract_arm_parameters(self):
-        """Extract parameters from the SpiralArmsPotential object."""
-        # Get the spiral arm parameters
+        """Copy the arm's parameters from the SpiralArmsPotential."""
         self.amp = self.spiral_potential._amp
         self.N = self.spiral_potential._N  # Number of arms
         self.alpha = self.spiral_potential._alpha  # Pitch angle
@@ -98,58 +67,33 @@ class SpiralArmTrace:
         self.phi_ref = self.spiral_potential._phi_ref  # Reference azimuth
         self.Rs = self.spiral_potential._Rs  # Scale radius
         self.H = self.spiral_potential._H   # Scale height
-        
-        # Pattern speed (if available)
-        if hasattr(self.spiral_potential, '_omega'):
-            self.omega = self.spiral_potential._omega
-        else:
-            self.omega = 0.0  # Static spiral
-            
+        # Pattern speed; 0 for a static spiral.
+        self.omega = getattr(self.spiral_potential, '_omega', 0.0)
+
     def _generate_spiral_locus(self):
-        """
-        Generate the spiral arm locus coordinates.
-        
-        Returns
-        -------
-        pandas.DataFrame
-            DataFrame with spiral arm coordinates in oviz format
-        """
-        # Generate radial range
+        """The arm's locus as an Oviz phase-space table (pc, zero velocities)."""
         r_spiral = np.linspace(self.r_range[0], self.r_range[1], self.n_points)
-        
-        # Calculate azimuthal angles from spiral equation
-        # ln(r/r_ref) = -(phi - phi_ref) * tan(alpha)
-        # Solving for phi: phi = phi_ref - ln(r/r_ref) / tan(alpha)
+        # ln(r / r_ref) = -(phi - phi_ref) tan(alpha), solved for phi.
         phi_spiral = self.phi_ref - np.log(r_spiral / self.r_ref) / np.tan(self.alpha)
-        
-        # Convert to Cartesian galactocentric coordinates
-        x_gc = r_spiral * np.cos(phi_spiral)  # kpc
-        y_gc = r_spiral * np.sin(phi_spiral)  # kpc
-        z_gc = np.zeros_like(r_spiral)  # Assume spiral is in galactic plane
-        
-        # Convert from galactocentric to heliocentric coordinates
-        # (oviz uses heliocentric coordinates)
-        R_sun = 8.122  # kpc, solar galactocentric distance
-        
-        # Transform: heliocentric = galactocentric + solar position
-        x_helio = x_gc - R_sun  # kpc
-        y_helio = y_gc          # kpc
-        z_helio = z_gc + 0.027  # kpc, add solar height above plane
-        
-        # Convert to parsecs (oviz units)
-        x_pc = x_helio * 1000  # pc
-        y_pc = y_helio * 1000  # pc
-        z_pc = z_helio * 1000  # pc
-        
-        # Assign zero velocities initially (will be updated during orbit integration)
-        U = np.zeros_like(x_pc)  # km/s
-        V = np.zeros_like(x_pc)  # km/s  
-        W = np.zeros_like(x_pc)  # km/s
-        
-        # Create DataFrame in oviz format
+
+        # Galactocentric kpc, in the plane.
+        x_gc = r_spiral * np.cos(phi_spiral)
+        y_gc = r_spiral * np.sin(phi_spiral)
+        z_gc = np.zeros_like(r_spiral)
+
+        # Heliocentric: shift by the solar radius (8.122 kpc) and height (27 pc).
+        R_sun = 8.122
+        x_pc = (x_gc - R_sun) * 1000
+        y_pc = y_gc * 1000
+        z_pc = (z_gc + 0.027) * 1000
+
+        U = np.zeros_like(x_pc)
+        V = np.zeros_like(x_pc)
+        W = np.zeros_like(x_pc)
+
         df_spiral = pd.DataFrame({
             'x': x_pc,
-            'y': y_pc, 
+            'y': y_pc,
             'z': z_pc,
             'U': U,
             'V': V,
@@ -158,126 +102,29 @@ class SpiralArmTrace:
             'age_myr': np.full(len(x_pc), 0.0),  # Spiral arms are "ageless"
             'n_stars': np.ones(len(x_pc))  # Dummy value for compatibility
         })
-        
         return df_spiral
-        
+
     def integrate_orbits(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
-        """
-        Integrate spiral arm motion over time.
-        
-        For spiral arms, this accounts for:
-        1. Pattern rotation (if omega != 0)
-        2. Orbital motion of individual spiral arm "particles"
-        
-        Parameters
-        ----------
-        time : array
-            Array of time points in Myr
-        reference_frame_center : tuple, optional
-            Center of the reference frame
-        potential : galpy potential, optional
-            Galactic potential to use for orbit integration
-        vo : float, optional
-            Circular velocity in km/s
-        ro : float, optional
-            Solar radius in kpc
-        zo : float, optional
-            Solar height in kpc
+        """Integrate each locus point as a test particle through ``time`` (Myr).
+
+        The pattern speed is not applied: points move with the Galactic
+        potential. Arguments are those of :meth:`oviz.Trace.integrate_orbits`.
         """
         time = orbit_maker.normalize_time_grid(time)
-
-        # Calculate pattern rotation effect
-        omega_pattern = self.omega  # Pattern speed in km/s/kpc
-        
-        # For each time step, rotate the spiral pattern
-        time_array = np.array(time)
-        
-        # Initialize storage for time-evolved coordinates
-        all_coords = []
-        
-        for t in time_array:
-            # Calculate rotation angle for this time
-            # Convert time from Myr to years, then to appropriate units
-            t_years = t * 1e6  # Myr to years
-            t_seconds = t_years * 3.15576e7  # years to seconds
-            
-            # Pattern rotation: Δφ = ω * Δt
-            if omega_pattern != 0:
-                # omega is in km/s/kpc, need to convert to rad/s
-                omega_rad_per_s = omega_pattern / ro  # Convert to 1/s
-                delta_phi = omega_rad_per_s * t_seconds  # radians
-            else:
-                delta_phi = 0
-                
-            # Rotate spiral pattern
-            coords_t = self._rotate_spiral_pattern(delta_phi)
-            all_coords.append(coords_t)
-            
-        # Now perform standard orbit integration
-        # (This handles motion of spiral arm material through the galaxy)
         self.cluster_int_coords = orbit_maker.create_orbit(
             self.coordinates, time,
             reference_frame_center=reference_frame_center,
             potential=potential,
             vo=vo, ro=ro, zo=zo
         )
-        
-        # Create integrated DataFrame
         self.df_int = self._create_integrated_dataframe(time, ro=ro, vo=vo)
         self.integrated = True
-        
-    def _rotate_spiral_pattern(self, delta_phi):
-        """
-        Rotate the spiral pattern by angle delta_phi.
-        
-        Parameters
-        ----------
-        delta_phi : float
-            Rotation angle in radians
-            
-        Returns
-        -------
-        numpy.ndarray
-            Rotated coordinates
-        """
-        # Get current coordinates
-        x, y, z, U, V, W = self.coordinates
-        
-        # Convert to polar coordinates in the galactic plane
-        r = np.sqrt((x/1000 + 8.122)**2 + (y/1000)**2)  # Convert pc to kpc, add solar position
-        phi = np.arctan2(y/1000, x/1000 + 8.122)
-        
-        # Apply pattern rotation
-        phi_new = phi + delta_phi
-        
-        # Convert back to Cartesian
-        x_gc_new = r * np.cos(phi_new)
-        y_gc_new = r * np.sin(phi_new)
-        
-        # Convert back to heliocentric coordinates
-        x_new = (x_gc_new - 8.122) * 1000  # kpc to pc, subtract solar position
-        y_new = y_gc_new * 1000
-        z_new = z  # No change in z
-        
-        return np.array([x_new, y_new, z_new, U, V, W])
-        
+
     def _create_integrated_dataframe(self, time, *, ro=8.122, vo=236.):
-        """
-        Create integrated DataFrame for spiral arm motion.
-        
-        Parameters
-        ----------
-        time : array
-            Array of time points
-            
-        Returns
-        -------
-        pandas.DataFrame
-            Integrated DataFrame
-        """
+        """One row per locus point and time, like :meth:`oviz.Trace.create_integrated_dataframe`."""
         if self.cluster_int_coords is None:
             raise ValueError("Must integrate orbits before creating integrated DataFrame")
-            
+
         xint, yint, zint = self.cluster_int_coords[0]
         xint_helio, yint_helio, zint_helio = self.cluster_int_coords[1]
         xint_gc, yint_gc, zint_gc = self.cluster_int_coords[2]
@@ -307,62 +154,29 @@ class SpiralArmTrace:
 
         df_int.reset_index(drop=True, inplace=True)
         df_int = orbit_maker.coordFIX_to_coordROT(df_int, r_sun=ro, v_sun=vo)
-        
         return df_int
-        
+
     def copy(self):
-        """
-        Create a copy of the SpiralArmTrace.
-        
-        Returns
-        -------
-        SpiralArmTrace
-            A copy of this spiral arm trace
-        """
+        """Return a deep copy of the arm trace."""
         return deepcopy(self)
 
 
 def extract_spiral_arms_from_potential(potential, arm_names=None, **trace_kwargs):
+    """One :class:`SpiralArmTrace` per ``SpiralArmsPotential`` term in ``potential``.
+
+    ``arm_names`` names them in order (``Spiral_Arm_<n>`` otherwise); other
+    keyword arguments go to :class:`SpiralArmTrace`.
     """
-    Extract SpiralArmTrace objects from a galpy potential containing spiral arms.
-    
-    Parameters
-    ----------
-    potential : list or galpy potential
-        Galpy potential object or list of potential objects
-    arm_names : list of str, optional
-        Names for the spiral arms. If None, will use generic names
-    **trace_kwargs
-        Additional keyword arguments passed to SpiralArmTrace constructor
-        
-    Returns
-    -------
-    list of SpiralArmTrace
-        List of SpiralArmTrace objects, one for each spiral arm component
-    """
-    # Ensure potential is a list
     if not isinstance(potential, list):
         potential = [potential]
-        
+
     spiral_traces = []
-    spiral_count = 0
-    
     for pot_component in potential:
         if isinstance(pot_component, SpiralArmsPotential):
-            # Determine arm name
-            if arm_names is not None and spiral_count < len(arm_names):
-                arm_name = arm_names[spiral_count]
+            index = len(spiral_traces)
+            if arm_names is not None and index < len(arm_names):
+                arm_name = arm_names[index]
             else:
-                arm_name = f"Spiral_Arm_{spiral_count + 1}"
-                
-            # Create SpiralArmTrace
-            spiral_trace = SpiralArmTrace(
-                spiral_potential=pot_component,
-                arm_name=arm_name,
-                **trace_kwargs
-            )
-            
-            spiral_traces.append(spiral_trace)
-            spiral_count += 1
-            
+                arm_name = f"Spiral_Arm_{index + 1}"
+            spiral_traces.append(SpiralArmTrace(spiral_potential=pot_component, arm_name=arm_name, **trace_kwargs))
     return spiral_traces

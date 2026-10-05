@@ -1,10 +1,13 @@
 """Data containers for orbiting traces and general spatial layers."""
 
+import copy
+
 import numpy as np
 import pandas as pd
+
 from . import orbit_maker
 from . import point_sizes
-import copy
+
 
 class Trace:
     """A styled phase-space sample that can be integrated through time.
@@ -113,18 +116,13 @@ class Trace:
         )
 
     def create_integrated_dataframe(self, time, *, ro=8.122, vo=236.):
-        """
-        Create an integrated DataFrame of the star cluster.
+        """Flatten the integrated orbits into one row per object and time.
 
-        Parameters
-        ----------
-        time : array
-            Array of time points.
-
-        Returns
-        -------
-        df_int : pandas.DataFrame
-            Integrated DataFrame of the star cluster.
+        Columns hold the frame-centred, heliocentric (``*_helio``),
+        Galactocentric (``*_gc``, ``r_gc``, ``phi_gc`` in degrees, ``z_gc_cyl``)
+        and co-rotating (``*_rot``) positions in pc, with ``name``,
+        ``age_myr``, ``time`` and, when present, ``n_stars`` and ``name_all``.
+        Returns None (after a message) before the orbits are integrated.
         """
         if self.cluster_int_coords is None:
             print('Clusters have not yet been integrated')
@@ -150,7 +148,6 @@ class Trace:
             'z_gc_cyl': zint_gc_cyl.flatten()
         })
 
-        
         if 'n_stars' in self.df.columns:
             df_int['n_stars'] = np.repeat(self.df['n_stars'].values, len(time))
 
@@ -164,34 +161,24 @@ class Trace:
 
         df_int = orbit_maker.coordFIX_to_coordROT(df_int, r_sun=ro, v_sun=vo)
         return df_int
-    
-    def set_age_based_sizes(self, fade_in_time=None, fade_in_and_out=None, fade_in_and_disp=None, disp_time=None):
-        """
-        Set the point sizes for clusters based on the number of stars.
 
-        Parameters
-        ----------
-        fade_in_time : float, optional
-            Duration of time for size easing. If None, uses instance value.
-        fade_in_and_out : bool, optional
-            Whether to fade in and out. If None, uses instance value.
-        fade_in_and_disp : bool, optional
-            Whether to fade in then drop to min size after disp_time. If None, uses instance value.
-        disp_time : float, optional
-            Time after birth to keep max size before dropping to min size. If None, uses instance value.
+    def set_age_based_sizes(self, fade_in_time=None, fade_in_and_out=None, fade_in_and_disp=None, disp_time=None):
+        """Set the ``size`` column of ``df_int``: markers grow from ``min_size`` to ``max_size`` at birth.
+
+        Arguments left as None fall back to the trace's own settings; see
+        :func:`oviz.point_sizes.size_easing` for their meaning.
         """
-        # Use instance values if parameters are None
         actual_fade_in_time = fade_in_time if fade_in_time is not None else self.fade_in_time
         actual_fade_in_and_out = fade_in_and_out if fade_in_and_out is not None else self.fade_in_and_out
         actual_fade_in_and_disp = fade_in_and_disp if fade_in_and_disp is not None else self.fade_in_and_disp
         actual_disp_time = disp_time if disp_time is not None else self.disp_time
-        
+
         df_int_new_sizes = point_sizes.set_cluster_point_sizes(
-            self.df_int, 
-            min_size=self.min_size, 
-            max_size=self.max_size, 
-            fade_in_time=actual_fade_in_time, 
-            fade_in_and_out=actual_fade_in_and_out, 
+            self.df_int,
+            min_size=self.min_size,
+            max_size=self.max_size,
+            fade_in_time=actual_fade_in_time,
+            fade_in_and_out=actual_fade_in_and_out,
             size_by_n_stars=self.size_by_n_stars,
             fade_in_and_disp=actual_fade_in_and_disp,
             disp_time=actual_disp_time
@@ -200,31 +187,26 @@ class Trace:
         self.sizes_set = True
 
     def integrate_orbits(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
-        """
-        Integrate the orbits of the star cluster.
+        """Integrate every row's orbit through ``time`` (Myr) and build ``df_int``.
 
         Parameters
         ----------
-        time : array
-            Array of time points.
-        reference_frame_center : tuple, optional
-            Center of the reference frame.
+        time : array-like
+            Timeline in Myr; must include 0.
+        reference_frame_center : sequence of 6 floats, optional
+            ``x, y, z, U, V, W`` of the frame's centre; ``None`` follows the
+            LSR. The trace's ``shifted_rf`` overrides it.
         potential : galpy potential, optional
-            Galactic potential to use. Defaults to MWPotential2014.
-        vo : float, optional
-            Circular velocity at the solar radius in km/s. Defaults to 236.
-        ro : float, optional
-            Solar radius in kpc. Defaults to 8.122.
-        zo : float, optional
-            Solar height above the galactic plane in kpc. Defaults to 0.0208.
+            Defaults to ``MWPotential2014``.
+        vo, ro, zo : float
+            Circular velocity (km/s), solar radius (kpc) and solar height (kpc).
         """
-
         time = orbit_maker.normalize_time_grid(time)
         if self.shifted_rf is not None:
             reference_frame_center = self.shifted_rf
 
         self.cluster_int_coords = orbit_maker.create_orbit(
-            self.coordinates, time, 
+            self.coordinates, time,
             reference_frame_center=reference_frame_center,
             potential=potential,
             vo=vo, ro=ro, zo=zo
@@ -234,16 +216,7 @@ class Trace:
         self.sizes_set = False
 
     def limit_cluster_age(self, age_min, age_max):
-        """
-        Limit the age of the star cluster.
-
-        Parameters
-        ----------
-        age_min : float
-            Minimum age of the star cluster.
-        age_max : float
-            Maximum age of the star cluster.
-        """
+        """Keep only rows with ``age_min <= age_myr <= age_max`` (also in integrated data)."""
         member_mask = ((self.df['age_myr'] >= age_min) & (self.df['age_myr'] <= age_max)).to_numpy()
         self.df = self.df[member_mask]
         self.coordinates = self.df[['x', 'y', 'z', 'U', 'V', 'W']].T.values
@@ -251,16 +224,9 @@ class Trace:
         if self.integrated:
             self._filter_integrated_state(member_mask)
             self.df_int = self.df_int.loc[(self.df_int['age_myr'] >= age_min) & (self.df_int['age_myr'] <= age_max)]
-    
-    def limit_cluster_by_name(self, names):
-        """
-        Limit the star cluster by name.
 
-        Parameters
-        ----------
-        names : list
-            List of names of the star clusters to keep.
-        """
+    def limit_cluster_by_name(self, names):
+        """Keep only rows whose ``name`` is in ``names`` (also in integrated data)."""
         member_mask = self.df['name'].isin(names).to_numpy()
         self.df = self.df[member_mask]
         self.coordinates = self.df[['x', 'y', 'z', 'U', 'V', 'W']].T.values
@@ -270,52 +236,40 @@ class Trace:
             self.df_int = self.df_int[self.df_int['name'].isin(names)]
 
     def copy(self):
-        """
-        Returns a copy of the Trace object.
-
-        Returns
-        -------
-        Trace
-            A copy of the Trace object.
-        """
+        """Return a deep copy of the trace."""
         return copy.deepcopy(self)
 
     @property
     def layer_name(self):
-        """Return the display name used for this trace in the viewer."""
-
+        """The display name used for this trace in the viewer."""
         return self.data_name
 
     @property
     def integrated_coords(self):
-        """Return centered, heliocentric, and Galactocentric orbit arrays."""
-
+        """Frame-centred, heliocentric, Galactocentric and cylindrical orbit arrays."""
         return self.cluster_int_coords
 
     @property
     def has_time_varying_geometry(self):
-        """Return whether this trace changes position across timeline frames."""
-
+        """Whether this trace changes position across timeline frames."""
         return True
 
     def limit_age(self, age_min, age_max):
         """Keep rows with ages inside the inclusive range in Myr."""
-
         self.limit_cluster_age(age_min, age_max)
 
     def limit_by_name(self, names):
         """Keep rows whose ``name`` is present in ``names``."""
-
         self.limit_cluster_by_name(names)
 
 
 class Layer(Trace):
-    """
-    General astronomy-facing spatial layer.
+    """A :class:`Trace` for general spatial data, static or orbiting.
 
-    `Layer` preserves the current `Trace` behavior but relaxes the dataframe
-    requirements so callers can provide static 3D spatial data or full phase-space
-    data for orbit tracing.
+    Only ``x``, ``y``, ``z`` (pc) are required. Without ``U``, ``V``, ``W``
+    pass ``assume_stationary=True`` and the points stay fixed in time;
+    a missing ``name`` defaults to ``layer_name`` and a missing ``age_myr`` to
+    ``default_age_myr``. Other arguments are those of :class:`Trace`.
     """
 
     def __init__(
@@ -411,19 +365,16 @@ class Layer(Trace):
     @classmethod
     def from_dataframe(cls, df, layer_name, **kwargs):
         """Construct a layer from a dataframe and keyword styling options."""
-
         return cls(df=df, layer_name=layer_name, **kwargs)
 
     @property
     def supports_orbit_tracing(self):
-        """Return whether the original input supplied all velocity columns."""
-
+        """Whether the input supplied all three velocity columns."""
         return bool(self._has_velocity_columns)
 
     @property
     def has_time_varying_geometry(self):
-        """Return whether this layer is orbit integrated rather than static."""
-
+        """Whether this layer is orbit integrated rather than static."""
         return self.supports_orbit_tracing
 
     def _static_cluster_int_coords(self, time):
@@ -444,8 +395,7 @@ class Layer(Trace):
         )
 
     def integrate_orbits(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
-        """Integrate a phase-space layer or replicate a stationary layer in time."""
-
+        """Integrate a phase-space layer, or repeat a stationary one at every time."""
         time = orbit_maker.normalize_time_grid(time)
 
         if self.supports_orbit_tracing:
@@ -463,29 +413,17 @@ class Layer(Trace):
         self.integrated = True
         self.sizes_set = False
 
+
 class TraceCollection:
     """An ordered collection of :class:`Trace` objects.
 
     Parameters
     ----------
     clusters : sequence of Trace, optional
-        Initial traces in display order.
+        Initial traces in display order. Anything else raises ``ValueError``.
     """
 
     def __init__(self, clusters=None):
-        """
-        Initialize the TraceCollection object.
-
-        Parameters
-        ----------
-        clusters : list, optional
-            List of Trace objects.
-
-        Raises
-        ------
-        ValueError
-            If any element in clusters is not a Trace object.
-        """
         self.clusters = []
         self.time = None
         self.potential = None
@@ -495,58 +433,20 @@ class TraceCollection:
         self.add_clusters(clusters or [])
 
     def add_clusters(self, clusters):
-        """
-        Add multiple star clusters to the collection.
-
-        Parameters
-        ----------
-        clusters : list
-            List of Trace objects.
-
-        Raises
-        ------
-        ValueError
-            If any element in clusters is not a Trace object.
-        """
+        """Append several traces; each must be a :class:`Trace`."""
         for cluster in clusters:
             self.add_cluster(cluster)
 
     def add_cluster(self, cluster):
-        """
-        Add a star cluster to the collection.
-
-        Parameters
-        ----------
-        cluster : Trace
-            Trace object to be added.
-
-        Raises
-        ------
-        ValueError
-            If cluster is not a Trace object.
-        """
+        """Append one :class:`Trace`; anything else raises ``ValueError``."""
         if not isinstance(cluster, Trace):
             raise ValueError('Input must be an instance of Trace')
         self.clusters.append(cluster)
 
     def get_cluster(self, identifier):
-        """
-        Retrieve a star cluster from the collection.
+        """Return a trace by ``data_name`` (None if absent) or by index.
 
-        Parameters
-        ----------
-        identifier : str or int
-            Name or index of the star cluster.
-
-        Returns
-        -------
-        cluster : Trace
-            Trace object.
-
-        Raises
-        ------
-        ValueError
-            If identifier is neither a string (name) nor an integer (index).
+        Any other identifier type raises ``ValueError``.
         """
         if isinstance(identifier, str):
             for cluster in self.clusters:
@@ -558,35 +458,11 @@ class TraceCollection:
             raise ValueError('Identifier must be a string (name) or an integer (index)')
 
     def get_all_clusters(self):
-        """
-        Retrieve all star clusters from the collection.
-
-        Returns
-        -------
-        clusters : list
-            List of Trace objects.
-        """
+        """Return the list of traces in display order."""
         return self.clusters
 
     def integrate_all_orbits(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
-        """
-        Integrate the orbits of all star clusters in the collection.
-
-        Parameters
-        ----------
-        time : array
-            Array of time points.
-        reference_frame_center : tuple, optional
-            Center of the reference frame.
-        potential : galpy potential, optional
-            Galactic potential to use. Defaults to MWPotential2014.
-        vo : float, optional
-            Circular velocity at the solar radius in km/s. Defaults to 236.
-        ro : float, optional
-            Solar radius in kpc. Defaults to 8.122.
-        zo : float, optional
-            Solar height above the galactic plane in kpc. Defaults to 0.0208.
-        """
+        """Integrate every trace (see :meth:`Trace.integrate_orbits`) and remember the settings."""
         self.time = orbit_maker.normalize_time_grid(time)
         self.potential = potential
         self.vo = vo
@@ -594,30 +470,19 @@ class TraceCollection:
         self.zo = zo
         for cluster in self.clusters:
             cluster.integrate_orbits(
-                self.time, 
+                self.time,
                 reference_frame_center=reference_frame_center,
                 potential=potential,
                 vo=vo, ro=ro, zo=zo
             )
-    
-    def set_all_cluster_sizes(self, fade_in_time, fade_in_and_out, fade_in_and_disp=False, disp_time=0):
-        """
-        Set the point sizes for all clusters in the collection.
 
-        Parameters
-        ----------
-        fade_in_time : int
-            Duration of time for size easing (used as default for clusters without instance values).
-        fade_in_and_out : bool
-            Whether to fade in and out (used as default for clusters without instance values).
-        fade_in_and_disp : bool
-            Whether to fade in then drop to min size after disp_time (used as default for clusters without instance values).
-        disp_time : float
-            Time after birth to keep max size before dropping to min size (used as default for clusters without instance values).
+    def set_all_cluster_sizes(self, fade_in_time, fade_in_and_out, fade_in_and_disp=False, disp_time=0):
+        """Size every trace whose sizes are not set yet (see :meth:`Trace.set_age_based_sizes`).
+
+        The arguments are defaults; a trace's own fade settings take precedence.
         """
         for cluster in self.clusters:
             if not cluster.sizes_set:
-                # Use cluster's instance values if they exist, otherwise use the provided defaults
                 cluster_fade_in_time = cluster.fade_in_time if cluster.fade_in_time is not None else fade_in_time
                 cluster_fade_in_and_out = cluster.fade_in_and_out if cluster.fade_in_and_out is not None else fade_in_and_out
                 cluster_fade_in_and_disp = cluster.fade_in_and_disp if cluster.fade_in_and_disp is not None else fade_in_and_disp
@@ -630,55 +495,34 @@ class TraceCollection:
                 )
 
     def limit_all_cluster_ages(self, age_min, age_max):
-        """
-        Limit the age of all star clusters in the collection.
-
-        Parameters
-        ----------
-        age_min : float
-            Minimum age of the star cluster.
-        age_max : float
-            Maximum age of the star cluster.
-        """
+        """Apply :meth:`Trace.limit_cluster_age` to every trace."""
         for cluster in self.clusters:
             cluster.limit_cluster_age(age_min, age_max)
-    
-    def limit_all_cluster_names(self, names):
-        """
-        Limit the star clusters in the collection by name.
 
-        Parameters
-        ----------
-        names : list
-            List of names of the star clusters to keep.
-        """
+    def limit_all_cluster_names(self, names):
+        """Apply :meth:`Trace.limit_cluster_by_name` to every trace."""
         for cluster in self.clusters:
             cluster.limit_cluster_by_name(names)
 
     @property
     def layers(self):
-        """Return the stored traces using layer terminology."""
-
+        """The stored traces, in layer terminology."""
         return self.clusters
 
     def add_layer(self, layer):
         """Add one :class:`Layer` or compatible :class:`Trace`."""
-
         self.add_cluster(layer)
 
     def get_layer(self, identifier):
         """Return a layer by display name or zero-based collection index."""
-
         return self.get_cluster(identifier)
 
     def get_all_layers(self):
         """Return all layers in insertion order."""
-
         return self.get_all_clusters()
 
     def integrate_all_layers(self, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
         """Prepare every layer for the supplied timeline."""
-
         self.integrate_all_orbits(
             time,
             reference_frame_center=reference_frame_center,
@@ -690,7 +534,6 @@ class TraceCollection:
 
     def set_all_layer_sizes(self, fade_in_time, fade_in_and_out, fade_in_and_disp=False, disp_time=0):
         """Apply the collection-wide marker-size defaults to every layer."""
-
         self.set_all_cluster_sizes(
             fade_in_time,
             fade_in_and_out,
@@ -701,5 +544,3 @@ class TraceCollection:
 
 class LayerCollection(TraceCollection):
     """A :class:`TraceCollection` exposed with general layer terminology."""
-
-    pass

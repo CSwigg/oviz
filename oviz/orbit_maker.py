@@ -1,20 +1,24 @@
 """Integrate Galactic orbits and convert them to Oviz coordinate frames."""
 
-from astropy.coordinates import SkyCoord
-import astropy.units as u
-from copy import deepcopy
 import math
+import warnings
+from copy import deepcopy
+
+import astropy.units as u
 import numpy as np
-from galpy.orbit import Orbit 
-import warnings 
+from astropy.coordinates import SkyCoord
+from galpy.orbit import Orbit
+from galpy.potential import MWPotential2014
+
 warnings.filterwarnings("ignore")
-#from galpy.potential import MWPotential2014, SpiralArmsPotential
-from galpy.potential import MWPotential2014, DehnenBarPotential, SpiralArmsPotential
 
 
 def normalize_time_grid(time, *, require_zero=True):
-    """Return a validated one-dimensional timeline in caller-supplied order."""
+    """Return ``time`` as a float array, in the caller's order, after validation.
 
+    The grid must be one-dimensional, finite and free of duplicates, and must
+    contain 0 (the present) unless ``require_zero`` is False.
+    """
     if time is None:
         raise ValueError("time must be a non-empty one-dimensional array-like.")
     try:
@@ -33,8 +37,12 @@ def normalize_time_grid(time, *, require_zero=True):
 
 
 def _integrate_orbit_in_requested_order(orbit, time, potential):
-    """Integrate outward from zero and return SkyCoords in requested order."""
+    """Integrate outward from zero, backward and forward separately.
 
+    Returns ``values(accessor)``, which applies ``accessor`` to each branch's
+    SkyCoord and reassembles the result (time on the last axis) in the
+    caller's order.
+    """
     requested_time = normalize_time_grid(time)
     negative_time = np.sort(requested_time[requested_time < 0.0])
     positive_time = np.sort(requested_time[requested_time > 0.0])
@@ -75,6 +83,7 @@ def _integrate_orbit_in_requested_order(orbit, time, potential):
 
     return values
 
+
 def reference_potential(potential, reference_frame_center=None):
     """Return the potential a reference-frame orbit is integrated in.
 
@@ -94,21 +103,22 @@ def reference_potential(potential, reference_frame_center=None):
         return potential
     return axisymmetric
 
+
 def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236., ro=8.122, zo=0.0208):
-    """
-    Get the coordinates of the center orbit.
+    """Heliocentric Galactic x, y, z (pc) of the reference-frame orbit at each time.
 
-    Parameters:
-    - time (array): Array of time points.
-    - reference_frame_center (tuple): Center of the reference frame.
-    - potential (galpy potential, optional): Galactic potential to use. Defaults to MWPotential2014.
-      The default (LSR) frame uses only its axisymmetric part (see reference_potential).
-    - vo (float, optional): Circular velocity at the solar radius in km/s. Defaults to 236.
-    - ro (float, optional): Solar radius in kpc. Defaults to 8.122.
-    - zo (float, optional): Solar height above the galactic plane in kpc. Defaults to 0.0208.
-
-    Returns:
-    tuple: Coordinates of the center orbit (x, y, z).
+    Parameters
+    ----------
+    time : array-like
+        Timeline in Myr; must include 0.
+    reference_frame_center : sequence of 6 floats or None
+        ``x, y, z`` (pc) and ``U, V, W`` (km/s) of the frame's centre today.
+        ``None`` follows the Local Standard of Rest.
+    potential : galpy potential, optional
+        Defaults to ``MWPotential2014``; the LSR frame uses only its
+        axisymmetric part (see :func:`reference_potential`).
+    vo, ro, zo : float
+        Circular velocity (km/s), solar radius (kpc) and solar height (kpc).
     """
     time = normalize_time_grid(time)
     potential = reference_potential(potential, reference_frame_center)
@@ -116,8 +126,7 @@ def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236
     if reference_frame_center is None:
         rf_coords = [0, 0, 0, -11.1, -12.24, -7.25]
     else:
-        rf_coords = reference_frame_center 
-
+        rf_coords = reference_frame_center
 
     rf_sc = SkyCoord(
         u=rf_coords[0]*u.pc, v=rf_coords[1]*u.pc, w=rf_coords[2]*u.pc,
@@ -133,21 +142,12 @@ def get_center_orbit_coords(time, reference_frame_center, potential=None, vo=236
 
     return (x_rf_int, y_rf_int, z_rf_int)
 
+
 def center_orbit(coordinates_int, time, reference_frame_center, potential=None, vo=236., ro=8.122, zo=0.0208):
-    """
-    Centers the given coordinates with respect to the Local Standard of Rest (LSR) at a specific time.
+    """Subtract the reference-frame orbit from heliocentric ``(x, y, z)`` orbits.
 
-    Parameters:
-    - coordinates_int (tuple): The initial coordinates (x, y, z) in the galactic frame.
-    - time (array): Array of time points.
-    - reference_frame_center (tuple): Center of the reference frame.
-    - potential (galpy potential, optional): Galactic potential to use. Defaults to MWPotential2014.
-    - vo (float, optional): Circular velocity at the solar radius in km/s. Defaults to 236.
-    - ro (float, optional): Solar radius in kpc. Defaults to 8.122.
-    - zo (float, optional): Solar height above the galactic plane in kpc. Defaults to 0.0208.
-
-    Returns:
-    tuple: The centered coordinates (x_centered, y_centered, z_centered) in the galactic frame.
+    Takes the same arguments as :func:`get_center_orbit_coords`, plus the
+    orbits to recentre; returns the frame-centred ``(x, y, z)`` in pc.
     """
     x_int, y_int, z_int = coordinates_int
     x_rf_int, y_rf_int, z_rf_int = get_center_orbit_coords(time, reference_frame_center, potential, vo, ro, zo)
@@ -158,26 +158,28 @@ def center_orbit(coordinates_int, time, reference_frame_center, potential=None, 
 
     return (x_centered, y_centered, z_centered)
 
+
 def create_orbit(coordinates, time, reference_frame_center=None, potential=None, vo=236., ro=8.122, zo=0.0208):
-    """
-    Create orbits for star cluster(s).
+    """Integrate phase-space positions through ``time``.
 
-    Parameters:
-    - coordinates (tuple): A tuple containing the x, y, z coordinates and U, V, W velocities of the star cluster.
-    - time (array): Array of time points.
-    - reference_frame_center (tuple, optional): Center of the reference frame.
-    - potential (galpy potential, optional): Galactic potential to use. Defaults to MWPotential2014.
-    - vo (float, optional): Circular velocity at the solar radius in km/s. Defaults to 236.
-    - ro (float, optional): Solar radius in kpc. Defaults to 8.122.
-    - zo (float, optional): Solar height above the galactic plane in kpc. Defaults to 0.0208.
+    Parameters
+    ----------
+    coordinates : sequence of arrays
+        ``x, y, z`` (pc) and ``U, V, W`` (km/s), heliocentric Galactic.
+    time, reference_frame_center, potential, vo, ro, zo
+        As in :func:`get_center_orbit_coords`.
 
-    Returns:
-    tuple: Centered, heliocentric, and galactocentric coordinates.
+    Returns
+    -------
+    tuple
+        Frame-centred ``(x, y, z)``, heliocentric ``(x, y, z)`` and
+        Galactocentric ``(x, y, z)`` in pc, and frame-centred Galactocentric
+        cylindrical ``(R, phi, z)``; each array is shaped (objects, times).
     """
     time = normalize_time_grid(time)
     if potential is None:
         potential = MWPotential2014
-        
+
     x, y, z, U, V, W = coordinates
     sc = SkyCoord(
         u=x*u.pc, v=y*u.pc, w=z*u.pc, U=U*u.km/u.s, V=V*u.km/u.s, W=W*u.km/u.s,
@@ -192,7 +194,7 @@ def create_orbit(coordinates, time, reference_frame_center=None, potential=None,
     x_gc_int = integrated_values(lambda sc: sc.galactocentric.cartesian.x.value) * 1000
     y_gc_int = integrated_values(lambda sc: sc.galactocentric.cartesian.y.value) * 1000
     z_gc_int = integrated_values(lambda sc: sc.galactocentric.cartesian.z.value) * 1000
-    
+
     helio_coords = (x_helio_int, y_helio_int, z_helio_int)
     galactocentric_coords = (x_gc_int, y_gc_int, z_gc_int)
     x_int_c, y_int_c, z_int_c = center_orbit(helio_coords, time, reference_frame_center, potential, vo, ro, zo)
@@ -207,31 +209,25 @@ def create_orbit(coordinates, time, reference_frame_center=None, potential=None,
     return (centered_coords, helio_coords, galactocentric_coords, gc_cylindcrical_centered_coords)
 
 
+def _rotating_frame_xyz(x_gc, y_gc, z_gc, time_myr, r_sun=8.122, v_sun=236):
+    """Galactocentric pc to the frame co-rotating with the Sun (Galactic centre at +R0 on x)."""
+    w1 = (v_sun / r_sun) / 10
+    t1 = time_myr * 0.01022
+    r = np.sqrt(x_gc**2 + y_gc**2)
+    theta = np.arctan2(x_gc, y_gc)
+    x_rot = r_sun * 1000 - r * np.cos(theta - w1 * t1 + math.pi / 2)
+    y_rot = r * np.sin(theta - w1 * t1 + math.pi / 2)
+    return x_rot, y_rot, z_gc
+
 
 def coordFIX_to_coordROT(df_gc, r_sun=8.122, v_sun=236):
+    """Add co-rotating ``x_rot``, ``y_rot``, ``z_rot`` columns (pc) to ``df_gc``.
+
+    ``df_gc`` needs ``time`` (Myr) and Galactocentric ``x_gc``, ``y_gc``,
+    ``z_gc`` (pc); ``r_sun`` is in kpc and ``v_sun`` in km/s. The frame is
+    modified in place and returned.
     """
-    Convert fixed coordinates to rotating coordinates.
-
-    Parameters:
-    - df_gc (pd.DataFrame): Data frame containing galactocentric coordinates.
-    - r_sun (float, optional): Distance from the Sun to the galactic center in kpc. Defaults to 8.122.
-    - v_sun (float, optional): Circular velocity of the Sun in km/s. Defaults to 236.
-
-    Returns:
-    pd.DataFrame: Data frame with rotating coordinates.
-    """
-    w0 = v_sun / r_sun
-    r_sun = r_sun * 1000  # in pc!
-    w1 = w0 / 10
-    t1 = df_gc['time'] * 0.01022
-    r = np.sqrt(df_gc['x_gc']**2 + df_gc['y_gc']**2)
-    theta = np.arctan2(df_gc['x_gc'], df_gc['y_gc'])
-    x_gc_rot = r_sun - r * np.cos(theta - w1 * t1 + math.pi / 2)
-    y_gc_rot = r * np.sin(theta - w1 * t1 + math.pi / 2)
-    z_gc_rot = df_gc['z_gc']
-
-    df_gc['x_rot'] = x_gc_rot
-    df_gc['y_rot'] = y_gc_rot
-    df_gc['z_rot'] = z_gc_rot
-
+    df_gc['x_rot'], df_gc['y_rot'], df_gc['z_rot'] = _rotating_frame_xyz(
+        df_gc['x_gc'], df_gc['y_gc'], df_gc['z_gc'], df_gc['time'], r_sun=r_sun, v_sun=v_sun
+    )
     return df_gc

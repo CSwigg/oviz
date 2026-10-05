@@ -11,5 +11,3 @@ class Scene3D(Animate3D):
     ``Scene3D`` reuses the same implementation so existing ``Animate3D``
     notebooks and scripts remain valid.
     """
-
-    pass

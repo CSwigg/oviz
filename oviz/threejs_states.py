@@ -17,6 +17,21 @@ def _stable_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4()}"
 
 
+# Number coercion shared by the deck and paper schemas.
+def _finite_number(value: Any, fallback: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(fallback)
+    if number != number or number in (float("inf"), float("-inf")):
+        return float(fallback)
+    return number
+
+
+def _clamp(value: Any, minimum: float, maximum: float, fallback: float) -> float:
+    return min(max(_finite_number(value, fallback), minimum), maximum)
+
+
 def default_states_project_id(scene_spec: dict[str, Any]) -> str:
     """Return a deterministic draft key for repeated exports of one figure."""
     explicit = str(scene_spec.get("states_project_id") or scene_spec.get("project_id") or "").strip()

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import uuid
 from copy import deepcopy
 from typing import Any
 
-from .threejs_states import deduplicate_state_assets
+from .threejs_states import _clamp, _stable_id, deduplicate_state_assets
 
 PAPER_SCHEMA_VERSION = 1
 SUPPORTED_BLOCK_TYPES = {"html", "figure"}
@@ -15,24 +14,6 @@ SUPPORTED_RESUME_POLICIES = {"next-anchor", "manual"}
 DEFAULT_PANEL_WIDTH_FRACTION = 0.42
 DEFAULT_READING_LINE = 0.35
 DEFAULT_KATEX_VERSION = "0.16.11"
-
-
-def _stable_id(prefix: str) -> str:
-    return f"{prefix}-{uuid.uuid4()}"
-
-
-def _finite_number(value: Any, fallback: float) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return float(fallback)
-    if number != number or number in (float("inf"), float("-inf")):
-        return float(fallback)
-    return number
-
-
-def _clamp(value: Any, minimum: float, maximum: float, fallback: float) -> float:
-    return min(max(_finite_number(value, fallback), minimum), maximum)
 
 
 def _unique_id(raw: Any, prefix: str, seen: set[str]) -> str:
@@ -126,7 +107,7 @@ def normalize_paper_spec(value: dict[str, Any] | None) -> dict[str, Any]:
     seen_blocks: set[str] = set()
     seen_anchors: set[str] = set()
     sections: list[dict[str, Any]] = []
-    for section_index, raw_section in enumerate(raw_sections):
+    for raw_section in raw_sections:
         section = raw_section if isinstance(raw_section, dict) else {}
         raw_blocks = section.get("blocks", [])
         if not isinstance(raw_blocks, list):
