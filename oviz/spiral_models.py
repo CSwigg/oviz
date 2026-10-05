@@ -131,6 +131,7 @@ class SpiralArmModel:
         raise NotImplementedError
 
     def provenance(self) -> dict:
+        """What the model shows and where it comes from, for a figure's metadata."""
         return {"name": self.name, "reference": self.reference, "pattern_speeds_kms_kpc": self.pattern_speeds()}
 
 

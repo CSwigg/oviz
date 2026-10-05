@@ -21,8 +21,88 @@ from .threejs_profiles import build_threejs_profile, merge_threejs_profile
 from .threejs_scene import build_threejs_scene_spec
 
 
+# Constants -------------------------------------------------------------------
+
+DEFAULT_VIEWER = "oviz"
+SUN_TRACE_NAME = 'Sun'
+
+GALACTIC_GUIDE_TRACE_NAMES = {
+    'Galactic Quadrants',
+    'Galactic l Labels',
+}
+
+GALACTIC_RADIUS_CIRCLE_DEFS = (
+    (4.0, 'R = 4 kpc'),
+    (8.122, 'R = 8.12 kpc'),
+    (12.0, 'R = 12 kpc'),
+)
+
+GALACTIC_RADIUS_TRACE_NAMES = (
+    {name for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
+    | {f'{name} Label' for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
+    | {'GC Ring'}
+)
+
+GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES = {
+    'Sun',
+    'Clusters (< 60 Myr)',
+    'R = 8.12 kpc',
+}
+
+# The Castro-Ginard et al. (2021) arms drawn by ``make_plot(include_spiral_arms=True)``.
+SPIRAL_ARMS = {
+    arm: {
+        "theta_ref_deg": theta_ref,
+        "theta_range_deg": theta_range,
+        "Rref_kpc": r_ref,
+        "psi_deg": pitch,
+        "Omega_p": pattern_speed,
+    }
+    for arm, theta_ref, theta_range, r_ref, pitch, pattern_speed in CASTRO_GINARD2021_ARM_TABLE
+}
+
+SPIRAL_ARM_TRACE_NAMES = {f"Spiral Arm: {name}" for name in SPIRAL_ARMS}
+SEC_PER_MYR = 1e6 * 365.25 * 24 * 3600.0
+KPC_IN_KM = 3.085677581e16
+KM_S_PER_KPC_TO_RAD_MYR = (1.0 / KPC_IN_KM) * SEC_PER_MYR
+KDE_TRACE_PREFIX = 'Age KDE: '
+KDE_TIME_MARKER_TRACE_NAME = 'Age KDE Time Marker'
+CUSTOMDATA_IDX_AGE_NOW = 0
+CUSTOMDATA_IDX_AGE_AT_T = 1
+CUSTOMDATA_IDX_L0_DEG = 2
+CUSTOMDATA_IDX_B0_DEG = 3
+CUSTOMDATA_IDX_DIST0_PC = 4
+CUSTOMDATA_IDX_X0 = 5
+CUSTOMDATA_IDX_Y0 = 6
+CUSTOMDATA_IDX_Z0 = 7
+CUSTOMDATA_IDX_CLUSTER_NAME = 8
+CUSTOMDATA_IDX_CLUSTER_COLOR = 9
+CUSTOMDATA_IDX_N_STARS = 10
+CUSTOMDATA_IDX_CLUSTER_ALIASES = 11
+MAX_SELECTED_MEMBER_POINTS = 1200
+
+DEFAULT_THREEJS_VOLUME_COLORMAPS = (
+    'inferno',
+    'magma',
+    'plasma',
+    'viridis',
+    'cividis',
+    'turbo',
+    'gist_heat',
+    'Greys',
+)
+
+DEFAULT_THREEJS_TRACE_COLORMAP = 'turbo'
+DEFAULT_THREEJS_VOLUME_SAMPLE_STEPS = 100
+DEFAULT_THREEJS_VOLUME_MAX_RESOLUTION_CAP = 512
+DEFAULT_THREEJS_AR_VOLUME_MAX_RESOLUTION = 64
+
+
+# Trace, frame and layout records ---------------------------------------------
+
+
 class _OvizAttrDict(dict):
-    """Small dict-backed object for legacy trace/frame/layout attribute access."""
+    """A dict with attribute access: the trace, frame and layout records ``make_plot`` builds."""
 
     def __getattr__(self, name):
         try:
@@ -38,6 +118,7 @@ class _OvizAttrDict(dict):
 
 
 def _attrdict_factory(kind):
+    """Constructor of ``kind`` records: keyword fields, or a dict that is deep-copied."""
     def _factory(*args, **kwargs):
         data = {}
         if args:
@@ -55,81 +136,7 @@ _layout = _attrdict_factory("Layout")
 _frame = _attrdict_factory("Frame")
 
 
-_COLOR_SCALE_STOPS = {
-    "viridis": ("#440154", "#31688e", "#35b779", "#fde725"),
-    "plasma": ("#0d0887", "#9c179e", "#ed7953", "#f0f921"),
-    "magma": ("#000004", "#51127c", "#b73779", "#fcfdbf"),
-    "inferno": ("#000004", "#57106e", "#bc3754", "#fcffa4"),
-    "cividis": ("#00224e", "#575d6d", "#a59c74", "#fee838"),
-    "turbo": ("#30123b", "#28a5f5", "#7ef658", "#fca636", "#7a0403"),
-    "greys": ("#000000", "#777777", "#ffffff"),
-    "gist_heat": ("#000000", "#b00000", "#ffff00", "#ffffff"),
-}
-
-
-def _hex_to_rgb_tuple(value):
-    value = str(value or "").strip().lstrip("#")
-    if len(value) == 3:
-        value = "".join(ch * 2 for ch in value)
-    if len(value) != 6:
-        return (128, 128, 128)
-    try:
-        return tuple(int(value[idx : idx + 2], 16) for idx in (0, 2, 4))
-    except ValueError:
-        return (128, 128, 128)
-
-
-def _sample_colorscale(colorscale, positions):
-    if isinstance(colorscale, str):
-        stops = _COLOR_SCALE_STOPS.get(colorscale.strip().lower(), _COLOR_SCALE_STOPS["viridis"])
-    elif isinstance(colorscale, (list, tuple)) and colorscale:
-        raw_stops = []
-        for item in colorscale:
-            if isinstance(item, (list, tuple)) and len(item) >= 2:
-                raw_stops.append(item[1])
-            else:
-                raw_stops.append(item)
-        stops = tuple(str(item) for item in raw_stops) or _COLOR_SCALE_STOPS["viridis"]
-    else:
-        stops = _COLOR_SCALE_STOPS["viridis"]
-
-    rgbs = [_hex_to_rgb_tuple(stop) for stop in stops]
-    if len(rgbs) == 1:
-        rgbs = [rgbs[0], rgbs[0]]
-    out = []
-    for position in positions:
-        t = min(max(float(position), 0.0), 1.0)
-        scaled = t * (len(rgbs) - 1)
-        lo = int(np.floor(scaled))
-        hi = min(lo + 1, len(rgbs) - 1)
-        frac = scaled - lo
-        rgb = tuple(
-            int(round(rgbs[lo][channel] + (rgbs[hi][channel] - rgbs[lo][channel]) * frac))
-            for channel in range(3)
-        )
-        out.append(f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})")
-    return out
-
-GALACTIC_GUIDE_TRACE_NAMES = {
-    'Galactic Quadrants',
-    'Galactic l Labels',
-}
-GALACTIC_RADIUS_CIRCLE_DEFS = (
-    (4.0, 'R = 4 kpc'),
-    (8.122, 'R = 8.12 kpc'),
-    (12.0, 'R = 12 kpc'),
-)
-GALACTIC_RADIUS_TRACE_NAMES = (
-    {name for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
-    | {f'{name} Label' for _, name in GALACTIC_RADIUS_CIRCLE_DEFS}
-    | {'GC Ring'}
-)
-GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES = {
-    'Sun',
-    'Clusters (< 60 Myr)',
-    'R = 8.12 kpc',
-}
-SUN_TRACE_NAME = 'Sun'
+# The default Sun -------------------------------------------------------------
 
 
 def _default_sun_trace():
@@ -172,70 +179,41 @@ class _CollectionWithSun:
         return getattr(self.base, name)
 
 
-def _galactic_simple_allowed_trace_names(plot):
-    allowed = set(GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES)
-    trace_grouping_dict = getattr(plot, 'trace_grouping_dict', {}) or {}
-    for grouped_trace_names in trace_grouping_dict.values():
-        if isinstance(grouped_trace_names, str):
-            grouped_trace_names = [grouped_trace_names]
-        if not isinstance(grouped_trace_names, (list, tuple, set, np.ndarray, pd.Series)):
-            continue
-        for trace_name in grouped_trace_names:
-            if trace_name not in (None, ''):
-                allowed.add(str(trace_name))
-    return allowed
+# Scene builder ---------------------------------------------------------------
 
-# The Castro-Ginard et al. (2021) arms drawn by ``make_plot(include_spiral_arms=True)``.
-SPIRAL_ARMS = {
-    arm: {
-        "theta_ref_deg": theta_ref,
-        "theta_range_deg": theta_range,
-        "Rref_kpc": r_ref,
-        "psi_deg": pitch,
-        "Omega_p": pattern_speed,
-    }
-    for arm, theta_ref, theta_range, r_ref, pitch, pattern_speed in CASTRO_GINARD2021_ARM_TABLE
-}
-SPIRAL_ARM_TRACE_NAMES = {f"Spiral Arm: {name}" for name in SPIRAL_ARMS}
-SEC_PER_MYR = 1e6 * 365.25 * 24 * 3600.0
-KPC_IN_KM = 3.085677581e16
-KM_S_PER_KPC_TO_RAD_MYR = (1.0 / KPC_IN_KM) * SEC_PER_MYR
-KDE_TRACE_PREFIX = 'Age KDE: '
-KDE_TIME_MARKER_TRACE_NAME = 'Age KDE Time Marker'
-CUSTOMDATA_IDX_AGE_NOW = 0
-CUSTOMDATA_IDX_AGE_AT_T = 1
-CUSTOMDATA_IDX_L0_DEG = 2
-CUSTOMDATA_IDX_B0_DEG = 3
-CUSTOMDATA_IDX_DIST0_PC = 4
-CUSTOMDATA_IDX_X0 = 5
-CUSTOMDATA_IDX_Y0 = 6
-CUSTOMDATA_IDX_Z0 = 7
-CUSTOMDATA_IDX_CLUSTER_NAME = 8
-CUSTOMDATA_IDX_CLUSTER_COLOR = 9
-CUSTOMDATA_IDX_N_STARS = 10
-CUSTOMDATA_IDX_CLUSTER_ALIASES = 11
-MAX_SELECTED_MEMBER_POINTS = 1200
-DEFAULT_THREEJS_VOLUME_COLORMAPS = (
-    'inferno',
-    'magma',
-    'plasma',
-    'viridis',
-    'cividis',
-    'turbo',
-    'gist_heat',
-    'Greys',
-)
-DEFAULT_THREEJS_TRACE_COLORMAP = 'turbo'
-DEFAULT_THREEJS_VOLUME_SAMPLE_STEPS = 100
-DEFAULT_THREEJS_VOLUME_MAX_RESOLUTION_CAP = 512
-DEFAULT_THREEJS_AR_VOLUME_MAX_RESOLUTION = 64
 
 class Animate3D:
-    """Build interactive time-dependent scenes from a trace collection.
+    """Build an interactive, time-dependent figure from a trace collection.
 
-    The class prepares galpy orbit frames, optional static and volume layers,
-    and the standalone Three.js viewer. :class:`oviz.Scene3D` is an equivalent
+    :meth:`make_plot` integrates the traces' orbits with galpy, builds one
+    frame per time step (with Galactic guides, static traces and volumes) and
+    returns the figure. :class:`oviz.Scene3D` is the same class under an
     astronomy-facing name.
+
+    Parameters
+    ----------
+    data_collection : TraceCollection
+        The traces, in legend order.
+    xyz_widths : tuple of float
+        Half-widths (pc) of the initial x, y and z ranges.
+    xyz_ranges : tuple of (low, high) pairs, optional
+        Explicit x, y and z ranges (pc), used instead of ``xyz_widths``.
+    figure_title : str, optional
+        Title shown above the figure.
+    figure_theme : str
+        A theme in ``oviz/themes``: ``"dark"``, ``"light"``, ``"gray"`` or
+        ``"solarized_light"``.
+    trace_grouping_dict : dict, optional
+        Legend groups, each a list of trace names. An ``"All"`` group with
+        every trace is always added.
+    potential : galpy potential, optional
+        Defaults to ``MWPotential2014``.
+    vo, ro, zo : float
+        Circular velocity (km/s), solar radius (kpc) and solar height (kpc).
+
+    ``light_template`` sets the light theme's layout template;
+    ``figure_layout`` and ``figure_layout_dict`` are kept for compatibility
+    and have no effect (the theme defines the layout).
     """
 
     def __init__(
@@ -633,6 +611,377 @@ class Animate3D:
             self.data_collection = self.data_collection.base
         return self.figure
 
+    # Frames: per-time traces and legend visibility ---------------------------
+
+    def _generate_scatter_list(
+        self,
+        cluster_groups,
+        t,
+        x_rf,
+        y_rf,
+        z_rf,
+        show_gc_line,
+        galactic_mode,
+        show_galactic_guides=True,
+        show_galactic_center_circles=True,
+        include_spiral_arms=False,
+        coord_system='centered'
+    ):
+        """All traces of the frame at time ``t``: one per cluster group, then the guides.
+
+        ``x_rf, y_rf, z_rf`` is the reference frame's position at ``t``. Outside
+        Galactic mode ``show_gc_line`` adds the R = 8.12 kpc circle; in Galactic
+        mode the two ``show_galactic_*`` flags control the circles and guides.
+        """
+        scatter_list = []
+        x_col, y_col, z_col = _xyz_columns(coord_system)
+
+        sun_x = 0.0
+        sun_y = 0.0
+
+        for cluster_group in cluster_groups:
+            assert cluster_group.integrated
+            df_int = cluster_group.df_int
+            if df_int.empty:
+                continue
+
+            # Rows per time step, indexed once per integrated table instead of
+            # rescanning every row for every frame (isclose semantics kept).
+            df_t = _rows_at_time(df_int, float(t))
+            if df_t.empty:
+                continue
+
+            # Build present-day (t=0) sky quantities for click->sky-panel callbacks.
+            df_t0 = _rows_at_time(df_int, 0.0)
+            if len(df_t0) != len(df_t):
+                # Fallback for any unexpected ordering/shape mismatch.
+                df_t0 = df_t
+
+            x0 = pd.to_numeric(df_t0[x_col], errors='coerce').to_numpy(dtype=float)
+            y0 = pd.to_numeric(df_t0[y_col], errors='coerce').to_numpy(dtype=float)
+            z0 = pd.to_numeric(df_t0[z_col], errors='coerce').to_numpy(dtype=float)
+
+            x_helio0 = pd.to_numeric(df_t0['x_helio'], errors='coerce').to_numpy(dtype=float)
+            y_helio0 = pd.to_numeric(df_t0['y_helio'], errors='coerce').to_numpy(dtype=float)
+            z_helio0 = pd.to_numeric(df_t0['z_helio'], errors='coerce').to_numpy(dtype=float)
+            dist0 = np.sqrt(x_helio0 ** 2 + y_helio0 ** 2 + z_helio0 ** 2)
+
+            with np.errstate(invalid='ignore', divide='ignore'):
+                l0 = np.rad2deg(np.arctan2(y_helio0, x_helio0))
+                l0 = np.mod(l0, 360.0)
+                b0 = np.rad2deg(np.arcsin(np.clip(z_helio0 / np.where(dist0 > 0, dist0, np.nan), -1.0, 1.0)))
+
+            if cluster_group.data_name.strip().lower() == 'sun':
+                sun_x = float(np.nanmedian(df_t[x_col].to_numpy(dtype=float)))
+                sun_y = float(np.nanmedian(df_t[y_col].to_numpy(dtype=float)))
+
+            age_at_t = df_t['age_myr'] + t
+            age_present = df_t['age_myr']
+            hovertext = (
+                '<b style="font-size:16px;">' + df_t['name'].str.replace('_', ' ').astype(str) + '</b>' + '<br>'  # Bold cluster name
+                + cluster_group.data_name + '<br>'  # Group name
+                + 'Age (now) = ' + age_present.round(1).astype(str) + ' Myr' + '<br>'
+                + 'Age (t) = ' + age_at_t.round(1).astype(str) + ' Myr' + '<br>'  # Cluster age at time t
+            )
+
+            if 'n_stars' in df_t.columns:
+                hovertext += 'N = ' + df_t['n_stars'].astype(str) + ' stars <br>'  # Number of stars
+
+            hovertext += (
+                f'({x_col},{y_col},{z_col}) = (' +
+                df_t[x_col].round(1).astype(str) + ', ' +
+                df_t[y_col].round(1).astype(str) + ', ' +
+                df_t[z_col].round(1).astype(str) + ')'
+            )
+
+            marker_dict = dict(
+                size=df_t['size'],
+                symbol=cluster_group.marker_style,
+                line=dict(color='black', width=0.0)
+            )
+
+            marker_dict.update(opacity=cluster_group.opacity)
+            if cluster_group.colormap:
+                age_full = df_int['age_myr'] + df_int['time']
+                cmin = cluster_group.cmin if cluster_group.cmin is not None else float(age_full.min())
+                cmax = cluster_group.cmax if cluster_group.cmax is not None else float(age_full.max())
+                marker_dict.update(
+                    color=age_at_t.values,
+                    colorscale=cluster_group.colormap,
+                    cmin=cmin,
+                    cmax=cmax
+                )
+            else:
+                marker_dict.update(color=cluster_group.color)
+
+            trace_color = cluster_group.color if isinstance(cluster_group.color, str) else 'white'
+            cluster_names = df_t['name'].astype(str).to_numpy(dtype=object)
+            trace_colors = np.repeat(trace_color, len(df_t)).astype(object)
+            if 'n_stars' in df_t.columns:
+                n_star_values = pd.to_numeric(df_t['n_stars'], errors='coerce').to_numpy(dtype=float)
+            else:
+                n_star_values = np.full(len(df_t), np.nan, dtype=float)
+            if 'name_all' in df_t.columns:
+                cluster_alias_values = (
+                    df_t['name_all'].fillna('').astype(str).to_numpy(dtype=object)
+                )
+            else:
+                cluster_alias_values = np.repeat('', len(df_t)).astype(object)
+
+            trace_meta = {
+                'trace_kind': 'cluster',
+                'size_by_n_stars': bool(getattr(cluster_group, 'size_by_n_stars', False)),
+            }
+            if cluster_group.colormap:
+                trace_meta.update({
+                    'color_by': 'age',
+                    'color_label': 'Age (Myr)',
+                    'colormap': str(cluster_group.colormap),
+                })
+
+            scatter_list.append(
+                _scatter3d(
+                    x=df_t[x_col].values,
+                    y=df_t[y_col].values,
+                    z=df_t[z_col].values,
+                    mode='markers',
+                    marker=marker_dict,
+                    customdata=np.column_stack((
+                        age_present.to_numpy(dtype=float),
+                        age_at_t.to_numpy(dtype=float),
+                        l0,
+                        b0,
+                        dist0,
+                        x0,
+                        y0,
+                        z0,
+                        cluster_names,
+                        trace_colors,
+                        n_star_values,
+                        cluster_alias_values,
+                    )),
+                    meta=trace_meta,
+                    hovertext=hovertext,
+                    hoverinfo='text',  # This removes default x, y, z
+                    hovertemplate='%{hovertext}<extra></extra>',  # This ensures only custom hovertext is shown
+                    name=cluster_group.data_name
+                )
+            )
+
+        show_reference_lines = show_gc_line if not galactic_mode else show_galactic_center_circles
+
+        if show_reference_lines:
+            if galactic_mode:
+                scatter_list.append(
+                    self._galactic_center_ring_trace(
+                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+                    )
+                )
+                scatter_list.append(
+                    self._galactic_center_label_trace(
+                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+                    )
+                )
+                scatter_list.extend(
+                    self._build_galactic_circles_with_labels(
+                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+                    )
+                )
+            else:
+                if coord_system == 'rot':
+                    gc_line_t = self.rotating_gc_line_rot(t)
+                else:
+                    gc_line_t = self.rotating_gc_line(x_rf, y_rf, z_rf)
+                scatter_list.append(gc_line_t)
+
+        if galactic_mode and show_galactic_guides:
+            scatter_list.extend(
+                self._build_galactic_guide_traces(
+                    sun_x=sun_x,
+                    sun_y=sun_y,
+                    plane_z_model=self._galactic_plane_z_model(
+                        t=t,
+                        x_rf=x_rf,
+                        y_rf=y_rf,
+                        z_rf=z_rf,
+                        coord_system=coord_system,
+                    ),
+                )
+            )
+
+        if galactic_mode and include_spiral_arms:
+            scatter_list.extend(
+                self._build_spiral_arm_traces(
+                    t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
+                )
+            )
+
+        for model in getattr(self, 'spiral_arm_models', ()):
+            scatter_list.append(
+                self._spiral_arm_model_trace(model, t, x_rf, y_rf, z_rf, coord_system=coord_system)
+            )
+
+        if self.show_age_kde_inset:
+            scatter_list.append(self._build_kde_time_marker_trace(t))
+            scatter_list.extend(self._build_kde_inset_traces())
+
+        return scatter_list
+
+    def _add_static_traces(self, frame, static_traces, static_traces_times, reference_frame_center, t):
+        """Append each static trace (``meta.static``) to the frame, or an empty one when hidden at ``t``.
+
+        ``static_traces_times[i]`` lists the times at which trace ``i`` shows.
+        With a focus group, traces other than tracks are recentred on it.
+        """
+        for i, st in enumerate(static_traces):
+            st_copy = copy.deepcopy(st)
+            existing_meta = st_copy.get('meta') if isinstance(st_copy, dict) else getattr(st_copy, 'meta', None)
+            existing_meta = existing_meta if isinstance(existing_meta, dict) else {}
+            st_copy['meta'] = {**existing_meta, 'static': True}
+            trace_name = self._trace_name(st_copy)
+
+            # Re-center if focusing on a group (except for tracks)
+            if (self.focus_group is not None) and trace_name and not trace_name.endswith('Track'):
+                for axis_idx, axis_key in enumerate(('x', 'y', 'z')):
+                    axis_values = st_copy.get(axis_key) if isinstance(st_copy, dict) else getattr(st_copy, axis_key, None)
+                    if axis_values is not None:
+                        st_copy[axis_key] = np.array(axis_values) - reference_frame_center[axis_idx]
+
+            if t in static_traces_times[i]:
+                frame['data'].append(st_copy)
+            else:
+                frame['data'].append(_scatter3d(
+                    x=[], y=[], z=[],
+                    name=trace_name,
+                    visible=False,
+                    meta={'static': True}
+                ))
+
+    def _initialize_figure(self, frames):
+        """Keep the t = 0 traces, with the first group's visibility, as ``initial_data``."""
+        default_group_key = list(self.trace_grouping_dict.keys())[0]  # e.g. "All"
+        grouping_0 = self.trace_grouping_dict[default_group_key]
+
+        # Find the frame for t=0
+        idx_zero = np.where(self.time == 0)[0][0]
+        starting_frame = copy.deepcopy(frames[idx_zero])
+
+        data_updated = []
+        for trace in starting_frame['data']:
+            trace_name = self._trace_name(trace)
+            visible_flag = self.get_visibility(trace_name, grouping_0)
+            self._set_trace_visible(trace, visible_flag)
+            data_updated.append(trace)
+
+        self.initial_data = copy.deepcopy(data_updated)
+
+    def _ordered_slider_times(self):
+        """Return times in the same order used by the time slider."""
+        time_neg = self.time[self.time < 0]
+        time_pos = self.time[self.time >= 0]
+
+        if (len(time_neg) > 0) and (len(time_pos) > 1):
+            return np.append(time_neg, time_pos)
+        if (len(time_neg) > 0) and (len(time_pos) == 1):
+            return np.flip(self.time)
+        return self.time
+
+    def get_visibility(self, trace_name: str, grouping: list):
+        """Initial visibility of a trace in a legend group: True, False or ``"legendonly"``.
+
+        A data trace shows when its name is in ``grouping``, and its orbit
+        track (``"<name> Track"``) with it. Other static traces, the default
+        Sun and the Galactic guides show in every group (static traces and
+        tracks as ``"legendonly"`` with ``static_traces_legendonly``).
+        Published spiral-arm models are listed in every group but start hidden.
+        """
+        if trace_name is None:
+            return False
+
+        if trace_name == KDE_TIME_MARKER_TRACE_NAME:
+            return True
+
+        if any(trace_name == model.name for model in getattr(self, 'spiral_arm_models', ())):
+            return "legendonly"
+
+        kde_source_trace = self._kde_source_trace_name(trace_name)
+        if kde_source_trace is not None:
+            return kde_source_trace in grouping
+
+        if trace_name.endswith(" Track"):
+            if trace_name.replace(" Track", "") not in grouping:
+                return False
+            return "legendonly" if self.static_traces_legendonly else True
+        if trace_name in self.base_static_trace_names:
+            return "legendonly" if self.static_traces_legendonly else True
+
+        # The default Sun is in every group, as the Galactic guides are.
+        if trace_name == SUN_TRACE_NAME and getattr(self, '_default_sun', None) is not None:
+            return True
+        if (
+            trace_name == 'GC'
+            or trace_name in GALACTIC_RADIUS_TRACE_NAMES
+            or trace_name in GALACTIC_GUIDE_TRACE_NAMES
+            or trace_name in SPIRAL_ARM_TRACE_NAMES
+        ):
+            return True
+        return trace_name in grouping
+
+    def set_focus(self, focus_group):
+        """Median ``x, y, z, U, V, W`` of the named trace, or None without a focus group."""
+        if not focus_group:
+            return None
+
+        focus_group_data = self.data_collection.get_cluster(focus_group).df
+        coords = focus_group_data[['x', 'y', 'z', 'U', 'V', 'W']].median().values
+        return coords
+
+    def _trace_name(self, trace):
+        """The ``name`` of a trace given as a dict or as an object with attributes."""
+        if isinstance(trace, dict):
+            return trace.get('name')
+        return getattr(trace, 'name', None)
+
+    def _set_trace_visible(self, trace, visible_flag):
+        """Set ``visible`` on a trace given as a dict or as an object with attributes."""
+        if isinstance(trace, dict):
+            trace['visible'] = visible_flag
+        else:
+            trace.visible = visible_flag
+
+    def _default_sun_for(self, wanted):
+        """Oviz's default Sun for this plot, or None: only when wanted, for a
+        real trace collection (not a test double), and only when the data
+        bring no trace named "Sun" of their own."""
+        from .traces import TraceCollection
+
+        base = self.data_collection
+        if not wanted or not isinstance(base, TraceCollection):
+            self._default_sun = None
+            return None
+        if any(str(getattr(c, 'data_name', '')).strip().lower() == 'sun' for c in base.get_all_clusters()):
+            self._default_sun = None
+            return None
+        if getattr(self, '_default_sun', None) is None:
+            self._default_sun = _default_sun_trace()
+        return self._default_sun
+
+    def _prepare_default_sun(self, sun, reference_frame_center, fade_in_time, fade_in_and_out, fade_in_and_disp, disp_time):
+        """Integrate the default Sun on the collection's time grid and frame
+        (again only when either changed) and size it like the other traces."""
+        time = np.asarray(self.data_collection.time, dtype=float)
+        key = (time.tobytes(), repr(reference_frame_center), self.vo, self.ro, self.zo, id(self.potential))
+        if getattr(self, '_default_sun_key', None) != key:
+            sun.integrate_orbits(
+                time, reference_frame_center=reference_frame_center,
+                potential=self.potential, vo=self.vo, ro=self.ro, zo=self.zo,
+            )
+            self._default_sun_key = key
+        if not sun.sizes_set:
+            sun.set_age_based_sizes(fade_in_time, fade_in_and_out, fade_in_and_disp, disp_time)
+
+    # Galactic reference geometry ---------------------------------------------
+
     def _coordFIX_to_coordROT(self, x_gc_pc, y_gc_pc, z_gc_pc, time_myr):
         """Galactocentric pc to the co-rotating frame of ``coord_system='rot'``."""
         return orbit_maker._rotating_frame_xyz(
@@ -918,6 +1267,133 @@ class Animate3D:
             a, b, c = 0.0, 0.0, float(np.nanmedian(z_plane))
         return float(a), float(b), float(c)
 
+    def _build_galactic_guide_traces(
+        self,
+        sun_x=0.0,
+        sun_y=0.0,
+        plane_z_model=(0.0, 0.0, 0.0),
+    ):
+        """Build four simple present-day Galactic quadrant boundaries."""
+        guide_color = self._reference_line_color()
+        label_color = self._reference_label_color()
+        plane_a, plane_b, plane_c = [
+            float(value)
+            for value in plane_z_model
+        ]
+
+        def plane_z(x_value, y_value):
+            return (
+                plane_a * float(x_value)
+                + plane_b * float(y_value)
+                + plane_c
+            )
+
+        try:
+            x_min, x_max = [float(v) for v in self.figure_layout['scene']['xaxis']['range']]
+        except Exception:
+            x_min, x_max = -10000.0, 10000.0
+        try:
+            y_min, y_max = [float(v) for v in self.figure_layout['scene']['yaxis']['range']]
+        except Exception:
+            y_min, y_max = -10000.0, 10000.0
+        xy_span = min(x_max - x_min, y_max - y_min)
+        ray_radius = 0.68 * np.hypot(x_max - x_min, y_max - y_min)
+        major_angles = np.deg2rad([0.0, 90.0, 180.0, 270.0])
+
+        major_x, major_y, major_z = [], [], []
+        for angle in major_angles:
+            end_x = float(sun_x) + ray_radius * np.cos(angle)
+            end_y = float(sun_y) + ray_radius * np.sin(angle)
+            major_x.extend([
+                float(sun_x),
+                end_x,
+                None,
+            ])
+            major_y.extend([
+                float(sun_y),
+                end_y,
+                None,
+            ])
+            major_z.extend([
+                plane_z(sun_x, sun_y),
+                plane_z(end_x, end_y),
+                None,
+            ])
+
+        # The four cardinal longitudes form the quadrant boundaries.
+        quadrants = _scatter3d(
+            x=major_x,
+            y=major_y,
+            z=major_z,
+            mode='lines',
+            line=dict(
+                color=guide_color,
+                width=self._reference_line_width(),
+                dash='solid',
+            ),
+            opacity=self._reference_opacity(),
+            name='Galactic Quadrants',
+            showlegend=False,
+            hoverinfo='skip'
+        )
+
+        # Put the four cardinal longitude labels far enough from the Sun to
+        # remain legible over the cluster field. They are intentionally large
+        # and screen-stable.
+        label_radius = 0.30 * xy_span
+        labels = ['ℓ = 0°', 'ℓ = 90°', 'ℓ = 180°', 'ℓ = 270°']
+        x_labels = [
+            float(sun_x) + label_radius * np.cos(angle)
+            for angle in major_angles
+        ]
+        y_labels = [
+            float(sun_y) + label_radius * np.sin(angle)
+            for angle in major_angles
+        ]
+
+        l_labels = _scatter3d(
+            x=x_labels,
+            y=y_labels,
+            z=[
+                plane_z(x_value, y_value)
+                for x_value, y_value in zip(x_labels, y_labels)
+            ],
+            mode='text',
+            text=labels,
+            textposition='middle center',
+            textfont=dict(
+                color=label_color,
+                size=28,
+                family='Inter, Helvetica Neue, Arial, sans-serif',
+            ),
+            opacity=0.92,
+            name='Galactic l Labels',
+            showlegend=False,
+            hoverinfo='skip',
+            meta={
+                'screen_stable_text': True,
+                'screen_px': 28.0,
+            },
+        )
+        return [quadrants, l_labels]
+
+    def _sync_scene_axis_style(self, layout_dict):
+        """Apply a shared x-axis line style to y/z so xyz axis lines stay visually consistent."""
+        scene = layout_dict.get('scene', {})
+        xaxis = scene.get('xaxis', {})
+        linecolor = xaxis.get('linecolor')
+        linewidth = xaxis.get('linewidth')
+        showline = xaxis.get('showline')
+
+        for axis_name in ('yaxis', 'zaxis'):
+            axis = scene.setdefault(axis_name, {})
+            if linecolor is not None:
+                axis['linecolor'] = linecolor
+            if linewidth is not None:
+                axis['linewidth'] = linewidth
+            if showline is not None:
+                axis['showline'] = showline
+
     def _log_spiral_radius(self, theta_rad, rref_kpc, theta_ref_rad, psi_rad):
         """Log-spiral radius model: ln(R/Rref) = -(theta - theta_ref) * tan(psi)."""
         return float(rref_kpc) * np.exp(-(theta_rad - theta_ref_rad) * np.tan(psi_rad))
@@ -1008,6 +1484,8 @@ class Animate3D:
             # Arms in the Galactic plane are 3D context; Sky view leaves them out.
             meta={'oviz_hide_in_sky': True},
         )
+
+    # Age KDE inset -----------------------------------------------------------
 
     def _kde_trace_name(self, trace_name):
         return f'{KDE_TRACE_PREFIX}{trace_name}'
@@ -1284,499 +1762,7 @@ class Animate3D:
             hovertemplate='t = %{x:.1f} Myr<extra></extra>'
         )
 
-    def _sync_scene_axis_style(self, layout_dict):
-        """Apply a shared x-axis line style to y/z so xyz axis lines stay visually consistent."""
-        scene = layout_dict.get('scene', {})
-        xaxis = scene.get('xaxis', {})
-        linecolor = xaxis.get('linecolor')
-        linewidth = xaxis.get('linewidth')
-        showline = xaxis.get('showline')
-
-        for axis_name in ('yaxis', 'zaxis'):
-            axis = scene.setdefault(axis_name, {})
-            if linecolor is not None:
-                axis['linecolor'] = linecolor
-            if linewidth is not None:
-                axis['linewidth'] = linewidth
-            if showline is not None:
-                axis['showline'] = showline
-
-    def _build_galactic_guide_traces(
-        self,
-        sun_x=0.0,
-        sun_y=0.0,
-        plane_z_model=(0.0, 0.0, 0.0),
-    ):
-        """Build four simple present-day Galactic quadrant boundaries."""
-        guide_color = self._reference_line_color()
-        label_color = self._reference_label_color()
-        plane_a, plane_b, plane_c = [
-            float(value)
-            for value in plane_z_model
-        ]
-
-        def plane_z(x_value, y_value):
-            return (
-                plane_a * float(x_value)
-                + plane_b * float(y_value)
-                + plane_c
-            )
-
-        try:
-            x_min, x_max = [float(v) for v in self.figure_layout['scene']['xaxis']['range']]
-        except Exception:
-            x_min, x_max = -10000.0, 10000.0
-        try:
-            y_min, y_max = [float(v) for v in self.figure_layout['scene']['yaxis']['range']]
-        except Exception:
-            y_min, y_max = -10000.0, 10000.0
-        xy_span = min(x_max - x_min, y_max - y_min)
-        ray_radius = 0.68 * np.hypot(x_max - x_min, y_max - y_min)
-        major_angles = np.deg2rad([0.0, 90.0, 180.0, 270.0])
-
-        major_x, major_y, major_z = [], [], []
-        for angle in major_angles:
-            end_x = float(sun_x) + ray_radius * np.cos(angle)
-            end_y = float(sun_y) + ray_radius * np.sin(angle)
-            major_x.extend([
-                float(sun_x),
-                end_x,
-                None,
-            ])
-            major_y.extend([
-                float(sun_y),
-                end_y,
-                None,
-            ])
-            major_z.extend([
-                plane_z(sun_x, sun_y),
-                plane_z(end_x, end_y),
-                None,
-            ])
-
-        # The four cardinal longitudes form the quadrant boundaries.
-        quadrants = _scatter3d(
-            x=major_x,
-            y=major_y,
-            z=major_z,
-            mode='lines',
-            line=dict(
-                color=guide_color,
-                width=self._reference_line_width(),
-                dash='solid',
-            ),
-            opacity=self._reference_opacity(),
-            name='Galactic Quadrants',
-            showlegend=False,
-            hoverinfo='skip'
-        )
-
-        # Put the four cardinal longitude labels far enough from the Sun to
-        # remain legible over the cluster field. They are intentionally large
-        # and screen-stable.
-        label_radius = 0.30 * xy_span
-        labels = ['ℓ = 0°', 'ℓ = 90°', 'ℓ = 180°', 'ℓ = 270°']
-        x_labels = [
-            float(sun_x) + label_radius * np.cos(angle)
-            for angle in major_angles
-        ]
-        y_labels = [
-            float(sun_y) + label_radius * np.sin(angle)
-            for angle in major_angles
-        ]
-
-        l_labels = _scatter3d(
-            x=x_labels,
-            y=y_labels,
-            z=[
-                plane_z(x_value, y_value)
-                for x_value, y_value in zip(x_labels, y_labels)
-            ],
-            mode='text',
-            text=labels,
-            textposition='middle center',
-            textfont=dict(
-                color=label_color,
-                size=28,
-                family='Inter, Helvetica Neue, Arial, sans-serif',
-            ),
-            opacity=0.92,
-            name='Galactic l Labels',
-            showlegend=False,
-            hoverinfo='skip',
-            meta={
-                'screen_stable_text': True,
-                'screen_px': 28.0,
-            },
-        )
-        return [quadrants, l_labels]
-
-    def _ordered_slider_times(self):
-        """Return times in the same order used by the time slider."""
-        time_neg = self.time[self.time < 0]
-        time_pos = self.time[self.time >= 0]
-
-        if (len(time_neg) > 0) and (len(time_pos) > 1):
-            return np.append(time_neg, time_pos)
-        if (len(time_neg) > 0) and (len(time_pos) == 1):
-            return np.flip(self.time)
-        return self.time
-
-    def _default_sun_for(self, wanted):
-        """Oviz's default Sun for this plot, or None: only when wanted, for a
-        real trace collection (not a test double), and only when the data
-        bring no trace named "Sun" of their own."""
-        from .traces import TraceCollection
-
-        base = self.data_collection
-        if not wanted or not isinstance(base, TraceCollection):
-            self._default_sun = None
-            return None
-        if any(str(getattr(c, 'data_name', '')).strip().lower() == 'sun' for c in base.get_all_clusters()):
-            self._default_sun = None
-            return None
-        if getattr(self, '_default_sun', None) is None:
-            self._default_sun = _default_sun_trace()
-        return self._default_sun
-
-    def _prepare_default_sun(self, sun, reference_frame_center, fade_in_time, fade_in_and_out, fade_in_and_disp, disp_time):
-        """Integrate the default Sun on the collection's time grid and frame
-        (again only when either changed) and size it like the other traces."""
-        time = np.asarray(self.data_collection.time, dtype=float)
-        key = (time.tobytes(), repr(reference_frame_center), self.vo, self.ro, self.zo, id(self.potential))
-        if getattr(self, '_default_sun_key', None) != key:
-            sun.integrate_orbits(
-                time, reference_frame_center=reference_frame_center,
-                potential=self.potential, vo=self.vo, ro=self.ro, zo=self.zo,
-            )
-            self._default_sun_key = key
-        if not sun.sizes_set:
-            sun.set_age_based_sizes(fade_in_time, fade_in_and_out, fade_in_and_disp, disp_time)
-
-    def set_focus(self, focus_group):
-        """Median ``x, y, z, U, V, W`` of the named trace, or None without a focus group."""
-        if not focus_group:
-            return None
-
-        focus_group_data = self.data_collection.get_cluster(focus_group).df
-        coords = focus_group_data[['x', 'y', 'z', 'U', 'V', 'W']].median().values
-        return coords
-
-    def _trace_name(self, trace):
-        """The ``name`` of a trace given as a dict or as an object with attributes."""
-        if isinstance(trace, dict):
-            return trace.get('name')
-        return getattr(trace, 'name', None)
-
-    def _set_trace_visible(self, trace, visible_flag):
-        """Set ``visible`` on a trace given as a dict or as an object with attributes."""
-        if isinstance(trace, dict):
-            trace['visible'] = visible_flag
-        else:
-            trace.visible = visible_flag
-
-    def get_visibility(self, trace_name: str, grouping: list):
-        """Initial visibility of a trace in a legend group: True, False or ``"legendonly"``.
-
-        A data trace shows when its name is in ``grouping``, and its orbit
-        track (``"<name> Track"``) with it. Other static traces, the default
-        Sun and the Galactic guides show in every group (static traces and
-        tracks as ``"legendonly"`` with ``static_traces_legendonly``).
-        Published spiral-arm models are listed in every group but start hidden.
-        """
-        if trace_name is None:
-            return False
-
-        if trace_name == KDE_TIME_MARKER_TRACE_NAME:
-            return True
-
-        if any(trace_name == model.name for model in getattr(self, 'spiral_arm_models', ())):
-            return "legendonly"
-
-        kde_source_trace = self._kde_source_trace_name(trace_name)
-        if kde_source_trace is not None:
-            return kde_source_trace in grouping
-
-        if trace_name.endswith(" Track"):
-            if trace_name.replace(" Track", "") not in grouping:
-                return False
-            return "legendonly" if self.static_traces_legendonly else True
-        if trace_name in self.base_static_trace_names:
-            return "legendonly" if self.static_traces_legendonly else True
-
-        # The default Sun is in every group, as the Galactic guides are.
-        if trace_name == SUN_TRACE_NAME and getattr(self, '_default_sun', None) is not None:
-            return True
-        if (
-            trace_name == 'GC'
-            or trace_name in GALACTIC_RADIUS_TRACE_NAMES
-            or trace_name in GALACTIC_GUIDE_TRACE_NAMES
-            or trace_name in SPIRAL_ARM_TRACE_NAMES
-        ):
-            return True
-        return trace_name in grouping
-
-    def _generate_scatter_list(
-        self,
-        cluster_groups,
-        t,
-        x_rf,
-        y_rf,
-        z_rf,
-        show_gc_line,
-        galactic_mode,
-        show_galactic_guides=True,
-        show_galactic_center_circles=True,
-        include_spiral_arms=False,
-        coord_system='centered'
-    ):
-        """All traces of the frame at time ``t``: one per cluster group, then the guides.
-
-        ``x_rf, y_rf, z_rf`` is the reference frame's position at ``t``. Outside
-        Galactic mode ``show_gc_line`` adds the R = 8.12 kpc circle; in Galactic
-        mode the two ``show_galactic_*`` flags control the circles and guides.
-        """
-        scatter_list = []
-        x_col, y_col, z_col = _xyz_columns(coord_system)
-
-        sun_x = 0.0
-        sun_y = 0.0
-
-        for cluster_group in cluster_groups:
-            assert cluster_group.integrated
-            df_int = cluster_group.df_int
-            if df_int.empty:
-                continue
-
-            # Rows per time step, indexed once per integrated table instead of
-            # rescanning every row for every frame (isclose semantics kept).
-            df_t = _rows_at_time(df_int, float(t))
-            if df_t.empty:
-                continue
-
-            # Build present-day (t=0) sky quantities for click->sky-panel callbacks.
-            df_t0 = _rows_at_time(df_int, 0.0)
-            if len(df_t0) != len(df_t):
-                # Fallback for any unexpected ordering/shape mismatch.
-                df_t0 = df_t
-
-            x0 = pd.to_numeric(df_t0[x_col], errors='coerce').to_numpy(dtype=float)
-            y0 = pd.to_numeric(df_t0[y_col], errors='coerce').to_numpy(dtype=float)
-            z0 = pd.to_numeric(df_t0[z_col], errors='coerce').to_numpy(dtype=float)
-
-            x_helio0 = pd.to_numeric(df_t0['x_helio'], errors='coerce').to_numpy(dtype=float)
-            y_helio0 = pd.to_numeric(df_t0['y_helio'], errors='coerce').to_numpy(dtype=float)
-            z_helio0 = pd.to_numeric(df_t0['z_helio'], errors='coerce').to_numpy(dtype=float)
-            dist0 = np.sqrt(x_helio0 ** 2 + y_helio0 ** 2 + z_helio0 ** 2)
-
-            with np.errstate(invalid='ignore', divide='ignore'):
-                l0 = np.rad2deg(np.arctan2(y_helio0, x_helio0))
-                l0 = np.mod(l0, 360.0)
-                b0 = np.rad2deg(np.arcsin(np.clip(z_helio0 / np.where(dist0 > 0, dist0, np.nan), -1.0, 1.0)))
-
-            if cluster_group.data_name.strip().lower() == 'sun':
-                sun_x = float(np.nanmedian(df_t[x_col].to_numpy(dtype=float)))
-                sun_y = float(np.nanmedian(df_t[y_col].to_numpy(dtype=float)))
-
-            age_at_t = df_t['age_myr'] + t
-            age_present = df_t['age_myr']
-            hovertext = (
-                '<b style="font-size:16px;">' + df_t['name'].str.replace('_', ' ').astype(str) + '</b>' + '<br>'  # Bold cluster name
-                + cluster_group.data_name + '<br>'  # Group name
-                + 'Age (now) = ' + age_present.round(1).astype(str) + ' Myr' + '<br>'
-                + 'Age (t) = ' + age_at_t.round(1).astype(str) + ' Myr' + '<br>'  # Cluster age at time t
-            )
-
-            if 'n_stars' in df_t.columns:
-                hovertext += 'N = ' + df_t['n_stars'].astype(str) + ' stars <br>'  # Number of stars
-
-            hovertext += (
-                f'({x_col},{y_col},{z_col}) = (' +
-                df_t[x_col].round(1).astype(str) + ', ' +
-                df_t[y_col].round(1).astype(str) + ', ' +
-                df_t[z_col].round(1).astype(str) + ')'
-            )
-
-            marker_dict = dict(
-                size=df_t['size'],
-                symbol=cluster_group.marker_style,
-                line=dict(color='black', width=0.0)
-            )
-
-            marker_dict.update(opacity=cluster_group.opacity)
-            if cluster_group.colormap:
-                age_full = df_int['age_myr'] + df_int['time']
-                cmin = cluster_group.cmin if cluster_group.cmin is not None else float(age_full.min())
-                cmax = cluster_group.cmax if cluster_group.cmax is not None else float(age_full.max())
-                marker_dict.update(
-                    color=age_at_t.values,
-                    colorscale=cluster_group.colormap,
-                    cmin=cmin,
-                    cmax=cmax
-                )
-            else:
-                marker_dict.update(color=cluster_group.color)
-
-            trace_color = cluster_group.color if isinstance(cluster_group.color, str) else 'white'
-            cluster_names = df_t['name'].astype(str).to_numpy(dtype=object)
-            trace_colors = np.repeat(trace_color, len(df_t)).astype(object)
-            if 'n_stars' in df_t.columns:
-                n_star_values = pd.to_numeric(df_t['n_stars'], errors='coerce').to_numpy(dtype=float)
-            else:
-                n_star_values = np.full(len(df_t), np.nan, dtype=float)
-            if 'name_all' in df_t.columns:
-                cluster_alias_values = (
-                    df_t['name_all'].fillna('').astype(str).to_numpy(dtype=object)
-                )
-            else:
-                cluster_alias_values = np.repeat('', len(df_t)).astype(object)
-
-            trace_meta = {
-                'trace_kind': 'cluster',
-                'size_by_n_stars': bool(getattr(cluster_group, 'size_by_n_stars', False)),
-            }
-            if cluster_group.colormap:
-                trace_meta.update({
-                    'color_by': 'age',
-                    'color_label': 'Age (Myr)',
-                    'colormap': str(cluster_group.colormap),
-                })
-
-            scatter_list.append(
-                _scatter3d(
-                    x=df_t[x_col].values,
-                    y=df_t[y_col].values,
-                    z=df_t[z_col].values,
-                    mode='markers',
-                    marker=marker_dict,
-                    customdata=np.column_stack((
-                        age_present.to_numpy(dtype=float),
-                        age_at_t.to_numpy(dtype=float),
-                        l0,
-                        b0,
-                        dist0,
-                        x0,
-                        y0,
-                        z0,
-                        cluster_names,
-                        trace_colors,
-                        n_star_values,
-                        cluster_alias_values,
-                    )),
-                    meta=trace_meta,
-                    hovertext=hovertext,
-                    hoverinfo='text',  # This removes default x, y, z
-                    hovertemplate='%{hovertext}<extra></extra>',  # This ensures only custom hovertext is shown
-                    name=cluster_group.data_name
-                )
-            )
-
-        show_reference_lines = show_gc_line if not galactic_mode else show_galactic_center_circles
-
-        if show_reference_lines:
-            if galactic_mode:
-                scatter_list.append(
-                    self._galactic_center_ring_trace(
-                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
-                    )
-                )
-                scatter_list.append(
-                    self._galactic_center_label_trace(
-                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
-                    )
-                )
-                scatter_list.extend(
-                    self._build_galactic_circles_with_labels(
-                        t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
-                    )
-                )
-            else:
-                if coord_system == 'rot':
-                    gc_line_t = self.rotating_gc_line_rot(t)
-                else:
-                    gc_line_t = self.rotating_gc_line(x_rf, y_rf, z_rf)
-                scatter_list.append(gc_line_t)
-
-        if galactic_mode and show_galactic_guides:
-            scatter_list.extend(
-                self._build_galactic_guide_traces(
-                    sun_x=sun_x,
-                    sun_y=sun_y,
-                    plane_z_model=self._galactic_plane_z_model(
-                        t=t,
-                        x_rf=x_rf,
-                        y_rf=y_rf,
-                        z_rf=z_rf,
-                        coord_system=coord_system,
-                    ),
-                )
-            )
-
-        if galactic_mode and include_spiral_arms:
-            scatter_list.extend(
-                self._build_spiral_arm_traces(
-                    t=t, x_rf=x_rf, y_rf=y_rf, z_rf=z_rf, coord_system=coord_system
-                )
-            )
-
-        for model in getattr(self, 'spiral_arm_models', ()):
-            scatter_list.append(
-                self._spiral_arm_model_trace(model, t, x_rf, y_rf, z_rf, coord_system=coord_system)
-            )
-
-        if self.show_age_kde_inset:
-            scatter_list.append(self._build_kde_time_marker_trace(t))
-            scatter_list.extend(self._build_kde_inset_traces())
-
-        return scatter_list
-
-    def _add_static_traces(self, frame, static_traces, static_traces_times, reference_frame_center, t):
-        """Append each static trace (``meta.static``) to the frame, or an empty one when hidden at ``t``.
-
-        ``static_traces_times[i]`` lists the times at which trace ``i`` shows.
-        With a focus group, traces other than tracks are recentred on it.
-        """
-        for i, st in enumerate(static_traces):
-            st_copy = copy.deepcopy(st)
-            existing_meta = st_copy.get('meta') if isinstance(st_copy, dict) else getattr(st_copy, 'meta', None)
-            existing_meta = existing_meta if isinstance(existing_meta, dict) else {}
-            st_copy['meta'] = {**existing_meta, 'static': True}
-            trace_name = self._trace_name(st_copy)
-
-            # Re-center if focusing on a group (except for tracks)
-            if (self.focus_group is not None) and trace_name and not trace_name.endswith('Track'):
-                for axis_idx, axis_key in enumerate(('x', 'y', 'z')):
-                    axis_values = st_copy.get(axis_key) if isinstance(st_copy, dict) else getattr(st_copy, axis_key, None)
-                    if axis_values is not None:
-                        st_copy[axis_key] = np.array(axis_values) - reference_frame_center[axis_idx]
-
-            if t in static_traces_times[i]:
-                frame['data'].append(st_copy)
-            else:
-                frame['data'].append(_scatter3d(
-                    x=[], y=[], z=[],
-                    name=trace_name,
-                    visible=False,
-                    meta={'static': True}
-                ))
-
-    def _initialize_figure(self, frames):
-        """Keep the t = 0 traces, with the first group's visibility, as ``initial_data``."""
-        default_group_key = list(self.trace_grouping_dict.keys())[0]  # e.g. "All"
-        grouping_0 = self.trace_grouping_dict[default_group_key]
-
-        # Find the frame for t=0
-        idx_zero = np.where(self.time == 0)[0][0]
-        starting_frame = copy.deepcopy(frames[idx_zero])
-
-        data_updated = []
-        for trace in starting_frame['data']:
-            trace_name = self._trace_name(trace)
-            visible_flag = self.get_visibility(trace_name, grouping_0)
-            self._set_trace_visible(trace, visible_flag)
-            data_updated.append(trace)
-
-        self.initial_data = copy.deepcopy(data_updated)
+    # Scene spec for the viewers ----------------------------------------------
 
     def _build_threejs_figure(self, frames):
         """Build the standalone figure wrapper from the current frame data."""
@@ -1818,6 +1804,7 @@ class Animate3D:
         )
 
     def _build_threejs_sky_panel_spec(self, default_catalog=None):
+        """Sky view settings and the member-star catalog per cluster."""
         if not getattr(self, 'enable_sky_panel', False):
             return {'enabled': False}
         if (
@@ -1857,6 +1844,7 @@ class Animate3D:
         }
 
     def _build_threejs_age_kde_spec(self, trace_key_by_name=None):
+        """The age KDE widget: one curve per trace and every cluster's present age."""
         if not getattr(self, 'show_age_kde_inset', False):
             return {'enabled': False}
 
@@ -1929,6 +1917,7 @@ class Animate3D:
         }
 
     def _build_threejs_cluster_filter_spec(self, trace_key_by_name=None):
+        """The cluster filter widget: one entry per cluster with its age and star count."""
         trace_key_by_name = trace_key_by_name or {}
         entries = []
         seen_keys = set()
@@ -1993,6 +1982,7 @@ class Animate3D:
         }
 
     def _build_threejs_dendrogram_spec(self, trace_key_by_name=None):
+        """The Birth tree widget: each cluster's birth position and sampled track."""
         trace_key_by_name = trace_key_by_name or {}
         entries = []
         trace_options = []
@@ -2136,6 +2126,7 @@ class Animate3D:
         }
 
     def _build_threejs_volume_layers(self):
+        """Volume layer specs, centred on the reference frame at t = 0."""
         if not getattr(self, 'volume_configs', None):
             return []
 
@@ -2458,12 +2449,83 @@ class Animate3D:
         return None
 
 
+# Theme and orbit tracks ------------------------------------------------------
 
-####################################################################################################
-DEFAULT_VIEWER = "oviz"
+
+def read_theme(plot):
+    """
+    Reads the theme configuration from a YAML file and sets up figure layout based on
+    the provided figure_theme (e.g., 'light', 'dark', etc.).
+    """
+    theme_resource = importlib.resources.files("oviz.themes").joinpath(f"{plot.figure_theme}.yaml")
+    with theme_resource.open("r", encoding="utf-8") as file:
+        layout = yaml.safe_load(file)
+
+    if plot.figure_theme == 'light':
+        layout['template'] = (
+            plot.light_template if plot.light_template else 'default'
+        )
+
+    if plot.xyz_ranges:
+        (x_low, x_high), (y_low, y_high), (z_low, z_high) = plot.xyz_ranges
+        x_width = x_high - x_low
+        y_width = y_high - y_low
+        z_width = z_high - z_low
+    else:
+        x_width, y_width, z_width = plot.xyz_widths
+        x_low, x_high = -x_width, x_width
+        y_low, y_high = -y_width, y_width
+        z_low, z_high = -z_width, z_width
+
+    xy_aspect = y_width / x_width
+    z_aspect = z_width / x_width
+
+    layout['scene']['xaxis']['range'] = [x_low, x_high]
+    layout['scene']['yaxis']['range'] = [y_low, y_high]
+    layout['scene']['zaxis']['range'] = [z_low, z_high]
+    layout['scene']['aspectratio']['x'] = 1
+    layout['scene']['aspectratio']['y'] = xy_aspect
+    layout['scene']['aspectratio']['z'] = z_aspect
+
+    return layout
+
+
+def plot_trace_tracks(sc, fade_in_time=0, coord_system='centered'):
+    """
+    Plots the tracks of a star cluster over time < 0 in a Scatter3d trace.
+    The size of markers changes with time in proportion to the cluster's 'max_size'.
+    """
+    df_int = sc.df_int
+
+    max_size = sc.max_size/2
+    min_size = sc.min_size/2
+    df_int = df_int.loc[(df_int['time'] <= 0) & (df_int['time'] > -1 * df_int['age_myr'] - fade_in_time)]
+
+    size_fade = min_size + (max_size - min_size) * (1 - np.abs(df_int['time']) / (df_int['age_myr'] + fade_in_time))
+    x_col, y_col, z_col = _xyz_columns(coord_system)
+
+    tracks = _scatter3d(
+        x=df_int[x_col].iloc[::1],
+        y=df_int[y_col].iloc[::1],
+        z=df_int[z_col].iloc[::1],
+        mode='markers',
+        marker=dict(
+            size=size_fade,
+            color=sc.color,
+            opacity=sc.opacity / 1.5,
+            line=dict(width=0)
+        ),
+        hoverinfo='none',
+        name=sc.data_name + ' Track'
+    )
+    return tracks
+
+
+# Value coercion --------------------------------------------------------------
 
 
 def _normalize_viewer_name(viewer):
+    """``"oviz"`` (the default) or ``"classic"`` from the names ``make_plot`` accepts."""
     if viewer is None:
         return DEFAULT_VIEWER
     name = str(viewer).strip().lower()
@@ -2475,6 +2537,7 @@ def _normalize_viewer_name(viewer):
 
 
 def _normalize_renderer_name(renderer):
+    """``"threejs"``, the only renderer; anything else raises ``ValueError``."""
     renderer_name = str(renderer).strip().lower()
     if renderer_name in ('three', 'threejs', 'three.js'):
         return 'threejs'
@@ -2482,6 +2545,7 @@ def _normalize_renderer_name(renderer):
 
 
 def _trace_to_scene_json(trace):
+    """A deep copy of a trace dict (or of a record with ``to_scene_json``)."""
     if isinstance(trace, dict):
         return copy.deepcopy(trace)
     if hasattr(trace, 'to_scene_json'):
@@ -2490,6 +2554,7 @@ def _trace_to_scene_json(trace):
 
 
 def _coerce_range(values, default):
+    """``[low, high]`` floats from a two-item sequence, else ``default``."""
     if not isinstance(values, (list, tuple, np.ndarray)) or len(values) != 2:
         return [float(default[0]), float(default[1])]
     try:
@@ -2499,6 +2564,7 @@ def _coerce_range(values, default):
 
 
 def _format_time_label(time_value):
+    """Frame label for a time in Myr: an integer when whole, else one decimal."""
     rounded = round(float(time_value), 10)
     if np.isclose(rounded, round(rounded), atol=1e-9):
         return str(int(round(rounded)))
@@ -2510,6 +2576,7 @@ def _is_sequence_value(value):
 
 
 def _expand_value(value, length, default=None):
+    """A list of ``length`` values from a scalar or a sequence (padded with its last item or cut)."""
     if length <= 0:
         return []
     if value is None:
@@ -2528,6 +2595,7 @@ def _expand_value(value, length, default=None):
 
 
 def _coerce_float(value, default=0.0):
+    """``float(value)`` when finite, else ``float(default)``."""
     try:
         out = float(value)
         if np.isfinite(out):
@@ -2538,6 +2606,7 @@ def _coerce_float(value, default=0.0):
 
 
 def _as_object_list(value):
+    """``value`` as a flat Python list (None gives an empty list, a scalar one item)."""
     if value is None:
         return []
     if isinstance(value, list):
@@ -2551,51 +2620,8 @@ def _as_object_list(value):
     return [value]
 
 
-def _color_to_css_and_opacity(color, base_opacity=1.0):
-    opacity = _coerce_float(base_opacity, 1.0)
-    if color is None:
-        return '#808080', opacity
-
-    if isinstance(color, (tuple, list)):
-        if len(color) == 4:
-            r, g, b, a = color
-            return (
-                f'rgb({int(r)}, {int(g)}, {int(b)})',
-                opacity * _coerce_float(a, 1.0),
-            )
-        if len(color) == 3:
-            r, g, b = color
-            return f'rgb({int(r)}, {int(g)}, {int(b)})', opacity
-
-    color_text = str(color).strip()
-    if not color_text:
-        return '#808080', opacity
-
-    lower = color_text.lower()
-    if lower.startswith('rgba(') and lower.endswith(')'):
-        inner = color_text[color_text.find('(') + 1: color_text.rfind(')')]
-        parts = [part.strip() for part in inner.split(',')]
-        if len(parts) == 4:
-            try:
-                r, g, b = [int(float(part)) for part in parts[:3]]
-                a = float(parts[3])
-                return f'rgb({r}, {g}, {b})', opacity * a
-            except Exception:
-                return color_text, opacity
-
-    if lower.startswith('rgb(') and lower.endswith(')'):
-        return color_text, opacity
-
-    if color_text.startswith('#'):
-        return color_text, opacity
-
-    try:
-        return webcolors.name_to_hex(color_text), opacity
-    except Exception:
-        return color_text, opacity
-
-
 def _threejs_file_to_data_url(path_value):
+    """An image file as a base64 ``data:`` URL, or None when there is no such file."""
     if not path_value:
         return None
     path = Path(path_value).expanduser()
@@ -2613,202 +2639,7 @@ def _threejs_file_to_data_url(path_value):
     return f'data:{mime_type};base64,{encoded}'
 
 
-def _resolve_marker_color_values(marker, length, default_opacity=1.0):
-    color_value = marker.get('color')
-    if color_value is None:
-        css, alpha = _color_to_css_and_opacity('#808080', default_opacity)
-        return [css] * length, [alpha] * length
-
-    numeric_values = _marker_numeric_color_values(marker, length)
-    if numeric_values is not None:
-        colorscale = marker.get('colorscale', 'Viridis')
-        cmin = _coerce_float(marker.get('cmin'), np.nan)
-        cmax = _coerce_float(marker.get('cmax'), np.nan)
-        finite_mask = np.isfinite(numeric_values)
-        if not np.isfinite(cmin):
-            cmin = float(np.nanmin(numeric_values[finite_mask])) if np.any(finite_mask) else 0.0
-        if not np.isfinite(cmax):
-            cmax = float(np.nanmax(numeric_values[finite_mask])) if np.any(finite_mask) else 1.0
-        scaled = np.zeros_like(numeric_values, dtype=float)
-        if not np.isclose(cmax, cmin, atol=1e-12):
-            scaled[finite_mask] = np.clip((numeric_values[finite_mask] - cmin) / (cmax - cmin), 0.0, 1.0)
-        css_values = ['#808080'] * length
-        alpha_values = [float(default_opacity)] * length
-        if np.any(finite_mask):
-            finite_indices = np.flatnonzero(finite_mask)
-            sampled = _sample_colorscale(colorscale, scaled[finite_mask].tolist())
-            for point_idx, item in zip(finite_indices, sampled):
-                css, alpha = _color_to_css_and_opacity(item, default_opacity)
-                css_values[int(point_idx)] = css
-                alpha_values[int(point_idx)] = alpha
-        return css_values, alpha_values
-
-    if _is_sequence_value(color_value):
-        color_values = list(np.asarray(color_value, dtype=object).tolist())
-        expanded = _expand_value(color_values, length, '#808080')
-        css_values = []
-        alpha_values = []
-        for item in expanded:
-            css, alpha = _color_to_css_and_opacity(item, default_opacity)
-            css_values.append(css)
-            alpha_values.append(alpha)
-        return css_values, alpha_values
-
-    css, alpha = _color_to_css_and_opacity(color_value, default_opacity)
-    return [css] * length, [alpha] * length
-
-
-def _marker_numeric_color_values(marker, length):
-    color_value = marker.get('color') if isinstance(marker, dict) else None
-    if color_value is None or length <= 0:
-        return None
-
-    if _is_sequence_value(color_value):
-        values = _as_object_list(color_value)
-        if len(values) not in (1, length):
-            return None
-        expanded = _expand_value(values, length, np.nan)
-    else:
-        expanded = [color_value] * length
-
-    numeric_values = []
-    has_finite = False
-    for value in expanded:
-        if value in (None, ''):
-            numeric_values.append(np.nan)
-            continue
-        try:
-            numeric_value = float(value)
-        except Exception:
-            return None
-        if np.isfinite(numeric_value):
-            has_finite = True
-            numeric_values.append(float(numeric_value))
-        else:
-            numeric_values.append(np.nan)
-
-    if not has_finite:
-        return None
-    return np.asarray(numeric_values, dtype=float)
-
-
-def _threejs_trace_color_by_spec(trace_json, points):
-    marker = trace_json.get('marker', {}) if isinstance(trace_json.get('marker'), dict) else {}
-    trace_meta = trace_json.get('meta') if isinstance(trace_json.get('meta'), dict) else {}
-    marker_color_scalars = _marker_numeric_color_values(marker, len(points))
-    scalar_values = np.asarray([
-        _coerce_float(point.get('color_scalar'), np.nan)
-        for point in points
-    ], dtype=float)
-    finite_mask = np.isfinite(scalar_values)
-    if not np.any(finite_mask):
-        return None
-
-    mode = str(trace_meta.get('color_by') or '').strip().lower()
-    if mode in ('none', 'false', 'off'):
-        return None
-    if not mode:
-        mode = 'age' if any(point.get('color_scalar_kind') == 'age' for point in points) else 'value'
-
-    label = str(trace_meta.get('color_label') or '').strip()
-    if not label:
-        label = 'Age (Myr)' if mode == 'age' else 'Value'
-
-    cmin = _coerce_float(marker.get('cmin'), np.nan)
-    cmax = _coerce_float(marker.get('cmax'), np.nan)
-    if not np.isfinite(cmin):
-        cmin = float(np.nanmin(scalar_values[finite_mask]))
-    if not np.isfinite(cmax):
-        cmax = float(np.nanmax(scalar_values[finite_mask]))
-    if not cmax > cmin:
-        cmax = float(cmin + 1.0)
-
-    selected_colormap = trace_meta.get('colormap') or marker.get('colorscale') or DEFAULT_THREEJS_TRACE_COLORMAP
-    if not isinstance(selected_colormap, str):
-        selected_colormap = DEFAULT_THREEJS_TRACE_COLORMAP
-    try:
-        colormap_options = _build_threejs_volume_colormap_options(selected_colormap)
-    except ValueError:
-        colormap_options = _build_threejs_volume_colormap_options(DEFAULT_THREEJS_TRACE_COLORMAP)
-
-    default_color_mode = str(trace_meta.get('default_color_mode') or '').strip().lower()
-    if default_color_mode not in ('fixed', 'by_value'):
-        default_color_mode = 'by_value' if marker_color_scalars is not None else 'fixed'
-
-    selected_option = colormap_options[0]
-    return {
-        'mode': mode,
-        'label': label,
-        'cmin': float(cmin),
-        'cmax': float(cmax),
-        'colormap': selected_option['name'],
-        'colormap_options': colormap_options,
-        'legend_color': selected_option.get('legend_color'),
-        'default_color_mode': default_color_mode,
-    }
-
-
-def _line_segments_from_trace(trace_json):
-    x_vals = _as_object_list(trace_json.get('x'))
-    y_vals = _as_object_list(trace_json.get('y'))
-    z_vals = _as_object_list(trace_json.get('z'))
-    segments = []
-    prev = None
-    for x_val, y_val, z_val in zip(x_vals, y_vals, z_vals):
-        if x_val is None or y_val is None or z_val is None:
-            prev = None
-            continue
-        try:
-            point = [float(x_val), float(y_val), float(z_val)]
-        except Exception:
-            prev = None
-            continue
-        if not all(np.isfinite(point)):
-            prev = None
-            continue
-        if prev is not None:
-            segments.append(prev + point)
-        prev = point
-    return segments
-
-
-def _first_trace_point(frame_json, trace_name):
-    """``{'x', 'y', 'z'}`` of the first point of the frame's scatter3d trace ``trace_name``, or None."""
-    for trace_json in frame_json.get('data', []):
-        if trace_json.get('type', 'scatter3d') != 'scatter3d':
-            continue
-        if trace_json.get('name') != trace_name:
-            continue
-        x_vals = _as_object_list(trace_json.get('x'))
-        y_vals = _as_object_list(trace_json.get('y'))
-        z_vals = _as_object_list(trace_json.get('z'))
-        if not x_vals or not y_vals or not z_vals:
-            continue
-        try:
-            return {
-                'x': float(x_vals[0]),
-                'y': float(y_vals[0]),
-                'z': float(z_vals[0]),
-            }
-        except Exception:
-            continue
-    return None
-
-
-def _image_plane_decoration(config, default_key, plane_center, opacity_scale):
-    """An ``image_plane`` frame decoration centred on ``plane_center`` in the Galactic plane."""
-    return {
-        'kind': 'image_plane',
-        'key': str(config.get('key') or default_key),
-        'center': {
-            'x': float(plane_center.get('x', 0.0)),
-            'y': float(plane_center.get('y', 0.0)),
-            'z': 0.0,
-        },
-        'opacity': float(np.clip(config.get('opacity', 0.6), 0.0, 1.0)),
-        'opacity_scale': opacity_scale,
-        'render_order': -20,
-    }
+# Integrated tables -----------------------------------------------------------
 
 
 def _xyz_columns(coord_system):
@@ -2869,6 +2700,9 @@ def _rows_at_time(df_int, t):
     return df_int.iloc[rows]
 
 
+# Galactic geometry and sky coordinates ---------------------------------------
+
+
 @functools.lru_cache(maxsize=32)
 def _radius_circle_xyz_pc(radius_kpc, frame):
     """Cartesian pc of a 1000-point galactocentric circle, in ``frame``.
@@ -2926,105 +2760,291 @@ def _galactic_to_icrs_deg(l_deg, b_deg):
     return (ra, dec)
 
 
-def _selection_from_customdata_row(row):
-    if row is None:
+# Colours ---------------------------------------------------------------------
+
+
+_COLOR_SCALE_STOPS = {
+    "viridis": ("#440154", "#31688e", "#35b779", "#fde725"),
+    "plasma": ("#0d0887", "#9c179e", "#ed7953", "#f0f921"),
+    "magma": ("#000004", "#51127c", "#b73779", "#fcfdbf"),
+    "inferno": ("#000004", "#57106e", "#bc3754", "#fcffa4"),
+    "cividis": ("#00224e", "#575d6d", "#a59c74", "#fee838"),
+    "turbo": ("#30123b", "#28a5f5", "#7ef658", "#fca636", "#7a0403"),
+    "greys": ("#000000", "#777777", "#ffffff"),
+    "gist_heat": ("#000000", "#b00000", "#ffff00", "#ffffff"),
+}
+
+
+def _hex_to_rgb_tuple(value):
+    """``(r, g, b)`` of a ``#rgb`` or ``#rrggbb`` colour; mid-grey when unreadable."""
+    value = str(value or "").strip().lstrip("#")
+    if len(value) == 3:
+        value = "".join(ch * 2 for ch in value)
+    if len(value) != 6:
+        return (128, 128, 128)
+    try:
+        return tuple(int(value[idx : idx + 2], 16) for idx in (0, 2, 4))
+    except ValueError:
+        return (128, 128, 128)
+
+
+def _sample_colorscale(colorscale, positions):
+    """``rgb(...)`` strings of a named or listed colour scale at ``positions`` in [0, 1]."""
+    if isinstance(colorscale, str):
+        stops = _COLOR_SCALE_STOPS.get(colorscale.strip().lower(), _COLOR_SCALE_STOPS["viridis"])
+    elif isinstance(colorscale, (list, tuple)) and colorscale:
+        raw_stops = []
+        for item in colorscale:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                raw_stops.append(item[1])
+            else:
+                raw_stops.append(item)
+        stops = tuple(str(item) for item in raw_stops) or _COLOR_SCALE_STOPS["viridis"]
+    else:
+        stops = _COLOR_SCALE_STOPS["viridis"]
+
+    rgbs = [_hex_to_rgb_tuple(stop) for stop in stops]
+    if len(rgbs) == 1:
+        rgbs = [rgbs[0], rgbs[0]]
+    out = []
+    for position in positions:
+        t = min(max(float(position), 0.0), 1.0)
+        scaled = t * (len(rgbs) - 1)
+        lo = int(np.floor(scaled))
+        hi = min(lo + 1, len(rgbs) - 1)
+        frac = scaled - lo
+        rgb = tuple(
+            int(round(rgbs[lo][channel] + (rgbs[hi][channel] - rgbs[lo][channel]) * frac))
+            for channel in range(3)
+        )
+        out.append(f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})")
+    return out
+
+
+def _color_to_css_and_opacity(color, base_opacity=1.0):
+    """A CSS colour and an opacity (``base_opacity`` times any alpha) from a colour value."""
+    opacity = _coerce_float(base_opacity, 1.0)
+    if color is None:
+        return '#808080', opacity
+
+    if isinstance(color, (tuple, list)):
+        if len(color) == 4:
+            r, g, b, a = color
+            return (
+                f'rgb({int(r)}, {int(g)}, {int(b)})',
+                opacity * _coerce_float(a, 1.0),
+            )
+        if len(color) == 3:
+            r, g, b = color
+            return f'rgb({int(r)}, {int(g)}, {int(b)})', opacity
+
+    color_text = str(color).strip()
+    if not color_text:
+        return '#808080', opacity
+
+    lower = color_text.lower()
+    if lower.startswith('rgba(') and lower.endswith(')'):
+        inner = color_text[color_text.find('(') + 1: color_text.rfind(')')]
+        parts = [part.strip() for part in inner.split(',')]
+        if len(parts) == 4:
+            try:
+                r, g, b = [int(float(part)) for part in parts[:3]]
+                a = float(parts[3])
+                return f'rgb({r}, {g}, {b})', opacity * a
+            except Exception:
+                return color_text, opacity
+
+    if lower.startswith('rgb(') and lower.endswith(')'):
+        return color_text, opacity
+
+    if color_text.startswith('#'):
+        return color_text, opacity
+
+    try:
+        return webcolors.name_to_hex(color_text), opacity
+    except Exception:
+        return color_text, opacity
+
+
+def _resolve_marker_color_values(marker, length, default_opacity=1.0):
+    """Per-point CSS colours and alphas of a marker: fixed, listed, or numbers on its colour scale."""
+    color_value = marker.get('color')
+    if color_value is None:
+        css, alpha = _color_to_css_and_opacity('#808080', default_opacity)
+        return [css] * length, [alpha] * length
+
+    numeric_values = _marker_numeric_color_values(marker, length)
+    if numeric_values is not None:
+        colorscale = marker.get('colorscale', 'Viridis')
+        cmin = _coerce_float(marker.get('cmin'), np.nan)
+        cmax = _coerce_float(marker.get('cmax'), np.nan)
+        finite_mask = np.isfinite(numeric_values)
+        if not np.isfinite(cmin):
+            cmin = float(np.nanmin(numeric_values[finite_mask])) if np.any(finite_mask) else 0.0
+        if not np.isfinite(cmax):
+            cmax = float(np.nanmax(numeric_values[finite_mask])) if np.any(finite_mask) else 1.0
+        scaled = np.zeros_like(numeric_values, dtype=float)
+        if not np.isclose(cmax, cmin, atol=1e-12):
+            scaled[finite_mask] = np.clip((numeric_values[finite_mask] - cmin) / (cmax - cmin), 0.0, 1.0)
+        css_values = ['#808080'] * length
+        alpha_values = [float(default_opacity)] * length
+        if np.any(finite_mask):
+            finite_indices = np.flatnonzero(finite_mask)
+            sampled = _sample_colorscale(colorscale, scaled[finite_mask].tolist())
+            for point_idx, item in zip(finite_indices, sampled):
+                css, alpha = _color_to_css_and_opacity(item, default_opacity)
+                css_values[int(point_idx)] = css
+                alpha_values[int(point_idx)] = alpha
+        return css_values, alpha_values
+
+    if _is_sequence_value(color_value):
+        color_values = list(np.asarray(color_value, dtype=object).tolist())
+        expanded = _expand_value(color_values, length, '#808080')
+        css_values = []
+        alpha_values = []
+        for item in expanded:
+            css, alpha = _color_to_css_and_opacity(item, default_opacity)
+            css_values.append(css)
+            alpha_values.append(alpha)
+        return css_values, alpha_values
+
+    css, alpha = _color_to_css_and_opacity(color_value, default_opacity)
+    return [css] * length, [alpha] * length
+
+
+def _marker_numeric_color_values(marker, length):
+    """The marker's colours as numbers (NaN for blanks), or None unless all are numeric and some finite."""
+    color_value = marker.get('color') if isinstance(marker, dict) else None
+    if color_value is None or length <= 0:
         return None
 
-    values = _as_object_list(row)
-    if len(values) <= CUSTOMDATA_IDX_Z0:
+    if _is_sequence_value(color_value):
+        values = _as_object_list(color_value)
+        if len(values) not in (1, length):
+            return None
+        expanded = _expand_value(values, length, np.nan)
+    else:
+        expanded = [color_value] * length
+
+    numeric_values = []
+    has_finite = False
+    for value in expanded:
+        if value in (None, ''):
+            numeric_values.append(np.nan)
+            continue
+        try:
+            numeric_value = float(value)
+        except Exception:
+            return None
+        if np.isfinite(numeric_value):
+            has_finite = True
+            numeric_values.append(float(numeric_value))
+        else:
+            numeric_values.append(np.nan)
+
+    if not has_finite:
+        return None
+    return np.asarray(numeric_values, dtype=float)
+
+
+def _threejs_trace_color_by_spec(trace_json, points):
+    """The trace's colour-by-value settings (scale, range, colormaps), or None without scalars."""
+    marker = trace_json.get('marker', {}) if isinstance(trace_json.get('marker'), dict) else {}
+    trace_meta = trace_json.get('meta') if isinstance(trace_json.get('meta'), dict) else {}
+    marker_color_scalars = _marker_numeric_color_values(marker, len(points))
+    scalar_values = np.asarray([
+        _coerce_float(point.get('color_scalar'), np.nan)
+        for point in points
+    ], dtype=float)
+    finite_mask = np.isfinite(scalar_values)
+    if not np.any(finite_mask):
         return None
 
-    l_deg = _coerce_float(values[CUSTOMDATA_IDX_L0_DEG], np.nan)
-    b_deg = _coerce_float(values[CUSTOMDATA_IDX_B0_DEG], np.nan)
-    dist_pc = _coerce_float(values[CUSTOMDATA_IDX_DIST0_PC], np.nan)
-    x0 = _coerce_float(values[CUSTOMDATA_IDX_X0], np.nan)
-    y0 = _coerce_float(values[CUSTOMDATA_IDX_Y0], np.nan)
-    z0 = _coerce_float(values[CUSTOMDATA_IDX_Z0], np.nan)
-    if (not np.isfinite(l_deg)) or (not np.isfinite(b_deg)):
+    mode = str(trace_meta.get('color_by') or '').strip().lower()
+    if mode in ('none', 'false', 'off'):
         return None
+    if not mode:
+        mode = 'age' if any(point.get('color_scalar_kind') == 'age' for point in points) else 'value'
 
-    age_now = _coerce_float(values[CUSTOMDATA_IDX_AGE_NOW], np.nan)
-    age_at_t = _coerce_float(values[CUSTOMDATA_IDX_AGE_AT_T], np.nan)
-    click_time_myr = np.nan
-    if np.isfinite(age_now) and np.isfinite(age_at_t):
-        click_time_myr = float(age_at_t - age_now)
-    ra_deg, dec_deg = _galactic_to_icrs_deg(l_deg, b_deg)
+    label = str(trace_meta.get('color_label') or '').strip()
+    if not label:
+        label = 'Age (Myr)' if mode == 'age' else 'Value'
 
-    cluster_name = None
-    if len(values) > CUSTOMDATA_IDX_CLUSTER_NAME and values[CUSTOMDATA_IDX_CLUSTER_NAME] not in (None, ''):
-        cluster_name = str(values[CUSTOMDATA_IDX_CLUSTER_NAME])
+    cmin = _coerce_float(marker.get('cmin'), np.nan)
+    cmax = _coerce_float(marker.get('cmax'), np.nan)
+    if not np.isfinite(cmin):
+        cmin = float(np.nanmin(scalar_values[finite_mask]))
+    if not np.isfinite(cmax):
+        cmax = float(np.nanmax(scalar_values[finite_mask]))
+    if not cmax > cmin:
+        cmax = float(cmin + 1.0)
 
-    cluster_color = None
-    if len(values) > CUSTOMDATA_IDX_CLUSTER_COLOR and values[CUSTOMDATA_IDX_CLUSTER_COLOR] not in (None, ''):
-        cluster_color = str(values[CUSTOMDATA_IDX_CLUSTER_COLOR])
-    n_stars = np.nan
-    if len(values) > CUSTOMDATA_IDX_N_STARS:
-        n_stars = _coerce_float(values[CUSTOMDATA_IDX_N_STARS], np.nan)
-    cluster_aliases = ''
-    if (
-        len(values) > CUSTOMDATA_IDX_CLUSTER_ALIASES
-        and values[CUSTOMDATA_IDX_CLUSTER_ALIASES] not in (None, '')
-    ):
-        cluster_aliases = str(values[CUSTOMDATA_IDX_CLUSTER_ALIASES])
+    selected_colormap = trace_meta.get('colormap') or marker.get('colorscale') or DEFAULT_THREEJS_TRACE_COLORMAP
+    if not isinstance(selected_colormap, str):
+        selected_colormap = DEFAULT_THREEJS_TRACE_COLORMAP
+    try:
+        colormap_options = _build_threejs_volume_colormap_options(selected_colormap)
+    except ValueError:
+        colormap_options = _build_threejs_volume_colormap_options(DEFAULT_THREEJS_TRACE_COLORMAP)
 
+    default_color_mode = str(trace_meta.get('default_color_mode') or '').strip().lower()
+    if default_color_mode not in ('fixed', 'by_value'):
+        default_color_mode = 'by_value' if marker_color_scalars is not None else 'fixed'
+
+    selected_option = colormap_options[0]
     return {
-        'l_deg': float(l_deg),
-        'b_deg': float(b_deg),
-        'dist_pc': float(dist_pc) if np.isfinite(dist_pc) else np.nan,
-        'x0': float(x0) if np.isfinite(x0) else np.nan,
-        'y0': float(y0) if np.isfinite(y0) else np.nan,
-        'z0': float(z0) if np.isfinite(z0) else np.nan,
-        'age_now_myr': float(age_now) if np.isfinite(age_now) else np.nan,
-        'age_at_t_myr': float(age_at_t) if np.isfinite(age_at_t) else np.nan,
-        'click_time_myr': float(click_time_myr) if np.isfinite(click_time_myr) else np.nan,
-        'ra_deg': float(ra_deg) if np.isfinite(ra_deg) else np.nan,
-        'dec_deg': float(dec_deg) if np.isfinite(dec_deg) else np.nan,
-        'cluster_name': cluster_name,
-        'cluster_color': cluster_color,
-        'n_stars': float(n_stars) if np.isfinite(n_stars) else np.nan,
-        'name_all': cluster_aliases,
+        'mode': mode,
+        'label': label,
+        'cmin': float(cmin),
+        'cmax': float(cmax),
+        'colormap': selected_option['name'],
+        'colormap_options': colormap_options,
+        'legend_color': selected_option.get('legend_color'),
+        'default_color_mode': default_color_mode,
     }
 
 
-def _selection_identity_key(selection):
-    if not isinstance(selection, dict):
-        return ''
-
-    cluster_name = str(selection.get('cluster_name') or '').strip()
-    if cluster_name:
-        return cluster_name
-
-    x0 = _coerce_float(selection.get('x0'), np.nan)
-    y0 = _coerce_float(selection.get('y0'), np.nan)
-    z0 = _coerce_float(selection.get('z0'), np.nan)
-    if np.isfinite(x0) and np.isfinite(y0) and np.isfinite(z0):
-        return f'{x0:.6f}|{y0:.6f}|{z0:.6f}'
-
-    ra_deg = _coerce_float(selection.get('ra_deg'), np.nan)
-    dec_deg = _coerce_float(selection.get('dec_deg'), np.nan)
-    if np.isfinite(ra_deg) and np.isfinite(dec_deg):
-        return f'{ra_deg:.6f}|{dec_deg:.6f}'
-
-    return str(selection.get('trace_name') or '').strip()
+# Viewer primitives: points, line segments, labels, decorations ---------------
 
 
-def _motion_from_selection(selection):
-    if not isinstance(selection, dict):
-        return None
+def _galactic_simple_allowed_trace_names(plot):
+    """Trace names Galactic-lite exports keep: the defaults plus every grouped trace."""
+    allowed = set(GALACTIC_SIMPLE_ALLOWED_TRACE_NAMES)
+    trace_grouping_dict = getattr(plot, 'trace_grouping_dict', {}) or {}
+    for grouped_trace_names in trace_grouping_dict.values():
+        if isinstance(grouped_trace_names, str):
+            grouped_trace_names = [grouped_trace_names]
+        if not isinstance(grouped_trace_names, (list, tuple, set, np.ndarray, pd.Series)):
+            continue
+        for trace_name in grouped_trace_names:
+            if trace_name not in (None, ''):
+                allowed.add(str(trace_name))
+    return allowed
 
-    age_now_myr = _coerce_float(selection.get('age_now_myr'), np.nan)
-    age_at_t_myr = _coerce_float(selection.get('age_at_t_myr'), np.nan)
-    if (not np.isfinite(age_now_myr)) or (not np.isfinite(age_at_t_myr)):
-        return None
 
-    return {
-        'key': _selection_identity_key(selection),
-        'cluster_name': str(selection.get('cluster_name') or '').strip(),
-        'trace_name': str(selection.get('trace_name') or '').strip(),
-        'age_now_myr': float(age_now_myr),
-        'age_at_t_myr': float(age_at_t_myr),
-        'time_myr': float(age_at_t_myr - age_now_myr),
-    }
+def _line_segments_from_trace(trace_json):
+    """``[x0, y0, z0, x1, y1, z1]`` segments joining consecutive finite points (None breaks a line)."""
+    x_vals = _as_object_list(trace_json.get('x'))
+    y_vals = _as_object_list(trace_json.get('y'))
+    z_vals = _as_object_list(trace_json.get('z'))
+    segments = []
+    prev = None
+    for x_val, y_val, z_val in zip(x_vals, y_vals, z_vals):
+        if x_val is None or y_val is None or z_val is None:
+            prev = None
+            continue
+        try:
+            point = [float(x_val), float(y_val), float(z_val)]
+        except Exception:
+            prev = None
+            continue
+        if not all(np.isfinite(point)):
+            prev = None
+            continue
+        if prev is not None:
+            segments.append(prev + point)
+        prev = point
+    return segments
 
 
 def _points_from_trace(
@@ -3035,6 +3055,8 @@ def _points_from_trace(
     include_motion=True,
     include_n_stars=True,
 ):
+    """Point records of a markers trace: position, size, symbol, colour and opacity,
+    plus hover text, selection, motion and star count as requested."""
     x_vals = _as_object_list(trace_json.get('x'))
     y_vals = _as_object_list(trace_json.get('y'))
     z_vals = _as_object_list(trace_json.get('z'))
@@ -3115,6 +3137,7 @@ def _points_from_trace(
 
 
 def _annotate_threejs_point_motion_ranges(frame_specs):
+    """Add each moving object's size and opacity range over all frames to its ``motion`` records."""
     motion_ranges = {}
     for frame_spec in frame_specs:
         for trace in frame_spec.get('traces', []):
@@ -3164,6 +3187,7 @@ def _annotate_threejs_point_motion_ranges(frame_specs):
 
 
 def _labels_from_trace(trace_json):
+    """Text labels of a ``text`` trace, with font, colour and screen-size settings."""
     x_vals = _as_object_list(trace_json.get('x'))
     y_vals = _as_object_list(trace_json.get('y'))
     z_vals = _as_object_list(trace_json.get('z'))
@@ -3228,11 +3252,163 @@ def _labels_from_trace(trace_json):
     return labels
 
 
+def _first_trace_point(frame_json, trace_name):
+    """``{'x', 'y', 'z'}`` of the first point of the frame's scatter3d trace ``trace_name``, or None."""
+    for trace_json in frame_json.get('data', []):
+        if trace_json.get('type', 'scatter3d') != 'scatter3d':
+            continue
+        if trace_json.get('name') != trace_name:
+            continue
+        x_vals = _as_object_list(trace_json.get('x'))
+        y_vals = _as_object_list(trace_json.get('y'))
+        z_vals = _as_object_list(trace_json.get('z'))
+        if not x_vals or not y_vals or not z_vals:
+            continue
+        try:
+            return {
+                'x': float(x_vals[0]),
+                'y': float(y_vals[0]),
+                'z': float(z_vals[0]),
+            }
+        except Exception:
+            continue
+    return None
+
+
+def _image_plane_decoration(config, default_key, plane_center, opacity_scale):
+    """An ``image_plane`` frame decoration centred on ``plane_center`` in the Galactic plane."""
+    return {
+        'kind': 'image_plane',
+        'key': str(config.get('key') or default_key),
+        'center': {
+            'x': float(plane_center.get('x', 0.0)),
+            'y': float(plane_center.get('y', 0.0)),
+            'z': 0.0,
+        },
+        'opacity': float(np.clip(config.get('opacity', 0.6), 0.0, 1.0)),
+        'opacity_scale': opacity_scale,
+        'render_order': -20,
+    }
+
+
+# Selections and Sky member catalogs ------------------------------------------
+
+
+def _selection_from_customdata_row(row):
+    """A cluster's selection record (sky position, ages, name, colour) from its customdata row."""
+    if row is None:
+        return None
+
+    values = _as_object_list(row)
+    if len(values) <= CUSTOMDATA_IDX_Z0:
+        return None
+
+    l_deg = _coerce_float(values[CUSTOMDATA_IDX_L0_DEG], np.nan)
+    b_deg = _coerce_float(values[CUSTOMDATA_IDX_B0_DEG], np.nan)
+    dist_pc = _coerce_float(values[CUSTOMDATA_IDX_DIST0_PC], np.nan)
+    x0 = _coerce_float(values[CUSTOMDATA_IDX_X0], np.nan)
+    y0 = _coerce_float(values[CUSTOMDATA_IDX_Y0], np.nan)
+    z0 = _coerce_float(values[CUSTOMDATA_IDX_Z0], np.nan)
+    if (not np.isfinite(l_deg)) or (not np.isfinite(b_deg)):
+        return None
+
+    age_now = _coerce_float(values[CUSTOMDATA_IDX_AGE_NOW], np.nan)
+    age_at_t = _coerce_float(values[CUSTOMDATA_IDX_AGE_AT_T], np.nan)
+    click_time_myr = np.nan
+    if np.isfinite(age_now) and np.isfinite(age_at_t):
+        click_time_myr = float(age_at_t - age_now)
+    ra_deg, dec_deg = _galactic_to_icrs_deg(l_deg, b_deg)
+
+    cluster_name = None
+    if len(values) > CUSTOMDATA_IDX_CLUSTER_NAME and values[CUSTOMDATA_IDX_CLUSTER_NAME] not in (None, ''):
+        cluster_name = str(values[CUSTOMDATA_IDX_CLUSTER_NAME])
+
+    cluster_color = None
+    if len(values) > CUSTOMDATA_IDX_CLUSTER_COLOR and values[CUSTOMDATA_IDX_CLUSTER_COLOR] not in (None, ''):
+        cluster_color = str(values[CUSTOMDATA_IDX_CLUSTER_COLOR])
+    n_stars = np.nan
+    if len(values) > CUSTOMDATA_IDX_N_STARS:
+        n_stars = _coerce_float(values[CUSTOMDATA_IDX_N_STARS], np.nan)
+    cluster_aliases = ''
+    if (
+        len(values) > CUSTOMDATA_IDX_CLUSTER_ALIASES
+        and values[CUSTOMDATA_IDX_CLUSTER_ALIASES] not in (None, '')
+    ):
+        cluster_aliases = str(values[CUSTOMDATA_IDX_CLUSTER_ALIASES])
+
+    return {
+        'l_deg': float(l_deg),
+        'b_deg': float(b_deg),
+        'dist_pc': float(dist_pc) if np.isfinite(dist_pc) else np.nan,
+        'x0': float(x0) if np.isfinite(x0) else np.nan,
+        'y0': float(y0) if np.isfinite(y0) else np.nan,
+        'z0': float(z0) if np.isfinite(z0) else np.nan,
+        'age_now_myr': float(age_now) if np.isfinite(age_now) else np.nan,
+        'age_at_t_myr': float(age_at_t) if np.isfinite(age_at_t) else np.nan,
+        'click_time_myr': float(click_time_myr) if np.isfinite(click_time_myr) else np.nan,
+        'ra_deg': float(ra_deg) if np.isfinite(ra_deg) else np.nan,
+        'dec_deg': float(dec_deg) if np.isfinite(dec_deg) else np.nan,
+        'cluster_name': cluster_name,
+        'cluster_color': cluster_color,
+        'n_stars': float(n_stars) if np.isfinite(n_stars) else np.nan,
+        'name_all': cluster_aliases,
+    }
+
+
+def _selection_identity_key(selection):
+    """A stable key for a selection: cluster name, else position, else sky position, else trace."""
+    if not isinstance(selection, dict):
+        return ''
+
+    cluster_name = str(selection.get('cluster_name') or '').strip()
+    if cluster_name:
+        return cluster_name
+
+    x0 = _coerce_float(selection.get('x0'), np.nan)
+    y0 = _coerce_float(selection.get('y0'), np.nan)
+    z0 = _coerce_float(selection.get('z0'), np.nan)
+    if np.isfinite(x0) and np.isfinite(y0) and np.isfinite(z0):
+        return f'{x0:.6f}|{y0:.6f}|{z0:.6f}'
+
+    ra_deg = _coerce_float(selection.get('ra_deg'), np.nan)
+    dec_deg = _coerce_float(selection.get('dec_deg'), np.nan)
+    if np.isfinite(ra_deg) and np.isfinite(dec_deg):
+        return f'{ra_deg:.6f}|{dec_deg:.6f}'
+
+    return str(selection.get('trace_name') or '').strip()
+
+
+def _motion_from_selection(selection):
+    """The record the viewer uses to fade a cluster in time, or None without both ages."""
+    if not isinstance(selection, dict):
+        return None
+
+    age_now_myr = _coerce_float(selection.get('age_now_myr'), np.nan)
+    age_at_t_myr = _coerce_float(selection.get('age_at_t_myr'), np.nan)
+    if (not np.isfinite(age_now_myr)) or (not np.isfinite(age_at_t_myr)):
+        return None
+
+    return {
+        'key': _selection_identity_key(selection),
+        'cluster_name': str(selection.get('cluster_name') or '').strip(),
+        'trace_name': str(selection.get('trace_name') or '').strip(),
+        'age_now_myr': float(age_now_myr),
+        'age_at_t_myr': float(age_at_t_myr),
+        'time_myr': float(age_at_t_myr - age_now_myr),
+    }
+
+
 def _normalize_threejs_cluster_catalog_key(value):
+    """A cluster name reduced to lower-case letters and digits, for matching member catalogs."""
     return ''.join(character for character in str(value or '').strip().lower() if character.isalnum())
 
 
 def _load_threejs_cluster_catalog(cluster_members_file, cluster_names=None):
+    """Member stars per cluster from a CSV (name plus l/b or ra/dec), or None.
+
+    With ``cluster_names`` only those clusters are read (matched on their
+    normalized names). Each keeps at most ``MAX_SELECTED_MEMBER_POINTS`` stars.
+    """
     if not cluster_members_file:
         return None
 
@@ -3486,6 +3662,7 @@ def _load_threejs_cluster_catalog(cluster_members_file, cluster_names=None):
 
 
 def _catalog_point_from_selection(selection, default_label=''):
+    """A Sky catalog point (l, b, ra, dec, label) from a selection, or None."""
     if not isinstance(selection, dict):
         return None
 
@@ -3507,6 +3684,7 @@ def _catalog_point_from_selection(selection, default_label=''):
 
 
 def _limit_catalog_points(points):
+    """Copies of at most ``MAX_SELECTED_MEMBER_POINTS`` evenly spaced points."""
     if not points:
         return []
     if len(points) <= MAX_SELECTED_MEMBER_POINTS:
@@ -3517,6 +3695,7 @@ def _limit_catalog_points(points):
 
 
 def _threejs_catalog_from_frame_spec(frame_spec):
+    """Sky catalog points per trace, cluster name and alias from a frame's selections."""
     if not isinstance(frame_spec, dict):
         return {}
 
@@ -3557,6 +3736,7 @@ def _threejs_catalog_from_frame_spec(frame_spec):
 
 
 def _merge_threejs_member_catalogs(*catalogs):
+    """Merge catalogs (later ones win per key), copying the point lists."""
     merged = {}
     for catalog in catalogs:
         if not isinstance(catalog, dict):
@@ -3568,7 +3748,11 @@ def _merge_threejs_member_catalogs(*catalogs):
     return merged
 
 
+# Volumes: configuration ------------------------------------------------------
+
+
 def _normalize_threejs_volume_configs(volumes):
+    """``make_plot(volumes=...)`` as a list of config dicts (a path becomes ``{'path': ...}``)."""
     if volumes in (None, False):
         return []
 
@@ -3699,6 +3883,7 @@ def _normalize_threejs_volume_clip_bounds(volume_cfg):
 
 
 def _threejs_volume_max_resolution_cap(volume_cfg, data_shape_zyx, *, minimum):
+    """The largest resampled size allowed per axis: the config's cap within [minimum, data size]."""
     data_limit = max(int(v) for v in data_shape_zyx)
     requested_cap = volume_cfg.get(
         'max_resolution_cap',
@@ -3711,6 +3896,9 @@ def _threejs_volume_max_resolution_cap(volume_cfg, data_shape_zyx, *, minimum):
             data_limit,
         )
     )
+
+
+# Volumes: layer specs --------------------------------------------------------
 
 
 def _xyz_shape(shape_zyx):
@@ -3741,6 +3929,7 @@ def _quantize_volume_uint8(data, data_min, data_max):
 
 
 def _uint8_b64(quantized):
+    """Raw bytes of a uint8 array as base64 text."""
     return base64.b64encode(quantized.tobytes(order='C')).decode('ascii')
 
 
@@ -4198,7 +4387,11 @@ def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, in
     }
 
 
+# Volumes: FITS cubes ---------------------------------------------------------
+
+
 def _resolve_threejs_volume_hdu(hdul, hdu_selector):
+    """The FITS HDU holding the cube: the requested one, or the best 3D candidate."""
     if hdu_selector not in (None, '', 'auto', 'AUTO'):
         resolved_hdu = _resolve_threejs_volume_hdu_explicit(hdul, hdu_selector)
         cube_data_zyx, axis_numbers_zyx = _coerce_threejs_volume_cube(resolved_hdu.data)
@@ -4303,6 +4496,7 @@ def _threejs_volume_hdu_label(hdul, hdu):
 
 
 def _coerce_threejs_volume_cube(data):
+    """A numeric 3D (z, y, x) cube without singleton axes, and its FITS axis numbers."""
     arr = np.asarray(data)
     if arr.size == 0:
         raise ValueError("FITS volume HDU is empty.")
@@ -4324,6 +4518,7 @@ def _coerce_threejs_volume_cube(data):
 
 
 def _downsample_threejs_volume_with_zoom(data, target_shape_zyx):
+    """``data`` resampled (linear) to ``target_shape_zyx`` as float32."""
     from scipy.ndimage import zoom
 
     source_shape = tuple(int(v) for v in np.shape(data))
@@ -4346,6 +4541,7 @@ def _downsample_threejs_volume_with_zoom(data, target_shape_zyx):
 
 
 def _threejs_volume_axis_bounds(header, axis_number, axis_size):
+    """Outer edges of a FITS axis from its WCS keywords, or +/- half its size without them."""
     cdelt_key = f'CDELT{axis_number}'
     crval_key = f'CRVAL{axis_number}'
     crpix_key = f'CRPIX{axis_number}'
@@ -4368,6 +4564,7 @@ def _threejs_volume_axis_bounds(header, axis_number, axis_size):
 
 
 def _threejs_volume_axis_centers(header, axis_number, axis_size):
+    """Voxel-centre coordinates along a FITS axis (indices without WCS keywords)."""
     cdelt_key = f'CDELT{axis_number}'
     crval_key = f'CRVAL{axis_number}'
     crpix_key = f'CRPIX{axis_number}'
@@ -4421,7 +4618,11 @@ def _threejs_volume_clip_axis_slice(
     return slice(start, stop), (float(raw_lower), float(raw_upper))
 
 
+# Volumes: colormaps ----------------------------------------------------------
+
+
 def _normalize_threejs_volume_opacity_function(opacity_function):
+    """An Nx2 array of sorted (position, alpha) points spanning [0, 1]; linear by default."""
     if opacity_function is None or opacity_function is False:
         return np.asarray([[0.0, 0.0], [1.0, 1.0]], dtype=float)
     if isinstance(opacity_function, str) and not opacity_function.strip():
@@ -4466,6 +4667,7 @@ def _normalize_threejs_volume_opacity_function(opacity_function):
 
 
 def _build_threejs_volume_colormap_options(selected_colormap, opacity_function=None):
+    """The selected colormap followed by the defaults (and their reverses) as 1024-step RGBA LUTs."""
     options = []
     seen = set()
     requested = []
@@ -4504,6 +4706,7 @@ def _build_threejs_volume_colormap_options(selected_colormap, opacity_function=N
 
 
 def _sample_threejs_volume_colormap(colormap_value, n_samples=1024, opacity_function=None):
+    """``(name, RGBA uint8 LUT)`` of a colormap with the opacity curve applied, or None."""
     values = np.linspace(0.0, 1.0, int(n_samples), dtype=float)
 
     cmap_obj = _resolve_threejs_volume_colormap_object(colormap_value)
@@ -4527,6 +4730,7 @@ def _sample_threejs_volume_colormap(colormap_value, n_samples=1024, opacity_func
 
 
 def _resolve_threejs_volume_colormap_object(colormap_value):
+    """``(label, callable)`` for a colormap name (matplotlib or ``colormaps``) or callable, or None."""
     if colormap_value is None:
         colormap_value = 'inferno'
 
@@ -4641,72 +4845,3 @@ def _finalize_threejs_volume_colormap(name, cmap, reversed_requested=False):
 
     reversed_callable.name = _threejs_reversed_colormap_name(label)
     return str(reversed_callable.name), reversed_callable
-
-
-def read_theme(plot):
-    """
-    Reads the theme configuration from a YAML file and sets up figure layout based on
-    the provided figure_theme (e.g., 'light', 'dark', etc.).
-    """
-    theme_resource = importlib.resources.files("oviz.themes").joinpath(f"{plot.figure_theme}.yaml")
-    with theme_resource.open("r", encoding="utf-8") as file:
-        layout = yaml.safe_load(file)
-
-    if plot.figure_theme == 'light':
-        layout['template'] = (
-            plot.light_template if plot.light_template else 'default'
-        )
-
-    if plot.xyz_ranges:
-        (x_low, x_high), (y_low, y_high), (z_low, z_high) = plot.xyz_ranges
-        x_width = x_high - x_low
-        y_width = y_high - y_low
-        z_width = z_high - z_low
-    else:
-        x_width, y_width, z_width = plot.xyz_widths
-        x_low, x_high = -x_width, x_width
-        y_low, y_high = -y_width, y_width
-        z_low, z_high = -z_width, z_width
-
-    xy_aspect = y_width / x_width
-    z_aspect = z_width / x_width
-
-    layout['scene']['xaxis']['range'] = [x_low, x_high]
-    layout['scene']['yaxis']['range'] = [y_low, y_high]
-    layout['scene']['zaxis']['range'] = [z_low, z_high]
-    layout['scene']['aspectratio']['x'] = 1
-    layout['scene']['aspectratio']['y'] = xy_aspect
-    layout['scene']['aspectratio']['z'] = z_aspect
-
-    return layout
-
-
-def plot_trace_tracks(sc, fade_in_time=0, coord_system='centered'):
-    """
-    Plots the tracks of a star cluster over time < 0 in a Scatter3d trace.
-    The size of markers changes with time in proportion to the cluster's 'max_size'.
-    """
-    df_int = sc.df_int
-
-    max_size = sc.max_size/2
-    min_size = sc.min_size/2
-    df_int = df_int.loc[(df_int['time'] <= 0) & (df_int['time'] > -1 * df_int['age_myr'] - fade_in_time)]
-
-    size_fade = min_size + (max_size - min_size) * (1 - np.abs(df_int['time']) / (df_int['age_myr'] + fade_in_time))
-    x_col, y_col, z_col = _xyz_columns(coord_system)
-
-    tracks = _scatter3d(
-        x=df_int[x_col].iloc[::1],
-        y=df_int[y_col].iloc[::1],
-        z=df_int[z_col].iloc[::1],
-        mode='markers',
-        marker=dict(
-            size=size_fade,
-            color=sc.color,
-            opacity=sc.opacity / 1.5,
-            line=dict(width=0)
-        ),
-        hoverinfo='none',
-        name=sc.data_name + ' Track'
-    )
-    return tracks
