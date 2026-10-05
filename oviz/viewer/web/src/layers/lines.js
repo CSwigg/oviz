@@ -91,6 +91,7 @@ export class LinesLayer {
     this.byKey = new Map();
     this.program = createProgram(gl, VERT, FRAG, { label: "lines" });
     this.cornerBuffer = createBuffer(gl, CORNERS);
+    this._offset = [0, 0, 0]; // scratch for per-frame offsets
     this.params = null;
   }
 
@@ -166,7 +167,7 @@ export class LinesLayer {
       const c = style.colorOverride ? parseColor(style.colorOverride) : b.color;
       prog.tex("uFrameTex", b.frameTex.texture);
       prog.i("uCount", 2 * b.count).i("uFrames", b.posFrames).f("uFrame", p.frame);
-      const off = frameOffset(b.offsets, p.frame);
+      const off = frameOffset(b.offsets, p.frame, this._offset);
       prog.v3("uOffset", off[0], off[1], off[2]);
       prog.f("uWidth", Math.max(0.6, (lineStyle.width || 1) * (style.sizeScale || 1)) * frame.dpr);
       // A colour picked for the layer replaces its per-segment colours.

@@ -12,6 +12,7 @@ import { showOnlySurvey, blendSurvey, hideSurvey, crossfadeToWavelength, layersI
 import { parseColor } from "../core/color.js";
 import { smoothstep, clamp, icrsToGal } from "../core/math.js";
 import { cloneJson } from "../app/state.js";
+import { cpuFramePosition, frameOffset } from "../engine/frames.js";
 
 // Aladin colormaps and stretches offered for a survey (classic Oviz list).
 const SKY_COLORMAPS = [
@@ -455,6 +456,8 @@ export class SkyPlugin {
     if (sig === this._clusterSig) return;
     this._clusterSig = sig;
     const styles = v.points.params?.styles;
+    // Positions as v.objectPosition gives them, without its per-call arrays.
+    const p = [0, 0, 0], p0 = [0, 0, 0], off = [0, 0, 0], off0 = [0, 0, 0];
     m.updateClusters((state, color) => {
       state.fill(0);
       color.fill(0);
@@ -464,11 +467,16 @@ export class SkyPlugin {
         const style = styles?.get(key);
         const trace = v.traceByKey.get(key);
         const d = v.data.get(key);
+        if (!trace.points || !d) continue;
         const batch = v.points.byKey.get(key);
         const bits = batch?.state;
         const dim = style?.dimOpacity ?? 0.16;
         const base = parseColor(ts.color || trace.color);
+        const rgb = d.rgb && !ts.color ? d.rgb : null;
         const opacityScale = ((ts.opacity ?? trace.opacity) / (trace.opacity || 1)) * g.pointOpacity * (style?.presence ?? 1);
+        const F = trace.points.position.frames || 1, N = trace.points.count;
+        frameOffset(d.offset, frame, off);
+        frameOffset(d.offset, zero, off0);
         for (let i = 0; i < link.length; i++) {
           const c = link[i];
           if (c < 0 || state[c * 4 + 3] > 0) continue;
@@ -479,20 +487,17 @@ export class SkyPlugin {
           const b = bits ? bits[i] : 0;
           const w = Math.min(b & 2 ? 0 : b & 33 ? dim : 1, batch ? batch.lassoWeight(i, mix, dim) : 1);
           if (w <= 0.001) continue;
-          const p = v.objectPosition(key, i, frame);
-          const p0 = v.objectPosition(key, i, zero);
-          if (!p || !p0) continue;
+          if (!cpuFramePosition(d.position, F, N, i, frame, p) || !cpuFramePosition(d.position, F, N, i, zero, p0)) continue;
           let alpha = opacityScale * w;
           const age = d.ageNow ? d.ageNow[i] : NaN;
           if (age === age) alpha *= t >= -age ? 1 : 0;
-          state[c * 4] = p[0] - p0[0];
-          state[c * 4 + 1] = p[1] - p0[1];
-          state[c * 4 + 2] = p[2] - p0[2];
+          state[c * 4] = (p[0] + off[0]) - (p0[0] + off0[0]);
+          state[c * 4 + 1] = (p[1] + off[1]) - (p0[1] + off0[1]);
+          state[c * 4 + 2] = (p[2] + off[2]) - (p0[2] + off0[2]);
           state[c * 4 + 3] = clamp(alpha, 0, 1);
-          const rgb = d.rgb && !ts.color ? [d.rgb[i * 3] / 255, d.rgb[i * 3 + 1] / 255, d.rgb[i * 3 + 2] / 255] : base;
-          color[c * 4] = rgb[0] * 255;
-          color[c * 4 + 1] = rgb[1] * 255;
-          color[c * 4 + 2] = rgb[2] * 255;
+          color[c * 4] = (rgb ? rgb[i * 3] / 255 : base[0]) * 255;
+          color[c * 4 + 1] = (rgb ? rgb[i * 3 + 1] / 255 : base[1]) * 255;
+          color[c * 4 + 2] = (rgb ? rgb[i * 3 + 2] / 255 : base[2]) * 255;
           const sf = d.starsFactor ? d.starsFactor[i] : 1;
           color[c * 4 + 3] = clamp(sf / 2.75, 0, 1) * 255;
         }

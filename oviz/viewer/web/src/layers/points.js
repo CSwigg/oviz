@@ -626,6 +626,7 @@ export class PointsLayer {
     this.trailProgram = null; // compiled on first use
     this.trailBuffer = null;
     this.lassoMix = [1, 1];
+    this._offset = [0, 0, 0]; // scratch for per-frame offsets
     this.textures = starTextures(gl);
     this.cmapTextures = new Map();
     this.fallbackCmap = createTexture2D(gl, {
@@ -652,34 +653,40 @@ export class PointsLayer {
     }));
   }
 
-  _uniforms(prog, frame, batch, style, global) {
+  /** Uniforms shared by every trace in a frame (set once per draw pass). */
+  _frameUniforms(prog, frame, global) {
     const cam = frame.camera;
     prog.m4("uViewProj", cam.viewProj).m4("uView", cam.view).f("uProjY", cam.proj[5]);
     prog.v2("uViewport", frame.width, frame.height);
+    prog.f("uFrame", global.frame).f("uTime", global.time);
+    prog.f("uPointScale", global.pointScale);
+    prog.f("uGlobalSize", global.pointSize);
+    prog.f("uGlow", global.glow);
+    prog.v3("uFade", global.fadeTime, global.fadeInOut ? 1 : 0, global.fadeByOpacity ? 1 : 0);
+    prog.f("uHoverBoost", 1.0);
+    prog.f("uMinPx", 1.25 * frame.dpr);
+    prog.f("uPickMinPx", PICK_MIN_PX * frame.dpr);
+    prog.f("uMemberFade", global.memberFade ?? 0);
+    prog.v2("uLassoMix", this.lassoMix[0], this.lassoMix[1]);
+  }
+
+  /** Uniforms of one trace. */
+  _batchUniforms(prog, batch, style, global) {
     prog.tex("uFrameTex", batch.frameTex.texture);
-    prog.i("uCount", batch.count).i("uFrames", batch.texFrames).f("uFrame", global.frame).f("uTime", global.time);
+    prog.i("uCount", batch.count).i("uFrames", batch.texFrames);
     if (batch.hasAux) {
       prog.tex("uAuxTex", batch.auxTex.texture).i("uAuxFrames", batch.auxFrames).i("uHasAux", 1);
     } else {
       prog.tex("uAuxTex", batch.frameTex.texture).i("uAuxFrames", 1).i("uHasAux", 0);
     }
-    const off = frameOffset(batch.offsets, global.frame);
+    const off = frameOffset(batch.offsets, global.frame, this._offset);
     prog.v3("uOffset", off[0], off[1], off[2]);
-    prog.f("uPointScale", global.pointScale);
     prog.f("uSizeScale", style.sizeScale * global.pointSize);
-    prog.f("uGlobalSize", global.pointSize);
     prog.f("uOpacityScale", style.opacityScale * global.pointOpacity * Math.min(1, style.presence ?? 1));
-    prog.f("uGlow", global.glow);
-    prog.v3("uFade", global.fadeTime, global.fadeInOut ? 1 : 0, global.fadeByOpacity ? 1 : 0);
     prog.f("uStarsExp", style.starsExp);
     prog.i("uHover", style.hover ?? -1);
-    prog.f("uHoverBoost", 1.0);
-    prog.f("uMinPx", 1.25 * frame.dpr);
-    prog.f("uPickMinPx", PICK_MIN_PX * frame.dpr);
     prog.f("uDimOpacity", style.dimOpacity ?? 0.16);
     prog.i("uHasAge", batch.hasAge ? 1 : 0);
-    prog.f("uMemberFade", global.memberFade ?? 0);
-    prog.v2("uLassoMix", this.lassoMix[0], this.lassoMix[1]);
   }
 
   /** How far a State change's lasso fade has got: fade-out and fade-in, 0–1 (1, 1 at rest). */
@@ -732,7 +739,7 @@ export class PointsLayer {
       } else {
         prog.tex("uAuxTex", batch.frameTex.texture).i("uAuxFrames", 1).i("uHasAux", 0);
       }
-      const off = frameOffset(batch.offsets, p.frame);
+      const off = frameOffset(batch.offsets, p.frame, this._offset);
       prog.v3("uOffset", off[0], off[1], off[2]);
       prog.f("uOpacityScale", style.opacityScale * p.pointOpacity * Math.min(1, style.presence ?? 1));
       prog.f("uDimOpacity", style.dimOpacity ?? 0.16);
@@ -766,10 +773,11 @@ export class PointsLayer {
     gl.depthMask(false);
     prog.tex("uHaloTex", this.textures.halo);
     prog.tex("uCoreTex", this.textures.core);
+    this._frameUniforms(prog, frame, p);
     for (const batch of this.batches) {
       const style = p.styles.get(batch.key);
       if (!style || !style.visible || style.presence <= 0.001) continue;
-      this._uniforms(prog, frame, batch, style, p);
+      this._batchUniforms(prog, batch, style, p);
       const colorMode = style.colorMode === "by_value" && batch.trace.colorBy ? 1 : 0;
       prog.i("uColorMode", colorMode);
       if (colorMode) {
@@ -794,10 +802,11 @@ export class PointsLayer {
     const gl = this.gl;
     const prog = this.pickProgram.use();
     gl.disable(gl.BLEND);
+    this._frameUniforms(prog, frame, p);
     for (const batch of this.batches) {
       const style = p.styles.get(batch.key);
       if (!style || !style.visible || style.presence <= 0.001 || style.pickable === false) continue;
-      this._uniforms(prog, frame, batch, style, p);
+      this._batchUniforms(prog, batch, style, p);
       prog.i("uPickTrace", batch.pickId);
       gl.bindVertexArray(batch.vao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, batch.count);
