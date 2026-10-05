@@ -2442,10 +2442,7 @@ class Animate3D:
 
 
 def read_theme(plot):
-    """
-    Reads the theme configuration from a YAML file and sets up figure layout based on
-    the provided figure_theme (e.g., 'light', 'dark', etc.).
-    """
+    """The layout of ``oviz/themes/<figure_theme>.yaml`` with the plot's axis ranges and aspect ratio."""
     theme_resource = importlib.resources.files("oviz.themes").joinpath(f"{plot.figure_theme}.yaml")
     with theme_resource.open("r", encoding="utf-8") as file:
         layout = yaml.safe_load(file)
@@ -2480,9 +2477,10 @@ def read_theme(plot):
 
 
 def plot_trace_tracks(sc, fade_in_time=0, coord_system='centered'):
-    """
-    Plots the tracks of a star cluster over time < 0 in a Scatter3d trace.
-    The size of markers changes with time in proportion to the cluster's 'max_size'.
+    """A markers trace of a trace's past positions since birth (``"<name> Track"``).
+
+    Markers shrink from half ``max_size`` today towards half ``min_size`` at
+    ``fade_in_time`` Myr before birth.
     """
     df_int = sc.df_int
 
@@ -2494,9 +2492,9 @@ def plot_trace_tracks(sc, fade_in_time=0, coord_system='centered'):
     x_col, y_col, z_col = _xyz_columns(coord_system)
 
     tracks = _scatter3d(
-        x=df_int[x_col].iloc[::1],
-        y=df_int[y_col].iloc[::1],
-        z=df_int[z_col].iloc[::1],
+        x=df_int[x_col],
+        y=df_int[y_col],
+        z=df_int[z_col],
         mode='markers',
         marker=dict(
             size=size_fade,
