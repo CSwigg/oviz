@@ -105,8 +105,8 @@ Output
 The figure is a single file that can be attached, opened from disk, or put on
 any static host such as GitHub Pages. The viewer runtime is inlined, so the
 3D scene works offline; Aladin Lite and the HiPS sky surveys load from the
-network. Large figures stay compact: the July 25 figure (about 1,800 clusters,
-61 frames, three volumes and 30,000 member stars) is 24 MB.
+network. Large figures stay compact: the October 1 figure (about 1,700
+clusters over 61 frames, three volumes and 590,000 member stars) is 26 MB.
 
 
 Testing
