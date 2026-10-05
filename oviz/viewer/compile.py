@@ -85,6 +85,17 @@ def _strip_heavy(value: Any, limit: int = 20000) -> Any:
     return value
 
 
+def _local_names(value: Any) -> Any:
+    """Keep only the file name of ``*_path`` settings, so figures never embed local paths."""
+
+    if isinstance(value, dict):
+        return {k: (v.replace("\\", "/").rsplit("/", 1)[-1] if isinstance(v, str) and str(k).endswith("_path")
+                    else _local_names(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_local_names(v) for v in value]
+    return value
+
+
 def _clean_json(value: Any) -> Any:
     """Make a value strict-JSON safe (NaN/Inf → None, tuples → lists)."""
 
@@ -1332,8 +1343,8 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
     }
 
     animation = spec.get("animation") or {}
-    initial_state = _remap_frame_fields(_clean_json(_strip_heavy(init)), order)
-    states = _remap_states_frames(_clean_json(spec.get("states") or {}), order)
+    initial_state = _remap_frame_fields(_local_names(_clean_json(_strip_heavy(init))), order)
+    states = _remap_states_frames(_local_names(_clean_json(spec.get("states") or {})), order)
     items = (states.get("items") if isinstance(states, dict) else None) or []
     for snapshot in [initial_state, *[i.get("snapshot") for i in items if isinstance(i, dict)]]:
         _rename_state_colormaps(snapshot, tc.colormap_names, volume_colormaps)

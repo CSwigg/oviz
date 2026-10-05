@@ -34,13 +34,19 @@ def _hsl_to_rgb(h: float, s: float, l: float) -> tuple[float, float, float]:
     return r * 255, g * 255, b * 255
 
 
-@lru_cache(maxsize=4096)
 def parse_color(value: object, default: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)):
     """Return an (r, g, b, a) tuple in 0..1 for any CSS-ish colour value."""
 
+    if isinstance(value, list) or getattr(value, "ndim", 0) >= 1:
+        value = tuple(value.tolist() if hasattr(value, "tolist") else value)  # lists and arrays are unhashable
+    return _parse_color(value, tuple(default))
+
+
+@lru_cache(maxsize=4096)
+def _parse_color(value: object, default: tuple[float, float, float, float]):
     if value is None:
         return default
-    if isinstance(value, (tuple, list)) and len(value) in (3, 4):
+    if isinstance(value, tuple) and len(value) in (3, 4):
         vals = [float(v) for v in value]
         scale = 255.0 if max(vals[:3]) > 1.0 else 1.0
         a = vals[3] if len(vals) == 4 else 1.0

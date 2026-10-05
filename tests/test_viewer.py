@@ -185,6 +185,22 @@ class CompileEdgeCaseTests(unittest.TestCase):
         self.assertAlmostEqual(snaps[0]["current_frame_value"], 0.0)
         self.assertAlmostEqual(snaps[1]["current_frame_value"], 1.5)  # halfway between t=0 and t=-1
 
+    def test_local_file_paths_keep_only_their_names(self):
+        spec = _spec_with_rings()
+        spec["initial_state"] = {"galaxy_image_path": "/Users/someone/Downloads/milky_way.jpg"}
+        spec["states"] = {"items": [{"id": "a", "name": "A", "snapshot": {"galaxy_image_path": "C:\\data\\mw.jpg"}}]}
+        m = compile_scene_spec(spec).manifest
+        self.assertEqual(m["initialState"]["galaxy_image_path"], "milky_way.jpg")
+        self.assertEqual(m["states"]["items"][0]["snapshot"]["galaxy_image_path"], "mw.jpg")
+        self.assertNotIn("/Users/", json.dumps(m))
+
+    def test_parse_color_accepts_lists_and_arrays(self):
+        from oviz.viewer.colors import parse_color
+
+        self.assertEqual(parse_color([255, 0, 0]), (1.0, 0.0, 0.0, 1.0))
+        self.assertEqual(parse_color(np.array([0.0, 0.0, 1.0, 0.5])), (0.0, 0.0, 1.0, 0.5))
+        self.assertEqual(parse_color((0, 255, 0)), (0.0, 1.0, 0.0, 1.0))
+
     def test_points_never_collapse_to_rigid_offsets(self):
         spec = _spec_with_rings()
         for f, frame in enumerate(spec["frames"]):
