@@ -28,7 +28,7 @@ import io
 import math
 import re
 from collections import OrderedDict
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 
@@ -451,15 +451,15 @@ class _TraceCompiler:
             out["symbol"] = {"blob": b.array(symbol, "u8", hint=f"{key}-symbol", priority=CRITICAL)}
             out["symbols"] = SYMBOLS
         if not np.all(np.isnan(age_now)):
-            out["ageNow"] = {"blob": b.array(np.where(np.isnan(age_now), np.nan, age_now), "f32", hint=f"{key}-age", priority=CRITICAL)}
+            out["ageNow"] = {"blob": b.array(age_now, "f32", hint=f"{key}-age", priority=CRITICAL)}
         if spec["hasStars"] and not np.all(np.isnan(n_stars)):
             out["nStars"] = {"blob": b.array(np.nan_to_num(n_stars, nan=-1.0), "f32", hint=f"{key}-nstars", priority=CRITICAL)}
             out["starsFactor"] = {"blob": b.array(_stars_factor(n_stars), "f32", hint=f"{key}-stars", priority=CRITICAL)}
 
-        out["meta"] = self._meta_columns(key, ids, info, age_now, n_stars)
+        out["meta"] = self._meta_columns(key, ids, info)
         return out
 
-    def _meta_columns(self, key, ids, info, age_now, n_stars) -> dict[str, Any]:
+    def _meta_columns(self, key, ids, info) -> dict[str, Any]:
         N = len(ids)
         names: list[str] = []
         aliases: list[str] = []
@@ -522,16 +522,13 @@ class _TraceCompiler:
         acc = 0.0
         for s in range(S):
             a, b_ = p[2 * s], p[2 * s + 1]
-            if s > 0 and not np.allclose(a, p[2 * s - 1], equal_nan=False):
-                acc += 0.0
             arc[2 * s] = acc
             seg_len = float(np.linalg.norm(b_ - a)) if np.all(np.isfinite(a)) and np.all(np.isfinite(b_)) else 0.0
             acc += seg_len
             arc[2 * s + 1] = acc
         line = ref.get("line") if isinstance(ref.get("line"), dict) else {}
         color = line.get("color") or spec["color"]
-        r, g, b_, a = parse_color(color)
-        opacity = _num(ref.get("opacity"), _num(ref.get("default_opacity"), 1.0)) * a
+        opacity = _num(ref.get("opacity"), _num(ref.get("default_opacity"), 1.0)) * parse_color(color)[3]
         pos = _fill_absent_frames(pos, spec.get("presence"))
         out = {
             "count": S,
@@ -663,7 +660,9 @@ class _ColormapRegistry:
 # Volumes
 
 
-def _decode_png_atlas(b64: str, nx: int, ny: int, nz: int, tiles_x: int, z_start: int, out: np.ndarray) -> int:
+def _decode_png_atlas(b64: str, nx: int, ny: int, nz: int, z_start: int, out: np.ndarray) -> int:
+    """Copy the z-slices tiled across a PNG atlas into ``out``, from ``z_start``; return how many."""
+
     from PIL import Image  # pillow ships with the scientific stack
 
     img = Image.open(io.BytesIO(base64.b64decode(b64)))
@@ -694,17 +693,16 @@ def _volume_bytes(layer: dict[str, Any]) -> tuple[np.ndarray, np.ndarray | None]
         encoding = str(src.get("encoding") or src.get("data_encoding") or "uint8")
         b64 = src.get("data_b64")
         slabs = src.get("data_b64_slabs") or src.get("slabs")
-        tiles = src.get("atlas_tiles") or src.get("data_atlas_tiles") or {}
         if encoding.startswith("png_atlas"):
             out = np.zeros((nz, ny, nx), dtype=np.uint8)
             if b64:
-                _decode_png_atlas(b64, nx, ny, nz, int(tiles.get("x", 1) or 1), 0, out)
+                _decode_png_atlas(b64, nx, ny, nz, 0, out)
             elif isinstance(slabs, list):
                 z = 0
                 for slab in slabs:
                     data = slab.get("data_b64") if isinstance(slab, dict) else slab
                     z_start = int(slab.get("z_start", z)) if isinstance(slab, dict) else z
-                    z += _decode_png_atlas(data, nx, ny, nz, int(tiles.get("x", 1) or 1), z_start, out)
+                    z += _decode_png_atlas(data, nx, ny, nz, z_start, out)
             else:
                 return None
             return out
