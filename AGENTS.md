@@ -27,25 +27,22 @@ Prefer `Trace` and `TraceCollection` for phase-space samples. Use `Layer` and
 `Scene3D` is the astronomy-facing alias of `Animate3D`.
 
 ```python
-from oviz import Scene3D, Trace, TraceCollection, build_threejs_profile
+from oviz import Scene3D, Trace, TraceCollection
 
 trace = Trace(table, data_name="Young clusters", color="#e34a4a")
-scene = Scene3D(
-    TraceCollection([trace]),
-    xyz_widths=(2000, 2000, 600),
-    figure_theme="dark",
-)
+scene = Scene3D(TraceCollection([trace]), figure_theme="dark")
 figure = scene.make_plot(
-    time=time_myr,                 # must include 0
+    time=time_myr,                 # Myr, evenly spaced, must include 0
     galactic_mode=True,
     enable_sky_panel=True,
-    renderer="threejs",
-    threejs_initial_state=build_threejs_profile("full"),
-    compress_scene_spec=True,
-    show=False,
 )
 figure.write_html(output_path)
 ```
+
+`make_plot` returns an `OvizFigure`. `threejs_initial_state` (or a named
+profile from `build_threejs_profile`) sets how the figure opens; it is
+optional. [SKILL.md](SKILL.md) is the figure-author's guide: data columns,
+volumes, members, spiral arms, saved views and large builds.
 
 Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
 `name`, and `age_myr`. `n_stars` is required only when
@@ -68,8 +65,7 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
 
 ## Scene and runtime rules
 
-- The Oviz viewer is the maintained runtime. Plotly paths exist for
-  compatibility.
+- The Oviz viewer is the maintained runtime.
 - Change the Python builders, the viewer sources in `oviz/viewer/web/`, or
   `oviz/threejs_runtime_*.py` for the classic runtime. Do not hand-edit a
   generated HTML artifact as the source of truth.
@@ -162,11 +158,13 @@ python -m http.server 8812 --bind 127.0.0.1 --directory /tmp
 - Generate stored figures with compact payloads and keep
   `tests/main_figure.html` below 100 MB.
 - The October 1 figure (`oviz_figures/oviz_oct1.html` on the website) is
-  `tests/main_figure_oct1.py`. It uses the July 25 clusters in the Khalil et al.
+  `tests/main_figure_oct1.py`: the July 25 clusters in the Khalil et al.
   (2025) spiral potential, with Khalil and Castro-Ginard arm traces that start
-  hidden. A plain run re-wraps the stored science source
-  (`tests/main_figure_oct1_source.html`) with the current viewer in seconds.
-  `--rebuild-source` re-runs the science.
+  hidden. A plain run re-wraps the science source
+  `tests/main_figure_oct1_source.html` (local and untracked) with the current
+  viewer in seconds; `--rebuild-source` re-runs the science from the July 25
+  inputs. The pulsar traces come from a local ATNF table (`--pulsars PATH`)
+  and are skipped when it is missing.
 - Preserve unrelated dirty and untracked files. Stage only the source, focused
   tests, and canonical artifact required by the task.
 
