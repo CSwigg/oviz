@@ -145,3 +145,53 @@ test("only attached or present-day annotations depend on time", () => {
   assert.deepEqual(pos, [11, 12, 13]);
   assert.equal(resolveAnnotPoint({ trace: "t", index: 1 }, () => null), null);
 });
+
+test("boxes: half sizes, corners and what lies inside", async () => {
+  const { boxCorners, insideBox, BOX_EDGES } = await import("../../oviz/viewer/web/src/ui/annotate-model.js");
+  const doc = normalizeAnnotations({ items: [{ kind: "box", center: [10, 0, 0], size: [20, 10, 4], select: "isolate", style: "edges" }] });
+  const box = doc.items[0];
+  assert.deepEqual(box.radii, [10, 5, 2]);
+  assert.equal(box.style, "box");           // unknown styles fall back
+  assert.equal(box.select, "isolate");
+  const c = boxCorners(box, [10, 0, 0]);
+  assert.deepEqual(c[0], [0, -5, -2]);
+  assert.deepEqual(c[7], [20, 5, 2]);
+  assert.equal(BOX_EDGES.length, 12);
+  assert.ok(BOX_EDGES.every(([a, b]) => [1, 2, 4].includes(a ^ b)));
+  assert.ok(insideBox(box, [10, 0, 0], [19, 4, 1]));
+  assert.ok(!insideBox(box, [10, 0, 0], [21, 0, 0]));
+  // Turned 90° about z, the long side lies along y.
+  const turned = { ...box, rot: [0, 0, 90] };
+  assert.ok(insideBox(turned, [10, 0, 0], [10, 9, 0]));
+  assert.ok(!insideBox(turned, [10, 0, 0], [19, 0, 0]));
+});
+
+test("selections: inside a shell, a box, or within reach of a curve", async () => {
+  const { selectionTest, curveReach } = await import("../../oviz/viewer/web/src/ui/annotate-model.js");
+  const shell = normalizeAnnotations({ items: [{ kind: "sphere", center: [0, 0, 0], radius: 10, select: "highlight" }] }).items[0];
+  const inShell = selectionTest(shell, { center: [0, 0, 0] });
+  assert.ok(inShell([0, 9, 0]) && !inShell([0, 11, 0]));
+  assert.equal(selectionTest({ ...shell, select: undefined }, { center: [0, 0, 0] }), null);
+  const line = normalizeAnnotations({ items: [{ kind: "curve", points: [[0, 0, 0], [100, 0, 0]], select: "highlight", reach: 5 }] }).items[0];
+  const samples = curveSamples([[0, 0, 0], [100, 0, 0]], { smooth: 0 }).points;
+  const near = selectionTest(line, { samples });
+  assert.ok(near([50, 4, 0]) && near([50, 0, -4.9]));
+  assert.ok(!near([50, 6, 0]) && !near([-6, 0, 0]));
+  // Without a reach a curve selects within a twentieth of its length.
+  assert.equal(curveReach({ ...line, reach: undefined }, samples), 5);
+});
+
+test("rotations turn and read back as the same Euler angles", async () => {
+  const { rotationToEuler, axisRotation, turnEuler, mul3 } = await import("../../oviz/viewer/web/src/ui/annotate-model.js");
+  for (const rot of [[0, 0, 0], [30, -20, 75], [-120, 40, 10], [5, 89, -30]]) {
+    const back = rotationToEuler(sphereRotation(rot));
+    const m1 = sphereRotation(rot), m2 = sphereRotation(back);
+    m1.forEach((x, i) => close(x, m2[i], 1e-6));
+  }
+  // A quarter turn about z, applied twice, is a half turn.
+  const q = axisRotation([0, 0, 1], Math.PI / 2);
+  const half = rotationToEuler(mul3(q, q));
+  sphereRotation(half).forEach((x, i) => close(x, sphereRotation([0, 0, 180])[i], 1e-9));
+  const turned = turnEuler([0, 0, 0], axisRotation([1, 0, 0], Math.PI / 6));
+  close(turned[0], 30, 1e-6); close(turned[1], 0, 1e-6); close(turned[2], 0, 1e-6);
+});

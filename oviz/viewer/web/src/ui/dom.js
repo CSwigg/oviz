@@ -93,6 +93,7 @@ const ICONS = {
   shell: '<circle cx="10" cy="10" r="6.6"/><circle cx="10" cy="10" r="4.4" stroke-opacity="0.4"/>',
   undo: '<path d="M7.4 7.2h4.8a3.9 3.9 0 0 1 0 7.8H8.4"/><path d="M9.6 4.6 7 7.2l2.6 2.6"/>',
   redo: '<path d="M12.6 7.2H7.8a3.9 3.9 0 0 0 0 7.8h3.8"/><path d="m10.4 4.6 2.6 2.6-2.6 2.6"/>',
+  box: '<path d="M4 7 10 4l6 3v6.2l-6 3-6-3Z" fill="currentColor" fill-opacity="0.16"/><path d="m4 7 6 3 6-3M10 10v6.2"/>',
 };
 
 export function icon(name, cls = "") {

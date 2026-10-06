@@ -48,7 +48,7 @@ can add 3D volumes (`volumes=`), member stars for the sky view
 - Play or scrub time; every orbit is interpolated on the GPU.
 - Orbit the scene in 3D, or switch to the sky with member stars and HiPS surveys.
 - Click to inspect, lasso to select, ⌘K to search, and share links that reopen a view.
-- Draw labels, curves, arrows, bubbles and shells in 3D (press K); they group themselves in the key.
+- Draw labels, curves, arrows, bubbles, shells and boxes in 3D (press K); shapes can highlight or isolate what they hold.
 - Save views and present them; export PNG, video or AR; works on phones.
 
 ## Develop

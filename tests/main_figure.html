@@ -1314,6 +1314,13 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-annot-xyz .ov-field { gap: 3px; }
 .ov-annot-xyz .ov-input { width: 100%; box-sizing: border-box; }
 .ov-annot-sub { margin-bottom: -6px; }
+.ov-annot-sub { display: flex; align-items: center; justify-content: space-between; }
+.ov-annot-link { all: unset; cursor: pointer; font: 500 11.5px/1 var(--ov-font); color: var(--ov-accent); }
+.ov-annot-link:hover { text-decoration: underline; }
+.ov-annot-link:focus-visible { outline: 2px solid var(--ov-accent-line); outline-offset: 2px; }
+.ov-annot-select { display: grid; gap: 10px; padding: 10px; border-radius: 12px; background: var(--ov-hover); }
+.ov-annot-count-line { font: 500 11.5px/1.3 var(--ov-font); color: var(--ov-text-2); }
+.ov-annot-count-line:empty { display: none; }
 .ov-annot-attached {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 8px; border-radius: 10px; background: var(--ov-hover);
@@ -1339,6 +1346,12 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-annot-box { fill: none; stroke: var(--ov-accent-line); stroke-width: 1.2; stroke-dasharray: 4 3; }
 .ov-annot-snap { fill: none; stroke: var(--ov-accent); stroke-width: 1.6; opacity: 0.9; }
 .ov-annot-anchor { fill: var(--ov-accent); }
+.ov-annot-rotate { pointer-events: all; cursor: grab; }
+.ov-annot-rotate:active { cursor: grabbing; }
+.ov-annot-rotate-disc { fill: #fff; stroke: rgba(8, 10, 15, 0.75); stroke-width: 1.5; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); }
+.ov-annot-rotate:hover .ov-annot-rotate-disc { fill: var(--ov-accent); }
+.ov-annot-rotate-arc { fill: none; stroke: #15171d; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ov-annot-stem { stroke: rgba(255, 255, 255, 0.55); stroke-width: 1; stroke-dasharray: 2 2; }
 
 /* ---- The label editor --------------------------------------------------- */
 .ov-annot-editor {
@@ -1385,6 +1398,12 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
     bottom: calc(var(--ov-gutter) * 3 + var(--ov-dock-h) + var(--ov-safe-bottom) + 44px);
     max-height: min(46vh, 420px); border-radius: 20px;
   }
+}
+
+/* Messages make room for the tool bar and its hint while annotating. */
+@media (min-width: 721px) {
+  .ov-root[data-annotating="true"] .ov-toasts { top: calc(var(--ov-gutter) + 76px + var(--ov-safe-top)); }
+  [data-oviz-mode="detailed"] .ov-root[data-annotating="true"] .ov-toasts { top: calc(var(--ov-gutter) + 132px + var(--ov-safe-top)); }
 }
 
 /* ---------------------------------------------------------------- sky
@@ -4609,6 +4628,7 @@ layout(location = 4) in float aSizeMax;
 layout(location = 5) in float aSymbol;
 layout(location = 6) in float aState;   // state bits (below)
 layout(location = 7) in vec2 aLasso;    // lasso level before / after a State change
+layout(location = 8) in vec4 aMark;     // highlight colour and strength (an annotation's selection)
 
 uniform mat4 uViewProj;
 uniform mat4 uView;
@@ -4653,6 +4673,7 @@ float lassoWeight(vec2 levels) {
 
 out vec2 vUv;
 out vec3 vColor;
+out vec4 vMark;
 out float vScalar;
 out float vGlowA;
 out float vCoreA;
@@ -4704,11 +4725,12 @@ void main() {
   float stars = pow(max(aStatic.w, 1e-6), uStarsExp);
   float eff = opacity * uOpacityScale * p.w;
   // State bits: 1 dimmed / 2 hidden (distribution filter), 4 replaced by
-  // member stars in Sky view, 32 dimmed (birth tree highlight). The lasso
-  // (bits 8 / 16, for the CPU's readers) draws through aLasso, which can
-  // blend; dimmed by both counts once.
+  // member stars in Sky view, 32 dimmed (birth tree highlight), 64 hidden
+  // (outside an annotation that isolates what it holds). The lasso (bits
+  // 8 / 16, for the CPU's readers) draws through aLasso, which can blend;
+  // dimmed by both counts once.
   int st = int(aState + 0.5);
-  float bitW = (st & 2) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
+  float bitW = (st & 66) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
   eff *= min(bitW, lassoWeight(aLasso));
   if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
   vec4 center = uViewProj * vec4(p.xyz + uOffset, 1.0);
@@ -4752,6 +4774,7 @@ void main() {
   gl_Position = center + vec4(ndc * center.w, 0.0, 0.0);
   vUv = aCorner;
   vColor = aColor;
+  vMark = aMark;
   vScalar = scalar;
   vSymbol = aSymbol;
 }
@@ -4760,6 +4783,7 @@ void main() {
 const FRAG = `
 in vec2 vUv;
 in vec3 vColor;
+in vec4 vMark;
 in float vScalar;
 in float vGlowA;
 in float vCoreA;
@@ -4805,6 +4829,8 @@ void main() {
     float u = clamp((vScalar - uCRange.x) / max(uCRange.y - uCRange.x, 1e-9), 0.0, 1.0);
     color = texture(uCmap, vec2(u, 0.5)).rgb;
   }
+  // What an annotation selects takes its colour.
+  if (vMark.a > 0.0) color = mix(color, vMark.rgb, vMark.a);
   if (uGlow > 0.02) {
     vec2 uv = vUv * 0.5 + 0.5;
     float halo = texture(uHaloTex, uv).r;
@@ -4835,6 +4861,7 @@ layout(location = 2) in vec3 aColor;
 layout(location = 3) in vec4 aStatic;   // opacity, scalar, ageNow, starsFactor
 layout(location = 6) in float aState;
 layout(location = 7) in vec2 aLasso;
+layout(location = 8) in vec4 aMark;
 
 uniform mat4 uViewProj;
 uniform vec2 uViewport;
@@ -4869,6 +4896,7 @@ float lassoWeight(vec2 levels) {
 }
 
 out vec3 vColor;
+out vec4 vMark;
 out float vScalar;
 out float vAlpha;
 out float vSide;
@@ -4900,7 +4928,7 @@ void main() {
   }
   float eff = opacity * uOpacityScale * pres;
   int st = int(aState + 0.5);
-  float bitW = (st & 2) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
+  float bitW = (st & 66) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
   eff *= min(bitW, lassoWeight(aLasso));
   if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
   if (uHasAge == 1 && aStatic.z == aStatic.z && aStatic.z > -1e29) {
@@ -4923,6 +4951,7 @@ void main() {
   float tail = 1.0 - s;
   vAlpha = eff * tail * tail;
   vColor = aColor;
+  vMark = aMark;
   vScalar = scalar;
   vSide = aTrail.y;
 }
@@ -4930,6 +4959,7 @@ void main() {
 
 const TRAIL_FRAG = `
 in vec3 vColor;
+in vec4 vMark;
 in float vScalar;
 in float vAlpha;
 in float vSide;
@@ -4947,6 +4977,7 @@ void main() {
     float u = clamp((vScalar - uCRange.x) / max(uCRange.y - uCRange.x, 1e-9), 0.0, 1.0);
     color = texture(uCmap, vec2(u, 0.5)).rgb;
   }
+  if (vMark.a > 0.0) color = mix(color, vMark.rgb, vMark.a);
   float a = vAlpha * uStrength * (1.0 - smoothstep(0.35, 1.0, abs(vSide)));
   if (a < 0.003) discard;
   // Mostly additive: trails brighten the sky rather than covering it.
@@ -5109,6 +5140,8 @@ class PointBatch {
     this.state = new Uint8Array(N);
     // Per object, the weight a lasso fade starts from and the selection's level (see aLasso).
     this.lasso = new Uint8Array(N * 2).fill(255);
+    // Per object, an annotation's highlight: colour and strength (0 = none).
+    this.mark = new Uint8Array(N * 4);
     this.buffers = {
       quad: createBuffer(gl, QUAD),
       index: createBuffer(gl, index),
@@ -5118,6 +5151,7 @@ class PointBatch {
       symbol: createBuffer(gl, symbol),
       state: createBuffer(gl, this.state, gl.DYNAMIC_DRAW),
       lasso: createBuffer(gl, this.lasso, gl.DYNAMIC_DRAW),
+      mark: createBuffer(gl, this.mark, gl.DYNAMIC_DRAW),
     };
     const b = this.buffers;
     this.vao = createVAO(gl, [
@@ -5129,7 +5163,24 @@ class PointBatch {
       { loc: 5, buffer: b.symbol, size: 1, divisor: 1 },
       { loc: 6, buffer: b.state, size: 1, type: gl.UNSIGNED_BYTE, divisor: 1 },
       { loc: 7, buffer: b.lasso, size: 2, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
+      { loc: 8, buffer: b.mark, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
     ]);
+  }
+
+  /** Annotation highlights per object (RGBA bytes, alpha = strength; null clears). Uploads only a change. */
+  setMarks(marks) {
+    const m = this.mark;
+    let changed = false;
+    for (let i = 0; i < m.length; i++) {
+      const v = marks ? marks[i] : 0;
+      if (v !== m[i]) { m[i] = v; changed = true; }
+    }
+    if (!changed) return false;
+    this.markVersion = (this.markVersion || 0) + 1;
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.mark);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, m);
+    return true;
   }
 
   /**
@@ -5308,6 +5359,7 @@ class PointsLayer {
           { loc: 3, buffer: b.stat, size: 4, divisor: 1 },
           { loc: 6, buffer: b.state, size: 1, type: gl.UNSIGNED_BYTE, divisor: 1 },
           { loc: 7, buffer: b.lasso, size: 2, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
+          { loc: 8, buffer: b.mark, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
         ]);
       }
       prog.tex("uFrameTex", batch.frameTex.texture);
@@ -8619,6 +8671,7 @@ const ICONS = {
   shell: '<circle cx="10" cy="10" r="6.6"/><circle cx="10" cy="10" r="4.4" stroke-opacity="0.4"/>',
   undo: '<path d="M7.4 7.2h4.8a3.9 3.9 0 0 1 0 7.8H8.4"/><path d="M9.6 4.6 7 7.2l2.6 2.6"/>',
   redo: '<path d="M12.6 7.2H7.8a3.9 3.9 0 0 0 0 7.8h3.8"/><path d="m10.4 4.6 2.6 2.6-2.6 2.6"/>',
+  box: '<path d="M4 7 10 4l6 3v6.2l-6 3-6-3Z" fill="currentColor" fill-opacity="0.16"/><path d="m4 7 6 3 6-3M10 10v6.2"/>',
 };
 
 function icon(name, cls = "") {
@@ -12926,7 +12979,7 @@ class SkyPlugin {
     let bitsVersion = 0;
     for (const { key } of this.links) {
       const b = v.points.byKey.get(key);
-      bitsVersion += (b?.stateVersion || 0) + (b?.lassoVersion || 0);
+      bitsVersion += (b?.stateVersion || 0) + (b?.lassoVersion || 0) + (b?.markVersion || 0);
     }
     const mix = v.points.lassoMix;
     const sig = `${frame.toFixed(4)}|${v._pickVersion}|${bitsVersion}|${mix[0].toFixed(3)},${mix[1].toFixed(3)}|${reveal > 0}`;
@@ -12957,12 +13010,12 @@ class SkyPlugin {
         for (let i = 0; i < link.length; i++) {
           const c = link[i];
           if (c < 0 || state[c * 4 + 3] > 0) continue;
-          // Members share their cluster's filter, lasso and birth-tree
-          // state as the marker draws it: hidden or dimmed by the filter
-          // (2, 1) or birth tree (32), and the lasso's level, which blends
-          // while a State change plays.
+          // Members share their cluster's filter, lasso, birth-tree and
+          // annotation state as the marker draws it: hidden or dimmed by
+          // the filter (2, 1), birth tree (32) or an isolating annotation
+          // (64), and the lasso's level, which blends while a State change plays.
           const b = bits ? bits[i] : 0;
-          const w = Math.min(b & 2 ? 0 : b & 33 ? dim : 1, batch ? batch.lassoWeight(i, mix, dim) : 1);
+          const w = Math.min(b & 66 ? 0 : b & 33 ? dim : 1, batch ? batch.lassoWeight(i, mix, dim) : 1);
           if (w <= 0.001) continue;
           if (!cpuFramePosition(d.position, F, N, i, frame, p) || !cpuFramePosition(d.position, F, N, i, zero, p0)) continue;
           let alpha = opacityScale * w;
@@ -12975,6 +13028,12 @@ class SkyPlugin {
           color[c * 4] = (rgb ? rgb[i * 3] / 255 : base[0]) * 255;
           color[c * 4 + 1] = (rgb ? rgb[i * 3 + 1] / 255 : base[1]) * 255;
           color[c * 4 + 2] = (rgb ? rgb[i * 3 + 2] / 255 : base[2]) * 255;
+          // An annotation's highlight colours the members too.
+          const mk = batch?.mark;
+          if (mk && mk[i * 4 + 3]) {
+            const k = mk[i * 4 + 3] / 255;
+            for (let j = 0; j < 3; j++) color[c * 4 + j] = color[c * 4 + j] * (1 - k) + mk[i * 4 + j] * k;
+          }
           const sf = d.starsFactor ? d.starsFactor[i] : 1;
           color[c * 4 + 3] = clamp(sf / 2.75, 0, 1) * 255;
         }
@@ -15570,7 +15629,7 @@ return { FilterPlugin };
 })();
 
 // ---- layers/annotations.js ----
-const { ANNOT_SEG_FLOATS, ANNOT_ARROW_FLOATS, ANNOT_SPHERE_FLOATS, AnnotationsLayer } = (() => {
+const { ANNOT_SEG_FLOATS, ANNOT_ARROW_FLOATS, ANNOT_SPHERE_FLOATS, ANNOT_MESH_FLOATS, AnnotationsLayer } = (() => {
 // Annotations drawn into the figure: curves and arrows as anti-aliased
 // screen-space ribbons with round joins, bubbles and shells as two-sided
 // ellipsoids shaded by how obliquely they are seen, and text as textures
@@ -15586,6 +15645,8 @@ const ANNOT_SEG_FLOATS = 16;
 const ANNOT_ARROW_FLOATS = 12;
 // Per ellipsoid: centre.xyz, radii.xyz, quaternion, rgba, style, highlight.
 const ANNOT_SPHERE_FLOATS = 16;
+// Per mesh vertex (box faces, a curve's selection tube): xyz, normal, rgba, style, 0.
+const ANNOT_MESH_FLOATS = 12;
 
 const SEG_VERT = `
 layout(location = 0) in vec2 aCorner;   // x: 0 start / 1 end, y: -1..1 side
@@ -15770,6 +15831,44 @@ void main() {
 }
 `;
 
+const MESH_VERT = `
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec4 aColor;
+layout(location = 3) in vec2 aStyle;    // 0 box face, 1 selection tube
+uniform mat4 uViewProj;
+out vec3 vWorld;
+out vec3 vNormal;
+out vec4 vColor;
+flat out float vStyle;
+void main() {
+  vWorld = aPos;
+  vNormal = aNormal;
+  vColor = aColor;
+  vStyle = aStyle.x;
+  gl_Position = uViewProj * vec4(aPos, 1.0);
+}
+`;
+
+const MESH_FRAG = `
+in vec3 vWorld;
+in vec3 vNormal;
+in vec4 vColor;
+flat in float vStyle;
+uniform vec3 uEye;
+out vec4 outColor;
+void main() {
+  vec3 N = normalize(vNormal);
+  vec3 V = normalize(uEye - vWorld);
+  float rim = 1.0 - abs(dot(N, V));
+  // A box face is a faint pane; a selection tube a glassy sleeve.
+  float a = vStyle < 0.5 ? 0.07 + 0.11 * rim : 0.025 + 0.5 * pow(rim, 3.0);
+  a *= vColor.a;
+  if (a < 0.002) discard;
+  outColor = vec4(vColor.rgb * a, a);
+}
+`;
+
 const TEXT_VERT = `
 layout(location = 0) in vec2 aCorner;
 uniform vec2 uViewport;     // device pixels
@@ -15838,6 +15937,7 @@ class AnnotationsLayer {
     this.arrowProgram = createProgram(gl, ARROW_VERT, ARROW_FRAG, { label: "annot-arrows" });
     this.sphereProgram = createProgram(gl, SPHERE_VERT, SPHERE_FRAG, { label: "annot-shells" });
     this.textProgram = createProgram(gl, TEXT_VERT, TEXT_FRAG, { label: "annot-text" });
+    this.meshProgram = createProgram(gl, MESH_VERT, MESH_FRAG, { label: "annot-mesh" });
     this.cornerBuffer = createBuffer(gl, SEG_CORNERS);
     this.quadBuffer = createBuffer(gl, QUAD);
     this.arrowCornerBuffer = createBuffer(gl, new Float32Array([0, 1, 2]));
@@ -15852,6 +15952,14 @@ class AnnotationsLayer {
     this.segBuffer = gl.createBuffer();
     this.arrowBuffer = gl.createBuffer();
     this.sphereBuffer = gl.createBuffer();
+    this.meshBuffer = gl.createBuffer();
+    const meshStride = ANNOT_MESH_FLOATS * 4;
+    this.meshVao = this._vao([
+      { loc: 0, buffer: this.meshBuffer, size: 3, stride: meshStride, offset: 0 },
+      { loc: 1, buffer: this.meshBuffer, size: 3, stride: meshStride, offset: 12 },
+      { loc: 2, buffer: this.meshBuffer, size: 4, stride: meshStride, offset: 24 },
+      { loc: 3, buffer: this.meshBuffer, size: 2, stride: meshStride, offset: 40 },
+    ]);
     this.segVao = this._vao([
       { loc: 0, buffer: this.cornerBuffer, size: 2 },
       ...this._instanced(this.segBuffer, ANNOT_SEG_FLOATS, [[1, 3], [2, 3], [3, 2], [4, 4], [5, 4]]),
@@ -15865,7 +15973,7 @@ class AnnotationsLayer {
       ...this._instanced(this.sphereBuffer, ANNOT_SPHERE_FLOATS, [[1, 3], [2, 3], [3, 4], [4, 4], [5, 2]]),
     ], this.icoIndex);
     this.textVao = this._vao([{ loc: 0, buffer: this.quadBuffer, size: 2 }]);
-    this.counts = { seg: 0, arrow: 0, sphere: 0 };
+    this.counts = { seg: 0, arrow: 0, sphere: 0, mesh: 0 };
     this.texts = [];
     this.textures = new Map(); // style key → {tex, w, h, used}
     this._version = -1;
@@ -15903,7 +16011,8 @@ class AnnotationsLayer {
     put(this.segBuffer, s.segments);
     put(this.arrowBuffer, s.arrows);
     put(this.sphereBuffer, s.spheres);
-    this.counts = { seg: s.segmentCount || 0, arrow: s.arrowCount || 0, sphere: s.sphereCount || 0 };
+    put(this.meshBuffer, s.mesh);
+    this.counts = { seg: s.segmentCount || 0, arrow: s.arrowCount || 0, sphere: s.sphereCount || 0, mesh: s.meshCount || 0 };
   }
 
   /** A texture of `t`'s text at the current pixel ratio, cached by its look. */
@@ -15954,6 +16063,13 @@ class AnnotationsLayer {
       }
       gl.disable(gl.CULL_FACE);
     }
+    // Box faces and selection tubes: faint, so their order hardly shows.
+    if (this.counts.mesh) {
+      const prog = this.meshProgram.use();
+      prog.m4("uViewProj", cam.viewProj).v3("uEye", cam.eye[0], cam.eye[1], cam.eye[2]);
+      gl.bindVertexArray(this.meshVao);
+      gl.drawArrays(gl.TRIANGLES, 0, this.counts.mesh);
+    }
     if (this.counts.seg) {
       const prog = this.segProgram.use();
       prog.m4("uViewProj", cam.viewProj).v2("uViewport", frame.width, frame.height).f("uDpr", frame.dpr);
@@ -16001,9 +16117,9 @@ class AnnotationsLayer {
     const gl = this.gl;
     for (const e of this.textures.values()) gl.deleteTexture(e.tex);
     this.textures.clear();
-    for (const b of [this.cornerBuffer, this.quadBuffer, this.arrowCornerBuffer, this.icoBuffer, this.icoIndex, this.segBuffer, this.arrowBuffer, this.sphereBuffer]) gl.deleteBuffer(b);
-    for (const v of [this.segVao, this.arrowVao, this.sphereVao, this.textVao]) gl.deleteVertexArray(v);
-    for (const p of [this.segProgram, this.arrowProgram, this.sphereProgram, this.textProgram]) p.dispose();
+    for (const b of [this.cornerBuffer, this.quadBuffer, this.arrowCornerBuffer, this.icoBuffer, this.icoIndex, this.segBuffer, this.arrowBuffer, this.sphereBuffer, this.meshBuffer]) gl.deleteBuffer(b);
+    for (const v of [this.segVao, this.arrowVao, this.sphereVao, this.textVao, this.meshVao]) gl.deleteVertexArray(v);
+    for (const p of [this.segProgram, this.arrowProgram, this.sphereProgram, this.textProgram, this.meshProgram]) p.dispose();
   }
 }
 
@@ -16042,11 +16158,11 @@ function rasterizeText(t, dpr) {
   lines.forEach((l, i) => ctx.fillText(l, W / 2, padY + lineH * (i + 0.5)));
   return { canvas };
 }
-return { ANNOT_SEG_FLOATS, ANNOT_ARROW_FLOATS, ANNOT_SPHERE_FLOATS, AnnotationsLayer };
+return { ANNOT_SEG_FLOATS, ANNOT_ARROW_FLOATS, ANNOT_SPHERE_FLOATS, ANNOT_MESH_FLOATS, AnnotationsLayer };
 })();
 
 // ---- ui/annotate-model.js ----
-const { SPHERE_STYLES, CURVE_DASHES, CURVE_ARROWS, ANNOT_DEFAULTS, emptyAnnotations, annotId, normalizePoint, normalizeAnnotations, notesToAnnotations, resolveAnnotPoint, annotationsTimeDependent, curveSamples, sphereRotation, sphereAxes, rotationQuat, insideSphere, polylineDistance, annotKind, annotKindName, annotGroupName, annotGroupLook, assignGroup, lerpAnnotations } = (() => {
+const { SPHERE_STYLES, BOX_STYLES, SELECT_MODES, BOX_EDGES, CURVE_DASHES, CURVE_ARROWS, ANNOT_DEFAULTS, emptyAnnotations, annotId, normalizePoint, normalizeAnnotations, notesToAnnotations, resolveAnnotPoint, annotationsTimeDependent, curveSamples, sphereRotation, sphereAxes, rotationQuat, rotationToEuler, axisRotation, mul3, turnEuler, boxCorners, insideBox, polylineDistance3, selectionTest, curveReach, insideSphere, polylineDistance, annotKind, annotKindName, annotGroupName, annotGroupLook, assignGroup, lerpAnnotations } = (() => {
 // Annotations: the data model, curve and shell geometry, and the grouping
 // rules, kept free of the DOM and GL so Node can test them.
 //
@@ -16058,14 +16174,21 @@ const { SPHERE_STYLES, CURVE_DASHES, CURVE_ARROWS, ANNOT_DEFAULTS, emptyAnnotati
 //   text   { at, text, size (px), weight, color, opacity, bg, dx, dy }
 //   curve  { points: [point…], smooth (0–1), closed, width (px), color, opacity, dash, arrow }
 //   sphere { center, radii [pc ×3], rot [deg ×3], style: bubble | shell | wire, color, opacity }
+//   box    { center, radii (half sizes, pc ×3), rot, style: box | wire, color, opacity }
 //
 // Any item may set `present: true` to show only around the present day,
-// like the dust maps it often marks.
+// like the dust maps it often marks. Shapes and curves may set `select`
+// ("highlight" or "isolate") to select the objects inside them (a curve:
+// within `reach` pc of it), coloured like the shape or shown alone.
 
 
 
 
 const SPHERE_STYLES = ["bubble", "shell", "wire"];
+const BOX_STYLES = ["box", "wire"];
+const SELECT_MODES = ["highlight", "isolate"];
+/** The twelve edges of a box, as pairs of corner indices (see boxCorners). */
+const BOX_EDGES = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
 const CURVE_DASHES = ["solid", "dash", "dot"];
 const CURVE_ARROWS = ["none", "end", "start", "both"];
 
@@ -16076,6 +16199,7 @@ const ANNOT_DEFAULTS = {
   arrow: { smooth: 1, closed: false, width: 2.5, color: "#ffd27a", opacity: 1, dash: "solid", arrow: "end" },
   bubble: { style: "bubble", color: "#7cc4ff", opacity: 0.6, rot: [0, 0, 0] },
   shell: { style: "shell", color: "#ff9e7a", opacity: 0.9, rot: [0, 0, 0] },
+  box: { style: "box", color: "#9b7bff", opacity: 0.85, rot: [0, 0, 0] },
 };
 
 function emptyAnnotations() {
@@ -16156,6 +16280,7 @@ function normalizeItem(it) {
   };
   if (it.present) base.present = true;
   if (it.visible === false) base.visible = false;
+  if (kind !== "text" && SELECT_MODES.includes(it.select)) base.select = it.select;
   if (kind === "text") {
     const at = normalizePoint(it.at ?? it.anchor ?? it.position);
     if (!at) return null;
@@ -16174,7 +16299,16 @@ function normalizeItem(it) {
       ...base, kind, points, smooth: clamp(num(it.smooth, d.smooth), 0, 1), closed: !!it.closed && points.length > 2,
       width: clamp(num(it.width, d.width), 0.5, 24), color: base.color || d.color,
       dash: CURVE_DASHES.includes(it.dash) ? it.dash : "solid", arrow: CURVE_ARROWS.includes(it.arrow) ? it.arrow : "none",
+      ...(num(it.reach, 0) > 0 ? { reach: num(it.reach, 0) } : {}),
     };
+  }
+  if (kind === "box") {
+    const center = normalizePoint(it.center ?? it.at);
+    const r = Array.isArray(it.radii) ? it.radii : Array.isArray(it.size) ? it.size.map((x) => num(x, NaN) / 2) : [it.radius, it.radius, it.radius];
+    const radii = r.slice(0, 3).map((x) => Math.max(1e-3, Math.abs(num(x, NaN))));
+    if (!center || radii.length !== 3 || radii.some((x) => !Number.isFinite(x))) return null;
+    const style = BOX_STYLES.includes(it.style) ? it.style : "box";
+    return { ...base, kind, center, radii, rot: vec3(it.rot) || [0, 0, 0], style, color: base.color || ANNOT_DEFAULTS.box.color };
   }
   if (kind === "sphere") {
     const center = normalizePoint(it.center ?? it.at);
@@ -16227,7 +16361,7 @@ function annotationsTimeDependent(doc) {
   for (const it of doc.items) {
     if (it.present) return true;
     if (it.kind === "text" && moving(it.at)) return true;
-    if (it.kind === "sphere" && moving(it.center)) return true;
+    if ((it.kind === "sphere" || it.kind === "box") && moving(it.center)) return true;
     if (it.kind === "curve" && it.points.some(moving)) return true;
   }
   return false;
@@ -16326,6 +16460,105 @@ function rotationQuat(m) {
   return [x / l, y / l, z / l, w / l];
 }
 
+/** Euler angles (degrees, as sphereRotation takes them) of a rotation matrix. */
+function rotationToEuler(m) {
+  const sy = clamp(-m[6], -1, 1);
+  const y = Math.asin(sy);
+  let x, z;
+  if (Math.abs(sy) < 0.99999) {
+    x = Math.atan2(m[7], m[8]);
+    z = Math.atan2(m[3], m[0]);
+  } else {
+    // Gimbal lock: put the whole turn about x.
+    x = Math.atan2(-m[5], m[4]);
+    z = 0;
+  }
+  return [x / DEG, y / DEG, z / DEG].map((d) => Math.round(d * 1e6) / 1e6);
+}
+
+/** Matrix of a turn by `angle` (radians) about the unit axis `u`. */
+function axisRotation(u, angle) {
+  const c = Math.cos(angle), s = Math.sin(angle), t = 1 - c;
+  const [x, y, z] = u;
+  return [
+    t * x * x + c, t * x * y - s * z, t * x * z + s * y,
+    t * x * y + s * z, t * y * y + c, t * y * z - s * x,
+    t * x * z - s * y, t * y * z + s * x, t * z * z + c,
+  ];
+}
+
+function mul3(a, b) {
+  const o = new Array(9);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) o[r * 3 + c] = a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c];
+  return o;
+}
+
+/** Euler angles after turning `rot` by the matrix `turn` (applied in world space). */
+function turnEuler(rot, turn) {
+  return rotationToEuler(mul3(turn, sphereRotation(rot)));
+}
+
+/** The eight corners of a box (bit 0: +x, bit 1: +y, bit 2: +z). */
+function boxCorners(item, center) {
+  const axes = sphereAxes(item);
+  const out = [];
+  for (let k = 0; k < 8; k++) {
+    const sx = k & 1 ? 1 : -1, sy = k & 2 ? 1 : -1, sz = k & 4 ? 1 : -1;
+    out.push([0, 1, 2].map((j) => center[j] + sx * axes[0][j] + sy * axes[1][j] + sz * axes[2][j]));
+  }
+  return out;
+}
+
+/** Whether world point `p` lies inside the box (grown by `margin`). */
+function insideBox(item, center, p, margin = 1) {
+  const m = sphereRotation(item.rot);
+  const d = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
+  for (let k = 0; k < 3; k++) {
+    const local = m[k] * d[0] + m[3 + k] * d[1] + m[6 + k] * d[2];
+    if (Math.abs(local) > item.radii[k] * margin) return false;
+  }
+  return true;
+}
+
+/** Distance in pc from `p` to a polyline of world points. */
+function polylineDistance3(p, pts) {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    const u = l2 > 0 ? clamp(((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / l2, 0, 1) : 0;
+    best = Math.min(best, Math.hypot(p[0] - a[0] - ab[0] * u, p[1] - a[1] - ab[1] * u, p[2] - a[2] - ab[2] * u));
+  }
+  return best;
+}
+
+/**
+ * A test for "is this world point selected by `item`": inside a sphere or
+ * box, or within its reach of a curve. `center` / `samples` are the item's
+ * resolved centre or sampled curve. Returns null for items that select nothing.
+ */
+function selectionTest(item, { center, samples } = {}) {
+  if (!item.select) return null;
+  if (item.kind === "sphere" && center) return (p) => insideSphere(item, center, p);
+  if (item.kind === "box" && center) return (p) => insideBox(item, center, p);
+  if (item.kind === "curve" && samples?.length > 1) {
+    const r = curveReach(item, samples);
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const q of samples) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], q[k] - r); hi[k] = Math.max(hi[k], q[k] + r); }
+    return (p) => p[0] >= lo[0] && p[0] <= hi[0] && p[1] >= lo[1] && p[1] <= hi[1] && p[2] >= lo[2] && p[2] <= hi[2] && polylineDistance3(p, samples) <= r;
+  }
+  return null;
+}
+
+/** A curve's selection reach in pc: its own, else a twentieth of its length. */
+function curveReach(item, samples) {
+  if (item.reach > 0) return item.reach;
+  let len = 0;
+  for (let i = 1; i < (samples?.length || 0); i++) len += Math.hypot(samples[i][0] - samples[i - 1][0], samples[i][1] - samples[i - 1][1], samples[i][2] - samples[i - 1][2]);
+  return Math.max(1, Math.round(len / 20));
+}
+
 /** Whether world point `p` lies within `margin` × the ellipsoid. */
 function insideSphere(item, center, p, margin = 1) {
   const m = sphereRotation(item.rot);
@@ -16359,12 +16592,14 @@ function polylineDistance(x, y, pts) {
 const KIND_NAMES = {
   text: ["Label", "Labels"], curve: ["Curve", "Curves"], arrow: ["Arrow", "Arrows"],
   bubble: ["Bubble", "Bubbles"], shell: ["Shell", "Shells"], wire: ["Sphere", "Spheres"],
+  box: ["Box", "Boxes"],
 };
 
 /** What an item looks like to a reader: label, curve, arrow, bubble, shell or wire sphere. */
 function annotKind(item) {
   if (item.kind === "curve") return item.arrow && item.arrow !== "none" ? "arrow" : "curve";
   if (item.kind === "sphere") return item.style;
+  if (item.kind === "box") return "box";
   return "text";
 }
 
@@ -16424,9 +16659,9 @@ function assignGroup(doc, item, ctx = {}) {
     const at = resolve(item.at);
     let best = null;
     for (const o of others) {
-      if (o.kind === "sphere") {
+      if (o.kind === "sphere" || o.kind === "box") {
         const c = resolve(o.center);
-        if (!at || !c || !insideSphere(o, c, at, 1.25)) continue;
+        if (!at || !c || !(o.kind === "box" ? insideBox(o, c, at, 1.25) : insideSphere(o, c, at, 1.25))) continue;
         const d = Math.hypot(at[0] - c[0], at[1] - c[1], at[2] - c[2]) / Math.max(...o.radii);
         if (!best || d < best.d) best = { o, d };
       } else if (o.kind === "curve" && at && ctx.screenDistance) {
@@ -16445,9 +16680,9 @@ function assignGroup(doc, item, ctx = {}) {
       if (o.kind !== "text") continue;
       const at = resolve(o.at);
       if (!at) continue;
-      if (item.kind === "sphere") {
+      if (item.kind === "sphere" || item.kind === "box") {
         const c = resolve(item.center);
-        if (!c || !insideSphere(item, c, at, 1.25)) continue;
+        if (!c || !(item.kind === "box" ? insideBox(item, c, at, 1.25) : insideSphere(item, c, at, 1.25))) continue;
         const d = Math.hypot(at[0] - c[0], at[1] - c[1], at[2] - c[2]) / Math.max(...item.radii);
         if (!best || d < best.d) best = { o, d };
       } else if (item.kind === "curve" && ctx.screenDistance) {
@@ -16522,7 +16757,7 @@ function lerpAnnotations(a, b, t, resolve = (p) => p?.pos || null) {
         base.size = lerp(x.size, y.size, t);
         base.dx = lerp(x.dx || 0, y.dx || 0, t);
         base.dy = lerp(x.dy || 0, y.dy || 0, t);
-      } else if (x.kind === "sphere") {
+      } else if (x.kind === "sphere" || x.kind === "box") {
         base.center = mixPoint(x.center, y.center, t);
         base.radii = x.radii.map((r, k) => Math.exp(lerp(Math.log(r), Math.log(y.radii[k]), t)));
         base.rot = x.rot.map((r, k) => lerp(r, y.rot[k], t));
@@ -16541,7 +16776,7 @@ function lerpAnnotations(a, b, t, resolve = (p) => p?.pos || null) {
       if (fade <= 1e-4) continue;
       const copy = { ...it, fade };
       if (it.kind === "text") copy.at = fixed(it.at);
-      else if (it.kind === "sphere") copy.center = fixed(it.center);
+      else if (it.kind === "sphere" || it.kind === "box") copy.center = fixed(it.center);
       else copy.points = it.points.map(fixed);
       if (copy.at === null || copy.center === null || (copy.points && copy.points.some((p) => !p))) continue;
       out.items.push(copy);
@@ -16549,7 +16784,7 @@ function lerpAnnotations(a, b, t, resolve = (p) => p?.pos || null) {
   }
   return out;
 }
-return { SPHERE_STYLES, CURVE_DASHES, CURVE_ARROWS, ANNOT_DEFAULTS, emptyAnnotations, annotId, normalizePoint, normalizeAnnotations, notesToAnnotations, resolveAnnotPoint, annotationsTimeDependent, curveSamples, sphereRotation, sphereAxes, rotationQuat, insideSphere, polylineDistance, annotKind, annotKindName, annotGroupName, annotGroupLook, assignGroup, lerpAnnotations };
+return { SPHERE_STYLES, BOX_STYLES, SELECT_MODES, BOX_EDGES, CURVE_DASHES, CURVE_ARROWS, ANNOT_DEFAULTS, emptyAnnotations, annotId, normalizePoint, normalizeAnnotations, notesToAnnotations, resolveAnnotPoint, annotationsTimeDependent, curveSamples, sphereRotation, sphereAxes, rotationQuat, rotationToEuler, axisRotation, mul3, turnEuler, boxCorners, insideBox, polylineDistance3, selectionTest, curveReach, insideSphere, polylineDistance, annotKind, annotKindName, annotGroupName, annotGroupLook, assignGroup, lerpAnnotations };
 })();
 
 // ---- ui/annotate.js ----
@@ -16573,6 +16808,7 @@ const { AnnotatePlugin } = (() => {
 
 
 
+
 const TOOLS = [
   { id: "select", icon: "pointer", label: "Select and edit", hint: "Click an annotation to edit it · drag empty space to orbit" },
   { id: "text", icon: "text", label: "Label", hint: "Click to place a label · on a cluster it follows its orbit" },
@@ -16580,7 +16816,9 @@ const TOOLS = [
   { id: "arrow", icon: "arrow", label: "Arrow", hint: "Drag from where the arrow starts to where it points" },
   { id: "bubble", icon: "bubble", label: "Bubble", hint: "Drag out from the centre to size a bubble" },
   { id: "shell", icon: "shell", label: "Shell", hint: "Drag out from the centre to size a shell" },
+  { id: "box", icon: "box", label: "Box", hint: "Drag out from the centre to size a box" },
 ];
+const DRAG_TOOLS = new Set(["arrow", "bubble", "shell", "box"]);
 const ACCENT = [1, 0.82, 0.48];
 const HISTORY = 120;
 const AXIS_COLORS = ["#ff8a80", "#8fe39b", "#82b9ff"];
@@ -16757,7 +16995,7 @@ class AnnotatePlugin {
     const d = [cam.right[0] * s, cam.right[1] * s, cam.right[2] * s];
     const shift = (p) => (p.pos ? { pos: add3(p.pos, d) } : { ...p, offset: add3(p.offset || [0, 0, 0], d) });
     if (copy.kind === "text") copy.at = shift(copy.at);
-    else if (copy.kind === "sphere") copy.center = shift(copy.center);
+    else if (copy.kind === "sphere" || copy.kind === "box") copy.center = shift(copy.center);
     else copy.points = copy.points.map(shift);
     this.pushHistory();
     copy.id = annotId("i");
@@ -16773,7 +17011,7 @@ class AnnotatePlugin {
     if (commit) this.pushHistory();
     Object.assign(it, fields);
     // The next one drawn looks like this one.
-    const tool = it.kind === "text" ? "text" : it.kind === "sphere" ? it.style === "shell" ? "shell" : "bubble" : it.arrow !== "none" ? "arrow" : "curve";
+    const tool = it.kind === "text" ? "text" : it.kind === "sphere" ? it.style === "shell" ? "shell" : "bubble" : it.kind === "box" ? "box" : it.arrow !== "none" ? "arrow" : "curve";
     const keep = ["color", "opacity", "width", "dash", "size", "weight", "bg", "style"];
     this.styles[tool] = { ...(this.styles[tool] || {}), ...Object.fromEntries(Object.entries(fields).filter(([k]) => keep.includes(k))) };
     this.version++;
@@ -16804,7 +17042,7 @@ class AnnotatePlugin {
   /** A world point that stands for an item (its anchor, centre or middle). */
   anchorOf(it) {
     if (it.kind === "text") return this.resolve(it.at);
-    if (it.kind === "sphere") return this.resolve(it.center);
+    if (it.kind === "sphere" || it.kind === "box") return this.resolve(it.center);
     const pts = it.points.map((p) => this.resolve(p)).filter(Boolean);
     if (!pts.length) return null;
     const c = [0, 0, 0];
@@ -16832,6 +17070,7 @@ class AnnotatePlugin {
   frame() {
     const v = this.viewer;
     const doc = this.drawn;
+    this.applySelection(doc);
     const key = `${this.version}|${this.view ? this.sceneVersion : 0}|${this.timeDependent || this.view ? v.timeline.frame : 0}|${v.state.view.mode}|${this.sel?.id || ""}|${this.hoverId || ""}|${this.editing?.id || ""}|${this.previewKey || ""}`;
     if (key === this._sceneKey && this.layer.scene) return;
     this._sceneKey = key;
@@ -16842,8 +17081,19 @@ class AnnotatePlugin {
     const v = this.viewer;
     const time = v.timeline.time;
     const groupOn = new Map(doc.groups.map((g) => [g.id, g.visible !== false]));
-    const segs = [], arrows = [], spheres = [], texts = [];
+    const segs = [], arrows = [], spheres = [], texts = [], mesh = [];
     this.geom = new Map();
+    const pushBox = (id, it, c3, alpha, selected) => {
+      const corners = boxCorners(it, c3);
+      const c = parseColor(it.color);
+      if (it.style !== "wire") pushBoxFaces(mesh, corners, sphereAxes(it), c, alpha);
+      const w = selected ? 2 : 1.5;
+      if (selected || id === this.hoverId) {
+        for (const [a, b] of BOX_EDGES) segs.push(...corners[a], ...corners[b], 0, 0, ...ACCENT, selected ? 0.38 : 0.2, w + 6, 0, 0, 0);
+      }
+      for (const [a, b] of BOX_EDGES) segs.push(...corners[a], ...corners[b], 0, 0, c[0], c[1], c[2], Math.min(1, alpha * 1.1), w, 0, 0, 0);
+      this.geom.set(id, { kind: "box", center: c3, axes: sphereAxes(it), corners });
+    };
     const pushCurve = (id, pts, it, alpha, selected) => {
       const { points: sp, arc } = curveSamples(pts, { smooth: it.smooth, closed: it.closed });
       const total = arc[arc.length - 1] || 1;
@@ -16872,6 +17122,8 @@ class AnnotatePlugin {
       if (!it.closed && (it.arrow === "end" || it.arrow === "both")) arrows.push(...sp[sp.length - 1], ...back(sp.length - 1), c[0], c[1], c[2], alpha, head, width);
       if (!it.closed && (it.arrow === "start" || it.arrow === "both")) arrows.push(...sp[0], ...back(0), c[0], c[1], c[2], alpha, head, width);
       this.geom.set(id, { kind: "curve", samples: sp, points: pts });
+      // While a selecting curve is edited, a glassy sleeve shows its reach.
+      if (selected && it.select) pushTube(mesh, sp, curveReach(it, sp), c, Math.max(0.35, alpha));
     };
     for (const it of doc.items) {
       if (it.visible === false || !groupOn.get(it.group)) continue;
@@ -16891,6 +17143,10 @@ class AnnotatePlugin {
         const style = it.style === "shell" ? 1 : it.style === "wire" ? 2 : 0;
         spheres.push(...c3, ...it.radii, ...q, c[0], c[1], c[2], alpha, style, selected || it.id === this.hoverId ? 1 : 0);
         this.geom.set(it.id, { kind: "sphere", center: c3, axes: sphereAxes(it) });
+      } else if (it.kind === "box") {
+        const c3 = this.resolve(it.center);
+        if (!c3) continue;
+        pushBox(it.id, it, c3, alpha, selected);
       } else {
         const at = this.resolve(it.at);
         if (!at) continue;
@@ -16906,11 +17162,13 @@ class AnnotatePlugin {
       const c = parseColor(pv.color);
       spheres.push(...pv.center, ...pv.radii, 0, 0, 0, 1, c[0], c[1], c[2], pv.opacity, pv.style === "shell" ? 1 : 0, 1);
     }
+    if (pv?.kind === "box") pushBox("__preview", pv, pv.center, pv.opacity, true);
     return {
       version: ++this.sceneVersion,
       segments: new Float32Array(segs), segmentCount: segs.length / ANNOT_SEG_FLOATS,
       arrows: new Float32Array(arrows), arrowCount: arrows.length / ANNOT_ARROW_FLOATS,
       spheres: new Float32Array(spheres), sphereCount: spheres.length / ANNOT_SPHERE_FLOATS,
+      mesh: new Float32Array(mesh), meshCount: mesh.length / ANNOT_MESH_FLOATS,
       texts,
     };
   }
@@ -16924,7 +17182,7 @@ class AnnotatePlugin {
     }
     const g = this.gesture;
     if (g?.end && g.tool === "arrow") return { kind: "curve", points: [g.startPos, g.end], ...this.look("arrow") };
-    if (g?.radius > 0) return { kind: "sphere", center: g.startPos, radii: [g.radius, g.radius, g.radius], ...this.look(g.tool) };
+    if (g?.radius > 0) return { kind: g.tool === "box" ? "box" : "sphere", center: g.startPos, radii: [g.radius, g.radius, g.radius], ...this.look(g.tool) };
     return null;
   }
 
@@ -16957,6 +17215,15 @@ class AnnotatePlugin {
     if (best) return best;
     let inside = null;
     for (const it of doc.items) {
+      if (it.kind === "box" && shown(it)) {
+        const sc = this.geom.get(it.id).corners.map((q) => this.project(q));
+        if (sc.some((q) => !q)) continue;
+        if (BOX_EDGES.some(([a, b]) => polylineDistance(x, y, [sc[a], sc[b]]) <= 8)) return { id: it.id };
+        const xs = sc.map((q) => q[0]), ys = sc.map((q) => q[1]);
+        const r = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2;
+        if (x >= Math.min(...xs) && x <= Math.max(...xs) && y >= Math.min(...ys) && y <= Math.max(...ys) && (!inside || r < inside.r)) inside = { id: it.id, r };
+        continue;
+      }
       if (it.kind !== "sphere" || !shown(it)) continue;
       const s = this.sphereScreen(it);
       if (!s) continue;
@@ -16977,6 +17244,20 @@ class AnnotatePlugin {
     const r = Math.max(...it.radii);
     const e = this.project(add3(g.center, [cam.right[0] * r, cam.right[1] * r, cam.right[2] * r]));
     return e ? { c, r: Math.hypot(e[0] - c[0], e[1] - c[1]) } : null;
+  }
+
+  /** Centre and screen radius of any shape (for the rotate handle). */
+  shapeScreen(it) {
+    const g = this.geom.get(it.id);
+    if (!g) return null;
+    if (it.kind === "sphere") return this.sphereScreen(it);
+    const pts = it.kind === "box" ? g.corners : g.samples;
+    const pivot = it.kind === "box" ? g.center : this.anchorOf(it);
+    const c = this.project(pivot);
+    if (!c) return null;
+    let r = 0;
+    for (const q of pts) { const s = this.project(q); if (s) r = Math.max(r, Math.hypot(s[0] - c[0], s[1] - c[1])); }
+    return { c, r, pivot };
   }
 
   /** Where a click lands: on a cluster (riding with it), the dust, or the plane through the orbit centre. */
@@ -17038,7 +17319,7 @@ class AnnotatePlugin {
         }
         return;
       }
-      if (this.tool === "arrow" || this.tool === "bubble" || this.tool === "shell") {
+      if (DRAG_TOOLS.has(this.tool)) {
         const place = this.placeAt(x, y, e);
         if (!place) return;
         this.gesture = { tool: this.tool, start: place.point, startPos: place.pos, x0: x, y0: y, radius: 0, end: null };
@@ -17175,7 +17456,7 @@ class AnnotatePlugin {
       const cam = this.viewer.renderer.camera;
       r = cam.pixelScale(Math.max(1e-6, dist3(g.startPos, cam.eye))) * 40;
     }
-    this.addItem({ kind: "sphere", center: g.start, radii: [r, r, r], ...this.look(g.tool) });
+    this.addItem({ kind: g.tool === "box" ? "box" : "sphere", center: g.start, radii: [r, r, r], ...this.look(g.tool) });
   }
 
   // ------------------------------------------------------------ dragging
@@ -17214,7 +17495,7 @@ class AnnotatePlugin {
     if (d.type === "move") {
       const delta = this.dragDelta(x, y, e);
       if (it.kind === "text") it.at = move(o.at, delta);
-      else if (it.kind === "sphere") it.center = move(o.center, delta);
+      else if (it.kind === "sphere" || it.kind === "box") it.center = move(o.center, delta);
       else it.points = o.points.map((p) => move(p, delta));
     } else if (d.type === "point") {
       // ⌘ / Ctrl snaps the point onto a cluster or the dust under the pointer.
@@ -17229,8 +17510,31 @@ class AnnotatePlugin {
       const c = this.resolve(it.center);
       const p = c && this.onPlane(x, y, d.ref);
       if (c && p) {
-        const k = Math.max(1e-3, dist3(p, c)) / Math.max(...o.radii);
+        const k = Math.max(1e-3, dist3(p, c)) / Math.max(1e-6, d.refDist || Math.max(...o.radii));
         it.radii = o.radii.map((r) => Math.max(1e-3, r * k));
+      }
+    } else if (d.type === "rotate") {
+      // Drag to turn it like a ball; Shift spins it about the line of sight.
+      const cam = this.viewer.renderer.camera;
+      let turn;
+      if (e.shiftKey && d.pivotS) {
+        const a0 = Math.atan2(d.y0 - d.pivotS[1], d.x0 - d.pivotS[0]), a1 = Math.atan2(y - d.pivotS[1], x - d.pivotS[0]);
+        turn = axisRotation(cam.forward, a1 - a0);
+      } else {
+        const k = Math.PI / 320;
+        turn = mul3(axisRotation(cam.camUp, (x - d.x0) * k), axisRotation(cam.right, (y - d.y0) * k));
+      }
+      if (it.kind === "curve") {
+        const pv = d.ref;
+        it.points = o.points.map((q, i) => {
+          const w = d.startPts[i];
+          if (!w) return q;
+          const r = sub3(w, pv);
+          const nw = add3(pv, [turn[0] * r[0] + turn[1] * r[1] + turn[2] * r[2], turn[3] * r[0] + turn[4] * r[1] + turn[5] * r[2], turn[6] * r[0] + turn[7] * r[1] + turn[8] * r[2]]);
+          return q.pos ? { pos: nw } : { ...q, offset: add3(q.offset || [0, 0, 0], sub3(nw, w)) };
+        });
+      } else {
+        it.rot = turnEuler(o.rot, turn);
       }
     } else if (d.type === "axis") {
       const c = this.resolve(it.center);
@@ -17308,8 +17612,17 @@ class AnnotatePlugin {
       } else if (kind === "axis") {
         const c = this.resolve(it.center);
         this.startDrag(e, { type: "axis", id: it.id, axis: index, ref: c && add3(c, sphereAxes(it)[index]) }, x, y, el);
+      } else if (kind === "rotate") {
+        const pivot = this.shapeScreen(it)?.pivot || this.anchorOf(it);
+        this.startDrag(e, { type: "rotate", id: it.id, ref: pivot }, x, y, el);
+        if (this.drag) {
+          this.drag.pivotS = this.project(pivot);
+          if (it.kind === "curve") this.drag.startPts = it.points.map((q) => this.resolve(q));
+        }
       } else {
         this.startDrag(e, { type: kind, id: it.id }, x, y, el);
+        // Resizing scales with the pointer's distance from the centre.
+        if (this.drag && kind === "radius") this.drag.refDist = dist3(this.drag.start, this.drag.ref);
       }
     });
     this.svg.addEventListener("pointermove", (e) => {
@@ -17376,15 +17689,15 @@ class AnnotatePlugin {
       }
       g.mids = mids;
       g.points.forEach((p, k) => handle(p, "point", k, { cls: this.sel.point === k ? "is-active" : "" }));
-    } else if (it.kind === "sphere") {
+      this.rotateKnob(it, add);
+    } else if (it.kind === "sphere" || it.kind === "box") {
       handle(g.center, "move", null, { r: 6 });
-      const s = this.sphereScreen(it);
-      if (s) {
-        const cam2 = this.viewer.renderer.camera;
-        const r = Math.max(...it.radii);
-        handle(add3(g.center, [cam2.right[0] * r, cam2.right[1] * r, cam2.right[2] * r]), "radius", null, { r: 6, cls: "ov-annot-handle--radius" });
-      }
+      const cam2 = this.viewer.renderer.camera;
+      const r = Math.max(...it.radii);
+      const grip = it.kind === "box" ? g.corners[7] : add3(g.center, [cam2.right[0] * r, cam2.right[1] * r, cam2.right[2] * r]);
+      handle(grip, "radius", null, { r: 6, cls: "ov-annot-handle--radius" });
       g.axes.forEach((ax, k) => handle(add3(g.center, ax), "axis", k, { r: 4.5, cls: "ov-annot-handle--axis", fill: AXIS_COLORS[k] }));
+      this.rotateKnob(it, add);
     } else {
       const b = this.layer.textBoxes().get(it.id);
       if (b) {
@@ -17394,6 +17707,21 @@ class AnnotatePlugin {
       const a = this.project(g.at);
       if (a && (it.dx || it.dy)) add("circle", { cx: a[0], cy: a[1], r: 3, class: "ov-annot-anchor" });
     }
+  }
+
+  /** The rotate handle above a shape: drag to turn it, Shift-drag to spin it in the view. */
+  rotateKnob(it, add) {
+    const sh = this.shapeScreen(it);
+    if (!sh) return;
+    const kx = sh.c[0], ky = sh.c[1] - sh.r - 26;
+    add("line", { x1: kx, y1: ky + 9, x2: kx, y2: sh.c[1] - sh.r, class: "ov-annot-stem" });
+    const g = add("g", { class: "ov-annot-rotate", "data-handle": "rotate", "data-index": "", transform: `translate(${kx} ${ky})` });
+    const ns = "http://www.w3.org/2000/svg";
+    const el = (tag, attrs) => { const x = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs)) x.setAttribute(k, v); g.appendChild(x); return x; };
+    el("circle", { r: 9, class: "ov-annot-rotate-disc" });
+    el("path", { d: "M -4.4 1.8 A 4.6 4.6 0 1 1 1.6 4.4", class: "ov-annot-rotate-arc" });
+    el("path", { d: "M 1.6 4.4 L -0.6 1.6 M 1.6 4.4 L 4.6 3.4", class: "ov-annot-rotate-arc" });
+    el("title", {}).textContent = "Drag to turn · Shift-drag to spin it in the view";
   }
 
   // ------------------------------------------------------------ the label editor
@@ -17540,6 +17868,8 @@ class AnnotatePlugin {
 
   renderPanel() {
     if (!this.panel) return;
+    this.countEl = null;
+    this.countFor = null;
     const it = this.active && this.sel ? this.item(this.sel.id) : null;
     this.panel.hidden = !it;
     if (!it) return;
@@ -17569,23 +17899,35 @@ class AnnotatePlugin {
       fields.push(miniSeg({ label: "Arrowheads", options: [{ value: "none", label: "None" }, { value: "end", label: "End" }, { value: "start", label: "Start" }, { value: "both", label: "Both" }], value: it.arrow, onChange: (x) => commit({ arrow: x }) }));
       if (it.points.length > 2) fields.push(toggle({ label: "Closed loop", checked: it.closed, onChange: (x) => commit({ closed: x }) }));
     } else {
-      fields.push(miniSeg({ label: "Look", options: [{ value: "bubble", label: "Bubble" }, { value: "shell", label: "Shell" }, { value: "wire", label: "Wire" }], value: it.style, onChange: (x) => commit({ style: x }) }));
+      const box = it.kind === "box";
+      fields.push(miniSeg({
+        label: "Look",
+        options: box ? [{ value: "box", label: "Box" }, { value: "wire", label: "Edges" }] : [{ value: "bubble", label: "Bubble" }, { value: "shell", label: "Shell" }, { value: "wire", label: "Wire" }],
+        value: it.style, onChange: (x) => commit({ style: x }),
+      }));
+      // Boxes are sized edge to edge; spheres by radius.
+      const k = box ? 2 : 1;
       const r = Math.max(...it.radii);
-      fields.push(slider({ label: "Radius", min: Math.max(0.1, r / 20), max: r * 4, value: r, scale: "log", format: (x) => fmtPc(x), onInput: (x) => live({ radii: it.radii.map((k) => (k / r) * x) }), onChange: done }));
-      const axes = h("div", { class: "ov-annot-xyz" }, ...["x", "y", "z"].map((a, k) => numberInput({ label: `R${a} (pc)`, value: round(it.radii[k]), onChange: (x) => { if (x > 0) commit({ radii: it.radii.map((y0, j) => (j === k ? x : y0)) }); } })));
-      fields.push(axes);
-      const rot = h("div", { class: "ov-annot-xyz" }, ...["x", "y", "z"].map((a, k) => numberInput({ label: `Tilt ${a} (°)`, value: round(it.rot[k]), onChange: (x) => commit({ rot: it.rot.map((y0, j) => (j === k ? x : y0)) }) })));
-      fields.push(rot);
+      fields.push(slider({ label: box ? "Size" : "Radius", min: Math.max(0.1, (k * r) / 20), max: k * r * 4, value: k * r, scale: "log", format: (x) => fmtPc(x), onInput: (x) => live({ radii: it.radii.map((q) => (q / r) * (x / k)) }), onChange: done }));
+      fields.push(h("div", { class: "ov-annot-xyz" }, ...["x", "y", "z"].map((a, j) => numberInput({
+        label: box ? `${a} (pc)` : `R${a} (pc)`, value: round(k * it.radii[j]),
+        onChange: (x) => { if (x > 0) commit({ radii: it.radii.map((y0, i) => (i === j ? x / k : y0)) }); },
+      }))));
+      fields.push(h("div", { class: "ov-field-head ov-annot-sub" }, h("span", { class: "ov-field-label" }, "Rotation · °"),
+        h("button", { class: "ov-annot-link", type: "button", onclick: () => { commit({ rot: [0, 0, 0] }); this.renderPanel(); } }, "Reset")));
+      fields.push(h("div", { class: "ov-annot-xyz" }, ...["x", "y", "z"].map((a, j) => numberInput({ label: a, value: round(it.rot[j]), onChange: (x) => commit({ rot: it.rot.map((y0, i) => (i === j ? x : y0)) }) }))));
+      fields.push(h("p", { class: "ov-field-hint" }, "Drag the ↻ handle to turn it; Shift-drag spins it in the view. Coloured dots stretch one axis."));
     }
+    if (it.kind !== "text") fields.push(this.selectionField(it, commit, live, done));
     fields.push(h("div", { class: "ov-field" }, h("div", { class: "ov-field-head" }, h("span", { class: "ov-field-label" }, "Colour")),
       colorPicker({ value: it.color, onChange: (c) => commit({ color: c }) })));
     fields.push(slider({ label: "Opacity", min: 0.05, max: 1, step: 0.01, value: it.opacity, format: pct, onInput: (x) => live({ opacity: x }), onChange: done }));
     // Where it is: the point being edited, the centre, or the label's anchor.
-    const pt = it.kind === "text" ? it.at : it.kind === "sphere" ? it.center : it.points[this.sel.point ?? -1] || null;
+    const pt = it.kind === "text" ? it.at : it.kind === "sphere" || it.kind === "box" ? it.center : it.points[this.sel.point ?? -1] || null;
     if (pt) {
       const setPt = (p) => {
         if (it.kind === "text") commit({ at: p });
-        else if (it.kind === "sphere") commit({ center: p });
+        else if (it.kind === "sphere" || it.kind === "box") commit({ center: p });
         else commit({ points: it.points.map((q, k) => (k === this.sel.point ? p : q)) });
         this.renderPanel();
       };
@@ -17615,6 +17957,111 @@ class AnnotatePlugin {
       h("button", { class: "ov-btn ov-btn--ghost", type: "button", onclick: () => this.duplicate(it.id) }, icon("copy"), "Duplicate"),
       h("button", { class: "ov-btn ov-btn--ghost ov-annot-delete", type: "button", onclick: () => this.removeItem(it.id) }, icon("trash"), "Delete")));
     body.append(...fields);
+  }
+
+  /** "Select what's inside" (along a curve: within its reach), highlighted in its colour or isolated. */
+  selectionField(it, commit, live, done) {
+    const curve = it.kind === "curve";
+    const wrap = h("div", { class: "ov-annot-select" });
+    wrap.append(toggle({
+      label: curve ? "Select along the line" : "Select what's inside",
+      hint: curve ? "Clusters within its reach take its colour, or show alone" : "Clusters inside take its colour, or show alone",
+      checked: !!it.select,
+      onChange: (x) => { commit({ select: x ? "highlight" : undefined }); this.renderPanel(); },
+    }));
+    if (it.select) {
+      wrap.append(miniSeg({ label: "Selection", options: [{ value: "highlight", label: "Highlight" }, { value: "isolate", label: "Isolate" }], value: it.select, onChange: (x) => commit({ select: x }) }));
+      if (curve) {
+        const samples = this.geom.get(it.id)?.samples;
+        const reach = curveReach(it, samples);
+        wrap.append(slider({ label: "Reach", min: Math.max(0.5, reach / 30), max: reach * 6, value: reach, scale: "log", format: (x) => fmtPc(x), onInput: (x) => live({ reach: Math.round(x * 10) / 10 }), onChange: done }));
+      }
+      this.countEl = h("div", { class: "ov-annot-count-line", "aria-live": "polite" }, this.countText(it.id));
+      this.countFor = it.id;
+      wrap.append(this.countEl);
+    }
+    return wrap;
+  }
+
+  countText(id) {
+    const n = this.selCounts?.get(id);
+    return n == null ? "" : n === 1 ? "1 object selected now" : `${n.toLocaleString()} objects selected now`;
+  }
+
+  /**
+   * Select what selecting annotations hold, at the current time: their
+   * colour on what they hold (highlight), or only what they hold shown
+   * (isolate). Written into each point trace's highlight colours and state
+   * bit 64, so markers, trails and Sky member stars all follow.
+   */
+  applySelection(doc) {
+    const v = this.viewer;
+    const batches = v.points?.batches || [];
+    const time = v.timeline.time;
+    const groupOn = new Map(doc.groups.map((g) => [g.id, g.visible !== false]));
+    const active = doc.items.filter((it) => it.select && it.kind !== "text" && it.visible !== false && groupOn.get(it.group)
+      && (it.fade ?? 1) > 0.5 && (!it.present || presentDayFade(time) > 0.5));
+    const key = `${this.version}|${this.view ? this.sceneVersion : 0}|${active.length ? v.timeline.frame : 0}|${batches.length}|${v._gpuGeneration || 0}|${v._pickVersion}`;
+    if (key === this._selKey) return;
+    this._selKey = key;
+    const counts = new Map();
+    const sel = [];
+    for (const it of active) {
+      let test = null;
+      if (it.kind === "curve") {
+        const pts = it.points.map((q) => this.resolve(q));
+        if (!pts.some((q) => !q)) test = selectionTest(it, { samples: curveSamples(pts, { smooth: it.smooth, closed: it.closed, perSegment: 16 }).points });
+      } else {
+        const c = this.resolve(it.center);
+        if (c) test = selectionTest(it, { center: c });
+      }
+      if (!test) continue;
+      const rgb = parseColor(it.color);
+      sel.push({ id: it.id, test, isolate: it.select === "isolate", rgb: rgb.map((x) => Math.round(x * 255)) });
+      counts.set(it.id, 0);
+    }
+    const isolate = sel.some((x) => x.isolate);
+    const sun = v.world?.sunTrace;
+    const p = [0, 0, 0], off = [0, 0, 0];
+    const frame = v.timeline.frame;
+    let changed = false;
+    for (const batch of batches) {
+      const trace = batch.trace;
+      const d = v.data.get(batch.key);
+      // The Sun and samples of a model stay as they are.
+      if (!sel.length || !d || batch.key === sun || trace.pickable === false) {
+        changed = batch.setMarks(null) || changed;
+        changed = batch.setStateBits(64, null) || changed;
+        continue;
+      }
+      const N = batch.count, F = trace.points.position.frames || 1;
+      const marks = new Uint8Array(N * 4);
+      const hidden = isolate ? new Uint8Array(N) : null;
+      frameOffset(d.offset, frame, off);
+      const shown = v.state.traces[batch.key]?.visible !== false;
+      const fade = v.state.global.fadeTime;
+      for (let i = 0; i < N; i++) {
+        if (!cpuFramePosition(d.position, F, N, i, frame, p)) { if (hidden) hidden[i] = 64; continue; }
+        p[0] += off[0]; p[1] += off[1]; p[2] += off[2];
+        let kept = false;
+        for (const s of sel) {
+          if (!s.test(p)) continue;
+          // Count what can be seen: shown traces, objects already born.
+          if (shown && (!d.ageNow || birthFadeAt(time, d.ageNow[i], fade) > 0.01)) counts.set(s.id, counts.get(s.id) + 1);
+          if (s.isolate) kept = true;
+          else { marks[i * 4] = s.rgb[0]; marks[i * 4 + 1] = s.rgb[1]; marks[i * 4 + 2] = s.rgb[2]; marks[i * 4 + 3] = 255; }
+        }
+        if (hidden && !kept) hidden[i] = 64;
+      }
+      changed = batch.setMarks(marks) || changed;
+      changed = batch.setStateBits(64, hidden) || changed;
+    }
+    this.selCounts = counts;
+    if (this.countEl && this.countFor) this.countEl.textContent = this.countText(this.countFor);
+    if (changed) {
+      v.invalidatePick();
+      v.renderer.invalidate();
+    }
   }
 
   moveToGroup(id, groupId) {
@@ -17763,6 +18210,7 @@ class AnnotatePlugin {
     const mod = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
     return [["Annotate", [
       ["Start / stop annotating", "K"], ["Finish a curve", "Enter"], ["Move along the line of sight", "⇧ Drag"],
+      ["Turn a shape", "Drag ↻"], ["Spin it in the view", "⇧ Drag ↻"],
       ["Snap a point onto a cluster or the dust", `${mod} Drag`], ["Undo / redo", `${mod} Z / ⇧${mod} Z`],
       ["Duplicate", `${mod} D`], ["Delete", "⌫"], ["Deselect · done", "Esc"],
     ]]];
@@ -17845,6 +18293,7 @@ const MARKS = {
   arrow: '<svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 10 9.5 2.5M5 2.5h4.5V7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   bubble: '<svg viewBox="0 0 12 12" width="12" height="12"><circle cx="6" cy="6" r="4.6" fill="currentColor" fill-opacity="0.45" stroke="currentColor" stroke-width="1.2"/></svg>',
   shell: '<svg viewBox="0 0 12 12" width="12" height="12"><circle cx="6" cy="6" r="4.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  box: '<svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 4.2 6 2l4 2.2v4.6L6 11 2 8.8Z" fill="currentColor" fill-opacity="0.25" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M2 4.2 6 6.4l4-2.2M6 6.4V11" fill="none" stroke="currentColor" stroke-width="1"/></svg>',
   wire: '<svg viewBox="0 0 12 12" width="12" height="12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.1"/><ellipse cx="6" cy="6" rx="4.5" ry="1.7" fill="none" stroke="currentColor" stroke-width="0.9"/><ellipse cx="6" cy="6" rx="1.7" ry="4.5" fill="none" stroke="currentColor" stroke-width="0.9"/></svg>',
 };
 
@@ -17865,6 +18314,56 @@ function legacyLabel(l, i) {
   if (![x, y, z].every(Number.isFinite)) return null;
   const size = Number(l.size ?? l.font_size);
   return { id: String(l.id || `legacy-${i}`), text: String(l.text || "Note"), anchor: { pos: [x, y, z] }, color: String(l.color || "#ffffff"), ...(size > 0 ? { size } : {}), ...(l.visible === false ? { visible: false } : {}) };
+}
+
+/** Two triangles per face of a box, with outward normals, into `mesh`. */
+function pushBoxFaces(mesh, corners, axes, c, alpha) {
+  const unit = (v, s) => { const l = Math.hypot(...v) || 1; return [s * v[0] / l, s * v[1] / l, s * v[2] / l]; };
+  // Faces by the corner bit they share: bit k fixed at 0 (minus side) or 1 (plus side).
+  for (let k = 0; k < 3; k++) {
+    for (const side of [0, 1]) {
+      const quad = [0, 1, 2, 3, 4, 5, 6, 7].filter((i) => ((i >> k) & 1) === side);
+      // Order the four corners around the face: 0, 1, 3, 2 in its own bits.
+      const [a, b, cc, d] = [quad[0], quad[1], quad[3], quad[2]];
+      const n = unit(axes[k], side ? 1 : -1);
+      for (const i of [a, b, cc, a, cc, d]) mesh.push(...corners[i], ...n, c[0], c[1], c[2], alpha, 0, 0);
+    }
+  }
+}
+
+/** A sleeve of `radius` around the polyline `pts` (a curve's selection reach), into `mesh`. */
+function pushTube(mesh, pts, radius, c, alpha) {
+  const ring = 14;
+  const frames = [];
+  let prevN = null;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    let t = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const tl = Math.hypot(...t) || 1;
+    t = t.map((x) => x / tl);
+    // Carry the ring's orientation along (parallel transport) so it never twists.
+    let n = prevN || (Math.abs(t[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0]);
+    const d = n[0] * t[0] + n[1] * t[1] + n[2] * t[2];
+    n = [n[0] - d * t[0], n[1] - d * t[1], n[2] - d * t[2]];
+    const nl = Math.hypot(...n) || 1;
+    n = n.map((x) => x / nl);
+    prevN = n;
+    const bn = [t[1] * n[2] - t[2] * n[1], t[2] * n[0] - t[0] * n[2], t[0] * n[1] - t[1] * n[0]];
+    const verts = [];
+    for (let k = 0; k <= ring; k++) {
+      const ang = (k / ring) * 2 * Math.PI;
+      const dir = [0, 1, 2].map((j) => Math.cos(ang) * n[j] + Math.sin(ang) * bn[j]);
+      verts.push({ p: [0, 1, 2].map((j) => pts[i][j] + radius * dir[j]), n: dir });
+    }
+    frames.push(verts);
+  }
+  const put = (v) => mesh.push(...v.p, ...v.n, c[0], c[1], c[2], alpha, 1, 0);
+  for (let i = 1; i < frames.length; i++) {
+    for (let k = 0; k < ring; k++) {
+      const a = frames[i - 1][k], b = frames[i - 1][k + 1], cc = frames[i][k], d = frames[i][k + 1];
+      put(a); put(b); put(d); put(a); put(d); put(cc);
+    }
+  }
 }
 
 function add3(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
@@ -18040,7 +18539,7 @@ class LassoPlugin {
       const ages = v.data.get(trace.key)?.ageNow;
       const hits = [];
       for (let i = 0; i < trace.points.count; i++) {
-        if (batch.state[i] & 18) continue; // hidden by the filter or an isolated lasso
+        if (batch.state[i] & 82) continue; // hidden by the filter, an isolated lasso or an annotation
         // Not yet born (or long faded) at this time: invisible, so not selectable.
         if (ages && birthFadeAt(t, ages[i], g.fadeTime, g.fadeInOut) <= 0) continue;
         const p = v.objectPosition(trace.key, i);

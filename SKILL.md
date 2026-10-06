@@ -148,11 +148,17 @@ annotations = [
     {"kind": "curve", "points": [[0, 0, 0], [200, 100, 50], [400, 0, 0]], "dash": "dash"},
     {"kind": "bubble", "center": [10, 0, 0], "radii": [30, 20, 10], "rot": [0, 0, 45]},
     {"kind": "text", "at": [300, 200, 0], "text": "Sco-Cen", "size": 16, "group": "Regions"},
+    {"kind": "box", "center": [-200, 50, 0], "size": [300, 150, 80], "rot": [0, 0, 25], "select": "isolate"},
+    {"kind": "curve", "points": [[0, -400, 0], [0, 400, 0]], "select": "highlight", "reach": 60},
 ]
 ```
 
-- Kinds: `text`, `curve`, `arrow`, and the ellipsoids `bubble`, `shell` and
-  `wire` (`radius` or `radii` in pc, `rot` in degrees).
+- Kinds: `text`, `curve`, `arrow`, the ellipsoids `bubble`, `shell` and
+  `wire` (`radius` or `radii` in pc), and `box` (`size`: edge lengths in pc).
+  Shapes take `rot` in degrees about x, y, z.
+- `select="highlight"` colours the objects a shape holds (a curve: within
+  `reach` pc of it) like the annotation; `select="isolate"` shows only them.
+  Both follow the objects through time.
 - A shape's `label` adds a label at its centre, in the same key entry.
 - Items with the same `group` share one key entry.
 - `present: True` shows an item only around t = 0.

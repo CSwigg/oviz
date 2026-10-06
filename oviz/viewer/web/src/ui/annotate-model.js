@@ -9,14 +9,21 @@
 //   text   { at, text, size (px), weight, color, opacity, bg, dx, dy }
 //   curve  { points: [point…], smooth (0–1), closed, width (px), color, opacity, dash, arrow }
 //   sphere { center, radii [pc ×3], rot [deg ×3], style: bubble | shell | wire, color, opacity }
+//   box    { center, radii (half sizes, pc ×3), rot, style: box | wire, color, opacity }
 //
 // Any item may set `present: true` to show only around the present day,
-// like the dust maps it often marks.
+// like the dust maps it often marks. Shapes and curves may set `select`
+// ("highlight" or "isolate") to select the objects inside them (a curve:
+// within `reach` pc of it), coloured like the shape or shown alone.
 
 import { clamp, lerp, DEG } from "../core/math.js";
 import { parseColor } from "../core/color.js";
 
 export const SPHERE_STYLES = ["bubble", "shell", "wire"];
+export const BOX_STYLES = ["box", "wire"];
+export const SELECT_MODES = ["highlight", "isolate"];
+/** The twelve edges of a box, as pairs of corner indices (see boxCorners). */
+export const BOX_EDGES = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
 export const CURVE_DASHES = ["solid", "dash", "dot"];
 export const CURVE_ARROWS = ["none", "end", "start", "both"];
 
@@ -27,6 +34,7 @@ export const ANNOT_DEFAULTS = {
   arrow: { smooth: 1, closed: false, width: 2.5, color: "#ffd27a", opacity: 1, dash: "solid", arrow: "end" },
   bubble: { style: "bubble", color: "#7cc4ff", opacity: 0.6, rot: [0, 0, 0] },
   shell: { style: "shell", color: "#ff9e7a", opacity: 0.9, rot: [0, 0, 0] },
+  box: { style: "box", color: "#9b7bff", opacity: 0.85, rot: [0, 0, 0] },
 };
 
 export function emptyAnnotations() {
@@ -107,6 +115,7 @@ function normalizeItem(it) {
   };
   if (it.present) base.present = true;
   if (it.visible === false) base.visible = false;
+  if (kind !== "text" && SELECT_MODES.includes(it.select)) base.select = it.select;
   if (kind === "text") {
     const at = normalizePoint(it.at ?? it.anchor ?? it.position);
     if (!at) return null;
@@ -125,7 +134,16 @@ function normalizeItem(it) {
       ...base, kind, points, smooth: clamp(num(it.smooth, d.smooth), 0, 1), closed: !!it.closed && points.length > 2,
       width: clamp(num(it.width, d.width), 0.5, 24), color: base.color || d.color,
       dash: CURVE_DASHES.includes(it.dash) ? it.dash : "solid", arrow: CURVE_ARROWS.includes(it.arrow) ? it.arrow : "none",
+      ...(num(it.reach, 0) > 0 ? { reach: num(it.reach, 0) } : {}),
     };
+  }
+  if (kind === "box") {
+    const center = normalizePoint(it.center ?? it.at);
+    const r = Array.isArray(it.radii) ? it.radii : Array.isArray(it.size) ? it.size.map((x) => num(x, NaN) / 2) : [it.radius, it.radius, it.radius];
+    const radii = r.slice(0, 3).map((x) => Math.max(1e-3, Math.abs(num(x, NaN))));
+    if (!center || radii.length !== 3 || radii.some((x) => !Number.isFinite(x))) return null;
+    const style = BOX_STYLES.includes(it.style) ? it.style : "box";
+    return { ...base, kind, center, radii, rot: vec3(it.rot) || [0, 0, 0], style, color: base.color || ANNOT_DEFAULTS.box.color };
   }
   if (kind === "sphere") {
     const center = normalizePoint(it.center ?? it.at);
@@ -178,7 +196,7 @@ export function annotationsTimeDependent(doc) {
   for (const it of doc.items) {
     if (it.present) return true;
     if (it.kind === "text" && moving(it.at)) return true;
-    if (it.kind === "sphere" && moving(it.center)) return true;
+    if ((it.kind === "sphere" || it.kind === "box") && moving(it.center)) return true;
     if (it.kind === "curve" && it.points.some(moving)) return true;
   }
   return false;
@@ -277,6 +295,105 @@ export function rotationQuat(m) {
   return [x / l, y / l, z / l, w / l];
 }
 
+/** Euler angles (degrees, as sphereRotation takes them) of a rotation matrix. */
+export function rotationToEuler(m) {
+  const sy = clamp(-m[6], -1, 1);
+  const y = Math.asin(sy);
+  let x, z;
+  if (Math.abs(sy) < 0.99999) {
+    x = Math.atan2(m[7], m[8]);
+    z = Math.atan2(m[3], m[0]);
+  } else {
+    // Gimbal lock: put the whole turn about x.
+    x = Math.atan2(-m[5], m[4]);
+    z = 0;
+  }
+  return [x / DEG, y / DEG, z / DEG].map((d) => Math.round(d * 1e6) / 1e6);
+}
+
+/** Matrix of a turn by `angle` (radians) about the unit axis `u`. */
+export function axisRotation(u, angle) {
+  const c = Math.cos(angle), s = Math.sin(angle), t = 1 - c;
+  const [x, y, z] = u;
+  return [
+    t * x * x + c, t * x * y - s * z, t * x * z + s * y,
+    t * x * y + s * z, t * y * y + c, t * y * z - s * x,
+    t * x * z - s * y, t * y * z + s * x, t * z * z + c,
+  ];
+}
+
+export function mul3(a, b) {
+  const o = new Array(9);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) o[r * 3 + c] = a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c];
+  return o;
+}
+
+/** Euler angles after turning `rot` by the matrix `turn` (applied in world space). */
+export function turnEuler(rot, turn) {
+  return rotationToEuler(mul3(turn, sphereRotation(rot)));
+}
+
+/** The eight corners of a box (bit 0: +x, bit 1: +y, bit 2: +z). */
+export function boxCorners(item, center) {
+  const axes = sphereAxes(item);
+  const out = [];
+  for (let k = 0; k < 8; k++) {
+    const sx = k & 1 ? 1 : -1, sy = k & 2 ? 1 : -1, sz = k & 4 ? 1 : -1;
+    out.push([0, 1, 2].map((j) => center[j] + sx * axes[0][j] + sy * axes[1][j] + sz * axes[2][j]));
+  }
+  return out;
+}
+
+/** Whether world point `p` lies inside the box (grown by `margin`). */
+export function insideBox(item, center, p, margin = 1) {
+  const m = sphereRotation(item.rot);
+  const d = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
+  for (let k = 0; k < 3; k++) {
+    const local = m[k] * d[0] + m[3 + k] * d[1] + m[6 + k] * d[2];
+    if (Math.abs(local) > item.radii[k] * margin) return false;
+  }
+  return true;
+}
+
+/** Distance in pc from `p` to a polyline of world points. */
+export function polylineDistance3(p, pts) {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    const u = l2 > 0 ? clamp(((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / l2, 0, 1) : 0;
+    best = Math.min(best, Math.hypot(p[0] - a[0] - ab[0] * u, p[1] - a[1] - ab[1] * u, p[2] - a[2] - ab[2] * u));
+  }
+  return best;
+}
+
+/**
+ * A test for "is this world point selected by `item`": inside a sphere or
+ * box, or within its reach of a curve. `center` / `samples` are the item's
+ * resolved centre or sampled curve. Returns null for items that select nothing.
+ */
+export function selectionTest(item, { center, samples } = {}) {
+  if (!item.select) return null;
+  if (item.kind === "sphere" && center) return (p) => insideSphere(item, center, p);
+  if (item.kind === "box" && center) return (p) => insideBox(item, center, p);
+  if (item.kind === "curve" && samples?.length > 1) {
+    const r = curveReach(item, samples);
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const q of samples) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], q[k] - r); hi[k] = Math.max(hi[k], q[k] + r); }
+    return (p) => p[0] >= lo[0] && p[0] <= hi[0] && p[1] >= lo[1] && p[1] <= hi[1] && p[2] >= lo[2] && p[2] <= hi[2] && polylineDistance3(p, samples) <= r;
+  }
+  return null;
+}
+
+/** A curve's selection reach in pc: its own, else a twentieth of its length. */
+export function curveReach(item, samples) {
+  if (item.reach > 0) return item.reach;
+  let len = 0;
+  for (let i = 1; i < (samples?.length || 0); i++) len += Math.hypot(samples[i][0] - samples[i - 1][0], samples[i][1] - samples[i - 1][1], samples[i][2] - samples[i - 1][2]);
+  return Math.max(1, Math.round(len / 20));
+}
+
 /** Whether world point `p` lies within `margin` × the ellipsoid. */
 export function insideSphere(item, center, p, margin = 1) {
   const m = sphereRotation(item.rot);
@@ -310,12 +427,14 @@ export function polylineDistance(x, y, pts) {
 const KIND_NAMES = {
   text: ["Label", "Labels"], curve: ["Curve", "Curves"], arrow: ["Arrow", "Arrows"],
   bubble: ["Bubble", "Bubbles"], shell: ["Shell", "Shells"], wire: ["Sphere", "Spheres"],
+  box: ["Box", "Boxes"],
 };
 
 /** What an item looks like to a reader: label, curve, arrow, bubble, shell or wire sphere. */
 export function annotKind(item) {
   if (item.kind === "curve") return item.arrow && item.arrow !== "none" ? "arrow" : "curve";
   if (item.kind === "sphere") return item.style;
+  if (item.kind === "box") return "box";
   return "text";
 }
 
@@ -375,9 +494,9 @@ export function assignGroup(doc, item, ctx = {}) {
     const at = resolve(item.at);
     let best = null;
     for (const o of others) {
-      if (o.kind === "sphere") {
+      if (o.kind === "sphere" || o.kind === "box") {
         const c = resolve(o.center);
-        if (!at || !c || !insideSphere(o, c, at, 1.25)) continue;
+        if (!at || !c || !(o.kind === "box" ? insideBox(o, c, at, 1.25) : insideSphere(o, c, at, 1.25))) continue;
         const d = Math.hypot(at[0] - c[0], at[1] - c[1], at[2] - c[2]) / Math.max(...o.radii);
         if (!best || d < best.d) best = { o, d };
       } else if (o.kind === "curve" && at && ctx.screenDistance) {
@@ -396,9 +515,9 @@ export function assignGroup(doc, item, ctx = {}) {
       if (o.kind !== "text") continue;
       const at = resolve(o.at);
       if (!at) continue;
-      if (item.kind === "sphere") {
+      if (item.kind === "sphere" || item.kind === "box") {
         const c = resolve(item.center);
-        if (!c || !insideSphere(item, c, at, 1.25)) continue;
+        if (!c || !(item.kind === "box" ? insideBox(item, c, at, 1.25) : insideSphere(item, c, at, 1.25))) continue;
         const d = Math.hypot(at[0] - c[0], at[1] - c[1], at[2] - c[2]) / Math.max(...item.radii);
         if (!best || d < best.d) best = { o, d };
       } else if (item.kind === "curve" && ctx.screenDistance) {
@@ -473,7 +592,7 @@ export function lerpAnnotations(a, b, t, resolve = (p) => p?.pos || null) {
         base.size = lerp(x.size, y.size, t);
         base.dx = lerp(x.dx || 0, y.dx || 0, t);
         base.dy = lerp(x.dy || 0, y.dy || 0, t);
-      } else if (x.kind === "sphere") {
+      } else if (x.kind === "sphere" || x.kind === "box") {
         base.center = mixPoint(x.center, y.center, t);
         base.radii = x.radii.map((r, k) => Math.exp(lerp(Math.log(r), Math.log(y.radii[k]), t)));
         base.rot = x.rot.map((r, k) => lerp(r, y.rot[k], t));
@@ -492,7 +611,7 @@ export function lerpAnnotations(a, b, t, resolve = (p) => p?.pos || null) {
       if (fade <= 1e-4) continue;
       const copy = { ...it, fade };
       if (it.kind === "text") copy.at = fixed(it.at);
-      else if (it.kind === "sphere") copy.center = fixed(it.center);
+      else if (it.kind === "sphere" || it.kind === "box") copy.center = fixed(it.center);
       else copy.points = it.points.map(fixed);
       if (copy.at === null || copy.center === null || (copy.points && copy.points.some((p) => !p))) continue;
       out.items.push(copy);

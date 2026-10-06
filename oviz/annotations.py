@@ -11,12 +11,17 @@ in the figure's frame (heliocentric Galactic x, y, z at the present day)::
     ]
 
 Kinds are ``text``, ``curve``, ``arrow`` (a curve with an arrowhead),
-``bubble``, ``shell`` and ``wire`` (ellipsoids: ``radius`` or ``radii`` in pc,
-``rot`` in degrees about x, y, z). A shape's ``label`` adds a label at its
-centre. Items with the same ``group`` share one entry in the figure's key;
-otherwise the viewer groups them as it does what readers draw. Every item
+``bubble``, ``shell`` and ``wire`` (ellipsoids: ``radius`` or ``radii`` in pc),
+and ``box`` (``size``, the edge lengths in pc, or half sizes as ``radii``).
+Shapes take ``rot`` in degrees about x, y, z. A shape's ``label`` adds a label
+at its centre. Items with the same ``group`` share one entry in the figure's
+key; otherwise the viewer groups them as it does what readers draw. Every item
 takes ``color``, ``opacity`` and ``present`` (show only at the present day).
-Readers can edit all of them in the figure (press K).
+
+Shapes and curves can select the objects they hold: ``select="highlight"``
+colours what is inside (a curve: within ``reach`` pc of it) like the shape,
+``select="isolate"`` shows only that. Readers can edit all of this in the
+figure (press K).
 """
 
 from __future__ import annotations
@@ -25,6 +30,23 @@ from typing import Any, Iterable
 
 _SPHERES = {"bubble": "bubble", "shell": "shell", "wire": "wire", "sphere": "bubble"}
 _STYLE_KEYS = ("color", "opacity", "present")
+_SELECT = {True: "highlight", "highlight": "highlight", "isolate": "isolate"}
+
+
+def _select(raw: dict, n: int) -> dict:
+    """The ``select`` (and ``reach``) settings of an item, validated."""
+    value = raw.get("select")
+    if value in (None, False, "off"):
+        return {}
+    if value not in _SELECT:
+        raise ValueError(f"annotation {n}: select must be 'highlight' or 'isolate'")
+    out = {"select": _SELECT[value]}
+    if "reach" in raw:
+        reach = float(raw["reach"])
+        if reach <= 0:
+            raise ValueError(f"annotation {n}: reach must be positive (pc)")
+        out["reach"] = reach
+    return out
 
 
 def _point(value: Any, what: str) -> dict[str, list[float]]:
@@ -77,7 +99,7 @@ def normalize_annotations(items: Iterable[dict] | None) -> dict[str, list[dict]]
                 raise ValueError(f"annotation {n} ({kind}) needs at least two 'points'")
             gid = group_for(raw.get("group"), f"item-{n}")
             item = {"kind": "curve", "id": item_id, "group": gid, "points": [_point(p, f"annotation {n} point") for p in pts],
-                    "arrow": raw.get("arrow", "end" if kind == "arrow" else "none"), **style}
+                    "arrow": raw.get("arrow", "end" if kind == "arrow" else "none"), **style, **_select(raw, n)}
             for k in ("smooth", "closed", "width", "dash"):
                 if k in raw:
                     item[k] = raw[k]
@@ -97,10 +119,30 @@ def normalize_annotations(items: Iterable[dict] | None) -> dict[str, list[dict]]
             gid = group_for(raw.get("group", label), f"item-{n}")
             center = _point(raw["center"], f"annotation {n} 'center'")
             out.append({"kind": "sphere", "id": item_id, "group": gid, "center": center, "radii": radii,
-                        "rot": [float(r) for r in raw.get("rot", (0, 0, 0))], "style": raw.get("style", _SPHERES[kind]), **style})
+                        "rot": [float(r) for r in raw.get("rot", (0, 0, 0))], "style": raw.get("style", _SPHERES[kind]), **style, **_select(raw, n)})
+            if label:
+                out.append({"kind": "text", "id": f"{item_id}-label", "group": gid, "at": center, "text": str(label),
+                            **{k: raw[k] for k in ("present",) if k in raw}})
+        elif kind == "box":
+            if "center" not in raw:
+                raise ValueError(f"annotation {n} (box) needs 'center'")
+            if "size" in raw:
+                size = raw["size"]
+                halves = [float(x) / 2 for x in (size if isinstance(size, (list, tuple)) else [size] * 3)]
+            elif "radii" in raw:
+                halves = [float(x) for x in raw["radii"]]
+            else:
+                raise ValueError(f"annotation {n} (box) needs 'size' (edge lengths) or 'radii' (half sizes)")
+            if len(halves) != 3 or min(halves) <= 0:
+                raise ValueError(f"annotation {n} (box) needs three positive sizes")
+            label = raw.get("label")
+            gid = group_for(raw.get("group", label), f"item-{n}")
+            center = _point(raw["center"], f"annotation {n} 'center'")
+            out.append({"kind": "box", "id": item_id, "group": gid, "center": center, "radii": halves,
+                        "rot": [float(r) for r in raw.get("rot", (0, 0, 0))], "style": raw.get("style", "box"), **style, **_select(raw, n)})
             if label:
                 out.append({"kind": "text", "id": f"{item_id}-label", "group": gid, "at": center, "text": str(label),
                             **{k: raw[k] for k in ("present",) if k in raw}})
         else:
-            raise ValueError(f"annotation {n}: unknown kind {raw.get('kind')!r} (text, curve, arrow, bubble, shell, wire)")
+            raise ValueError(f"annotation {n}: unknown kind {raw.get('kind')!r} (text, curve, arrow, bubble, shell, wire, box)")
     return {"groups": list(groups.values()), "items": out}

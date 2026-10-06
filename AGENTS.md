@@ -121,7 +121,10 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
   - States and view links carry the anchor. Older ones infer it from the pose.
 - Per-object GPU state is a bitfield: 1 = dimmed, 2 = hidden (the filter),
   4 = replaced by member stars, 8 / 16 = dimmed / hidden by a lasso, 32 =
-  dimmed by the Birth tree. The point shader dims on 1 and 32.
+  dimmed by the Birth tree, 64 = hidden outside an isolating annotation. The
+  point shader dims on 1 and 32 and hides on 2 and 64. Annotation highlights
+  are a per-object RGBA attribute (`PointBatch.setMarks`); Sky member stars
+  and the lasso honour both.
 - The shaders draw the lasso from a per-object pair (`aLasso`): the weight a
   fade starts from and the level in the selection. Bits 8 / 16 serve the
   CPU's readers. A State extension may return `transition(from, to)` with

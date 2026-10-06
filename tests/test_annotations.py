@@ -54,3 +54,27 @@ def test_figures_without_annotations_are_unchanged():
 def test_bad_annotations_raise(bad):
     with pytest.raises(ValueError):
         normalize_annotations([bad])
+
+
+def test_boxes_and_selections():
+    doc = normalize_annotations([
+        {"kind": "box", "center": [0, 0, 0], "size": [100, 50, 20], "rot": [0, 0, 30], "select": "isolate", "label": "Survey"},
+        {"kind": "curve", "points": [[0, 0, 0], [100, 0, 0]], "select": True, "reach": 25},
+        {"kind": "bubble", "center": [0, 0, 0], "radius": 10, "select": "highlight"},
+    ])
+    box, label, curve, bubble = doc["items"]
+    assert box["kind"] == "box" and box["radii"] == [50.0, 25.0, 10.0] and box["select"] == "isolate"
+    assert label["text"] == "Survey" and label["group"] == box["group"]
+    assert curve["select"] == "highlight" and curve["reach"] == 25.0
+    assert bubble["select"] == "highlight" and "reach" not in bubble
+
+
+@pytest.mark.parametrize("bad", [
+    {"kind": "box", "center": [0, 0, 0]},
+    {"kind": "box", "center": [0, 0, 0], "size": [1, 0, 1]},
+    {"kind": "bubble", "center": [0, 0, 0], "radius": 1, "select": "everything"},
+    {"kind": "curve", "points": [[0, 0, 0], [1, 0, 0]], "select": "highlight", "reach": -1},
+])
+def test_bad_boxes_and_selections_raise(bad):
+    with pytest.raises(ValueError):
+        normalize_annotations([bad])

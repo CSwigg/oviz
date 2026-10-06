@@ -13,6 +13,8 @@ export const ANNOT_SEG_FLOATS = 16;
 export const ANNOT_ARROW_FLOATS = 12;
 // Per ellipsoid: centre.xyz, radii.xyz, quaternion, rgba, style, highlight.
 export const ANNOT_SPHERE_FLOATS = 16;
+// Per mesh vertex (box faces, a curve's selection tube): xyz, normal, rgba, style, 0.
+export const ANNOT_MESH_FLOATS = 12;
 
 const SEG_VERT = `
 layout(location = 0) in vec2 aCorner;   // x: 0 start / 1 end, y: -1..1 side
@@ -197,6 +199,44 @@ void main() {
 }
 `;
 
+const MESH_VERT = `
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec4 aColor;
+layout(location = 3) in vec2 aStyle;    // 0 box face, 1 selection tube
+uniform mat4 uViewProj;
+out vec3 vWorld;
+out vec3 vNormal;
+out vec4 vColor;
+flat out float vStyle;
+void main() {
+  vWorld = aPos;
+  vNormal = aNormal;
+  vColor = aColor;
+  vStyle = aStyle.x;
+  gl_Position = uViewProj * vec4(aPos, 1.0);
+}
+`;
+
+const MESH_FRAG = `
+in vec3 vWorld;
+in vec3 vNormal;
+in vec4 vColor;
+flat in float vStyle;
+uniform vec3 uEye;
+out vec4 outColor;
+void main() {
+  vec3 N = normalize(vNormal);
+  vec3 V = normalize(uEye - vWorld);
+  float rim = 1.0 - abs(dot(N, V));
+  // A box face is a faint pane; a selection tube a glassy sleeve.
+  float a = vStyle < 0.5 ? 0.07 + 0.11 * rim : 0.025 + 0.5 * pow(rim, 3.0);
+  a *= vColor.a;
+  if (a < 0.002) discard;
+  outColor = vec4(vColor.rgb * a, a);
+}
+`;
+
 const TEXT_VERT = `
 layout(location = 0) in vec2 aCorner;
 uniform vec2 uViewport;     // device pixels
@@ -265,6 +305,7 @@ export class AnnotationsLayer {
     this.arrowProgram = createProgram(gl, ARROW_VERT, ARROW_FRAG, { label: "annot-arrows" });
     this.sphereProgram = createProgram(gl, SPHERE_VERT, SPHERE_FRAG, { label: "annot-shells" });
     this.textProgram = createProgram(gl, TEXT_VERT, TEXT_FRAG, { label: "annot-text" });
+    this.meshProgram = createProgram(gl, MESH_VERT, MESH_FRAG, { label: "annot-mesh" });
     this.cornerBuffer = createBuffer(gl, SEG_CORNERS);
     this.quadBuffer = createBuffer(gl, QUAD);
     this.arrowCornerBuffer = createBuffer(gl, new Float32Array([0, 1, 2]));
@@ -279,6 +320,14 @@ export class AnnotationsLayer {
     this.segBuffer = gl.createBuffer();
     this.arrowBuffer = gl.createBuffer();
     this.sphereBuffer = gl.createBuffer();
+    this.meshBuffer = gl.createBuffer();
+    const meshStride = ANNOT_MESH_FLOATS * 4;
+    this.meshVao = this._vao([
+      { loc: 0, buffer: this.meshBuffer, size: 3, stride: meshStride, offset: 0 },
+      { loc: 1, buffer: this.meshBuffer, size: 3, stride: meshStride, offset: 12 },
+      { loc: 2, buffer: this.meshBuffer, size: 4, stride: meshStride, offset: 24 },
+      { loc: 3, buffer: this.meshBuffer, size: 2, stride: meshStride, offset: 40 },
+    ]);
     this.segVao = this._vao([
       { loc: 0, buffer: this.cornerBuffer, size: 2 },
       ...this._instanced(this.segBuffer, ANNOT_SEG_FLOATS, [[1, 3], [2, 3], [3, 2], [4, 4], [5, 4]]),
@@ -292,7 +341,7 @@ export class AnnotationsLayer {
       ...this._instanced(this.sphereBuffer, ANNOT_SPHERE_FLOATS, [[1, 3], [2, 3], [3, 4], [4, 4], [5, 2]]),
     ], this.icoIndex);
     this.textVao = this._vao([{ loc: 0, buffer: this.quadBuffer, size: 2 }]);
-    this.counts = { seg: 0, arrow: 0, sphere: 0 };
+    this.counts = { seg: 0, arrow: 0, sphere: 0, mesh: 0 };
     this.texts = [];
     this.textures = new Map(); // style key → {tex, w, h, used}
     this._version = -1;
@@ -330,7 +379,8 @@ export class AnnotationsLayer {
     put(this.segBuffer, s.segments);
     put(this.arrowBuffer, s.arrows);
     put(this.sphereBuffer, s.spheres);
-    this.counts = { seg: s.segmentCount || 0, arrow: s.arrowCount || 0, sphere: s.sphereCount || 0 };
+    put(this.meshBuffer, s.mesh);
+    this.counts = { seg: s.segmentCount || 0, arrow: s.arrowCount || 0, sphere: s.sphereCount || 0, mesh: s.meshCount || 0 };
   }
 
   /** A texture of `t`'s text at the current pixel ratio, cached by its look. */
@@ -381,6 +431,13 @@ export class AnnotationsLayer {
       }
       gl.disable(gl.CULL_FACE);
     }
+    // Box faces and selection tubes: faint, so their order hardly shows.
+    if (this.counts.mesh) {
+      const prog = this.meshProgram.use();
+      prog.m4("uViewProj", cam.viewProj).v3("uEye", cam.eye[0], cam.eye[1], cam.eye[2]);
+      gl.bindVertexArray(this.meshVao);
+      gl.drawArrays(gl.TRIANGLES, 0, this.counts.mesh);
+    }
     if (this.counts.seg) {
       const prog = this.segProgram.use();
       prog.m4("uViewProj", cam.viewProj).v2("uViewport", frame.width, frame.height).f("uDpr", frame.dpr);
@@ -428,9 +485,9 @@ export class AnnotationsLayer {
     const gl = this.gl;
     for (const e of this.textures.values()) gl.deleteTexture(e.tex);
     this.textures.clear();
-    for (const b of [this.cornerBuffer, this.quadBuffer, this.arrowCornerBuffer, this.icoBuffer, this.icoIndex, this.segBuffer, this.arrowBuffer, this.sphereBuffer]) gl.deleteBuffer(b);
-    for (const v of [this.segVao, this.arrowVao, this.sphereVao, this.textVao]) gl.deleteVertexArray(v);
-    for (const p of [this.segProgram, this.arrowProgram, this.sphereProgram, this.textProgram]) p.dispose();
+    for (const b of [this.cornerBuffer, this.quadBuffer, this.arrowCornerBuffer, this.icoBuffer, this.icoIndex, this.segBuffer, this.arrowBuffer, this.sphereBuffer, this.meshBuffer]) gl.deleteBuffer(b);
+    for (const v of [this.segVao, this.arrowVao, this.sphereVao, this.textVao, this.meshVao]) gl.deleteVertexArray(v);
+    for (const p of [this.segProgram, this.arrowProgram, this.sphereProgram, this.textProgram, this.meshProgram]) p.dispose();
   }
 }
 

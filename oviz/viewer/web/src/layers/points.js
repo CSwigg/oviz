@@ -31,6 +31,7 @@ layout(location = 4) in float aSizeMax;
 layout(location = 5) in float aSymbol;
 layout(location = 6) in float aState;   // state bits (below)
 layout(location = 7) in vec2 aLasso;    // lasso level before / after a State change
+layout(location = 8) in vec4 aMark;     // highlight colour and strength (an annotation's selection)
 
 uniform mat4 uViewProj;
 uniform mat4 uView;
@@ -75,6 +76,7 @@ float lassoWeight(vec2 levels) {
 
 out vec2 vUv;
 out vec3 vColor;
+out vec4 vMark;
 out float vScalar;
 out float vGlowA;
 out float vCoreA;
@@ -126,11 +128,12 @@ void main() {
   float stars = pow(max(aStatic.w, 1e-6), uStarsExp);
   float eff = opacity * uOpacityScale * p.w;
   // State bits: 1 dimmed / 2 hidden (distribution filter), 4 replaced by
-  // member stars in Sky view, 32 dimmed (birth tree highlight). The lasso
-  // (bits 8 / 16, for the CPU's readers) draws through aLasso, which can
-  // blend; dimmed by both counts once.
+  // member stars in Sky view, 32 dimmed (birth tree highlight), 64 hidden
+  // (outside an annotation that isolates what it holds). The lasso (bits
+  // 8 / 16, for the CPU's readers) draws through aLasso, which can blend;
+  // dimmed by both counts once.
   int st = int(aState + 0.5);
-  float bitW = (st & 2) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
+  float bitW = (st & 66) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
   eff *= min(bitW, lassoWeight(aLasso));
   if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
   vec4 center = uViewProj * vec4(p.xyz + uOffset, 1.0);
@@ -174,6 +177,7 @@ void main() {
   gl_Position = center + vec4(ndc * center.w, 0.0, 0.0);
   vUv = aCorner;
   vColor = aColor;
+  vMark = aMark;
   vScalar = scalar;
   vSymbol = aSymbol;
 }
@@ -182,6 +186,7 @@ void main() {
 const FRAG = `
 in vec2 vUv;
 in vec3 vColor;
+in vec4 vMark;
 in float vScalar;
 in float vGlowA;
 in float vCoreA;
@@ -227,6 +232,8 @@ void main() {
     float u = clamp((vScalar - uCRange.x) / max(uCRange.y - uCRange.x, 1e-9), 0.0, 1.0);
     color = texture(uCmap, vec2(u, 0.5)).rgb;
   }
+  // What an annotation selects takes its colour.
+  if (vMark.a > 0.0) color = mix(color, vMark.rgb, vMark.a);
   if (uGlow > 0.02) {
     vec2 uv = vUv * 0.5 + 0.5;
     float halo = texture(uHaloTex, uv).r;
@@ -257,6 +264,7 @@ layout(location = 2) in vec3 aColor;
 layout(location = 3) in vec4 aStatic;   // opacity, scalar, ageNow, starsFactor
 layout(location = 6) in float aState;
 layout(location = 7) in vec2 aLasso;
+layout(location = 8) in vec4 aMark;
 
 uniform mat4 uViewProj;
 uniform vec2 uViewport;
@@ -291,6 +299,7 @@ float lassoWeight(vec2 levels) {
 }
 
 out vec3 vColor;
+out vec4 vMark;
 out float vScalar;
 out float vAlpha;
 out float vSide;
@@ -322,7 +331,7 @@ void main() {
   }
   float eff = opacity * uOpacityScale * pres;
   int st = int(aState + 0.5);
-  float bitW = (st & 2) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
+  float bitW = (st & 66) != 0 ? 0.0 : (st & 33) != 0 ? uDimOpacity : 1.0;
   eff *= min(bitW, lassoWeight(aLasso));
   if ((st & 4) != 0) eff *= 1.0 - uMemberFade;
   if (uHasAge == 1 && aStatic.z == aStatic.z && aStatic.z > -1e29) {
@@ -345,6 +354,7 @@ void main() {
   float tail = 1.0 - s;
   vAlpha = eff * tail * tail;
   vColor = aColor;
+  vMark = aMark;
   vScalar = scalar;
   vSide = aTrail.y;
 }
@@ -352,6 +362,7 @@ void main() {
 
 const TRAIL_FRAG = `
 in vec3 vColor;
+in vec4 vMark;
 in float vScalar;
 in float vAlpha;
 in float vSide;
@@ -369,6 +380,7 @@ void main() {
     float u = clamp((vScalar - uCRange.x) / max(uCRange.y - uCRange.x, 1e-9), 0.0, 1.0);
     color = texture(uCmap, vec2(u, 0.5)).rgb;
   }
+  if (vMark.a > 0.0) color = mix(color, vMark.rgb, vMark.a);
   float a = vAlpha * uStrength * (1.0 - smoothstep(0.35, 1.0, abs(vSide)));
   if (a < 0.003) discard;
   // Mostly additive: trails brighten the sky rather than covering it.
@@ -531,6 +543,8 @@ class PointBatch {
     this.state = new Uint8Array(N);
     // Per object, the weight a lasso fade starts from and the selection's level (see aLasso).
     this.lasso = new Uint8Array(N * 2).fill(255);
+    // Per object, an annotation's highlight: colour and strength (0 = none).
+    this.mark = new Uint8Array(N * 4);
     this.buffers = {
       quad: createBuffer(gl, QUAD),
       index: createBuffer(gl, index),
@@ -540,6 +554,7 @@ class PointBatch {
       symbol: createBuffer(gl, symbol),
       state: createBuffer(gl, this.state, gl.DYNAMIC_DRAW),
       lasso: createBuffer(gl, this.lasso, gl.DYNAMIC_DRAW),
+      mark: createBuffer(gl, this.mark, gl.DYNAMIC_DRAW),
     };
     const b = this.buffers;
     this.vao = createVAO(gl, [
@@ -551,7 +566,24 @@ class PointBatch {
       { loc: 5, buffer: b.symbol, size: 1, divisor: 1 },
       { loc: 6, buffer: b.state, size: 1, type: gl.UNSIGNED_BYTE, divisor: 1 },
       { loc: 7, buffer: b.lasso, size: 2, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
+      { loc: 8, buffer: b.mark, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
     ]);
+  }
+
+  /** Annotation highlights per object (RGBA bytes, alpha = strength; null clears). Uploads only a change. */
+  setMarks(marks) {
+    const m = this.mark;
+    let changed = false;
+    for (let i = 0; i < m.length; i++) {
+      const v = marks ? marks[i] : 0;
+      if (v !== m[i]) { m[i] = v; changed = true; }
+    }
+    if (!changed) return false;
+    this.markVersion = (this.markVersion || 0) + 1;
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.mark);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, m);
+    return true;
   }
 
   /**
@@ -730,6 +762,7 @@ export class PointsLayer {
           { loc: 3, buffer: b.stat, size: 4, divisor: 1 },
           { loc: 6, buffer: b.state, size: 1, type: gl.UNSIGNED_BYTE, divisor: 1 },
           { loc: 7, buffer: b.lasso, size: 2, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
+          { loc: 8, buffer: b.mark, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, divisor: 1 },
         ]);
       }
       prog.tex("uFrameTex", batch.frameTex.texture);

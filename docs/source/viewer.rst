@@ -34,9 +34,10 @@ Sky                    **V** flies to the Sun and looks out; **Shift + B** picks
                        background survey.
 Views                  **N** saves a view, **Y** opens the story, **P** presents.
 Annotate               **K** (or the pen button) draws labels, curves, arrows,
-                       bubbles and shells in 3D. Drag handles to move, bend and
-                       resize; **Shift**-drag moves along the line of sight;
-                       **⌘Z** undoes; **Esc** finishes.
+                       bubbles, shells and boxes in 3D. Drag handles to move,
+                       bend and resize, the ↻ handle to turn a shape (Shift:
+                       spin it in the view); **Shift**-drag moves along the line
+                       of sight; **⌘Z** undoes; **Esc** finishes.
 Capture and share      **I** saves a PNG (up to 4×); the capture menu records MP4 or
                        WebM; *Copy link* shares the current view.
 Display                **G** grid, **B** Sky background, **Z** hides the interface,
@@ -100,9 +101,13 @@ moves.
 along with the cluster's orbit, on a dust map it lands in the dust, elsewhere
 on the plane through the orbit centre (Alt places freely). Selected
 annotations show handles: curve points (a "+" between two bends the curve),
-a shell's centre, radius and per-axis radii, a label's size. The style panel
-sets colour, opacity, line, arrowheads, shell look (bubble, shell or wire),
-position in pc and *Present day only*. What you draw groups itself in the
+a shape's centre, size and per-axis size, a ↻ handle that turns it like a
+ball (Shift spins it in the view), a label's size. The style panel sets
+colour, opacity, line, arrowheads, look (bubble, shell or wire; box or
+edges), rotation, position in pc and *Present day only*. A shape can select
+what it holds, and a curve what lies within its reach: *Highlight* colours
+those objects like the annotation, *Isolate* shows only them, and both follow
+the objects through time (Sky member stars too). What you draw groups itself in the
 key: a label put on a shape names it, and a run of shapes of one kind and
 colour is one entry, which toggles, solos and renames like a layer.
 Annotations are part of the figure: views capture them (and morph them in
@@ -229,4 +234,5 @@ mirrored by ``src/app/export.js``.
 Per-object GPU state is a bitfield: 1 dimmed and 2 hidden by the filter, 4
 replaced by member stars in Sky view, 8 dimmed and 16 hidden by a lasso (for
 CPU readers; the shaders draw the lasso from a separate per-object pair so
-selections can crossfade), 32 dimmed by the Birth tree.
+selections can crossfade), 32 dimmed by the Birth tree, 64 hidden outside an
+isolating annotation. Annotation highlights travel in a per-object colour.
