@@ -8,6 +8,8 @@
 
 import { h, icon } from "./dom.js";
 import { lutGradient } from "../core/color.js";
+import { volumeColormap } from "../app/state.js";
+import { flowRamp } from "./layers.js";
 
 const MAX_ITEMS = 8;
 const MAX_NOTES = 5;
@@ -123,7 +125,7 @@ export class CompactLegend {
       }
       if (r.it.kind === "volume") {
         const vs = v.state.volumes[r.it.key] || {};
-        const lut = this.ui.luts.get(vs.colormap);
+        const lut = this.ui.luts.get(volumeColormap(v.volumeSpecs.find((s) => s.stateKey === r.it.key), vs));
         r.dot.style.background = lut ? lutGradient(lut, "135deg", 4) : "";
         continue;
       }
@@ -131,7 +133,7 @@ export class CompactLegend {
       const st = v.state.traces[r.it.key] || {};
       const cb = t?.colorBy;
       const mode = st.colorMode || cb?.defaultMode || "fixed";
-      const lut = mode === "by_value" && cb ? this.ui.luts.get(st.colormap || cb.colormap) : null;
+      const lut = flowRamp(t, st, this.ui.luts) || (mode === "by_value" && cb ? this.ui.luts.get(st.colormap || cb.colormap) : null);
       if (lut) {
         r.dot.style.background = lutGradient(lut, "to right", 5);
         r.dot.dataset.ramp = "true";

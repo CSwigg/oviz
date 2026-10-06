@@ -90,6 +90,16 @@ Orbit and appearance helpers
              SpiralArmModel, KhalilSpiralArms, CastroGinardSpiralArms
 
 
+KT maps and flow lines
+----------------------
+
+.. automodule:: oviz.kt
+   :members: read_kt_map, KTMap
+
+.. automodule:: oviz.viewer.flow
+   :members: trace_streamlines, flow_layer, Streamlines
+
+
 Lower-level scene export
 ------------------------
 

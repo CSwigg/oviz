@@ -2,7 +2,8 @@
 
 import { h, icon, iconButton, kbd, isEditable, controlConsumesKey, MOD, downloadBlob, copyTextLater, clear, localStorageGet, localStorageSet } from "./dom.js";
 import { slider, toggle, miniSeg, installTooltips, createToasts } from "./controls.js";
-import { LayersPanel } from "./layers.js";
+import { LayersPanel, flowRamp } from "./layers.js";
+import { flowStyle } from "../layers/flow.js";
 import { TimelineDock } from "./dock.js";
 import { Inspector } from "./inspector.js";
 import { Palette } from "./palette.js";
@@ -11,7 +12,7 @@ import { rafThrottle } from "../core/emitter.js";
 import { formatAngle, formatDistance, clamp } from "../core/math.js";
 import { clonePose } from "../engine/camera.js";
 import { anchorLabel } from "../engine/anchor.js";
-import { autoOrbitRate, initialViewerState, skyStartView } from "../app/state.js";
+import { autoOrbitRate, initialViewerState, skyStartView, volumeColormap, volumeColorField } from "../app/state.js";
 import { keyMotion } from "../engine/controls.js";
 import { cpuFramePosition, frameOffset } from "../engine/frames.js";
 import { SkyPlugin } from "../sky/sky.js";
@@ -22,6 +23,7 @@ import { RecorderPlugin } from "./recorder.js";
 import { FilterPlugin } from "./filter.js";
 import { AnnotatePlugin } from "./annotate.js";
 import { LassoPlugin } from "./lasso.js";
+import { FlowPlugin } from "./flow.js";
 import { SelectionReticle } from "./reticle.js";
 import { MODES, modeById, initialMode, applyMode } from "./modes.js";
 import { reveal, conceal, SPRINGS, flickToDismiss } from "./motion.js";
@@ -41,6 +43,7 @@ export function mountUI(root, viewer) {
   ui.use(new FilterPlugin());
   ui.use(new AnnotatePlugin());
   ui.use(new LassoPlugin());
+  ui.use(new FlowPlugin());
   ui.use(new StoryPlugin());
   ui.use(new RecorderPlugin());
   ui.use(new BirthTreePlugin());
@@ -1045,6 +1048,14 @@ class AppUI {
     const bars = [];
     for (const trace of v.traces) {
       const st = v.state.traces[trace.key] || {};
+      // A flow coloured by value, while it shows.
+      const flowLut = st.visible && trace.flow ? flowRamp(trace, st, this.luts) : null;
+      if (flowLut && !(v.state.view.mode === "sky" && trace.skyHidden) && (!trace.presentDayOnly || Math.abs(v.timeline.time) < 1)) {
+        const fs = flowStyle(trace, st);
+        const F = trace.flow;
+        bars.push({ dot: trace.legendColor, title: `${trace.name} · ${F.colorLabel}${F.unit ? ` (${F.unit})` : ""}`, name: fs.colormap, lo: fs.range[0], hi: fs.range[1] });
+        continue;
+      }
       const cb = trace.colorBy;
       if (!cb || !st.visible) continue;
       if ((st.colorMode || cb.defaultMode) !== "by_value") continue;
@@ -1056,11 +1067,13 @@ class AppUI {
     const drawn = new Set((v._volumeParams(v.timeline.frame, v.timeline.time).volumeDraws || []).filter((d) => d.fade > 0.5).map((d) => d.key));
     const seen = new Set();
     for (const spec of v.volumeSpecs || []) {
-      const cb = spec.colorbar;
+      const vs = v.state.volumes[spec.stateKey] || {};
+      // A colour field's scale while the volume is coloured by it.
+      const cf = volumeColorField(spec, vs);
+      const cb = cf ? { label: `${spec.name} · ${cf.title || cf.label}`, unit: cf.unit, range: cf.range } : spec.colorbar;
       if (!cb || !drawn.has(spec.key) || seen.has(spec.stateKey)) continue;
       seen.add(spec.stateKey);
-      const vs = v.state.volumes[spec.stateKey] || {};
-      const name = vs.colormap || spec.colormaps[0];
+      const name = volumeColormap(spec, vs);
       if (!this.luts.get(name)) continue;
       let lo, hi;
       if (Array.isArray(cb.range)) [lo, hi] = cb.range;

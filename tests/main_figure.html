@@ -3522,6 +3522,13 @@ const { Renderer } = (() => {
 
 
 
+// Copies the cached static scene to the screen (premultiplied, one texel per pixel).
+const COPY_FS = `
+in vec2 vUv;
+uniform sampler2D uTex;
+out vec4 outColor;
+void main() { outColor = texelFetch(uTex, ivec2(gl_FragCoord.xy), 0); }`;
+
 // Largest capture we ask for (Chrome's drawing-buffer area limit).
 const MAX_CAPTURE_PIXELS = 7680 * 4320;
 
@@ -3542,6 +3549,13 @@ class Renderer {
     this.afterRender = [];
     this.dirty = true;
     this.continuous = new Set();
+    // Holds that only move "animated" layers (flow pulses): while nothing else
+    // changes, those frames redraw the animated layers over a cached copy of
+    // everything else instead of re-drawing the whole scene.
+    this.animatedHolds = new Set(["flow"]);
+    this._base = null;
+    this._baseValid = false;
+    this._copy = null;
     this.frameCount = 0;
     this.lastFrameMs = 0;
     this.frameTimes = new Float32Array(90);
@@ -3567,6 +3581,9 @@ class Renderer {
       this.caps = enableExtensions(this.gl);
       // Every GL object died with the old context; the owner rebuilds them.
       this.layers = [];
+      this._base = null;
+      this._copy = null;
+      this._baseValid = false;
       this.onContextRestored?.();
       this.invalidate();
     });
@@ -3686,8 +3703,11 @@ class Renderer {
     const needs = this.dirty || this.continuous.size > 0;
     if (needs && !this.contextLost) {
       const t0 = performance.now();
+      // Nothing but animated layers moved since the last frame.
+      let reuseBase = !this.dirty && !this.interacting && this.continuous.size > 0;
+      if (reuseBase) for (const k of this.continuous) if (!this.animatedHolds.has(k)) { reuseBase = false; break; }
       this.dirty = false;
-      this.render(now);
+      this.render(now, { reuseBase });
       const dt = performance.now() - t0;
       this.lastFrameMs = dt;
       this.frameTimes[this.frameTimeIndex++ % this.frameTimes.length] = dt;
@@ -3700,7 +3720,7 @@ class Renderer {
     if (this.continuous.size > 0 || this.dirty || this.interacting) this._schedule();
   }
 
-  render(now = performance.now()) {
+  render(now = performance.now(), { reuseBase = false } = {}) {
     const gl = this.gl;
     const cam = this.camera;
     cam.update(this.sceneRadius);
@@ -3718,17 +3738,55 @@ class Renderer {
       capture: !!this._capturing,
     };
     for (const layer of this.layers) if (layer.visible !== false) layer.prepare?.(frame);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, frame.width, frame.height);
-    const c = this.clearColor;
-    gl.clearColor(c[0], c[1], c[2], c[3]);
-    gl.depthMask(true);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    for (const layer of this.layers) {
-      if (layer.visible === false) continue;
-      layer.draw(frame);
+    const animated = frame.capture ? [] : this.layers.filter((l) => l.animated && l.visible !== false && l.active?.() !== false);
+    if (animated.length) {
+      this._renderCached(frame, animated, reuseBase);
+    } else {
+      this._baseValid = false;
+      this._clear(null, frame.width, frame.height);
+      for (const layer of this.layers) {
+        if (layer.visible === false) continue;
+        layer.draw(frame);
+      }
     }
     for (const overlay of this.overlays) overlay.update?.(frame);
+  }
+
+  _clear(fbo, width, height, color = this.clearColor) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, width, height);
+    gl.clearColor(color[0], color[1], color[2], color[3]);
+    gl.depthMask(true);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  }
+
+  /**
+   * Draw the static layers into a cached target (only when something other
+   * than the animated layers changed), copy it to the screen, then draw the
+   * animated layers on top. No layer writes depth, so colour is all the
+   * cache needs.
+   */
+  _renderCached(frame, animated, reuseBase) {
+    const gl = this.gl;
+    const base = (this._base ||= new RenderTarget(gl, { filter: gl.NEAREST }));
+    const resized = base.resize(frame.width, frame.height);
+    if (!reuseBase || resized || !this._baseValid || this.camera.version !== this._baseCamera) {
+      this._clear(base.fbo, frame.width, frame.height);
+      for (const layer of this.layers) {
+        if (layer.visible === false || animated.includes(layer)) continue;
+        layer.draw(frame);
+      }
+      this._baseValid = true;
+      this._baseCamera = this.camera.version;
+    }
+    this._clear(null, frame.width, frame.height, [0, 0, 0, 0]);
+    const copy = (this._copy ||= createProgram(gl, FULLSCREEN_VS, COPY_FS, { label: "base-copy" }));
+    copy.use().tex("uTex", base.texture);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    for (const layer of animated) layer.draw(frame);
   }
 
   /**
@@ -5667,6 +5725,267 @@ class LinesLayer {
 return { LinesLayer };
 })();
 
+// ---- layers/flow.js ----
+const { flowStyle, FlowLayer } = (() => {
+// Animated flow lines: static streamlines with light pulses running along
+// them in integration time (see oviz/viewer/flow.py).
+//
+// Every vertex carries (x, y, z, line) and (tau, value, trust, edge). Each
+// instance is one segment, read straight from the vertex buffer twice (the
+// second read one vertex later), so the GPU holds the geometry once and a
+// frame of animation costs one uniform: the flow's clock. Segments that
+// would join two different lines collapse in the vertex shader.
+//
+// What readers can change lives in the trace's state (see flowStyle): the
+// pulse rate, spacing and trail, the rails' brightness, the colour (solid
+// or by value through a colormap) and the colour range.
+
+
+
+
+const VERT = `
+layout(location = 0) in vec2 aCorner;     // x: 0 start / 1 end, y: -1..1 side
+layout(location = 1) in vec4 aPosA;       // xyz, line id
+layout(location = 2) in vec4 aPosB;
+layout(location = 3) in vec4 aAttrA;      // tau (Myr), value, trust, edge
+layout(location = 4) in vec4 aAttrB;
+uniform mat4 uViewProj;
+uniform vec2 uViewport;
+uniform float uWidth;
+uniform float uFocus;
+out float vSide;
+out float vHalf;
+out float vTau;
+out float vValue;
+out float vTrust;
+out float vEdge;
+out float vPhase;
+out float vDepth;
+
+float hash(float n) { return fract(sin(n * 12.9898 + 4.1414) * 43758.5453); }
+
+void main() {
+  if (aPosA.w != aPosB.w) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+  vec4 ca = uViewProj * vec4(aPosA.xyz, 1.0);
+  vec4 cb = uViewProj * vec4(aPosB.xyz, 1.0);
+  float near = 1e-4;
+  if (ca.w < near && cb.w < near) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+  if (ca.w < near) ca = mix(ca, cb, (near - ca.w) / (cb.w - ca.w));
+  if (cb.w < near) cb = mix(cb, ca, (near - cb.w) / (ca.w - cb.w));
+  vec2 sa = ca.xy / ca.w * uViewport * 0.5;
+  vec2 sb = cb.xy / cb.w * uViewport * 0.5;
+  vec2 dir = sb - sa;
+  float len = length(dir);
+  dir = len > 1e-6 ? dir / len : vec2(1.0, 0.0);
+  vec2 n = vec2(-dir.y, dir.x);
+  bool atB = aCorner.x > 0.5;
+  vec4 c = atB ? cb : ca;
+  // Nearer lines draw a little wider: a quiet depth cue.
+  float depthScale = clamp(uFocus / max(c.w, 1e-3), 0.7, 1.35);
+  float half_ = uWidth * 0.5 * depthScale + 1.0;
+  vec2 sp = (atB ? sb : sa) + n * aCorner.y * half_ + dir * (atB ? 0.5 : -0.5);
+  gl_Position = vec4(sp / (uViewport * 0.5) * c.w, c.z, c.w);
+  vec4 attr = atB ? aAttrB : aAttrA;
+  vSide = aCorner.y * half_;
+  vHalf = half_;
+  vTau = attr.x;
+  vValue = attr.y;
+  vTrust = attr.z;
+  vEdge = attr.w;
+  vPhase = hash(aPosA.w);
+  vDepth = c.w;
+}
+`;
+
+const FRAG = `
+in float vSide;
+in float vHalf;
+in float vTau;
+in float vValue;
+in float vTrust;
+in float vEdge;
+in float vPhase;
+in float vDepth;
+uniform sampler2D uLut;
+uniform int uUseLut;
+uniform vec3 uColor;
+uniform vec2 uRange;
+uniform float uOpacity;
+uniform float uRail;
+uniform float uClock;
+uniform float uPeriod;
+uniform float uTail;
+uniform float uTrustFloor;
+uniform float uFocus;
+out vec4 outColor;
+
+void main() {
+  float d = abs(vSide);
+  float cover = clamp(vHalf - d, 0.0, 1.0);
+  // Distance behind the nearest pulse head, in Myr of integration time.
+  float behind = fract((uClock - vTau) / uPeriod + vPhase) * uPeriod;
+  float tail = exp(-behind / uTail);
+  // Soft leading edge so heads never alias into a hard step.
+  float lead = smoothstep(uPeriod, uPeriod - max(fwidth(behind) * 1.5, 0.05 * uTail), behind);
+  float pulse = tail * lead;
+  float s = clamp((vValue - uRange.x) / max(uRange.y - uRange.x, 1e-6), 0.0, 1.0);
+  vec3 col = uUseLut == 1 ? texture(uLut, vec2(0.02 + 0.96 * s, 0.5)).rgb : uColor;
+  // The head burns toward white; the tail keeps the line's colour.
+  col = mix(col, vec3(1.0), 0.3 * pulse * pulse * pulse);
+  float trust = mix(uTrustFloor, 1.0, smoothstep(0.0, 1.0, vTrust));
+  float fog = mix(1.0, 0.45, smoothstep(uFocus * 0.7, uFocus * 2.2, vDepth));
+  // The core of the line is brighter than its rim.
+  float core = 1.0 - 0.45 * smoothstep(0.0, vHalf, d);
+  float a = uOpacity * cover * core * vEdge * trust * fog * (uRail + (1.0 - uRail) * pulse);
+  if (a < 0.003) discard;
+  outColor = vec4(col * a, a * 0.85);
+}
+`;
+
+const CORNERS = new Float32Array([0, -1, 1, -1, 0, 1, 1, 1]);
+
+const finite = (v, fb) => (v !== null && v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : fb);
+
+/**
+ * A flow trace's display settings: its authored defaults (`trace.flow`)
+ * under the reader's choices in its trace state `ts`:
+ *   colorMode "by_value" | "fixed", colormap, cmin, cmax, color,
+ *   flowRate (Myr of integration time per second), flowPeriod (Myr between
+ *   pulses), flowTail (Myr of trail), flowRail (0–1 brightness of the lines
+ *   between pulses).
+ */
+function flowStyle(trace, ts = {}) {
+  const F = trace.flow || {};
+  const A = F.animation || {};
+  const [lo, hi] = F.speedRange || [0, 1];
+  const colormap = ts.colormap || F.colormap || null;
+  const mode = ts.colorMode || (F.fixedColor || !F.colormap ? "fixed" : "by_value");
+  return {
+    byValue: mode === "by_value" && !!colormap,
+    colormap,
+    color: ts.color || trace.color,
+    range: [finite(ts.cmin, lo), finite(ts.cmax, hi)],
+    rate: Math.max(0, finite(ts.flowRate, A.rate ?? 1.2)),
+    period: Math.max(finite(ts.flowPeriod, A.period ?? 14), 0.05),
+    tail: Math.max(finite(ts.flowTail, A.tail ?? 3.5), 0.02),
+    rail: Math.min(Math.max(finite(ts.flowRail, F.railOpacity ?? 0.16), 0), 1),
+  };
+}
+
+class FlowLayer {
+  /** `cmaps`: the figure's colormap textures by name (shared with volumes). */
+  constructor(gl, { cmaps } = {}) {
+    this.gl = gl;
+    this.order = 35;
+    // Animated: the renderer redraws only this layer while its pulses move.
+    this.animated = true;
+    this.batches = [];
+    this.byKey = new Map();
+    this.cmaps = cmaps || new Map();
+    // Each flow's clock (Myr of integration time), advanced at its own rate
+    // so a rate change never makes the pulses jump.
+    this.clocks = new Map();
+    this.program = createProgram(gl, VERT, FRAG, { label: "flow" });
+    this.cornerBuffer = createBuffer(gl, CORNERS);
+    this.params = null;
+  }
+
+  /** `data`: {position: Float32Array(V*4), attr: Float32Array(V*4)}. */
+  addTrace(trace, data) {
+    const gl = this.gl;
+    const F = trace.flow;
+    const V = F.vertices;
+    const posBuf = createBuffer(gl, data.position.subarray(0, V * 4));
+    const attrBuf = createBuffer(gl, data.attr.subarray(0, V * 4));
+    const stride = 16;
+    const vao = createVAO(gl, [
+      { loc: 0, buffer: this.cornerBuffer, size: 2 },
+      { loc: 1, buffer: posBuf, size: 4, stride, offset: 0, divisor: 1 },
+      { loc: 2, buffer: posBuf, size: 4, stride, offset: stride, divisor: 1 },
+      { loc: 3, buffer: attrBuf, size: 4, stride, offset: 0, divisor: 1 },
+      { loc: 4, buffer: attrBuf, size: 4, stride, offset: stride, divisor: 1 },
+    ]);
+    const batch = { key: trace.key, trace, segments: V - 1, vao, buffers: [posBuf, attrBuf] };
+    this.batches.push(batch);
+    this.byKey.set(trace.key, batch);
+    return batch;
+  }
+
+  /** Move every shown flow's pulses on by `seconds` of playback. */
+  advance(seconds, styles) {
+    for (const b of this.batches) {
+      const s = styles?.get(b.key);
+      if (!s?.flow || !this._shown(s)) continue;
+      // Pulses repeat every period: wrapping keeps float32 exact forever.
+      this.clocks.set(b.key, ((this.clocks.get(b.key) || 0) + seconds * s.flow.rate) % s.flow.period);
+    }
+  }
+
+  _shown(s) {
+    return !!s && s.visible && s.presence > 0.001 && s.opacityScale > 0.002;
+  }
+
+  /** Whether a flow is on screen (the renderer caches the rest of the scene then). */
+  active() {
+    return this.anyVisible(this.params?.styles);
+  }
+
+  /** Whether any flow is on screen (so the viewer knows to keep animating). */
+  anyVisible(styles) {
+    return this.batches.some((b) => this._shown(styles?.get(b.key)));
+  }
+
+  draw(frame) {
+    const p = this.params;
+    if (!p || !this.batches.length) return;
+    const gl = this.gl;
+    const prog = this.program.use();
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    const cam = frame.camera;
+    // The orbit distance sets the depth scale; in Sky view the eye sits on
+    // the target, so fall back to the scene scale.
+    const focus = Math.max(cam.pose?.distance || 0, p.focusFallback || 500);
+    prog.m4("uViewProj", cam.viewProj).v2("uViewport", frame.width, frame.height).f("uFocus", focus);
+    for (const b of this.batches) {
+      const style = p.styles.get(b.key);
+      if (!this._shown(style)) continue;
+      const F = b.trace.flow;
+      const fs = style.flow || flowStyle(b.trace);
+      const opacity = (b.trace.opacity ?? 1) * style.opacityScale * style.presence;
+      if (opacity <= 0.002) continue;
+      const lut = fs.byValue ? this.cmaps.get(fs.colormap) || this.cmaps.get(F.colormap) : null;
+      const c = parseColor(fs.color || b.trace.color);
+      if (lut) prog.tex("uLut", lut);
+      prog.i("uUseLut", lut ? 1 : 0).v3("uColor", c[0], c[1], c[2]);
+      prog.v2("uRange", fs.range[0], fs.range[1]);
+      prog.f("uOpacity", Math.min(opacity, 1.5)).f("uRail", fs.rail);
+      prog.f("uClock", (this.clocks.get(b.key) || 0) % fs.period);
+      prog.f("uPeriod", fs.period).f("uTail", fs.tail).f("uTrustFloor", F.trustFloor ?? 0.35);
+      prog.f("uWidth", Math.max(0.6, (F.width || 1.6) * (style.sizeScale || 1)) * frame.dpr);
+      gl.bindVertexArray(b.vao);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, b.segments);
+    }
+    gl.bindVertexArray(null);
+  }
+
+  dispose() {
+    const gl = this.gl;
+    for (const b of this.batches) {
+      gl.deleteVertexArray(b.vao);
+      b.buffers.forEach((x) => gl.deleteBuffer(x));
+    }
+    this.batches = [];
+    this.byKey.clear();
+    gl.deleteBuffer(this.cornerBuffer);
+    this.program.dispose();
+  }
+}
+return { flowStyle, FlowLayer };
+})();
+
 // ---- layers/images.js ----
 const { ImagesLayer } = (() => {
 // Textured image planes in the Galactic plane (e.g. the face-on Milky Way).
@@ -5797,10 +6116,14 @@ uniform vec3 uCenter;
 uniform vec2 uRot;            // cos, sin of the co-rotation angle
 uniform highp sampler3D uVolume;
 uniform highp sampler3D uOcc;
-// Optional colour field (e.g. velocity), stored as colour × density so
-// trilinear filtering weights it by density: the LUT index is the ratio.
+// Optional colour field (e.g. velocity). Legacy fields are stored as
+// colour × density so trilinear filtering weights them by density (the LUT
+// index is the ratio). With uColorField (a KT map's velocity) the texture
+// holds the scaled value itself and opacity follows the density, not the
+// colour LUT at the field's value.
 uniform highp sampler3D uColorVol;
 uniform int uUseColor;
+uniform int uColorField;
 uniform vec3 uOccDims;
 uniform int uUseOcc;
 uniform sampler2D uCmap;
@@ -5970,8 +6293,10 @@ void main() {
       if (mw <= 0.0) continue;
     }
     v = stretch(min(v, 0.999));
-    float cv = uUseColor == 1 ? clamp(texture(uColorVol, tc).r / max(raw, 1e-6), 0.0, 1.0) : v;
+    float cv = v;
+    if (uUseColor == 1) cv = uColorField == 1 ? texture(uColorVol, tc).r : clamp(texture(uColorVol, tc).r / max(raw, 1e-6), 0.0, 1.0);
     vec4 c = texture(uCmap, vec2(cv, 0.5));
+    if (uUseColor == 1 && uColorField == 1) c.a = texture(uCmap, vec2(v, 0.5)).a;
     c.a *= mw;
     float a = 1.0 - pow(1.0 - clamp(c.a * uOpacity, 0.0, 0.999), stepAlpha);
     a *= (1.0 - acc.a);
@@ -6165,20 +6490,22 @@ class VolumesLayer {
   /**
    * Upload a volume. `data` is Uint8Array (z, y, x) or Float32Array of
    * values in [0, 1] (stored half-float); `occ` optional block maxima;
-   * `color` an optional Uint8Array colour field of the same shape;
-   * `dataId` names these voxels in the cache `useData` swaps through.
+   * `color` an optional Uint8Array legacy colour field (colour × density)
+   * of the same shape; `dataId` names these voxels in the cache `useData`
+   * swaps through; `fields` the Uint8Array of each of `spec.colorFields`.
    */
-  addVolume(spec, data, occ, color = null, dataId = "") {
+  addVolume(spec, data, occ, color = null, dataId = "", fields = []) {
     const gl = this.gl;
     // Replacing a volume frees the old textures (never leak GPU memory).
     const old = this.volumes.get(spec.key);
     if (old) this._freeVolume(old);
     const gpu = this._upload(spec, data, occ);
-    let colorTex = null;
-    if (color) colorTex = this._texture3D(spec, color, spec.interpolation === false ? gl.NEAREST : gl.LINEAR);
+    const filter = spec.interpolation === false ? gl.NEAREST : gl.LINEAR;
+    const colorTex = color ? this._texture3D(spec, color, filter) : null;
+    const fieldTexes = (fields || []).map((f) => (f ? this._texture3D(spec, f, filter) : null));
     const [lo, hi] = spec.bounds;
     const vol = {
-      key: spec.key, spec, ...gpu, colorTex,
+      key: spec.key, spec, ...gpu, colorTex, fieldTexes,
       center: [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2],
       boxMin: lo, boxMax: hi,
       // Rebuilt densities (event KDEs) by id: one texture per time sample.
@@ -6277,6 +6604,7 @@ class VolumesLayer {
     for (const g of vol.cache.values()) this._freeGpu(g);
     vol.cache.clear();
     if (vol.colorTex) this.gl.deleteTexture(vol.colorTex);
+    for (const t of vol.fieldTexes || []) if (t) this.gl.deleteTexture(t);
   }
 
   prepare(frame) {
@@ -6329,13 +6657,16 @@ class VolumesLayer {
       .sort((a, b) => dist2(b.vol.center, cam.eye) - dist2(a.vol.center, cam.eye));
     for (const { d, vol } of sorted) {
       const st = d.state;
-      const cm = this.cmaps.get(st.colormap) || this.cmaps.get(vol.spec.colormaps[0]);
+      const cm = this.cmaps.get(d.colormap || st.colormap) || this.cmaps.get(vol.spec.colormaps[0]);
       if (!cm) continue;
       prog.v3("uBoxMin", vol.boxMin).v3("uBoxMax", vol.boxMax).v3("uCenter", vol.center);
       prog.v2("uRot", Math.cos(d.angle || 0), Math.sin(d.angle || 0));
       prog.tex("uVolume", vol.tex, gl.TEXTURE_3D);
       prog.tex("uOcc", vol.occTex || vol.tex, gl.TEXTURE_3D);
-      prog.tex("uColorVol", vol.colorTex || vol.tex, gl.TEXTURE_3D).i("uUseColor", vol.colorTex ? 1 : 0);
+      // A colour field when one is chosen, else a legacy colour × density field.
+      const fieldTex = d.fieldIndex >= 0 ? vol.fieldTexes?.[d.fieldIndex] || null : null;
+      const colorTex = fieldTex || (vol.spec.colorFields?.length ? null : vol.colorTex);
+      prog.tex("uColorVol", colorTex || vol.tex, gl.TEXTURE_3D).i("uUseColor", colorTex ? 1 : 0).i("uColorField", fieldTex ? 1 : 0);
       prog.v3("uOccDims", vol.occDims).i("uUseOcc", vol.occTex && d.canSkip ? 1 : 0);
       prog.tex("uCmap", cm);
       prog.f("uLow", d.low).f("uHigh", d.high).f("uOpacity", st.opacity).f("uSamples", st.steps);
@@ -6948,7 +7279,7 @@ return { Timeline, birthProfile, presentDayFade, birthFadeAt };
 })();
 
 // ---- app/state.js ----
-const { STATE_VERSION, clampVolumeState, groupMode, volumeGroupMode, initialViewerState, toggleAllPlan, soloPlan, applyGroupDefaults, applyLegacySkyGroup, legacySnapshotToState, skyStartView, cloneState, cloneJson, autoOrbitRate, selectionKey } = (() => {
+const { STATE_VERSION, volumeColorField, volumeColormap, clampVolumeState, groupMode, volumeGroupMode, initialViewerState, toggleAllPlan, soloPlan, applyGroupDefaults, applyLegacySkyGroup, legacySnapshotToState, skyStartView, cloneState, cloneJson, autoOrbitRate, selectionKey } = (() => {
 // Viewer state: defaults, legacy conversion, volume clamping.
 //
 // The state object is plain JSON so it can be captured into a State,
@@ -6986,7 +7317,24 @@ function defaultVolumeState(spec) {
     galacticWarmth: num(d.galactic_warmth, 0.72),
     // Event-density volumes: the trailing window their KDE counts (Myr).
     ...(spec.procedural ? { kdeTimeWindowMyr: num(spec.procedural.windowMyr, 10) } : {}),
+    // Volumes with colour fields (a KT map's velocities): what colours them,
+    // a field's key or "value" (density), and each field's own colormap.
+    ...(spec.colorFields?.length ? { colorBy: spec.colorDefault || spec.colorFields[0].key, fieldColormaps: {} } : {}),
   };
+}
+
+/** The colour field a volume is coloured by now, or null (density). */
+function volumeColorField(spec, vs) {
+  const fields = spec?.colorFields;
+  if (!fields?.length || vs?.colorBy === "value") return null;
+  return fields.find((f) => f.key === vs?.colorBy) || fields[0];
+}
+
+/** The colormap a volume draws with: its colour field's, else the density colormap. */
+function volumeColormap(spec, vs) {
+  const field = volumeColorField(spec, vs);
+  if (field) return vs?.fieldColormaps?.[field.key] || field.colormap;
+  return vs?.colormap || spec?.colormaps?.[0];
 }
 
 function normalizeLighting(mode) {
@@ -7011,6 +7359,13 @@ function clampVolumeState(spec, vs) {
   if (!Number.isFinite(out.steps)) out.steps = Number(d.steps || 100);
   out.alphaCoef = clamp(Number(out.alphaCoef), 1, 200);
   if (!Number.isFinite(out.alphaCoef)) out.alphaCoef = Number(d.alpha_coef || 50);
+  if (spec.colorFields?.length) {
+    const keys = spec.colorFields.map((f) => f.key);
+    if (out.colorBy !== "value" && !keys.includes(out.colorBy)) out.colorBy = spec.colorDefault || keys[0];
+    const maps = {};
+    for (const [k, name] of Object.entries(out.fieldColormaps || {})) if (keys.includes(k) && spec.colormaps?.includes(name)) maps[k] = name;
+    out.fieldColormaps = maps;
+  }
   return out;
 }
 
@@ -7212,7 +7567,7 @@ function pickVolumeFields(v) {
   const keys = [
     "visible", "opacity", "vmin", "vmax", "steps", "alphaCoef", "stretch", "colormap", "showAllTimes",
     "lightingMode", "galacticCenter", "galacticLightIntensity", "galacticAmbient", "galacticExtinction",
-    "galacticScattering", "galacticAnisotropy", "galacticWarmth", "kdeTimeWindowMyr",
+    "galacticScattering", "galacticAnisotropy", "galacticWarmth", "kdeTimeWindowMyr", "colorBy", "fieldColormaps",
   ];
   for (const k of keys) {
     if (v[k] === undefined || v[k] === null) continue;
@@ -7471,13 +7826,14 @@ function legacyNote(l, i) {
     ...(l.visible === false ? { visible: false } : {}),
   };
 }
-return { STATE_VERSION, clampVolumeState, groupMode, volumeGroupMode, initialViewerState, toggleAllPlan, soloPlan, applyGroupDefaults, applyLegacySkyGroup, legacySnapshotToState, skyStartView, cloneState, cloneJson, autoOrbitRate, selectionKey };
+return { STATE_VERSION, volumeColorField, volumeColormap, clampVolumeState, groupMode, volumeGroupMode, initialViewerState, toggleAllPlan, soloPlan, applyGroupDefaults, applyLegacySkyGroup, legacySnapshotToState, skyStartView, cloneState, cloneJson, autoOrbitRate, selectionKey };
 })();
 
 // ---- app/viewer.js ----
 const { Viewer } = (() => {
 // The Viewer: owns the renderer, layers, time and view state, and exposes
 // the imperative API that the UI, States and the public JS API drive.
+
 
 
 
@@ -7561,6 +7917,7 @@ class Viewer extends Emitter {
     this.images = this.renderer.add(new ImagesLayer(gl));
     this.volumes = this.renderer.add(new VolumesLayer(gl, { caps: this.renderer.caps }));
     this.lines = this.renderer.add(new LinesLayer(gl, { frames }));
+    this.flows = this.renderer.add(new FlowLayer(gl, { cmaps: this.volumes.cmaps }));
     this.points = this.renderer.add(new PointsLayer(gl, { frames }));
   }
 
@@ -7601,6 +7958,10 @@ class Viewer extends Emitter {
         if (L.segmentColors?.blob) ld.segmentColors = await store.get(L.segmentColors.blob);
         this.lines.addTrace(trace, ld);
         (this.lineData ||= new Map()).set(trace.key, ld);
+      }
+      if (trace.flow) {
+        const F = trace.flow;
+        this.flows.addTrace(trace, { position: await store.get(F.position.blob), attr: await store.get(F.attr.blob) });
       }
       if (trace.labels && labels) {
         const L = trace.labels;
@@ -7669,13 +8030,15 @@ class Viewer extends Emitter {
         }
         const data = await this.store.get(spec.data.blob);
         const color = spec.colorData?.blob ? await this.store.get(spec.colorData.blob) : null;
+        const fields = [];
+        for (const f of spec.colorFields || []) fields.push(await this.store.get(f.data.blob));
         let occ = null;
         if (spec.occupancy?.blob) {
           const o = await this.store.get(spec.occupancy.blob);
           occ = { data: o, gx: spec.occupancy.dims[0], gy: spec.occupancy.dims[1], gz: spec.occupancy.dims[2] };
         }
         if (gen !== (this._gpuGeneration || 0) || layer !== this.volumes) return;
-        layer.addVolume(spec, data, occ, color);
+        layer.addVolume(spec, data, occ, color, "", fields);
         this.renderer.invalidate();
         onEach?.(spec);
         this.emit("volume-ready", spec);
@@ -7829,6 +8192,48 @@ class Viewer extends Emitter {
     }
     for (const fn of this._animators || []) fn(now);
     this._resolveParams();
+    this._stepFlow(now);
+  }
+
+  // -------------------------------------------------------------- flow lines
+
+  /** Whether the figure has animated flow layers. */
+  get hasFlows() {
+    return this.traces.some((t) => t.flow);
+  }
+
+  /**
+   * Flow pulses run unless paused. The default follows the figure (and the
+   * reader's reduced-motion preference); an explicit choice is kept in
+   * `state.global.flowPaused`, so States restore it.
+   */
+  get flowPlaying() {
+    const g = this.state.global;
+    if (typeof g.flowPaused === "boolean") return !g.flowPaused;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return false;
+    return this.traces.some((t) => t.flow && t.flow.animation?.playing !== false);
+  }
+
+  setFlowPlaying(on) {
+    this.state.global.flowPaused = !on;
+    this.renderer.invalidate();
+    this.emit("global", { flowPaused: !on });
+  }
+
+  /**
+   * Advance the flow clocks, and keep frames coming only while a shown flow
+   * is playing: a paused or hidden flow leaves the figure idle.
+   */
+  _stepFlow(now) {
+    const layer = this.flows;
+    if (!layer?.batches.length) return;
+    const styles = layer.params?.styles;
+    const running = this.flowPlaying && layer.anyVisible(styles);
+    const last = this._flowLast;
+    this._flowLast = running ? now : null;
+    if (running && last != null) layer.advance(Math.min(Math.max(now - last, 0), 100) / 1000, styles);
+    if (running) this.renderer.hold("flow");
+    else this.renderer.continuous.delete("flow");
   }
 
   addAnimator(fn) {
@@ -7892,6 +8297,7 @@ class Viewer extends Emitter {
         dimOpacity: 0.16,
         // Samples of a surface or model are not picked (no hover, no click).
         pickable: trace.pickable !== false,
+        flow: trace.flow ? flowStyle(trace, ts) : null,
       });
     }
     for (const [k, s] of this.extraStyles) styles.set(k, s);
@@ -7912,6 +8318,7 @@ class Viewer extends Emitter {
     };
     this.points.params = pointParams;
     this.lines.params = { styles, frame, lineOpacity: 1 };
+    this.flows.params = { styles, focusFallback: Math.max((this.world.maxSpan || 1000) * 0.5, 100) };
     this.labels.params = { styles, frame, labelSignature: this._labelSignature(), labelsVisible: g.labels !== false };
     // Images fade with the scale bar (zoom), like the legacy figure.
     const scaleBarPc = this.scaleBarPc();
@@ -7998,8 +8405,12 @@ class Viewer extends Emitter {
         const allTimes = vs.showAllTimes && spec.supportsShowAllTimes && spec.timeMyr == null;
         const angle = allTimes && spec.coRotate ? (spec.coRotationRate || 0) * (time - (spec.referenceTimeMyr || 0)) : 0;
         const dataId = spec.procedural ? this._ensureKde(spec, time, vs) : "";
-        draws.push({ key: spec.key, state: vsClamped, low, high, fade: w, angle, canSkip: true });
-        sig += `${spec.key}:${dataId}:${w.toFixed(3)}:${low}:${high}:${vsClamped.opacity}:${vsClamped.steps}:${vsClamped.alphaCoef}:${vsClamped.stretch}:${vsClamped.colormap}:${angle.toFixed(5)}:${vsClamped.lightingMode};`;
+        // A colour field (a KT map's velocity) colours it unless density is chosen.
+        const field = volumeColorField(spec, vsClamped);
+        const fieldIndex = field ? spec.colorFields.indexOf(field) : -1;
+        const colormap = volumeColormap(spec, vsClamped);
+        draws.push({ key: spec.key, state: vsClamped, low, high, fade: w, angle, canSkip: true, fieldIndex, colormap });
+        sig += `${spec.key}:${dataId}:${w.toFixed(3)}:${low}:${high}:${vsClamped.opacity}:${vsClamped.steps}:${vsClamped.alphaCoef}:${vsClamped.stretch}:${colormap}:${fieldIndex}:${angle.toFixed(5)}:${vsClamped.lightingMode};`;
       }
     }
     return { frame, volumeDraws: draws, volumeSignature: sig };
@@ -9031,9 +9442,10 @@ return { slider, toggle, select, miniSeg, numberInput, colorPicker, installToolt
 })();
 
 // ---- ui/layers.js ----
-const { LayersPanel } = (() => {
+const { LayersPanel, flowRamp } = (() => {
 // Layers panel: group presets, the data layers (traces and volumes, one
 // list), the distribution filter, the Sky background and reference guides.
+
 
 
 
@@ -9309,6 +9721,7 @@ class LayersPanel {
   }
 
   traceEditor(trace) {
+    if (trace.flow) return this.flowEditor(trace);
     const v = this.viewer;
     const st = v.state.traces[trace.key] || {};
     const wrap = h("div", { class: "ov-editor" });
@@ -9394,6 +9807,72 @@ class LayersPanel {
     return wrap;
   }
 
+  /**
+   * A flow layer's settings: colour (by its value through a colormap, or
+   * solid), range, opacity and width, and the animation: pulse speed,
+   * spacing and trail, and how much of each line shows between pulses.
+   */
+  flowEditor(trace) {
+    const v = this.viewer;
+    const key = trace.key;
+    const F = trace.flow;
+    const st = () => v.state.traces[key] || {};
+    const fs = flowStyle(trace, st());
+    const set = (patch) => v.setTraceStyle(key, patch);
+    const wrap = h("div", { class: "ov-editor" });
+    const unit = F.unit ? ` ${F.unit}` : "";
+    const valueLabel = F.colorLabel || "Value";
+    // Colour: by value through a colormap, or one colour.
+    const solid = h("div", { class: "ov-field" },
+      h("div", { class: "ov-field-head" }, h("span", { class: "ov-field-label" }, "Colour")),
+      colorPicker({ value: fs.color, onChange: (c) => set({ color: c, colorMode: "fixed" }) }));
+    const byValue = h("div", { style: { display: "grid", gap: "10px" } });
+    if (F.colormap) {
+      // The figure's colormaps, each once (a volume's copy of the flow's own is skipped).
+      const seen = new Set();
+      const names = [F.colormap, ...this.lutFor.keys()].filter((n) => {
+        const label = this.ui.cmapLabel(n).toLowerCase();
+        if (n.includes("~") || seen.has(label)) return false;
+        seen.add(label);
+        return true;
+      });
+      const ramp = h("div", { class: "ov-ramp" });
+      const paint = (n) => { const lut = this.lutFor.get(n); if (lut) ramp.style.background = lutGradient(lut); };
+      paint(fs.colormap);
+      const [lo0, hi0] = F.speedRange;
+      const step = niceStep(hi0 - lo0);
+      const lo = numberInput({ label: `Low${unit}`, value: +fs.range[0].toPrecision(4), step, onChange: (x) => set({ cmin: x }) });
+      const hi = numberInput({ label: `High${unit}`, value: +fs.range[1].toPrecision(4), step, onChange: (x) => set({ cmax: x }) });
+      byValue.append(
+        select({ label: "Colormap", value: fs.colormap, options: names.map((n) => ({ value: n, label: this.ui.cmapLabel(n) })), onChange: (n) => { set({ colormap: n }); paint(n); } }),
+        ramp,
+        h("div", { class: "ov-field-row" }, lo, hi));
+      const show = (m) => { byValue.hidden = m !== "by_value"; solid.hidden = m === "by_value"; };
+      wrap.append(miniSeg({
+        label: "Colour by", value: fs.byValue ? "by_value" : "fixed",
+        options: [{ value: "by_value", label: valueLabel }, { value: "fixed", label: "Solid" }],
+        onChange: (m) => { set({ colorMode: m }); show(m); },
+      }));
+      show(fs.byValue ? "by_value" : "fixed");
+    }
+    wrap.append(byValue, solid,
+      slider({ label: "Opacity", min: 0, max: 1, step: 0.01, value: st().opacity ?? trace.opacity, format: (x) => `${Math.round(x * 100)}%`, onInput: (x) => set({ opacity: x }) }),
+      slider({ label: "Line width", min: 0.2, max: 5, value: st().sizeScale ?? 1, scale: "log", format: (x) => `${x.toFixed(2)}×`, onInput: (x) => set({ sizeScale: x }) }),
+      toggle({ label: "Animate", hint: "Pulses travel along each line at the gas's own speed", checked: v.flowPlaying, onChange: (x) => v.setFlowPlaying(x) }),
+      slider({ label: "Speed", min: 0.02, max: 30, value: fs.rate, scale: "log", format: (x) => `${fmtFlow(x)} Myr/s`, onInput: (x) => set({ flowRate: x }) }),
+      slider({ label: "Pulse spacing", min: 0.2, max: 80, value: fs.period, scale: "log", format: (x) => `${fmtFlow(x)} Myr`, onInput: (x) => set({ flowPeriod: x }) }),
+      slider({ label: "Trail", min: 0.05, max: 40, value: fs.tail, scale: "log", format: (x) => `${fmtFlow(x)} Myr`, onInput: (x) => set({ flowTail: x }) }),
+      slider({ label: "Lines between pulses", min: 0, max: 1, step: 0.01, value: fs.rail, format: (x) => `${Math.round(x * 100)}%`, onInput: (x) => set({ flowRail: x }) }),
+      h("div", { class: "ov-note" }, `${fmtInt(F.lines)} lines · ${valueLabel} ${formatSci(F.speedRange[0])} to ${formatSci(F.speedRange[1])}${unit}`),
+      h("div", { class: "ov-field-row" }, h("button", { class: "ov-btn ov-btn--sm ov-btn--ghost", type: "button", onclick: () => {
+        const vis = v.state.traces[key]?.visible;
+        v.state.traces[key] = { visible: vis, inGroup: true };
+        set({});
+        this.expand(key); this.expand(key);
+      } }, "Reset")));
+    return wrap;
+  }
+
   // ---------------------------------------------------------------- volumes
 
   volumeRow(spec, index = 99) {
@@ -9433,8 +9912,24 @@ class LayersPanel {
       const lut = this.lutFor.get(name);
       if (lut) ramp.style.background = lutGradient(lut);
     };
-    paint(vs.colormap);
+    paint(volumeColormap(spec, vs));
     const names = spec.colormaps.length ? spec.colormaps : [vs.colormap];
+    // Colour fields (a KT map's velocities): colour by one of them or by
+    // density, each keeping its own colormap. Opacity follows the density.
+    const fields = spec.colorFields || [];
+    const scaleLo = h("span", { class: "ov-faint ov-num" }), scaleHi = h("span", { class: "ov-faint ov-num" });
+    const fieldScale = fields.length ? h("div", { class: "ov-field-head" }, scaleLo, scaleHi) : null;
+    const showScale = () => {
+      const f = volumeColorField(spec, v.state.volumes[key]);
+      if (!fieldScale) return;
+      fieldScale.hidden = !f;
+      if (f) { scaleLo.textContent = formatSci(f.range[0]); scaleHi.textContent = `${formatSci(f.range[1])}${f.unit ? ` ${f.unit}` : ""}`; }
+    };
+    const setColormap = (n) => {
+      const cur = v.state.volumes[key];
+      const f = volumeColorField(spec, cur);
+      v.setVolumeState(key, f ? { fieldColormaps: { ...(cur.fieldColormaps || {}), [f.key]: n } } : { colormap: n });
+    };
     const proc = spec.procedural;
     if (proc?.windowOptions?.length) {
       // Event densities: how many Myr of events each moment counts.
@@ -9447,10 +9942,26 @@ class LayersPanel {
       }));
     }
     if (spec.note) wrap.append(h("div", { class: "ov-note" }, spec.note));
-    wrap.append(
-      select({ label: "Colormap", value: vs.colormap, options: names.map((n) => ({ value: n, label: this.ui.cmapLabel(n) })), onChange: (n) => { v.setVolumeState(key, { colormap: n }); paint(n); } }),
-      ramp,
-    );
+    const cmapSelect = select({
+      label: "Colormap", value: volumeColormap(spec, vs), options: names.map((n) => ({ value: n, label: this.ui.cmapLabel(n) })),
+      onChange: (n) => { setColormap(n); paint(n); },
+    });
+    if (fields.length) {
+      wrap.append(miniSeg({
+        label: "Colour by", value: vs.colorBy,
+        options: [...fields.map((f) => ({ value: f.key, label: f.label })), { value: "value", label: "Density" }],
+        onChange: (m) => {
+          v.setVolumeState(key, { colorBy: m });
+          const name = volumeColormap(spec, v.state.volumes[key]);
+          cmapSelect.set(name);
+          paint(name);
+          showScale();
+        },
+      }));
+      showScale();
+    }
+    wrap.append(cmapSelect, ramp);
+    if (fieldScale) wrap.append(fieldScale);
     // A fixed display encoding (pre-scaled data, a colour field) has no
     // meaningful window or stretch to edit.
     if (!spec.fixedDisplay) wrap.append(
@@ -9544,8 +10055,9 @@ class LayersPanel {
         if (r.shownVisible !== visible) { r.shownVisible = visible; r.eye.replaceChildren(icon(visible ? "eye" : "eyeOff")); }
         const cb = r.trace.colorBy;
         const mode = st.colorMode || cb?.defaultMode || "fixed";
-        if (mode === "by_value" && cb) {
-          const lut = this.lutFor.get(st.colormap || cb.colormap);
+        const flowLut = flowRamp(r.trace, st, this.lutFor);
+        if (flowLut || (mode === "by_value" && cb)) {
+          const lut = flowLut || this.lutFor.get(st.colormap || cb.colormap);
           r.swatch.className = "ov-swatch ov-swatch--ramp";
           r.swatch.style.background = lut ? lutGradient(lut, "to right", 5) : "";
           r.swatch.style.color = "";
@@ -9559,7 +10071,7 @@ class LayersPanel {
         const visible = !!vs.visible;
         r.row.dataset.visible = String(visible);
         if (r.shownVisible !== visible) { r.shownVisible = visible; r.eye.replaceChildren(icon(visible ? "eye" : "eyeOff")); }
-        const lut = this.lutFor.get(vs.colormap);
+        const lut = this.lutFor.get(volumeColormap(r.spec, vs));
         r.swatch.style.background = lut ? lutGradient(lut, "135deg", 4) : r.spec.legendColor;
         this.syncVolumeStatus(r);
       }
@@ -9569,6 +10081,17 @@ class LayersPanel {
     this.gridToggle?.set(v.state.global.grid);
     this.labelsToggle?.set(v.state.global.labels !== false);
   }
+}
+
+/** A flow layer coloured by value shows its colormap as its swatch. */
+function flowRamp(trace, st, luts) {
+  if (!trace?.flow) return null;
+  const fs = flowStyle(trace, st || {});
+  return fs.byValue ? luts.get(fs.colormap) || luts.get(trace.flow.colormap) || null : null;
+}
+
+function fmtFlow(x) {
+  return x < 1 ? x.toFixed(2) : x < 10 ? x.toFixed(1) : x.toFixed(0);
 }
 
 function niceStep(span) {
@@ -9599,7 +10122,7 @@ function formatSci(x) {
   if (a >= 1) return x.toFixed(2);
   return x.toPrecision(3);
 }
-return { LayersPanel };
+return { LayersPanel, flowRamp };
 })();
 
 // ---- ui/dock.js ----
@@ -13940,6 +14463,12 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
       cur.color = discrete.color;
       cur.inGroup = visA || visB ? true : discrete.inGroup;
       cur.sizeScale = lerp(a.sizeScale ?? 1, b.sizeScale ?? 1, t);
+      // Colour ranges and flow settings glide when both States set them.
+      for (const f of GLIDING_TRACE_FIELDS) {
+        if (a[f] == null && b[f] == null) continue;
+        const fa = Number(a[f]), fb = Number(b[f]);
+        cur[f] = Number.isFinite(fa) && Number.isFinite(fb) ? lerp(fa, fb, t) : discrete[f];
+      }
       if (visA && visB) { cur.visible = true; cur.opacity = lerp(opA, opB, t); }
       else if (visA) { cur.visible = t < 1; cur.opacity = opA * (1 - t); }
       else if (visB) { cur.visible = t > 0; cur.opacity = opB * t; }
@@ -13954,6 +14483,7 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
       const d = t < 0.5 ? a : b;
       Object.assign(cur, { stretch: d.stretch, colormap: d.colormap, showAllTimes: d.showAllTimes, lightingMode: d.lightingMode });
       if (d.kdeTimeWindowMyr != null) cur.kdeTimeWindowMyr = d.kdeTimeWindowMyr;
+      if (d.colorBy != null) Object.assign(cur, { colorBy: d.colorBy, fieldColormaps: { ...(d.fieldColormaps || {}) } });
       for (const f of ["vmin", "vmax", "alphaCoef", "steps"]) cur[f] = lerp(Number(a[f]), Number(b[f]), t);
       if (a.visible && b.visible) { cur.visible = true; cur.opacity = lerp(a.opacity, b.opacity, t); }
       else if (a.visible) { cur.visible = t < 1; cur.opacity = a.opacity * (1 - t); }
@@ -14038,6 +14568,8 @@ function makeTransition(viewer, sky, target, { keepCamera = false } = {}) {
 
   return { step, finish, modeChange, keepCamera, from, to };
 }
+
+const GLIDING_TRACE_FIELDS = ["cmin", "cmax", "flowRate", "flowPeriod", "flowTail", "flowRail"];
 
 function smoothstepT(e0, e1, x) {
   const t = clamp((x - e0) / (e1 - e0), 0, 1);
@@ -18924,6 +19456,65 @@ function lassoFade(raw) {
 return { LassoPlugin, lassoFade };
 })();
 
+// ---- ui/flow.js ----
+const { FlowPlugin } = (() => {
+// Play and pause animated flow layers: an entry in More and the command
+// palette, and Space when the figure has no timeline. Everything else about
+// a flow (colour, range, width, pulse speed, spacing and trail) is set in
+// its row of the layers panel.
+
+
+
+class FlowPlugin {
+  constructor() {
+    this.name = "flow";
+  }
+
+  attach(ui) {
+    this.ui = ui;
+    this.viewer = ui.viewer;
+  }
+
+  get active() {
+    return this.viewer.hasFlows;
+  }
+
+  toggle() {
+    const v = this.viewer;
+    const on = !v.flowPlaying;
+    v.setFlowPlaying(on);
+    this.ui.toast?.(on ? "Flow running" : "Flow paused", { icon: icon(on ? "play" : "pause"), ms: 1200 });
+  }
+
+  onKey(e) {
+    if (!this.active || e.metaKey || e.ctrlKey || e.altKey) return false;
+    if (e.key === " " && !e.shiftKey && this.viewer.timeline.count <= 1) {
+      this.toggle();
+      return true;
+    }
+    return false;
+  }
+
+  moreItems() {
+    if (!this.active) return [];
+    const on = this.viewer.flowPlaying;
+    return [{ label: on ? "Pause flow" : "Play flow", icon: on ? "pause" : "play", run: () => this.toggle() }];
+  }
+
+  commands() {
+    if (!this.active) return [];
+    const on = this.viewer.flowPlaying;
+    return [{ title: on ? "Pause flow" : "Play flow", sub: "Animated flow lines", icon: on ? "pause" : "play", keywords: "flow wind stream streamline animation pulse gas velocity kinetic tomography", run: () => this.toggle() }];
+  }
+
+  helpGroups() {
+    if (!this.active || this.viewer.timeline.count > 1) return [];
+    return [["Flow", [["Play / pause flow", "Space"]]]];
+  }
+}
+return { FlowPlugin };
+})();
+
 // ---- ui/reticle.js ----
 const { SelectionReticle } = (() => {
 // Selection reticle: a ring around the selected object, recomputed after
@@ -19229,6 +19820,8 @@ const { CompactLegend } = (() => {
 
 
 
+
+
 const MAX_ITEMS = 8;
 const MAX_NOTES = 5;
 const LONG_PRESS_MS = 480;
@@ -19343,7 +19936,7 @@ class CompactLegend {
       }
       if (r.it.kind === "volume") {
         const vs = v.state.volumes[r.it.key] || {};
-        const lut = this.ui.luts.get(vs.colormap);
+        const lut = this.ui.luts.get(volumeColormap(v.volumeSpecs.find((s) => s.stateKey === r.it.key), vs));
         r.dot.style.background = lut ? lutGradient(lut, "135deg", 4) : "";
         continue;
       }
@@ -19351,7 +19944,7 @@ class CompactLegend {
       const st = v.state.traces[r.it.key] || {};
       const cb = t?.colorBy;
       const mode = st.colorMode || cb?.defaultMode || "fixed";
-      const lut = mode === "by_value" && cb ? this.ui.luts.get(st.colormap || cb.colormap) : null;
+      const lut = flowRamp(t, st, this.ui.luts) || (mode === "by_value" && cb ? this.ui.luts.get(st.colormap || cb.colormap) : null);
       if (lut) {
         r.dot.style.background = lutGradient(lut, "to right", 5);
         r.dot.dataset.ramp = "true";
@@ -20089,8 +20682,11 @@ async function dustSlices(v, ui, draws, toAr) {
     const spec = v.volumeSpecs.find((x) => x.key === d.key);
     if (!spec) continue;
     const data = await v.store.get(spec.data.blob);
-    const lut = ui.luts.get(d.state.colormap) || ui.luts.get(spec.colormaps?.[0]);
+    const lut = ui.luts.get(d.colormap || d.state.colormap) || ui.luts.get(spec.colormaps?.[0]);
     if (!data || !lut) continue;
+    // A colour field (a KT map's velocity) colours the slices when chosen.
+    const fieldSpec = d.fieldIndex >= 0 ? spec.colorFields?.[d.fieldIndex] : null;
+    const field = fieldSpec ? await v.store.get(fieldSpec.data.blob) : null;
     const [nx, ny, nz] = spec.dims;
     const [lo, hi] = spec.bounds;
     // Per raw byte: optical depth per unit texture length, and colour value.
@@ -20131,7 +20727,7 @@ async function dustSlices(v, ui, draws, toAr) {
         for (let x = 0; x < nx; x++) {
           const t = tauLut[data[row + x]];
           if (!t) continue;
-          const val = valLut[data[row + x]] * t;
+          const val = (field ? field[row + x] / 255 : valLut[data[row + x]]) * t;
           let k = (sz.sMap[z] * sz.H + sz.vMap[y]) * sz.W + sz.uMap[x];
           sz.tau[k] += t; sz.val[k] += val;
           k = (sx.sMap[x] * sx.H + sx.vMap[z]) * sx.W + sx.uMap[y];
@@ -21795,12 +22391,15 @@ const { mountUI } = (() => {
 
 
 
+
+
 function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
   if (viewer.manifest.sky?.enabled) ui.use(new SkyPlugin());
   ui.use(new FilterPlugin());
   ui.use(new AnnotatePlugin());
   ui.use(new LassoPlugin());
+  ui.use(new FlowPlugin());
   ui.use(new StoryPlugin());
   ui.use(new RecorderPlugin());
   ui.use(new BirthTreePlugin());
@@ -22805,6 +23404,14 @@ class AppUI {
     const bars = [];
     for (const trace of v.traces) {
       const st = v.state.traces[trace.key] || {};
+      // A flow coloured by value, while it shows.
+      const flowLut = st.visible && trace.flow ? flowRamp(trace, st, this.luts) : null;
+      if (flowLut && !(v.state.view.mode === "sky" && trace.skyHidden) && (!trace.presentDayOnly || Math.abs(v.timeline.time) < 1)) {
+        const fs = flowStyle(trace, st);
+        const F = trace.flow;
+        bars.push({ dot: trace.legendColor, title: `${trace.name} · ${F.colorLabel}${F.unit ? ` (${F.unit})` : ""}`, name: fs.colormap, lo: fs.range[0], hi: fs.range[1] });
+        continue;
+      }
       const cb = trace.colorBy;
       if (!cb || !st.visible) continue;
       if ((st.colorMode || cb.defaultMode) !== "by_value") continue;
@@ -22816,11 +23423,13 @@ class AppUI {
     const drawn = new Set((v._volumeParams(v.timeline.frame, v.timeline.time).volumeDraws || []).filter((d) => d.fade > 0.5).map((d) => d.key));
     const seen = new Set();
     for (const spec of v.volumeSpecs || []) {
-      const cb = spec.colorbar;
+      const vs = v.state.volumes[spec.stateKey] || {};
+      // A colour field's scale while the volume is coloured by it.
+      const cf = volumeColorField(spec, vs);
+      const cb = cf ? { label: `${spec.name} · ${cf.title || cf.label}`, unit: cf.unit, range: cf.range } : spec.colorbar;
       if (!cb || !drawn.has(spec.key) || seen.has(spec.stateKey)) continue;
       seen.add(spec.stateKey);
-      const vs = v.state.volumes[spec.stateKey] || {};
-      const name = vs.colormap || spec.colormaps[0];
+      const name = volumeColormap(spec, vs);
       if (!this.luts.get(name)) continue;
       let lo, hi;
       if (Array.isArray(cb.range)) [lo, hi] = cb.range;

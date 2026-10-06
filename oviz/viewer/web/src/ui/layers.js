@@ -4,7 +4,8 @@
 import { h, icon, iconButton, clear, fmtInt, fmt } from "./dom.js";
 import { slider, toggle, select, miniSeg, colorPicker, numberInput } from "./controls.js";
 import { lutGradient } from "../core/color.js";
-import { applyGroupDefaults, groupMode, volumeGroupMode, clampVolumeState, toggleAllPlan, soloPlan } from "../app/state.js";
+import { flowStyle } from "../layers/flow.js";
+import { applyGroupDefaults, groupMode, volumeGroupMode, clampVolumeState, volumeColormap, volumeColorField, toggleAllPlan, soloPlan } from "../app/state.js";
 
 export class LayersPanel {
   constructor(ui) {
@@ -275,6 +276,7 @@ export class LayersPanel {
   }
 
   traceEditor(trace) {
+    if (trace.flow) return this.flowEditor(trace);
     const v = this.viewer;
     const st = v.state.traces[trace.key] || {};
     const wrap = h("div", { class: "ov-editor" });
@@ -360,6 +362,72 @@ export class LayersPanel {
     return wrap;
   }
 
+  /**
+   * A flow layer's settings: colour (by its value through a colormap, or
+   * solid), range, opacity and width, and the animation: pulse speed,
+   * spacing and trail, and how much of each line shows between pulses.
+   */
+  flowEditor(trace) {
+    const v = this.viewer;
+    const key = trace.key;
+    const F = trace.flow;
+    const st = () => v.state.traces[key] || {};
+    const fs = flowStyle(trace, st());
+    const set = (patch) => v.setTraceStyle(key, patch);
+    const wrap = h("div", { class: "ov-editor" });
+    const unit = F.unit ? ` ${F.unit}` : "";
+    const valueLabel = F.colorLabel || "Value";
+    // Colour: by value through a colormap, or one colour.
+    const solid = h("div", { class: "ov-field" },
+      h("div", { class: "ov-field-head" }, h("span", { class: "ov-field-label" }, "Colour")),
+      colorPicker({ value: fs.color, onChange: (c) => set({ color: c, colorMode: "fixed" }) }));
+    const byValue = h("div", { style: { display: "grid", gap: "10px" } });
+    if (F.colormap) {
+      // The figure's colormaps, each once (a volume's copy of the flow's own is skipped).
+      const seen = new Set();
+      const names = [F.colormap, ...this.lutFor.keys()].filter((n) => {
+        const label = this.ui.cmapLabel(n).toLowerCase();
+        if (n.includes("~") || seen.has(label)) return false;
+        seen.add(label);
+        return true;
+      });
+      const ramp = h("div", { class: "ov-ramp" });
+      const paint = (n) => { const lut = this.lutFor.get(n); if (lut) ramp.style.background = lutGradient(lut); };
+      paint(fs.colormap);
+      const [lo0, hi0] = F.speedRange;
+      const step = niceStep(hi0 - lo0);
+      const lo = numberInput({ label: `Low${unit}`, value: +fs.range[0].toPrecision(4), step, onChange: (x) => set({ cmin: x }) });
+      const hi = numberInput({ label: `High${unit}`, value: +fs.range[1].toPrecision(4), step, onChange: (x) => set({ cmax: x }) });
+      byValue.append(
+        select({ label: "Colormap", value: fs.colormap, options: names.map((n) => ({ value: n, label: this.ui.cmapLabel(n) })), onChange: (n) => { set({ colormap: n }); paint(n); } }),
+        ramp,
+        h("div", { class: "ov-field-row" }, lo, hi));
+      const show = (m) => { byValue.hidden = m !== "by_value"; solid.hidden = m === "by_value"; };
+      wrap.append(miniSeg({
+        label: "Colour by", value: fs.byValue ? "by_value" : "fixed",
+        options: [{ value: "by_value", label: valueLabel }, { value: "fixed", label: "Solid" }],
+        onChange: (m) => { set({ colorMode: m }); show(m); },
+      }));
+      show(fs.byValue ? "by_value" : "fixed");
+    }
+    wrap.append(byValue, solid,
+      slider({ label: "Opacity", min: 0, max: 1, step: 0.01, value: st().opacity ?? trace.opacity, format: (x) => `${Math.round(x * 100)}%`, onInput: (x) => set({ opacity: x }) }),
+      slider({ label: "Line width", min: 0.2, max: 5, value: st().sizeScale ?? 1, scale: "log", format: (x) => `${x.toFixed(2)}×`, onInput: (x) => set({ sizeScale: x }) }),
+      toggle({ label: "Animate", hint: "Pulses travel along each line at the gas's own speed", checked: v.flowPlaying, onChange: (x) => v.setFlowPlaying(x) }),
+      slider({ label: "Speed", min: 0.02, max: 30, value: fs.rate, scale: "log", format: (x) => `${fmtFlow(x)} Myr/s`, onInput: (x) => set({ flowRate: x }) }),
+      slider({ label: "Pulse spacing", min: 0.2, max: 80, value: fs.period, scale: "log", format: (x) => `${fmtFlow(x)} Myr`, onInput: (x) => set({ flowPeriod: x }) }),
+      slider({ label: "Trail", min: 0.05, max: 40, value: fs.tail, scale: "log", format: (x) => `${fmtFlow(x)} Myr`, onInput: (x) => set({ flowTail: x }) }),
+      slider({ label: "Lines between pulses", min: 0, max: 1, step: 0.01, value: fs.rail, format: (x) => `${Math.round(x * 100)}%`, onInput: (x) => set({ flowRail: x }) }),
+      h("div", { class: "ov-note" }, `${fmtInt(F.lines)} lines · ${valueLabel} ${formatSci(F.speedRange[0])} to ${formatSci(F.speedRange[1])}${unit}`),
+      h("div", { class: "ov-field-row" }, h("button", { class: "ov-btn ov-btn--sm ov-btn--ghost", type: "button", onclick: () => {
+        const vis = v.state.traces[key]?.visible;
+        v.state.traces[key] = { visible: vis, inGroup: true };
+        set({});
+        this.expand(key); this.expand(key);
+      } }, "Reset")));
+    return wrap;
+  }
+
   // ---------------------------------------------------------------- volumes
 
   volumeRow(spec, index = 99) {
@@ -399,8 +467,24 @@ export class LayersPanel {
       const lut = this.lutFor.get(name);
       if (lut) ramp.style.background = lutGradient(lut);
     };
-    paint(vs.colormap);
+    paint(volumeColormap(spec, vs));
     const names = spec.colormaps.length ? spec.colormaps : [vs.colormap];
+    // Colour fields (a KT map's velocities): colour by one of them or by
+    // density, each keeping its own colormap. Opacity follows the density.
+    const fields = spec.colorFields || [];
+    const scaleLo = h("span", { class: "ov-faint ov-num" }), scaleHi = h("span", { class: "ov-faint ov-num" });
+    const fieldScale = fields.length ? h("div", { class: "ov-field-head" }, scaleLo, scaleHi) : null;
+    const showScale = () => {
+      const f = volumeColorField(spec, v.state.volumes[key]);
+      if (!fieldScale) return;
+      fieldScale.hidden = !f;
+      if (f) { scaleLo.textContent = formatSci(f.range[0]); scaleHi.textContent = `${formatSci(f.range[1])}${f.unit ? ` ${f.unit}` : ""}`; }
+    };
+    const setColormap = (n) => {
+      const cur = v.state.volumes[key];
+      const f = volumeColorField(spec, cur);
+      v.setVolumeState(key, f ? { fieldColormaps: { ...(cur.fieldColormaps || {}), [f.key]: n } } : { colormap: n });
+    };
     const proc = spec.procedural;
     if (proc?.windowOptions?.length) {
       // Event densities: how many Myr of events each moment counts.
@@ -413,10 +497,26 @@ export class LayersPanel {
       }));
     }
     if (spec.note) wrap.append(h("div", { class: "ov-note" }, spec.note));
-    wrap.append(
-      select({ label: "Colormap", value: vs.colormap, options: names.map((n) => ({ value: n, label: this.ui.cmapLabel(n) })), onChange: (n) => { v.setVolumeState(key, { colormap: n }); paint(n); } }),
-      ramp,
-    );
+    const cmapSelect = select({
+      label: "Colormap", value: volumeColormap(spec, vs), options: names.map((n) => ({ value: n, label: this.ui.cmapLabel(n) })),
+      onChange: (n) => { setColormap(n); paint(n); },
+    });
+    if (fields.length) {
+      wrap.append(miniSeg({
+        label: "Colour by", value: vs.colorBy,
+        options: [...fields.map((f) => ({ value: f.key, label: f.label })), { value: "value", label: "Density" }],
+        onChange: (m) => {
+          v.setVolumeState(key, { colorBy: m });
+          const name = volumeColormap(spec, v.state.volumes[key]);
+          cmapSelect.set(name);
+          paint(name);
+          showScale();
+        },
+      }));
+      showScale();
+    }
+    wrap.append(cmapSelect, ramp);
+    if (fieldScale) wrap.append(fieldScale);
     // A fixed display encoding (pre-scaled data, a colour field) has no
     // meaningful window or stretch to edit.
     if (!spec.fixedDisplay) wrap.append(
@@ -510,8 +610,9 @@ export class LayersPanel {
         if (r.shownVisible !== visible) { r.shownVisible = visible; r.eye.replaceChildren(icon(visible ? "eye" : "eyeOff")); }
         const cb = r.trace.colorBy;
         const mode = st.colorMode || cb?.defaultMode || "fixed";
-        if (mode === "by_value" && cb) {
-          const lut = this.lutFor.get(st.colormap || cb.colormap);
+        const flowLut = flowRamp(r.trace, st, this.lutFor);
+        if (flowLut || (mode === "by_value" && cb)) {
+          const lut = flowLut || this.lutFor.get(st.colormap || cb.colormap);
           r.swatch.className = "ov-swatch ov-swatch--ramp";
           r.swatch.style.background = lut ? lutGradient(lut, "to right", 5) : "";
           r.swatch.style.color = "";
@@ -525,7 +626,7 @@ export class LayersPanel {
         const visible = !!vs.visible;
         r.row.dataset.visible = String(visible);
         if (r.shownVisible !== visible) { r.shownVisible = visible; r.eye.replaceChildren(icon(visible ? "eye" : "eyeOff")); }
-        const lut = this.lutFor.get(vs.colormap);
+        const lut = this.lutFor.get(volumeColormap(r.spec, vs));
         r.swatch.style.background = lut ? lutGradient(lut, "135deg", 4) : r.spec.legendColor;
         this.syncVolumeStatus(r);
       }
@@ -535,6 +636,17 @@ export class LayersPanel {
     this.gridToggle?.set(v.state.global.grid);
     this.labelsToggle?.set(v.state.global.labels !== false);
   }
+}
+
+/** A flow layer coloured by value shows its colormap as its swatch. */
+export function flowRamp(trace, st, luts) {
+  if (!trace?.flow) return null;
+  const fs = flowStyle(trace, st || {});
+  return fs.byValue ? luts.get(fs.colormap) || luts.get(trace.flow.colormap) || null : null;
+}
+
+function fmtFlow(x) {
+  return x < 1 ? x.toFixed(2) : x < 10 ? x.toFixed(1) : x.toFixed(0);
 }
 
 function niceStep(span) {
