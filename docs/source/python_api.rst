@@ -40,8 +40,15 @@ Viewer profiles
    :members:
 
 
-HTML figure
------------
+HTML figures
+------------
+
+.. autoclass:: oviz.OvizFigure
+   :members: to_dict, to_html, write_html, show, size_report, bundle
+
+.. autofunction:: oviz.upgrade_html
+
+.. autofunction:: oviz.viewer.compile_scene_spec
 
 .. autoclass:: oviz.threejs_figure.ThreeJSFigure
    :members: to_dict, to_html, write_html, show
@@ -74,6 +81,10 @@ Orbit and appearance helpers
 
 .. automodule:: oviz.spiral_arms
    :members:
+
+.. automodule:: oviz.spiral_models
+   :members: khalil2025_potential, khalil2025_spiral_potentials, spiral_arm_coordinates,
+             SpiralArmModel, KhalilSpiralArms, CastroGinardSpiralArms
 
 
 Lower-level scene export

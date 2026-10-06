@@ -1,0 +1,52 @@
+// Idle fade: in Focus mode the controls fade out while the
+// pointer rests over the figure (like a video player) and return the moment
+// it moves. Never while a menu, panel or story is open, while the pointer is
+// over the controls, on touch screens, or while presenting.
+
+const CHROME = ".ov-top, .ov-bottom, .ov-panel, .ov-pop, .ov-callout, .ov-story, .ov-legend";
+
+export class IdleFade {
+  constructor(ui, { delay = 2800 } = {}) {
+    this.ui = ui;
+    this.delay = delay;
+    this.timer = 0;
+    this.over = false;
+    this.fine = window.matchMedia?.("(hover: hover) and (pointer: fine)");
+    const root = ui.root;
+    const wake = () => this.wake();
+    for (const type of ["pointermove", "pointerdown", "wheel"]) root.addEventListener(type, wake, { passive: true });
+    // Keys arrive at the window when nothing inside the figure has focus.
+    window.addEventListener("keydown", wake, { capture: true, passive: true });
+    root.addEventListener("pointerover", (e) => { this.over = !!e.target.closest?.(CHROME); }, { passive: true });
+    root.addEventListener("pointerleave", () => { this.over = false; });
+  }
+
+  get enabled() {
+    return !!this.ui.modeConfig?.autoHide && !!this.fine?.matches;
+  }
+
+  busy() {
+    const ui = this.ui;
+    const ds = ui.root.dataset;
+    // A control with keyboard focus must stay visible under the user's hands.
+    const focused = document.activeElement;
+    const keyboardFocus = focused && focused !== document.body && ui.ui.contains(focused) && focused.matches?.(":focus-visible");
+    return this.over || keyboardFocus || ui.layersOpen || ui.overlays?.size || ui.palette?.open || ui._menu || ui._sheet
+      || ds.story === "true" || ds.presenting === "true" || ds.lasso === "true" || ui.viewer.controls.pointers.size > 0;
+  }
+
+  wake() {
+    if (this.ui.root.dataset.idle) delete this.ui.root.dataset.idle;
+    clearTimeout(this.timer);
+    if (this.enabled) this.timer = setTimeout(() => this.sleep(), this.delay);
+  }
+
+  sleep() {
+    if (!this.enabled) return;
+    if (this.busy()) {
+      this.timer = setTimeout(() => this.sleep(), this.delay);
+      return;
+    }
+    this.ui.root.dataset.idle = "true";
+  }
+}

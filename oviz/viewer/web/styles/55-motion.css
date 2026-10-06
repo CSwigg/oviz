@@ -1,0 +1,65 @@
+/* ---------------------------------------------------------------- motion
+   Quiet motion. The chrome settles into place once the first frame is up,
+   panels fade and slide a few pixels, and the selection gets a simple ring.
+   Under prefers-reduced-motion every animation collapses to an instant
+   change (see 10-base). */
+
+/* ---- Entrance ------------------------------------------------------- */
+@keyframes ov-rise { from { opacity: 0; transform: translateY(var(--ov-rise-dy, 10px)); } }
+@keyframes ov-stage-in { from { opacity: 0; transform: scale(1.03); } }
+
+/* Zoom the drawing, not the stage: the stage's size must stay true for the
+   renderer and for Aladin, which measure it while this runs. */
+.ov-root[data-entrance="true"] .ov-canvas,
+.ov-root[data-entrance="true"] .ov-labels { animation: ov-stage-in 1100ms var(--ov-ease) backwards; }
+.ov-root[data-entrance="true"] .ov-top > * { --ov-rise-dy: -10px; animation: ov-rise 520ms var(--ov-ease) backwards; }
+.ov-root[data-entrance="true"] .ov-search-trigger { animation-delay: 80ms; }
+.ov-root[data-entrance="true"] .ov-toolbar { animation-delay: 140ms; }
+.ov-root[data-entrance="true"] .ov-layers[data-open="true"] { animation: ov-rise 560ms var(--ov-ease) 180ms backwards; }
+.ov-root[data-entrance="true"] .ov-bottom > * { animation: ov-rise 520ms var(--ov-ease) backwards; }
+.ov-root[data-entrance="true"] .ov-bottom-left { animation-delay: 200ms; }
+.ov-root[data-entrance="true"] .ov-dock { animation-delay: 240ms; }
+.ov-root[data-entrance="true"] .ov-bottom-right { animation-delay: 280ms; }
+.ov-boot[data-leaving="true"] { opacity: 0; pointer-events: none; }
+
+/* ---- Distance-from-Sun chart in the inspector ---------------------- */
+.ov-insp-track { display: grid; gap: 6px; padding: 10px 16px 12px; }
+.ov-insp-track-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.ov-insp-track-read { font: 600 12px/1.2 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text); white-space: nowrap; }
+.ov-insp-track-read small { font-weight: 500; color: var(--ov-text-3); margin-left: 3px; }
+.ov-spark { display: block; width: 100%; height: 54px; cursor: ew-resize; touch-action: none; border-radius: 8px; }
+.ov-insp-track-axis { display: flex; justify-content: space-between; font: 500 10px/1 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text-3); }
+
+/* ---- Selection ring -------------------------------------------------- */
+.ov-ui > .ov-reticle { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.ov-reticle-mark { transition: opacity 180ms linear; }
+.ov-reticle-lock { transform-box: fill-box; transform-origin: center; animation: ov-lock 260ms var(--ov-ease) backwards; }
+.ov-reticle circle { fill: none; vector-effect: non-scaling-stroke; }
+.ov-reticle-halo { stroke: var(--ov-accent); stroke-width: 1.5; filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8)); }
+.ov-root[data-reticle="true"] .ov-label--sel { margin-left: 10px; }
+@keyframes ov-lock { from { transform: scale(1.6); opacity: 0; } }
+
+/* ---- Narrow desktop: keep the bar clear of the corner controls ------ */
+/* Sky extras (member display, background) sit on their own row above the
+   view switch, so Sky view never pushes the corner into the timeline. */
+@media (min-width: 721px) {
+  .ov-bottom-right { display: grid; grid-template-columns: auto auto; justify-items: end; align-items: end; gap: 8px; }
+  .ov-bottom-right > :first-child { grid-column: 1 / -1; }
+  .ov-bottom-right > :first-child:empty { display: none; }
+  /* The Sky background chip over the member switch: one narrow column. */
+  .ov-sky-extras { flex-direction: column-reverse; align-items: flex-end; }
+}
+@media (min-width: 721px) and (max-width: 1180px) {
+  .ov-bottom { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ov-dock { width: auto; min-width: 0; }
+  /* Without a timeline the bar holds a few buttons: it hugs them, centred. */
+  .ov-dock.ov-bar-only { justify-self: center; }
+  .ov-colorbar { min-width: 0; max-width: 220px; }
+}
+@media (min-width: 721px) and (max-width: 980px) {
+  .ov-bottom-right { grid-template-columns: auto; }
+  .ov-dock [aria-label="Previous frame"], .ov-dock [aria-label="Next frame"], .ov-dock [aria-label="Loop playback"] { display: none; }
+  .ov-time-read { min-width: 84px; }
+  .ov-scrub { min-width: 72px; }
+  .ov-scale-sub { display: none; }
+}

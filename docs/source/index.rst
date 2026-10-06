@@ -11,6 +11,7 @@ maps.
    :caption: Contents
 
    overview
+   viewer
    python_api
    browser_api
 

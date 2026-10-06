@@ -16,11 +16,18 @@ import base64
 import gzip
 import json
 import re
+import sys
 from copy import deepcopy
 from pathlib import Path
 
 from oviz.paper import Paper
 from oviz.threejs_figure import ThreeJSFigure
+
+TESTS_DIR = Path(__file__).resolve().parent
+if str(TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(TESTS_DIR))
+
+from figure_provenance import hash_provenance_paths  # noqa: E402
 
 
 SOURCE_HTML = Path(__file__).with_name("main_figure_july25.html")
@@ -695,7 +702,7 @@ def build_figure(source_html: Path, output_html: Path) -> Path:
     output_html = Path(output_html).expanduser().resolve()
     if source_html == output_html:
         raise ValueError("The paper demo must be a sibling copy, not the source artifact.")
-    scene = build_state_only_scene(read_embedded_scene_spec(source_html))
+    scene = build_state_only_scene(hash_provenance_paths(read_embedded_scene_spec(source_html)))
     scene["states"] = build_states(scene)
     scene["paper"] = build_paper(scene["states"])
     html = ThreeJSFigure(scene, compress_scene_spec=True).to_html(compress_scene_spec=True)

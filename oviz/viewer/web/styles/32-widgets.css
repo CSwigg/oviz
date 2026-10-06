@@ -1,0 +1,54 @@
+/* --------------------------------------------------------------- widgets
+   Floating tool panels (src/ui/widgets.js): dragged by their title, resized
+   from the corner, bottom sheets on phones. */
+.ov-widgets { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.ov-widgets > .ov-widget { pointer-events: auto; }
+.ov-widget { z-index: 5; }
+.ov-widget[data-open="false"] { transform: translateY(8px) scale(0.985); }
+.ov-widget-head { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ov-widget[data-dragging="true"] { transition: none; }
+.ov-widget[data-dragging="true"] .ov-widget-head { cursor: grabbing; }
+.ov-widget-actions { display: flex; align-items: center; gap: 2px; }
+.ov-widget-body { position: relative; flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.ov-widget-grip {
+  position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px;
+  cursor: nwse-resize; touch-action: none; opacity: 0.55;
+  background:
+    linear-gradient(135deg, transparent 55%, var(--ov-line-strong) 55%, var(--ov-line-strong) 62%, transparent 62%),
+    linear-gradient(135deg, transparent 72%, var(--ov-line-strong) 72%, var(--ov-line-strong) 79%, transparent 79%);
+}
+.ov-widget-grip:hover { opacity: 1; }
+
+@media (max-width: 720px) {
+  .ov-widget {
+    left: var(--ov-gutter) !important; right: var(--ov-gutter); top: auto !important;
+    width: auto !important; height: min(56vh, 460px) !important;
+    bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom) + 52px);
+    border-radius: 20px;
+  }
+  .ov-widget[data-open="false"] { transform: translateY(24px); }
+  .ov-widget-head { cursor: default; }
+  .ov-widget-grip { display: none; }
+}
+/* Notes: placing one, and the X/Y/Z fields of a fixed note. */
+.ov-root[data-placing="true"] .ov-canvas { cursor: copy; }
+.ov-field-row.ov-note-xyz { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ov-widget[data-widget="notes"] .ov-widget-body { padding: 6px 0; }
+/* Birth tree (classic dendrogram). */
+.ov-tree { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; height: 100%; padding: 8px 10px 8px; box-sizing: border-box; }
+.ov-tree-controls { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr)) minmax(0, 0.8fr); gap: 8px; }
+.ov-tree-plot { position: relative; min-height: 0; }
+.ov-tree-canvas { display: block; width: 100%; height: 100%; cursor: crosshair; border-radius: 8px; background: rgba(0, 0, 0, 0.18); }
+.ov-tree-tip { position: absolute; max-width: 200px; padding: 4px 8px; border-radius: 6px; font: 500 11px/1.3 var(--ov-font); color: var(--ov-text); background: var(--ov-surface-raised); box-shadow: var(--ov-shadow-sm); pointer-events: none; }
+.ov-tree-tip[hidden] { display: none; }
+.ov-tree-foot { font: 450 10.5px/1.3 var(--ov-font); color: var(--ov-text-3); }
+@media (max-width: 720px) { .ov-tree-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Relative SFH (classic Age KDE). */
+.ov-sfh { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; gap: 8px; height: 100%; padding: 8px 10px; box-sizing: border-box; }
+.ov-sfh-plot { position: relative; min-height: 0; }
+.ov-sfh-canvas { display: block; width: 100%; height: 100%; cursor: ew-resize; border-radius: 8px; background: rgba(0, 0, 0, 0.18); touch-action: none; }
+.ov-sfh-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px; gap: 12px; align-items: end; }
+.ov-sfh-key { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 500 11px/1.3 var(--ov-font); color: var(--ov-text-2); }
+.ov-sfh-item { display: inline-flex; align-items: center; gap: 6px; }
+.ov-sfh-item i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+.ov-sfh-foot { font: 450 10.5px/1.3 var(--ov-font); color: var(--ov-text-3); }

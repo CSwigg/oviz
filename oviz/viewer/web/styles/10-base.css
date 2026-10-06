@@ -1,0 +1,124 @@
+/* ------------------------------------------------------------------ base */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ov-bg); }
+body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; -webkit-tap-highlight-color: transparent; }
+
+.ov-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  color: var(--ov-text);
+  font: 450 13px/1.45 var(--ov-font);
+  font-feature-settings: "cv11", "ss01", "tnum" 0;
+  letter-spacing: -0.003em;
+  background: var(--ov-bg-glow);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ov-root button, .ov-root input, .ov-root select, .ov-root textarea { font: inherit; color: inherit; letter-spacing: inherit; }
+.ov-root button { cursor: pointer; }
+.ov-root :focus { outline: none; }
+.ov-root :focus-visible { outline: 2px solid var(--ov-accent-line); outline-offset: 2px; }
+.ov-root [hidden] { display: none !important; }
+
+.ov-stage { position: absolute; inset: 0; background: var(--ov-stage); }
+.ov-canvas { position: absolute; inset: 0; display: block; z-index: 1; cursor: grab; touch-action: none; }
+.ov-canvas:active { cursor: grabbing; }
+.ov-root[data-hovering="true"] .ov-canvas { cursor: pointer; }
+/* The Sky plugin fades the survey frame by frame (in step with the camera
+   reaching the Sun); a CSS transition would lag behind it. */
+.ov-sky-host { position: absolute; inset: 0; z-index: 0; opacity: 0; pointer-events: none; background: #000; }
+.ov-sky-host .aladin-container, .ov-sky-host > div { position: absolute !important; inset: 0; }
+/* Hide Aladin's own chrome; Oviz provides the controls. */
+.ov-sky-host .aladin-logo-container, .ov-sky-host .aladin-location, .ov-sky-host .aladin-fov,
+.ov-sky-host .aladin-reticle, .ov-sky-host .aladin-stack-control, .ov-sky-host .aladin-layersControl-container,
+.ov-sky-host .aladin-zoom-control, .ov-sky-host .aladin-cooFrame, .ov-sky-host .aladin-status-bar,
+.ov-sky-host .aladin-projection-control, .ov-sky-host .aladin-fullScreen-control, .ov-sky-host .aladin-settings-control,
+.ov-sky-host .aladin-share-control, .ov-sky-host .aladin-simbadPointer-control, .ov-sky-host .aladin-grid-control,
+.ov-sky-host .aladin-toolbar, .ov-sky-host .aladin-cooGrid, .ov-sky-host .aladin-location-text { display: none !important; }
+
+.ov-labels { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; contain: strict; }
+.ov-label {
+  position: absolute; left: 0; top: 0;
+  opacity: 0;
+  white-space: nowrap;
+  font: 600 13px/1 var(--ov-font-display);
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 12px rgba(0, 0, 0, 0.6);
+  will-change: transform, opacity;
+  transition: opacity 160ms linear;
+}
+.ov-label--dyn {
+  font: 550 12px/1 var(--ov-font);
+  color: var(--ov-text);
+  padding: 4px 8px 4px 16px;
+  transform-origin: 0 50%;
+  margin-top: -10px;
+}
+.ov-label--dyn::before {
+  content: ""; position: absolute; left: 2px; top: 50%; width: 10px; height: 1px; background: currentColor; opacity: 0.6;
+}
+.ov-label--sel { color: var(--ov-accent-strong); }
+.ov-label--measure { color: var(--ov-sky); font-family: var(--ov-mono); font-size: 11.5px; padding-left: 8px; }
+.ov-label--measure::before { display: none; }
+
+.ov-icon { display: inline-grid; place-items: center; width: 20px; height: 20px; flex: none; }
+.ov-icon svg { display: block; }
+
+.ov-kbd {
+  display: inline-grid; place-items: center;
+  min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 5px;
+  font: 600 10.5px/1 var(--ov-font);
+  color: var(--ov-text-2);
+  background: var(--ov-hover);
+  box-shadow: inset 0 0 0 1px var(--ov-line-strong), inset 0 -1px 0 var(--ov-line-strong);
+}
+
+.ov-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.ov-mono { font-family: var(--ov-mono); font-size: 0.94em; }
+.ov-faint { color: var(--ov-text-3); }
+
+/* Boot */
+.ov-boot {
+  position: absolute; inset: 0; z-index: 50;
+  display: grid; place-content: center; justify-items: center; gap: 18px;
+  color: var(--ov-text-2); font: 500 13px/1.4 var(--ov-font);
+  background: var(--ov-bg-glow);
+  transition: opacity 400ms var(--ov-ease);
+}
+.ov-boot-mark { display: flex; gap: 7px; }
+.ov-boot-mark span {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--ov-accent);
+  box-shadow: 0 0 14px var(--ov-accent);
+  animation: ov-twinkle 1.4s var(--ov-ease-in-out) infinite;
+}
+.ov-boot-mark span:nth-child(2) { animation-delay: 0.18s; }
+.ov-boot-mark span:nth-child(3) { animation-delay: 0.36s; }
+.ov-boot-bar { width: 180px; height: 2px; border-radius: 2px; overflow: hidden; background: var(--ov-line); }
+.ov-boot-bar i { display: block; height: 100%; background: var(--ov-accent); transform-origin: left; transform: scaleX(0.02); transition: transform 200ms linear; }
+.ov-boot--error .ov-boot-text { color: var(--ov-danger); max-width: 42ch; text-align: center; }
+@keyframes ov-twinkle { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ov-root *, .ov-root *::before, .ov-root *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+.ov-label--note {
+  pointer-events: auto; cursor: pointer;
+  padding: 5px 10px 5px 18px; margin-top: -12px;
+  border-radius: 999px;
+  font: 600 12.5px/1 var(--ov-font);
+  background: rgba(8, 10, 15, 0.55);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  text-shadow: none;
+}
+.ov-label--note::before { left: 6px; width: 7px; height: 7px; top: calc(50% - 3.5px); border-radius: 50%; opacity: 1; }
+.ov-label--note:hover { box-shadow: inset 0 0 0 1px currentColor; }
+/* Axis ticks and titles (classic "Show axes"). */
+.ov-label--axis { font: 500 11px/1 var(--ov-mono); color: rgba(200, 208, 222, 0.75); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9); transform-origin: center; }
+.ov-label--axis-title { font: 600 12px/1 var(--ov-font); color: rgba(220, 226, 236, 0.85); }
+.ov-label--axis[hidden] { display: none; }
+.ov-label--axis::before { display: none; }

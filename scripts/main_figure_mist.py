@@ -4,9 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from main_figure import run_main_figure
+# The runner lives in tests/; scripts/main_figure.py is only its command-line wrapper.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+
+from main_figure import run_main_figure  # noqa: E402
 
 
 DEFAULT_OUTPUT_HTML = Path("/tmp/main_figure_mist.html")

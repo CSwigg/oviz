@@ -1,77 +1,120 @@
 Overview
 ========
 
-Oviz joins four parts of an astronomical visualization workflow:
+Oviz turns tables of Galactic objects into one interactive HTML file:
 
-1. pandas and Astropy prepare tables and coordinates.
-2. galpy integrates phase-space measurements through a Galactic potential.
-3. Three.js renders points, tracks, labels, images, and volumes in 3D.
-4. Aladin Lite supplies registered HiPS backgrounds in Sky mode.
+1. pandas and Astropy hold the tables and coordinates.
+2. galpy integrates each object's orbit over a time grid.
+3. :func:`oviz.viewer.compile_scene_spec` packs the frames, volumes and member
+   stars into compact binary blobs inside the page.
+4. A WebGL2 viewer replays them on the GPU, and Aladin Lite supplies the
+   registered sky backgrounds.
 
-The output is a browser-ready HTML figure. The reader does not need Python, and
-the author can save a sequence of complete viewer States to guide the reader
-through the data.
+Readers need only a browser. Authors can save a sequence of views and present
+them from the same file.
 
 
 Data model
 ----------
 
-Use :class:`oviz.Trace` for an orbiting sample. Each row needs Galactic
-Cartesian ``x``, ``y``, and ``z`` in parsecs; ``U``, ``V``, and ``W`` in km/s;
-``name``; and ``age_myr``. Use :class:`oviz.Layer` for a more general spatial
-layer. A layer with only XYZ coordinates must set ``assume_stationary=True``.
+Use :class:`oviz.Trace` for objects whose orbits should be integrated. Each row
+needs heliocentric Galactic Cartesian ``x``, ``y`` and ``z`` in pc (x towards
+the Galactic centre), heliocentric ``U``, ``V`` and ``W`` in km/s, a unique
+``name`` and ``age_myr``. Use :class:`oviz.Layer` for other spatial data; a
+layer with only positions sets ``assume_stationary=True``.
 
-:class:`oviz.TraceCollection` and :class:`oviz.LayerCollection` combine these
-objects. :class:`oviz.Animate3D` and its alias :class:`oviz.Scene3D` build the
-time frames and return a :class:`oviz.threejs_figure.ThreeJSFigure`.
+:class:`oviz.TraceCollection` and :class:`oviz.LayerCollection` group them,
+and :class:`oviz.Scene3D` (an alias of :class:`oviz.Animate3D`) builds the
+frames. ``make_plot`` returns an :class:`oviz.OvizFigure`:
+
+.. code-block:: python
+
+   import numpy as np
+   from oviz import Scene3D, Trace, TraceCollection
+
+   trace = Trace(clusters, data_name="Young clusters", color="#ff5a5a")
+   scene = Scene3D(TraceCollection([trace]), figure_theme="dark")
+   figure = scene.make_plot(time=np.arange(0, -61, -1.0), galactic_mode=True, enable_sky_panel=True)
+   figure.write_html("clusters.html")
+
+The time grid is in Myr, must be evenly spaced and must include 0. Positions
+are shown in a frame centred on the Local Standard of Rest, which follows a
+circular orbit through the axisymmetric part of the potential.
+
+Other ``make_plot`` inputs add to the same figure:
+
+- ``volumes``: 3D dust, emission or density cubes, from a FITS file or an
+  array with bounds in pc.
+- ``cluster_members_file``: one row per member star (a cluster-name column and
+  ``l``/``b`` or ``ra``/``dec``); in Sky view each cluster marker crossfades
+  into its members.
+- ``spiral_arm_models``: published spiral arms (below).
+- ``viewer_mode``, ``camera_anchor``, ``actions``: how the figure opens.
+
+``viewer="classic"`` writes the previous Three.js runtime instead
+(:class:`oviz.threejs_figure.ThreeJSFigure`), which still offers Slides and
+Paper exports. Older figures convert to the current viewer with
+:func:`oviz.upgrade_html`.
 
 
-Viewer model
-------------
+Potentials and spiral arms
+--------------------------
 
-The maintained renderer is the standalone Three.js viewer. Its spatial modes
-are 3D and Sky. Sky mode keeps Oviz-rendered points registered with Aladin Lite
-background imagery. Optional cluster-member tables can replace bulk cluster
-markers with member stars in Sky mode. Optional volume layers can show 3D dust,
-emission, or other scalar fields.
+Orbits use galpy's MWPotential2014 unless the scene is given another
+``potential``. :func:`oviz.spiral_models.khalil2025_potential` adds the m = 2
+and m = 3 spiral modes of Khalil et al. (2025) as galpy
+``SpiralArmsPotential`` terms; in the Galactic plane they reproduce the
+authors' released SPIBACK potential exactly. Their bar, their own axisymmetric
+background and the modes' radial cutoffs are left out.
 
-The timeline interpolates between generated frames. Controls, trace styles,
-selections, labels, panels, camera settings, and Sky layers can all be captured
-in a State.
+``make_plot(spiral_arm_models=...)`` draws published arms. Each model is one
+line trace holding all of its arms, turning at its pattern speeds through the
+timeline. The traces start hidden, and Sky view leaves them out.
+
+.. code-block:: python
+
+   from oviz.spiral_models import CASTRO_GINARD2021_ARMS, KHALIL2025_ARMS, khalil2025_potential
+
+   scene = Scene3D(TraceCollection([trace]), figure_theme="dark", potential=khalil2025_potential())
+   figure = scene.make_plot(
+       time=time_myr,
+       galactic_mode=True,
+       spiral_arm_models=(KHALIL2025_ARMS, CASTRO_GINARD2021_ARMS),
+   )
+
+``KHALIL2025_ARMS`` are the troughs of the two modes (m = 2: Crux-Scutum, Local
+and Outer arms at 13.1 km/s/kpc; m = 3: Carina-Sagittarius and Perseus at
+16.4 km/s/kpc). ``CASTRO_GINARD2021_ARMS`` are the Perseus, Local, Sagittarius
+and Scutum segments fitted to young open clusters and masers, each turning at
+its own pattern speed (17.8, 33.8, 26.1 and 49.8 km/s/kpc).
 
 
-States and presentation
------------------------
+Views and presentation
+----------------------
 
-States are ordered, named snapshots of the complete viewer. The original scene
-is the implicit State 0. A destination State controls its transition duration,
-easing, and whether its saved camera is followed or the current camera is kept.
-
-The States drawer supports capture, update, rename, duplicate, reorder, delete,
-preview, and HTML export. Standard exports remain editable. Present-only exports
-show simple navigation controls and move through the saved sequence.
-
-The same system is available through the browser API described in
-:doc:`browser_api`.
+A saved view (a *State*) captures the whole viewer: camera, time, mode, layer
+and volume styles, Sky layers, filters, selections, widgets and display
+settings. Views form a story that can be presented, exported as a
+present-only copy, or shared as links. :doc:`viewer` describes the controls
+and the browser API.
 
 
-HTML export
------------
+Output
+------
 
-Large scene specifications can be gzip-compressed inside the output HTML. The
-figure is a single file that can be attached, copied to a static host, or placed
-on GitHub Pages. Three.js, Aladin Lite, and remote HiPS surveys are fetched at
-runtime, so an internet connection is required for those assets.
+The figure is a single file that can be attached, opened from disk, or put on
+any static host such as GitHub Pages. The viewer runtime is inlined, so the
+3D scene works offline; Aladin Lite and the HiPS sky surveys load from the
+network. Large figures stay compact: the October 1 figure (about 1,700
+clusters over 61 frames, three volumes and 590,000 member stars) is 26 MB.
 
 
 Testing
 -------
 
-Run the maintained tests with:
-
 .. code-block:: bash
 
    pytest -q tests
+   node --test tests/viewer_js/*.test.mjs
 
-When runtime code changes, regenerate and inspect the canonical HTML in a
-browser in addition to running unit and regression tests.
+When the viewer changes, also open a regenerated figure in a browser.

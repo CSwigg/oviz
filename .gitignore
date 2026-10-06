@@ -1,6 +1,19 @@
+# OS and notebook files
 .DS_Store
-notebooks/
+.ipynb_checkpoints/
+
+# Python build and test artifacts
 __pycache__/
 *.pyc
+*.egg-info/
 build/
 dist/
+.pytest_cache/
+
+# Local scratch notebooks
+notebooks/
+
+# Local figure outputs; rebuild them with the matching tests/main_figure_*.py
+tests/main_figure_oct1.html
+tests/main_figure_oct1_source.html
+tests/main_figure_july25_rewrite.html

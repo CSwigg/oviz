@@ -41,23 +41,10 @@ def _coerce_positive_float(value: Any, *, label: str, default: float) -> float:
     return number
 
 
-def _coerce_xyz_mapping(value: Any, *, label: str) -> dict[str, float]:
+def _coerce_xyz_mapping(value: Any, *, label: str, axes: tuple[str, ...] = ("x", "y", "z")) -> dict[str, float]:
     mapping = _require_mapping(value, label=label)
     coords = {}
-    for axis in ("x", "y", "z"):
-        if axis not in mapping:
-            raise ValueError(f"{label} must include {axis}.")
-        try:
-            coords[axis] = float(mapping[axis])
-        except Exception as exc:  # pragma: no cover - defensive
-            raise ValueError(f"{label}.{axis} must be numeric.") from exc
-    return coords
-
-
-def _coerce_xy_mapping(value: Any, *, label: str) -> dict[str, float]:
-    mapping = _require_mapping(value, label=label)
-    coords = {}
-    for axis in ("x", "y"):
+    for axis in axes:
         if axis not in mapping:
             raise ValueError(f"{label} must include {axis}.")
         try:
@@ -123,9 +110,10 @@ def _normalize_camera_overrides(value: Any, *, label_prefix: str) -> dict[str, A
             label=f"{label_prefix}.camera.up",
         )
     if "view_offset" in camera:
-        normalized["view_offset"] = _coerce_xy_mapping(
+        normalized["view_offset"] = _coerce_xyz_mapping(
             camera.get("view_offset"),
             label=f"{label_prefix}.camera.view_offset",
+            axes=("x", "y"),
         )
     if "fov" in camera:
         try:

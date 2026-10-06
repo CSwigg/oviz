@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import uuid
 from copy import deepcopy
 from typing import Any
 
+from .threejs_states import _clamp, _finite_number, _stable_id
 
 DECK_SCHEMA_VERSION = 2
 DEFAULT_REVEAL_VERSION = "5.2.1"
@@ -26,24 +26,6 @@ SUPPORTED_TEXT_ALIGNMENTS = {"left", "center", "right"}
 SUPPORTED_FONT_STYLES = {"normal", "italic"}
 SUPPORTED_LIST_STYLES = {"none", "bullet", "number"}
 SUPPORTED_BORDER_STYLES = {"solid", "dashed", "dotted"}
-
-
-def _stable_id(prefix: str) -> str:
-    return f"{prefix}-{uuid.uuid4()}"
-
-
-def _finite_number(value: Any, fallback: float) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return float(fallback)
-    if number != number or number in (float("inf"), float("-inf")):
-        return float(fallback)
-    return number
-
-
-def _clamp(value: Any, minimum: float, maximum: float, fallback: float) -> float:
-    return min(max(_finite_number(value, fallback), minimum), maximum)
 
 
 def _normalize_color(value: Any, fallback: str = "#ffffff") -> str:

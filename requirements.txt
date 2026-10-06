@@ -1,6 +1,9 @@
 numpy
 pandas
-dash
-plotly
 astropy
 galpy
+scipy
+matplotlib
+pillow
+pyyaml
+webcolors

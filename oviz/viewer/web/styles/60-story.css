@@ -1,0 +1,184 @@
+/* --------------------------------------------------------------- story */
+.ov-story {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom));
+  width: min(960px, calc(100vw - 2 * var(--ov-gutter)));
+  transform: translateX(-50%);
+  border-radius: 18px;
+  overflow: hidden;
+  transition: opacity 260ms var(--ov-ease), transform 320ms var(--ov-ease), visibility 0s linear 0s;
+  z-index: 12;
+}
+.ov-story[data-open="false"] {
+  opacity: 0; transform: translateX(-50%) translateY(14px); pointer-events: none; visibility: hidden;
+  transition: opacity 260ms var(--ov-ease), transform 320ms var(--ov-ease), visibility 0s linear 320ms;
+}
+.ov-story.ov-glass, .ov-present.ov-glass { background: var(--ov-surface-strong); }
+.ov-story-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 16px; }
+.ov-story-title { font: 680 14px/1 var(--ov-font-display); }
+.ov-story-count { font: 550 11.5px/1 var(--ov-font); color: var(--ov-text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-grow { flex: 1; }
+.ov-story-strip {
+  display: flex; gap: 10px; align-items: stretch;
+  overflow-x: auto; overscroll-behavior: contain;
+  padding: 6px 14px 14px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin; scrollbar-color: var(--ov-line-strong) transparent;
+}
+.ov-story-status { padding: 0 16px 10px; font: 500 11px/1 var(--ov-font); color: var(--ov-text-3); }
+.ov-story-status:empty { display: none; }
+.ov-story-empty { padding: 10px 4px 12px; color: var(--ov-text-2); font: 450 12.5px/1.6 var(--ov-font); max-width: 64ch; }
+.ov-story-empty-title { font: 650 13.5px/1.3 var(--ov-font); color: var(--ov-text); margin-bottom: 4px; }
+
+.ov-card {
+  position: relative; flex: none;
+  width: 168px;
+  border-radius: 12px;
+  background: var(--ov-hover);
+  border: 1px solid var(--ov-line);
+  overflow: hidden; cursor: pointer;
+  scroll-snap-align: start;
+  transition: border-color var(--ov-dur), transform 200ms var(--ov-ease), box-shadow var(--ov-dur), background var(--ov-dur);
+}
+.ov-card:hover { transform: translateY(-2px); border-color: var(--ov-line-strong); background: var(--ov-active); }
+.ov-card[data-active="true"] { border-color: var(--ov-accent-line); box-shadow: 0 0 0 1px var(--ov-accent-line), 0 10px 24px -12px var(--ov-accent); }
+.ov-card[data-dragging="true"] { opacity: 0.4; }
+.ov-card[data-over="true"] { box-shadow: -3px 0 0 var(--ov-accent); }
+.ov-card-thumb {
+  position: relative; aspect-ratio: 16 / 9; width: 100%;
+  background: #000 center / cover no-repeat;
+  display: grid; place-items: center;
+}
+.ov-card-mode { font: 650 11px/1 var(--ov-font); color: var(--ov-text-3); letter-spacing: 0.08em; text-transform: uppercase; }
+.ov-card-meta { display: flex; align-items: center; gap: 8px; padding: 8px 10px 9px; min-width: 0; }
+.ov-card-index {
+  display: inline-grid; place-items: center; flex: none;
+  width: 18px; height: 18px; border-radius: 5px;
+  font: 700 10.5px/1 var(--ov-font); font-variant-numeric: tabular-nums;
+  color: var(--ov-text-inverse); background: var(--ov-text-2);
+}
+.ov-card[data-active="true"] .ov-card-index { background: var(--ov-accent); }
+.ov-card-name { font: 580 12px/1.25 var(--ov-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.ov-card-name .ov-input { height: 24px; padding: 0 6px; font-size: 12px; }
+.ov-card-more { position: absolute !important; top: 6px; right: 6px; width: 28px !important; height: 28px !important; background: rgba(5, 7, 11, 0.6) !important; color: #fff !important; opacity: 0; transition: opacity var(--ov-dur); }
+.ov-card:hover .ov-card-more, .ov-card:focus-within .ov-card-more { opacity: 1; }
+.ov-card-flag { position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; background: rgba(5, 7, 11, 0.6); color: var(--ov-sky); }
+.ov-card-flag .ov-icon { transform: scale(0.75); }
+.ov-story-add {
+  flex: none; width: 64px; border-radius: 12px;
+  border: 1.5px dashed var(--ov-line-strong); background: transparent; color: var(--ov-text-3);
+  display: grid; place-items: center;
+  transition: color var(--ov-dur), border-color var(--ov-dur), background var(--ov-dur);
+}
+.ov-story-add:hover { color: var(--ov-accent); border-color: var(--ov-accent-line); background: var(--ov-accent-soft); }
+
+/* --------------------------------------------------------- presentation */
+.ov-present {
+  position: absolute; left: 50%;
+  bottom: calc(var(--ov-gutter) * 1.5 + var(--ov-safe-bottom));
+  transform: translateX(-50%);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
+  width: min(760px, calc(100vw - 2 * var(--ov-gutter)));
+  padding: 12px 12px 12px 12px;
+  border-radius: 20px;
+  z-index: 20;
+  transition: opacity 320ms var(--ov-ease), transform 360ms var(--ov-ease), visibility 0s linear 0s;
+}
+.ov-present[data-open="false"] {
+  opacity: 0; transform: translateX(-50%) translateY(20px); pointer-events: none; visibility: hidden;
+  transition: opacity 320ms var(--ov-ease), transform 360ms var(--ov-ease), visibility 0s linear 360ms;
+}
+.ov-present .ov-ibtn { width: 44px; height: 44px; background: var(--ov-hover); }
+.ov-present .ov-ibtn:hover { background: var(--ov-active); }
+.ov-present-text { display: grid; gap: 5px; justify-items: center; text-align: center; min-width: 0; }
+.ov-present-title { font: 680 17px/1.25 var(--ov-font-display); letter-spacing: -0.01em; max-width: 100%; }
+.ov-present-caption { font: 450 13px/1.5 var(--ov-font); color: var(--ov-text-2); max-width: 62ch; user-select: text; -webkit-user-select: text; }
+/* Progress segments and the reel replace the dots; kept for assistive tech. */
+.ov-present-dots { display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap; justify-content: center; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.ov-present-dot { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: var(--ov-line-strong); transition: background var(--ov-dur), transform var(--ov-dur); }
+.ov-present-dot:hover { background: var(--ov-text-3); }
+.ov-present-dot[aria-current="step"] { background: var(--ov-accent); transform: scale(1.35); }
+.ov-present-exit { align-self: start; }
+.ov-present-time { font: 550 11.5px/1.2 var(--ov-font); font-variant-numeric: tabular-nums; color: var(--ov-text-3); }
+.ov-present-time[hidden] { display: none; }
+/* Presenting keeps the scale bar and colour bars, as the classic viewer did
+   (the rest of the bar gives way to the presenter). */
+.ov-root[data-presenting="true"] .ov-bottom.ov-chrome { opacity: 1; transform: none; pointer-events: none; }
+.ov-root[data-presenting="true"] .ov-bottom > :not(.ov-bottom-left) { visibility: hidden; }
+.ov-root[data-presenting="true"] .ov-bottom-left > .ov-stream { visibility: hidden; }
+.ov-root[data-presenting="true"] .ov-labels .ov-label--sel,
+.ov-root[data-presenting="true"] .ov-labels .ov-label--measure { display: none; }
+/* The key while presenting: only the layers in view, small and quiet like
+   a printed figure key, and not clickable (the presenter owns the screen).
+   No struck-through hidden layers, no hide-all row, no "more" link. */
+.ov-root[data-presenting="true"] .ov-legend { pointer-events: none; gap: 0; opacity: 0.88; transition: opacity 320ms var(--ov-ease); }
+/* Where the presenter would cover the key and scale (phones), they sit just above it. */
+.ov-root[data-presenting="true"] .ov-bottom-left { transform: translateY(calc(-1 * var(--ov-key-lift, 0px))); transition: transform 320ms var(--ov-ease); }
+.ov-root[data-presenting="true"] .ov-legend :is(.ov-legend-all, .ov-legend-more),
+.ov-root[data-presenting="true"] .ov-legend .ov-legend-item:is([data-visible="false"], [data-drawn="false"]) { display: none; }
+.ov-root[data-presenting="true"] .ov-legend .ov-legend-item {
+  height: 19px; max-width: 220px; padding: 0 4px; gap: 7px;
+  font: 500 11.5px/1 var(--ov-font); color: rgba(255, 255, 255, 0.82);
+  background: transparent;
+}
+.ov-root[data-presenting="true"] .ov-legend-dot { width: 7px; height: 7px; }
+.ov-root[data-presenting="true"] .ov-legend-dot[data-ramp] { width: 14px; height: 6px; border-radius: 2px; }
+.ov-root[data-presenting="true"] .ov-legend-dot[data-kind="volume"] { width: 8px; height: 8px; border-radius: 2px; }
+.ov-root[data-story="true"] .ov-layers,
+.ov-root[data-story="true"] .ov-inspector {
+  max-height: calc(100% - 52px - var(--ov-dock-h) - 3 * var(--ov-gutter) - 24px - 200px - var(--ov-safe-top) - var(--ov-safe-bottom));
+}
+
+/* Story progress: one segment per view; the current one fills during the
+   flight. The stage is always a night sky, so the bars are plain white. */
+.ov-present-progress {
+  position: absolute; left: 50%; top: calc(var(--ov-gutter) + var(--ov-safe-top));
+  transform: translateX(-50%);
+  display: flex; gap: 5px;
+  width: min(560px, calc(100vw - 2 * var(--ov-gutter) - 40px));
+  z-index: 21;
+  transition: opacity 320ms var(--ov-ease), transform 380ms var(--ov-ease), visibility 0s linear 0s;
+}
+.ov-present-progress[data-open="false"] {
+  opacity: 0; transform: translateX(-50%) translateY(-12px); pointer-events: none; visibility: hidden;
+  transition: opacity 320ms var(--ov-ease), transform 380ms var(--ov-ease), visibility 0s linear 380ms;
+}
+.ov-present-seg { flex: 1; min-width: 0; height: 18px; padding: 7px 0; border: 0; background: none; }
+.ov-present-seg span { display: block; height: 3px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, 0.2); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transition: background var(--ov-dur); }
+.ov-present-seg:hover span { background: rgba(255, 255, 255, 0.34); }
+.ov-present-seg i { display: block; width: 0; height: 100%; border-radius: 3px; background: rgba(255, 255, 255, 0.92); }
+
+/* Caption entrance for each view. */
+.ov-present-text.ov-anim > * { --ov-rise-dy: 10px; animation: ov-rise 620ms var(--ov-ease) backwards; }
+.ov-present-text.ov-anim > :nth-child(2) { animation-delay: 90ms; }
+.ov-present-text.ov-anim > :nth-child(3) { animation-delay: 160ms; }
+
+/* 3D reel of views. */
+.ov-present-reel {
+  position: absolute; left: 50%; width: 0;
+  bottom: calc(var(--ov-gutter) * 1.5 + var(--ov-safe-bottom) + var(--ov-present-h, 96px) + 16px);
+  height: 96px;
+  perspective: 900px; perspective-origin: 50% 40%;
+  transform-style: preserve-3d;
+  z-index: 19;
+  transition: opacity 420ms var(--ov-ease), transform 520ms var(--ov-ease);
+}
+.ov-present-reel[data-open="false"], .ov-present-reel[data-idle="true"] { opacity: 0; transform: translateY(18px); }
+.ov-present-reel[data-open="false"] .ov-reel-card, .ov-present-reel[data-idle="true"] .ov-reel-card { pointer-events: none !important; }
+.ov-reel-card {
+  position: absolute; left: -76px; top: 0;
+  width: 152px; height: 86px; padding: 0;
+  border-radius: 12px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #070a11 center / cover no-repeat;
+  box-shadow: 0 18px 36px -18px rgba(0, 0, 0, 0.95);
+  transition: transform 760ms var(--ov-ease), opacity 760ms var(--ov-ease), border-color 300ms, box-shadow 300ms;
+}
+.ov-reel-card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.72)); }
+.ov-reel-card[aria-current="step"] { border-color: var(--ov-accent-line); box-shadow: 0 0 0 1px var(--ov-accent-line), 0 20px 44px -16px rgba(0, 0, 0, 0.95); }
+.ov-reel-card b, .ov-reel-card span, .ov-reel-card em { position: absolute; z-index: 1; color: #fff; }
+.ov-reel-card b { left: 8px; top: 7px; font: 700 10px/1 var(--ov-font); opacity: 0.75; }
+.ov-reel-card span { left: 9px; right: 9px; bottom: 7px; text-align: left; font: 600 11.5px/1.2 var(--ov-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }
+.ov-reel-card em { inset: 0; display: grid; place-items: center; font: 650 11px/1 var(--ov-font); font-style: normal; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; }
+@media (max-width: 720px) { .ov-present-reel { display: none; } }
