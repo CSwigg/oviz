@@ -2,7 +2,7 @@
 
 **Interactive 3D figures of the Milky Way's young stars, from Python to one HTML file.**
 
-![Oviz: young clusters and the local dust in 3D, a traceback through the Khalil et al. (2025) spiral arms, and the sky view with member stars](docs/assets/oviz-tour.gif)
+![Oviz: young clusters and the local dust in 3D, a 25 Myr traceback with motion trails, the flight to the sky view with member stars, and the survey picker switching the sky background](docs/assets/oviz-tour.gif)
 
 Oviz turns tables of clusters or stars (positions, velocities, ages) into a
 figure anyone can open in a browser. Orbits are integrated with
