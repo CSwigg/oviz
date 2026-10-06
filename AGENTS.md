@@ -189,6 +189,10 @@ python -m http.server 8812 --bind 127.0.0.1 --directory /tmp
   viewer in seconds; `--rebuild-source` re-runs the science from the July 25
   inputs. The pulsar traces come from a local ATNF table (`--pulsars PATH`)
   and are skipped when it is missing.
+- The KT map figure (`oviz_figures/oviz_kt_map.html`) is
+  `tests/kt_map_figure.py`: the October 1 figure, through
+  `build_figure(extend_spec=...)`, plus the DIB KT map
+  (`~/Downloads/cubes_full_mean_std.h5`) as a volume and two flow layers.
 - Preserve unrelated dirty and untracked files. Stage only the source, focused
   tests, and canonical artifact required by the task.
 

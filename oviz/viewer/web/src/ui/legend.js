@@ -51,11 +51,19 @@ export class CompactLegend {
     // Presenting, the key lists only what is in view.
     if (this.ui.root.dataset.presenting === "true") all = all.filter((it) => this.ui.layers.itemVisible(it));
     const volumes = all.filter((it) => it.kind === "volume").slice(0, MAX_ITEMS - 1);
-    const traces = all.filter((it) => it.kind === "trace");
+    let traces = all.filter((it) => it.kind === "trace");
     // Annotations follow the data, a few at most (the layers panel lists them all).
     const notes = all.filter((it) => it.kind === "annotation");
     const room = Math.max(1, MAX_ITEMS - volumes.length);
-    return { shown: [...traces.slice(0, room), ...volumes, ...notes.slice(0, MAX_NOTES)], extra: Math.max(0, traces.length - room) + Math.max(0, notes.length - MAX_NOTES) };
+    const extra = Math.max(0, traces.length - room) + Math.max(0, notes.length - MAX_NOTES);
+    if (traces.length > room) {
+      // Too many for the key: the layers shown now keep their rows before
+      // hidden ones (the layers panel lists them all), in the panel's order.
+      const visible = (it) => this.ui.layers.itemVisible(it);
+      const keep = new Set([...traces.filter(visible), ...traces.filter((it) => !visible(it))].slice(0, room));
+      traces = traces.filter((it) => keep.has(it));
+    }
+    return { shown: [...traces, ...volumes, ...notes.slice(0, MAX_NOTES)], extra };
   }
 
   render() {

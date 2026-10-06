@@ -267,11 +267,13 @@ def add_pulsar_traces(spec: dict, table_path: Path = PULSAR_TABLE) -> dict[str, 
 
 def build_figure(source_html: Path = SOURCE_HTML, output_html: Path = OUTPUT_HTML, *,
                  rebuild_source: bool = False, mode_ages_path: Path | None = None,
-                 pulsars: Path | None = PULSAR_TABLE) -> dict:
+                 pulsars: Path | None = PULSAR_TABLE, extend_spec=None) -> dict:
     """Write the October 1 figure, re-running the science first when asked or needed.
 
     The pulsar traces are skipped when ``pulsars`` is the default table and it
-    is not on this machine.
+    is not on this machine. ``extend_spec(spec)``, if given, adds to the scene
+    spec just before it is compiled (``tests/kt_map_figure.py`` adds a KT map
+    this way, so that figure stays the October 1 figure in all else).
     """
     source_html = Path(source_html).expanduser().resolve()
     if rebuild_source or not source_html.exists():
@@ -285,6 +287,8 @@ def build_figure(source_html: Path = SOURCE_HTML, output_html: Path = OUTPUT_HTM
     spec = hash_provenance_paths(read_legacy_scene_spec(source_html))
     if pulsars is not None:
         print("Pulsar traces:", add_pulsar_traces(spec, Path(pulsars).expanduser()))
+    if extend_spec is not None:
+        extend_spec(spec)
     bundle = compile_scene_spec(spec)
     out = OvizFigure(bundle=bundle, mode="focus", camera_anchor="lsr").write_html(output_html)
     print(f"Wrote {out} ({out.stat().st_size / 2**20:.1f} MiB)")
