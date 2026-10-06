@@ -33,6 +33,10 @@ Layers                 **1–9** toggle, Shift + number or double-click solos, *
 Sky                    **V** flies to the Sun and looks out; **Shift + B** picks the
                        background survey.
 Views                  **N** saves a view, **Y** opens the story, **P** presents.
+Annotate               **K** (or the pen button) draws labels, curves, arrows,
+                       bubbles and shells in 3D. Drag handles to move, bend and
+                       resize; **Shift**-drag moves along the line of sight;
+                       **⌘Z** undoes; **Esc** finishes.
 Capture and share      **I** saves a PNG (up to 4×); the capture menu records MP4 or
                        WebM; *Copy link* shares the current view.
 Display                **G** grid, **B** Sky background, **Z** hides the interface,
@@ -87,10 +91,24 @@ that fades while the pointer rests. *Detailed* keeps the layers panel, the
 inspector and the full transport in view. Choose with
 ``make_plot(viewer_mode=...)`` or ``?mode=detailed``.
 
-**Widgets and actions.** The widgets button opens the *Birth tree*, *Relative
-SFH* and *Notes* panels; they are saved with views. Figures made with
+**Widgets and actions.** The widgets button opens the *Birth tree* and
+*Relative SFH* panels; they are saved with views. Figures made with
 ``make_plot(actions=...)`` show an action bar of scripted camera and time
 moves.
+
+**Annotations.** A click places what the tool bar draws: on a cluster it rides
+along with the cluster's orbit, on a dust map it lands in the dust, elsewhere
+on the plane through the orbit centre (Alt places freely). Selected
+annotations show handles: curve points (a "+" between two bends the curve),
+a shell's centre, radius and per-axis radii, a label's size. The style panel
+sets colour, opacity, line, arrowheads, shell look (bubble, shell or wire),
+position in pc and *Present day only*. What you draw groups itself in the
+key: a label put on a shape names it, and a run of shapes of one kind and
+colour is one entry, which toggles, solos and renames like a layer.
+Annotations are part of the figure: views capture them (and morph them in
+transitions), links carry them, and saving writes them into the file.
+Authors can add them from Python with ``make_plot(annotations=...)`` (see
+:mod:`oviz.annotations`).
 
 **Trace options for authors.** Set them with the trace's ``meta``:
 
@@ -199,12 +217,14 @@ mirrored by ``src/app/export.js``.
 
 - ``core/``: maths, colour, bundle loader, events.
 - ``engine/``: GL helpers, camera, anchors, controls, renderer, frame textures.
-- ``layers/``: points, lines, labels, image planes, volumes, KDE volumes.
+- ``layers/``: points, lines, labels, image planes, volumes, KDE volumes,
+  annotations.
 - ``sky/``: Aladin, survey catalogue, layer stack, picker, lens, SIMBAD,
   member stars.
 - ``app/``: viewer, timeline, state model, States, links, drafts, export, API.
 - ``ui/``: shell, layers panel, dock, inspector, palette, story, filter,
-  lasso, recorder, widget host and widgets, actions, axes.
+  lasso, recorder, widget host and widgets, actions, axes, annotate
+  (``annotate-model.js`` holds its DOM-free model).
 
 Per-object GPU state is a bitfield: 1 dimmed and 2 hidden by the filter, 4
 replaced by member stars in Sky view, 8 dimmed and 16 hidden by a lasso (for

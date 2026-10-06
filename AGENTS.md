@@ -128,6 +128,14 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
   `step(t, raw)`; the lasso uses it to crossfade selections, and volumes
   blend their lasso clips (`blendMask`). A fade starts from what is drawn, so
   an interrupted State change carries on without a jump.
+- Annotations (labels, curves, arrows, bubbles, shells) live in
+  `src/ui/annotate.js` (tools, handles, style panel, key entries),
+  `src/ui/annotate-model.js` (DOM-free model, geometry and grouping, tested
+  in `tests/viewer_js/annotate.test.mjs`) and `src/layers/annotations.js`
+  (WebGL, so captures include them). The document is the "annotations" State
+  extension and is also written into saved files (`exportManifest`); figures
+  get it from `manifest.annotations`, which `make_plot(annotations=...)` fills
+  through `oviz/annotations.py`. Legacy notes and manual labels become labels.
 - A lost WebGL context must be recoverable. New GPU resources must be
   recreated in `Viewer._restoreGPU` or on the `gpu-restored` event.
 

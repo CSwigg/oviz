@@ -1395,6 +1395,9 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
     }
     if isinstance(spec.get("provenance"), dict):
         manifest["provenance"] = _clean_json(_strip_heavy(spec["provenance"]))
+    # Labels, curves and shells drawn on the figure (oviz.annotations).
+    if isinstance(spec.get("annotations"), dict):
+        manifest["annotations"] = _clean_json(spec["annotations"])
     return Bundle(manifest=manifest, blobs=builder.blobs)
 
 

@@ -49,6 +49,8 @@ Other ``make_plot`` inputs add to the same figure:
   ``l``/``b`` or ``ra``/``dec``); in Sky view each cluster marker crossfades
   into its members.
 - ``spiral_arm_models``: published spiral arms (below).
+- ``annotations``: labels, curves, arrows, bubbles and shells drawn into the
+  figure (:mod:`oviz.annotations`); readers can draw and edit them too (K).
 - ``viewer_mode``, ``camera_anchor``, ``actions``: how the figure opens.
 
 ``viewer="classic"`` writes the previous Three.js runtime instead
