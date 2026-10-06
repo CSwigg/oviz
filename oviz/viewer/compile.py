@@ -610,6 +610,18 @@ class _TraceCompiler:
 # Colormaps
 
 
+def _colormap_label(label: str) -> str:
+    """A colormap's label in Matplotlib's spelling ("rdbu_r" → "RdBu_r"), else as given."""
+    try:
+        import matplotlib
+    except Exception:  # pragma: no cover - matplotlib is a dependency
+        return label
+    key = label.lower()
+    # Prefer the mixed-case name over lowercase aliases registered beside it.
+    names = [n for n in matplotlib.colormaps if n.lower() == key]
+    return next((n for n in names if n != key), names[0] if names else label)
+
+
 class _ColormapRegistry:
     def __init__(self, builder: BundleBuilder):
         self.builder = builder
@@ -640,7 +652,7 @@ class _ColormapRegistry:
             self.entries[name] = {
                 "blob": blob,
                 "width": int(width),
-                "label": str(option.get("label") or name),
+                "label": _colormap_label(str(option.get("label") or name)),
                 "legendColor": css_hex(option.get("legend_color") or "#888888"),
             }
             self._by_blob.setdefault(blob, name)
@@ -910,6 +922,29 @@ def _compile_volume(builder: BundleBuilder, layer: dict[str, Any], colormaps: _C
         color = _volume_bytes({"shape": layer.get("shape"), "data_b64": layer["color_data_b64"],
                                "data_encoding": layer.get("color_data_encoding") or "uint8", "key": layer.get("key")})[0]
         out["colorData"] = {"blob": builder.array(color, "u8", hint=f"vol-{layer.get('key')}-color", priority=DEFERRED, shuffle=False)}
+    fields = [f for f in (layer.get("color_fields") or []) if isinstance(f, dict) and f.get("data_b64")]
+    if fields:
+        # Quantities readers can colour the volume by (a KT map's velocities);
+        # each stores its scaled value, and opacity follows the density.
+        out["colorFields"] = []
+        for f in fields:
+            values = _volume_bytes({"shape": layer.get("shape"), "data_b64": f["data_b64"],
+                                    "data_encoding": f.get("data_encoding") or "uint8", "key": layer.get("key")})[0]
+            lo, hi = (list(f.get("range") or [0.0, 1.0]) + [1.0])[:2]
+            cmap = str(f.get("colormap") or names[0])
+            key = str(f.get("key") or "field")
+            out["colorFields"].append({
+                "key": key,
+                "label": str(f.get("label") or key),
+                "title": str(f.get("title") or f.get("label") or key),
+                "unit": str(f.get("unit") or ""),
+                "range": [_num(lo, 0.0), _num(hi, 1.0)],
+                "colormap": renamed.get(cmap, cmap),
+                "data": {"blob": builder.array(values, "u8", hint=f"vol-{layer.get('key')}-{key}", priority=DEFERRED, shuffle=False)},
+            })
+        keys = [f["key"] for f in out["colorFields"]]
+        default = layer.get("color_default")
+        out["colorDefault"] = default if default in keys or default == "value" else keys[0]
     colorbar = _volume_colorbar(layer, sources or {})
     if colorbar:
         out["colorbar"] = colorbar
@@ -1106,6 +1141,85 @@ def _compile_members(builder: BundleBuilder, sky_panel: dict[str, Any], traces: 
 
 
 # ---------------------------------------------------------------------------
+# Flows (animated streamlines; see oviz.viewer.flow)
+
+
+def _compile_flow(builder: BundleBuilder, flow: dict[str, Any], colormaps: _ColormapRegistry,
+                  index: int) -> dict[str, Any] | None:
+    """A flow-layer trace: static streamline vertices plus display columns."""
+
+    positions = np.asarray(flow.get("positions"), dtype=np.float64).reshape(-1, 3)
+    offsets = np.asarray(flow.get("offsets"), dtype=np.int64).ravel()
+    V = len(positions)
+    if V < 2 or offsets.size < 2 or offsets[0] != 0 or offsets[-1] != V or np.any(np.diff(offsets) < 1):
+        return None
+
+    def column(name: str, default: float) -> np.ndarray:
+        values = flow.get(name)
+        if values is None:
+            return np.full(V, default)
+        arr = np.asarray(values, dtype=np.float64).ravel()
+        if arr.size != V:
+            raise CompileError(f"flow {flow.get('key')!r}: column {name!r} has {arr.size} values for {V} vertices")
+        return np.nan_to_num(arr, nan=default)
+
+    line_id = np.repeat(np.arange(offsets.size - 1, dtype=np.float64), np.diff(offsets))
+    pos4 = np.column_stack([positions, line_id])
+    # Colour by the given values (e.g. a signed velocity), else by speed.
+    colour = column("color_values", 0.0) if flow.get("color_values") is not None else column("speed_kms", 0.0)
+    attr = np.column_stack([
+        column("tau_myr", 0.0), colour,
+        np.clip(column("trust", 1.0), 0, 1), np.clip(column("edge", 1.0), 0, 1),
+    ])
+    key = str(flow.get("key") or f"flow-{index}")
+    cmap_name = colormaps.add(flow.get("colormap") or {}) if isinstance(flow.get("colormap"), dict) else ""
+    color = flow.get("color")
+    legend = css_hex(flow.get("legend_color") or color or "#7fe7ff")
+    anim = flow.get("animation") if isinstance(flow.get("animation"), dict) else {}
+    lo, hi = (list(flow.get("speed_range") or [0.0, 1.0]) + [1.0])[:2]
+    finite = positions[np.all(np.isfinite(positions), axis=1)]
+    return {
+        "key": key,
+        "name": str(flow.get("name") or key),
+        "description": str(flow.get("description") or ""),
+        "showInLegend": bool(flow.get("show_in_legend", True)),
+        "legendColor": legend,
+        "color": css_hex(color) if color else legend,
+        "opacity": _num(flow.get("opacity"), 0.9),
+        "pointSize": 0.0,
+        "symbol": "circle",
+        "sizeByStarsDefault": False,
+        "hasStars": False,
+        # Flows are 3D context: seen from the Sun a line of sight is a point.
+        "skyHidden": bool(flow.get("hide_in_sky", True)),
+        # A snapshot of today's gas (a KT map) fades within a Myr of t = 0.
+        **({"presentDayOnly": True} if flow.get("present_day_only") else {}),
+        "flow": {
+            "vertices": int(V),
+            "lines": int(offsets.size - 1),
+            "position": {"blob": builder.array(pos4, "f32", hint=f"{key}-flow-pos", priority=CRITICAL)},
+            "attr": {"blob": builder.array(attr, "f32", hint=f"{key}-flow-attr", priority=CRITICAL)},
+            "colormap": cmap_name or None,
+            "fixedColor": bool(color),
+            "speedRange": [_num(lo, 0.0), _num(hi, 1.0)],
+            "colorLabel": str(flow.get("color_label") or "speed"),
+            "unit": str(flow.get("unit") or "km/s"),
+            "width": _num(flow.get("width_px"), 1.6),
+            "railOpacity": _num(flow.get("rail_opacity"), 0.16),
+            "trustFloor": _num(flow.get("trust_floor"), 0.35),
+            "animation": {
+                "rate": _num(anim.get("rate_myr_per_s"), 1.2),
+                "period": max(_num(anim.get("period_myr"), 14.0), 1e-3),
+                "tail": max(_num(anim.get("tail_myr"), 3.5), 1e-3),
+                "playing": bool(anim.get("playing", True)),
+            },
+            "bounds": [finite.min(axis=0).tolist(), finite.max(axis=0).tolist()] if len(finite) else None,
+            "summary": _clean_json(_strip_heavy(flow.get("summary") or {})),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # Top level
 
 
@@ -1217,6 +1331,16 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
         compiled = tc.compile(k, by_frame[k], legend_by_key.get(k))
         if compiled is not None:
             traces.append(compiled)
+    # Animated flow layers are traces of their own.
+    hidden_flows: list[str] = []
+    flow_keys: list[str] = []
+    for fi, flow in enumerate(spec.get("flows") or []):
+        compiled = _compile_flow(builder, flow, colormaps, fi) if isinstance(flow, dict) else None
+        if compiled is not None:
+            traces.append(compiled)
+            flow_keys.append(compiled["key"])
+            if flow.get("visible") is False:
+                hidden_flows.append(compiled["key"])
 
     # ---- decorations (images + volume presence)
     image_specs = {str(p.get("key")): p for p in (spec.get("image_planes") or []) if isinstance(p, dict)}
@@ -1344,6 +1468,10 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
 
     animation = spec.get("animation") or {}
     initial_state = _remap_frame_fields(_local_names(_clean_json(_strip_heavy(init))), order)
+    if hidden_flows and isinstance(initial_state, dict):
+        legend_state = initial_state.setdefault("legend_state", {})
+        for key in hidden_flows:
+            legend_state.setdefault(key, False)
     states = _remap_states_frames(_local_names(_clean_json(spec.get("states") or {})), order)
     items = (states.get("items") if isinstance(states, dict) else None) or []
     for snapshot in [initial_state, *[i.get("snapshot") for i in items if isinstance(i, dict)]]:
@@ -1393,6 +1521,11 @@ def compile_scene_spec(spec: dict[str, Any], *, compress_level: int = 9) -> Bund
             "mobile": bool((spec.get("mobile") or {}).get("enabled")),
         },
     }
+    # Flows belong to every trace group (their legend state decides visibility).
+    for vis in manifest["groups"]["visibility"].values():
+        if isinstance(vis, dict):
+            for key in flow_keys:
+                vis.setdefault(key, True)
     if isinstance(spec.get("provenance"), dict):
         manifest["provenance"] = _clean_json(_strip_heavy(spec["provenance"]))
     # Labels, curves and shells drawn on the figure (oviz.annotations).

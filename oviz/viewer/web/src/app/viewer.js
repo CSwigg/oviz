@@ -12,12 +12,13 @@ import { cpuFramePosition, frameOffset, trailParams } from "../engine/frames.js"
 import { rayBox, volumeMedianDepth, rayPlaneRect, screenSegment } from "../engine/surface.js";
 import { PointsLayer, resetStarTextures } from "../layers/points.js";
 import { LinesLayer } from "../layers/lines.js";
+import { FlowLayer, flowStyle } from "../layers/flow.js";
 import { ImagesLayer } from "../layers/images.js";
 import { VolumesLayer } from "../layers/volumes.js";
 import { buildEventKde, kdeSampleTime, kdeWindow, kdeId, kdeSampleTimes } from "../layers/kde.js";
 import { LabelsOverlay } from "../layers/labels.js";
 import { Timeline, presentDayFade } from "./timeline.js";
-import { initialViewerState, clampVolumeState } from "./state.js";
+import { initialViewerState, clampVolumeState, volumeColormap, volumeColorField } from "./state.js";
 
 const SKY_FOV = 60;
 
@@ -83,6 +84,7 @@ export class Viewer extends Emitter {
     this.images = this.renderer.add(new ImagesLayer(gl));
     this.volumes = this.renderer.add(new VolumesLayer(gl, { caps: this.renderer.caps }));
     this.lines = this.renderer.add(new LinesLayer(gl, { frames }));
+    this.flows = this.renderer.add(new FlowLayer(gl, { cmaps: this.volumes.cmaps }));
     this.points = this.renderer.add(new PointsLayer(gl, { frames }));
   }
 
@@ -123,6 +125,10 @@ export class Viewer extends Emitter {
         if (L.segmentColors?.blob) ld.segmentColors = await store.get(L.segmentColors.blob);
         this.lines.addTrace(trace, ld);
         (this.lineData ||= new Map()).set(trace.key, ld);
+      }
+      if (trace.flow) {
+        const F = trace.flow;
+        this.flows.addTrace(trace, { position: await store.get(F.position.blob), attr: await store.get(F.attr.blob) });
       }
       if (trace.labels && labels) {
         const L = trace.labels;
@@ -191,13 +197,15 @@ export class Viewer extends Emitter {
         }
         const data = await this.store.get(spec.data.blob);
         const color = spec.colorData?.blob ? await this.store.get(spec.colorData.blob) : null;
+        const fields = [];
+        for (const f of spec.colorFields || []) fields.push(await this.store.get(f.data.blob));
         let occ = null;
         if (spec.occupancy?.blob) {
           const o = await this.store.get(spec.occupancy.blob);
           occ = { data: o, gx: spec.occupancy.dims[0], gy: spec.occupancy.dims[1], gz: spec.occupancy.dims[2] };
         }
         if (gen !== (this._gpuGeneration || 0) || layer !== this.volumes) return;
-        layer.addVolume(spec, data, occ, color);
+        layer.addVolume(spec, data, occ, color, "", fields);
         this.renderer.invalidate();
         onEach?.(spec);
         this.emit("volume-ready", spec);
@@ -351,6 +359,48 @@ export class Viewer extends Emitter {
     }
     for (const fn of this._animators || []) fn(now);
     this._resolveParams();
+    this._stepFlow(now);
+  }
+
+  // -------------------------------------------------------------- flow lines
+
+  /** Whether the figure has animated flow layers. */
+  get hasFlows() {
+    return this.traces.some((t) => t.flow);
+  }
+
+  /**
+   * Flow pulses run unless paused. The default follows the figure (and the
+   * reader's reduced-motion preference); an explicit choice is kept in
+   * `state.global.flowPaused`, so States restore it.
+   */
+  get flowPlaying() {
+    const g = this.state.global;
+    if (typeof g.flowPaused === "boolean") return !g.flowPaused;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return false;
+    return this.traces.some((t) => t.flow && t.flow.animation?.playing !== false);
+  }
+
+  setFlowPlaying(on) {
+    this.state.global.flowPaused = !on;
+    this.renderer.invalidate();
+    this.emit("global", { flowPaused: !on });
+  }
+
+  /**
+   * Advance the flow clocks, and keep frames coming only while a shown flow
+   * is playing: a paused or hidden flow leaves the figure idle.
+   */
+  _stepFlow(now) {
+    const layer = this.flows;
+    if (!layer?.batches.length) return;
+    const styles = layer.params?.styles;
+    const running = this.flowPlaying && layer.anyVisible(styles);
+    const last = this._flowLast;
+    this._flowLast = running ? now : null;
+    if (running && last != null) layer.advance(Math.min(Math.max(now - last, 0), 100) / 1000, styles);
+    if (running) this.renderer.hold("flow");
+    else this.renderer.continuous.delete("flow");
   }
 
   addAnimator(fn) {
@@ -414,6 +464,7 @@ export class Viewer extends Emitter {
         dimOpacity: 0.16,
         // Samples of a surface or model are not picked (no hover, no click).
         pickable: trace.pickable !== false,
+        flow: trace.flow ? flowStyle(trace, ts) : null,
       });
     }
     for (const [k, s] of this.extraStyles) styles.set(k, s);
@@ -434,6 +485,7 @@ export class Viewer extends Emitter {
     };
     this.points.params = pointParams;
     this.lines.params = { styles, frame, lineOpacity: 1 };
+    this.flows.params = { styles, focusFallback: Math.max((this.world.maxSpan || 1000) * 0.5, 100) };
     this.labels.params = { styles, frame, labelSignature: this._labelSignature(), labelsVisible: g.labels !== false };
     // Images fade with the scale bar (zoom), like the legacy figure.
     const scaleBarPc = this.scaleBarPc();
@@ -520,8 +572,12 @@ export class Viewer extends Emitter {
         const allTimes = vs.showAllTimes && spec.supportsShowAllTimes && spec.timeMyr == null;
         const angle = allTimes && spec.coRotate ? (spec.coRotationRate || 0) * (time - (spec.referenceTimeMyr || 0)) : 0;
         const dataId = spec.procedural ? this._ensureKde(spec, time, vs) : "";
-        draws.push({ key: spec.key, state: vsClamped, low, high, fade: w, angle, canSkip: true });
-        sig += `${spec.key}:${dataId}:${w.toFixed(3)}:${low}:${high}:${vsClamped.opacity}:${vsClamped.steps}:${vsClamped.alphaCoef}:${vsClamped.stretch}:${vsClamped.colormap}:${angle.toFixed(5)}:${vsClamped.lightingMode};`;
+        // A colour field (a KT map's velocity) colours it unless density is chosen.
+        const field = volumeColorField(spec, vsClamped);
+        const fieldIndex = field ? spec.colorFields.indexOf(field) : -1;
+        const colormap = volumeColormap(spec, vsClamped);
+        draws.push({ key: spec.key, state: vsClamped, low, high, fade: w, angle, canSkip: true, fieldIndex, colormap });
+        sig += `${spec.key}:${dataId}:${w.toFixed(3)}:${low}:${high}:${vsClamped.opacity}:${vsClamped.steps}:${vsClamped.alphaCoef}:${vsClamped.stretch}:${colormap}:${fieldIndex}:${angle.toFixed(5)}:${vsClamped.lightingMode};`;
       }
     }
     return { frame, volumeDraws: draws, volumeSignature: sig };

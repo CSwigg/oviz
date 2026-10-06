@@ -23,10 +23,14 @@ uniform vec3 uCenter;
 uniform vec2 uRot;            // cos, sin of the co-rotation angle
 uniform highp sampler3D uVolume;
 uniform highp sampler3D uOcc;
-// Optional colour field (e.g. velocity), stored as colour × density so
-// trilinear filtering weights it by density: the LUT index is the ratio.
+// Optional colour field (e.g. velocity). Legacy fields are stored as
+// colour × density so trilinear filtering weights them by density (the LUT
+// index is the ratio). With uColorField (a KT map's velocity) the texture
+// holds the scaled value itself and opacity follows the density, not the
+// colour LUT at the field's value.
 uniform highp sampler3D uColorVol;
 uniform int uUseColor;
+uniform int uColorField;
 uniform vec3 uOccDims;
 uniform int uUseOcc;
 uniform sampler2D uCmap;
@@ -196,8 +200,10 @@ void main() {
       if (mw <= 0.0) continue;
     }
     v = stretch(min(v, 0.999));
-    float cv = uUseColor == 1 ? clamp(texture(uColorVol, tc).r / max(raw, 1e-6), 0.0, 1.0) : v;
+    float cv = v;
+    if (uUseColor == 1) cv = uColorField == 1 ? texture(uColorVol, tc).r : clamp(texture(uColorVol, tc).r / max(raw, 1e-6), 0.0, 1.0);
     vec4 c = texture(uCmap, vec2(cv, 0.5));
+    if (uUseColor == 1 && uColorField == 1) c.a = texture(uCmap, vec2(v, 0.5)).a;
     c.a *= mw;
     float a = 1.0 - pow(1.0 - clamp(c.a * uOpacity, 0.0, 0.999), stepAlpha);
     a *= (1.0 - acc.a);
@@ -391,20 +397,22 @@ export class VolumesLayer {
   /**
    * Upload a volume. `data` is Uint8Array (z, y, x) or Float32Array of
    * values in [0, 1] (stored half-float); `occ` optional block maxima;
-   * `color` an optional Uint8Array colour field of the same shape;
-   * `dataId` names these voxels in the cache `useData` swaps through.
+   * `color` an optional Uint8Array legacy colour field (colour × density)
+   * of the same shape; `dataId` names these voxels in the cache `useData`
+   * swaps through; `fields` the Uint8Array of each of `spec.colorFields`.
    */
-  addVolume(spec, data, occ, color = null, dataId = "") {
+  addVolume(spec, data, occ, color = null, dataId = "", fields = []) {
     const gl = this.gl;
     // Replacing a volume frees the old textures (never leak GPU memory).
     const old = this.volumes.get(spec.key);
     if (old) this._freeVolume(old);
     const gpu = this._upload(spec, data, occ);
-    let colorTex = null;
-    if (color) colorTex = this._texture3D(spec, color, spec.interpolation === false ? gl.NEAREST : gl.LINEAR);
+    const filter = spec.interpolation === false ? gl.NEAREST : gl.LINEAR;
+    const colorTex = color ? this._texture3D(spec, color, filter) : null;
+    const fieldTexes = (fields || []).map((f) => (f ? this._texture3D(spec, f, filter) : null));
     const [lo, hi] = spec.bounds;
     const vol = {
-      key: spec.key, spec, ...gpu, colorTex,
+      key: spec.key, spec, ...gpu, colorTex, fieldTexes,
       center: [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2],
       boxMin: lo, boxMax: hi,
       // Rebuilt densities (event KDEs) by id: one texture per time sample.
@@ -503,6 +511,7 @@ export class VolumesLayer {
     for (const g of vol.cache.values()) this._freeGpu(g);
     vol.cache.clear();
     if (vol.colorTex) this.gl.deleteTexture(vol.colorTex);
+    for (const t of vol.fieldTexes || []) if (t) this.gl.deleteTexture(t);
   }
 
   prepare(frame) {
@@ -555,13 +564,16 @@ export class VolumesLayer {
       .sort((a, b) => dist2(b.vol.center, cam.eye) - dist2(a.vol.center, cam.eye));
     for (const { d, vol } of sorted) {
       const st = d.state;
-      const cm = this.cmaps.get(st.colormap) || this.cmaps.get(vol.spec.colormaps[0]);
+      const cm = this.cmaps.get(d.colormap || st.colormap) || this.cmaps.get(vol.spec.colormaps[0]);
       if (!cm) continue;
       prog.v3("uBoxMin", vol.boxMin).v3("uBoxMax", vol.boxMax).v3("uCenter", vol.center);
       prog.v2("uRot", Math.cos(d.angle || 0), Math.sin(d.angle || 0));
       prog.tex("uVolume", vol.tex, gl.TEXTURE_3D);
       prog.tex("uOcc", vol.occTex || vol.tex, gl.TEXTURE_3D);
-      prog.tex("uColorVol", vol.colorTex || vol.tex, gl.TEXTURE_3D).i("uUseColor", vol.colorTex ? 1 : 0);
+      // A colour field when one is chosen, else a legacy colour × density field.
+      const fieldTex = d.fieldIndex >= 0 ? vol.fieldTexes?.[d.fieldIndex] || null : null;
+      const colorTex = fieldTex || (vol.spec.colorFields?.length ? null : vol.colorTex);
+      prog.tex("uColorVol", colorTex || vol.tex, gl.TEXTURE_3D).i("uUseColor", colorTex ? 1 : 0).i("uColorField", fieldTex ? 1 : 0);
       prog.v3("uOccDims", vol.occDims).i("uUseOcc", vol.occTex && d.canSkip ? 1 : 0);
       prog.tex("uCmap", cm);
       prog.f("uLow", d.low).f("uHigh", d.high).f("uOpacity", st.opacity).f("uSamples", st.steps);

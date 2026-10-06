@@ -4,8 +4,15 @@
 // frame dirty (camera motion, time change, style edit, async asset arrival)
 // or an animation asked for continuous frames. Idle figures cost ~0 CPU/GPU.
 
-import { createContext, enableExtensions } from "./gl.js";
+import { createContext, enableExtensions, createProgram, RenderTarget, FULLSCREEN_VS } from "./gl.js";
 import { Camera } from "./camera.js";
+
+// Copies the cached static scene to the screen (premultiplied, one texel per pixel).
+const COPY_FS = `
+in vec2 vUv;
+uniform sampler2D uTex;
+out vec4 outColor;
+void main() { outColor = texelFetch(uTex, ivec2(gl_FragCoord.xy), 0); }`;
 
 // Largest capture we ask for (Chrome's drawing-buffer area limit).
 const MAX_CAPTURE_PIXELS = 7680 * 4320;
@@ -27,6 +34,13 @@ export class Renderer {
     this.afterRender = [];
     this.dirty = true;
     this.continuous = new Set();
+    // Holds that only move "animated" layers (flow pulses): while nothing else
+    // changes, those frames redraw the animated layers over a cached copy of
+    // everything else instead of re-drawing the whole scene.
+    this.animatedHolds = new Set(["flow"]);
+    this._base = null;
+    this._baseValid = false;
+    this._copy = null;
     this.frameCount = 0;
     this.lastFrameMs = 0;
     this.frameTimes = new Float32Array(90);
@@ -52,6 +66,9 @@ export class Renderer {
       this.caps = enableExtensions(this.gl);
       // Every GL object died with the old context; the owner rebuilds them.
       this.layers = [];
+      this._base = null;
+      this._copy = null;
+      this._baseValid = false;
       this.onContextRestored?.();
       this.invalidate();
     });
@@ -171,8 +188,11 @@ export class Renderer {
     const needs = this.dirty || this.continuous.size > 0;
     if (needs && !this.contextLost) {
       const t0 = performance.now();
+      // Nothing but animated layers moved since the last frame.
+      let reuseBase = !this.dirty && !this.interacting && this.continuous.size > 0;
+      if (reuseBase) for (const k of this.continuous) if (!this.animatedHolds.has(k)) { reuseBase = false; break; }
       this.dirty = false;
-      this.render(now);
+      this.render(now, { reuseBase });
       const dt = performance.now() - t0;
       this.lastFrameMs = dt;
       this.frameTimes[this.frameTimeIndex++ % this.frameTimes.length] = dt;
@@ -185,7 +205,7 @@ export class Renderer {
     if (this.continuous.size > 0 || this.dirty || this.interacting) this._schedule();
   }
 
-  render(now = performance.now()) {
+  render(now = performance.now(), { reuseBase = false } = {}) {
     const gl = this.gl;
     const cam = this.camera;
     cam.update(this.sceneRadius);
@@ -203,17 +223,55 @@ export class Renderer {
       capture: !!this._capturing,
     };
     for (const layer of this.layers) if (layer.visible !== false) layer.prepare?.(frame);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, frame.width, frame.height);
-    const c = this.clearColor;
-    gl.clearColor(c[0], c[1], c[2], c[3]);
-    gl.depthMask(true);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    for (const layer of this.layers) {
-      if (layer.visible === false) continue;
-      layer.draw(frame);
+    const animated = frame.capture ? [] : this.layers.filter((l) => l.animated && l.visible !== false && l.active?.() !== false);
+    if (animated.length) {
+      this._renderCached(frame, animated, reuseBase);
+    } else {
+      this._baseValid = false;
+      this._clear(null, frame.width, frame.height);
+      for (const layer of this.layers) {
+        if (layer.visible === false) continue;
+        layer.draw(frame);
+      }
     }
     for (const overlay of this.overlays) overlay.update?.(frame);
+  }
+
+  _clear(fbo, width, height, color = this.clearColor) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, width, height);
+    gl.clearColor(color[0], color[1], color[2], color[3]);
+    gl.depthMask(true);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  }
+
+  /**
+   * Draw the static layers into a cached target (only when something other
+   * than the animated layers changed), copy it to the screen, then draw the
+   * animated layers on top. No layer writes depth, so colour is all the
+   * cache needs.
+   */
+  _renderCached(frame, animated, reuseBase) {
+    const gl = this.gl;
+    const base = (this._base ||= new RenderTarget(gl, { filter: gl.NEAREST }));
+    const resized = base.resize(frame.width, frame.height);
+    if (!reuseBase || resized || !this._baseValid || this.camera.version !== this._baseCamera) {
+      this._clear(base.fbo, frame.width, frame.height);
+      for (const layer of this.layers) {
+        if (layer.visible === false || animated.includes(layer)) continue;
+        layer.draw(frame);
+      }
+      this._baseValid = true;
+      this._baseCamera = this.camera.version;
+    }
+    this._clear(null, frame.width, frame.height, [0, 0, 0, 0]);
+    const copy = (this._copy ||= createProgram(gl, FULLSCREEN_VS, COPY_FS, { label: "base-copy" }));
+    copy.use().tex("uTex", base.texture);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    for (const layer of animated) layer.draw(frame);
   }
 
   /**

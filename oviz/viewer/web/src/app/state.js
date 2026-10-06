@@ -35,7 +35,24 @@ function defaultVolumeState(spec) {
     galacticWarmth: num(d.galactic_warmth, 0.72),
     // Event-density volumes: the trailing window their KDE counts (Myr).
     ...(spec.procedural ? { kdeTimeWindowMyr: num(spec.procedural.windowMyr, 10) } : {}),
+    // Volumes with colour fields (a KT map's velocities): what colours them,
+    // a field's key or "value" (density), and each field's own colormap.
+    ...(spec.colorFields?.length ? { colorBy: spec.colorDefault || spec.colorFields[0].key, fieldColormaps: {} } : {}),
   };
+}
+
+/** The colour field a volume is coloured by now, or null (density). */
+export function volumeColorField(spec, vs) {
+  const fields = spec?.colorFields;
+  if (!fields?.length || vs?.colorBy === "value") return null;
+  return fields.find((f) => f.key === vs?.colorBy) || fields[0];
+}
+
+/** The colormap a volume draws with: its colour field's, else the density colormap. */
+export function volumeColormap(spec, vs) {
+  const field = volumeColorField(spec, vs);
+  if (field) return vs?.fieldColormaps?.[field.key] || field.colormap;
+  return vs?.colormap || spec?.colormaps?.[0];
 }
 
 function normalizeLighting(mode) {
@@ -60,6 +77,13 @@ export function clampVolumeState(spec, vs) {
   if (!Number.isFinite(out.steps)) out.steps = Number(d.steps || 100);
   out.alphaCoef = clamp(Number(out.alphaCoef), 1, 200);
   if (!Number.isFinite(out.alphaCoef)) out.alphaCoef = Number(d.alpha_coef || 50);
+  if (spec.colorFields?.length) {
+    const keys = spec.colorFields.map((f) => f.key);
+    if (out.colorBy !== "value" && !keys.includes(out.colorBy)) out.colorBy = spec.colorDefault || keys[0];
+    const maps = {};
+    for (const [k, name] of Object.entries(out.fieldColormaps || {})) if (keys.includes(k) && spec.colormaps?.includes(name)) maps[k] = name;
+    out.fieldColormaps = maps;
+  }
   return out;
 }
 
@@ -261,7 +285,7 @@ function pickVolumeFields(v) {
   const keys = [
     "visible", "opacity", "vmin", "vmax", "steps", "alphaCoef", "stretch", "colormap", "showAllTimes",
     "lightingMode", "galacticCenter", "galacticLightIntensity", "galacticAmbient", "galacticExtinction",
-    "galacticScattering", "galacticAnisotropy", "galacticWarmth", "kdeTimeWindowMyr",
+    "galacticScattering", "galacticAnisotropy", "galacticWarmth", "kdeTimeWindowMyr", "colorBy", "fieldColormaps",
   ];
   for (const k of keys) {
     if (v[k] === undefined || v[k] === null) continue;

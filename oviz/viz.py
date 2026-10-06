@@ -315,6 +315,7 @@ class Animate3D:
         camera_anchor=None,
         show_sun=True,
         annotations=None,
+        flows=None,
     ):
         """Integrate the data, build timeline frames, and return a figure.
 
@@ -372,6 +373,11 @@ class Animate3D:
         annotations : sequence of mappings, optional
             Labels, curves, arrows, bubbles and shells drawn into the figure
             (see :mod:`oviz.annotations`); readers can edit them (key K).
+        flows : sequence of mappings, optional
+            Oviz viewer only: animated flow layers (streamlines of a steady
+            velocity field), each from :func:`oviz.viewer.flow.flow_layer` or
+            :meth:`oviz.kt.KTMap.flows`, in the scene's coordinates. The
+            classic viewer ignores them.
         show : bool
             Display the figure after construction.
         save_name : path-like, optional
@@ -457,6 +463,7 @@ class Animate3D:
         self.threejs_initial_state = merge_threejs_profile(profile_initial_state, caller_initial_state)
         self.threejs_actions = copy.deepcopy(actions) if actions else []
         self.annotations = normalize_annotations(annotations)
+        self.flow_configs = [dict(f) for f in (flows or []) if f]
         self.threejs_compress_scene_spec = compress_scene_spec
         self.threejs_scene_spec_compression_threshold_bytes = scene_spec_compression_threshold_bytes
         lite_mode_enabled = bool(
@@ -1754,6 +1761,9 @@ class Animate3D:
     def _build_threejs_figure(self, frames):
         """Build the standalone figure wrapper from the current frame data."""
         scene_spec = self._build_threejs_scene_spec(frames)
+        # Flow layers are drawn by the Oviz viewer only.
+        if getattr(self, "flow_configs", None) and getattr(self, "viewer_name", DEFAULT_VIEWER) == "oviz":
+            scene_spec["flows"] = list(self.flow_configs)
         self.fig = scene_spec
         self.fig_dict = scene_spec
         if getattr(self, "viewer_name", DEFAULT_VIEWER) == "oviz":
@@ -4249,17 +4259,19 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
     key = str(volume_cfg.get('key') or f'volume-{index}')
     time_myr = _coerce_threejs_volume_time_myr(volume_cfg.get('time_myr'))
     opacity_function = _normalize_threejs_volume_opacity_function(volume_cfg.get('opacity_function'))
+    quantized = _quantize_volume_uint8(sampled, data_min, data_max)
     colormap_options = _build_threejs_volume_colormap_options(
         volume_cfg.get('colormap', 'inferno'),
         opacity_function=opacity_function,
     )
+    color_keys = _inline_volume_color_fields(volume_cfg, data, target_shape_zyx, quantized, colormap_options, opacity_function)
     value_unit = str(volume_cfg.get('unit_label') or volume_cfg.get('value_unit') or '').strip()
 
     return {
         **_threejs_volume_identity(volume_cfg, key, name, time_myr),
         'path': '<inline>',
         'hdu': 'inline',
-        'data_b64': _uint8_b64(_quantize_volume_uint8(sampled, data_min, data_max)),
+        'data_b64': _uint8_b64(quantized),
         'data_encoding': 'uint8',
         'ar_proxy': _build_threejs_volume_ar_proxy(sampled, data_min, data_max, volume_cfg),
         'shape': _xyz_shape(sampled.shape),
@@ -4277,7 +4289,111 @@ def _build_threejs_inline_volume_layer_spec(volume_cfg, center_offset=None, inde
             volume_cfg, default_vmin, default_vmax, colormap_options[0]['name']
         ),
         'colormap_options': colormap_options,
+        **(color_keys or {}),
     }
+
+
+def _inline_volume_color_fields(volume_cfg, data, target_shape_zyx, quantized, colormap_options, opacity_function):
+    """Spec keys for the quantities that can colour an array volume, or None.
+
+    ``volume_cfg['color_fields']`` lists them as dicts with ``data`` (same
+    shape as the volume, e.g. a line-of-sight velocity), ``label``, ``unit``,
+    ``range``, ``colormap`` (default ``RdBu_r``), an optional longer
+    ``title`` and an optional ``key``; ``color_data`` with ``color_label``,
+    ``color_unit``, ``color_range`` and ``color_colormap`` gives a single
+    one. Each is averaged density-weighted onto the drawn grid (plainly where
+    there is no density; NaN counts as no data) and scaled over its range to
+    uint8. Opacity always follows the density; ``color_by`` (a field's key
+    or label, or ``"density"``) picks what colours the volume when the
+    figure opens, and readers can switch. Missing field colormaps are
+    appended to ``colormap_options``.
+    """
+    fields = volume_cfg.get('color_fields')
+    if fields is None and volume_cfg.get('color_data') is not None:
+        fields = [{
+            'data': volume_cfg.get('color_data'),
+            'label': volume_cfg.get('color_label'),
+            'unit': volume_cfg.get('color_unit'),
+            'range': volume_cfg.get('color_range'),
+            'colormap': volume_cfg.get('color_colormap'),
+        }]
+    if not fields:
+        return None
+    out = []
+    for i, field in enumerate(fields):
+        if not isinstance(field, dict) or field.get('data') is None:
+            raise ValueError("each color field needs 'data'")
+        key = str(field.get('key') or ('field' if i == 0 else f'field-{i}'))
+        if any(f['key'] == key for f in out):
+            raise ValueError(f"color field key {key!r} is used twice")
+        stored, lo, hi = _volume_color_field_bytes(field.get('data'), data, target_shape_zyx, quantized, field.get('range'))
+        sampled_cmap = _sample_threejs_volume_colormap(field.get('colormap') or 'RdBu_r', opacity_function=opacity_function)
+        if sampled_cmap is None:
+            raise ValueError(f"Unknown color field colormap {field.get('colormap')!r}")
+        cmap = sampled_cmap[0]
+        if cmap not in {o['name'] for o in colormap_options}:
+            colormap_options.extend(
+                o for o in _build_threejs_volume_colormap_options(cmap, opacity_function=opacity_function)
+                if o['name'] == cmap
+            )
+        label = str(field.get('label') or ('Velocity' if i == 0 else f'Field {i + 1}'))
+        out.append({
+            'key': key,
+            'label': label,
+            'title': str(field.get('title') or label),
+            'unit': str(field.get('unit') if field.get('unit') is not None else 'km/s'),
+            'range': [lo, hi],
+            'colormap': cmap,
+            'data_b64': _uint8_b64(stored),
+            'data_encoding': 'uint8',
+        })
+    choice = volume_cfg.get('color_by')
+    if choice is None or str(choice).lower() in ('field', 'velocity'):
+        default = out[0]['key']
+    elif str(choice).lower() in ('density', 'value'):
+        default = 'value'
+    else:
+        match = [f['key'] for f in out if str(choice) in (f['key'], f['label'])]
+        if not match:
+            raise ValueError(f"color_by must be 'density' or one of the color fields {[f['key'] for f in out]}")
+        default = match[0]
+    return {'color_fields': out, 'color_default': default}
+
+
+def _volume_color_field_bytes(values, data, target_shape_zyx, quantized, rng=None):
+    """``values`` density-weighted onto the drawn grid and scaled to uint8: (bytes, lo, hi)."""
+    color = np.asarray(values, dtype=np.float32)
+    if color.shape != np.shape(data):
+        raise ValueError("a color field must have the same (z, y, x) shape as the volume data")
+    valid = np.isfinite(color)
+    weight = np.where(valid, np.nan_to_num(np.clip(np.asarray(data, dtype=np.float32), 0, None)), 0.0).astype(np.float32)
+    filled = np.where(valid, color, 0.0).astype(np.float32)
+    if tuple(target_shape_zyx) != tuple(weight.shape):
+        zoom_to = lambda a: _downsample_threejs_volume_with_zoom(a, target_shape_zyx)  # noqa: E731
+        num, den = zoom_to(filled * weight), zoom_to(weight)
+        plain_num, plain_den = zoom_to(filled), zoom_to(valid.astype(np.float32))
+    else:
+        num, den, plain_num, plain_den = filled * weight, weight, filled, valid.astype(np.float32)
+    plain = np.where(plain_den > 1e-6, plain_num / np.maximum(plain_den, 1e-6), np.nan)
+    averaged = np.where(den > 0, num / np.where(den > 0, den, 1), plain)
+    if rng is None:
+        # Symmetric about zero for a signed quantity, else its 1st–99th
+        # percentile, over the voxels that show.
+        shown = averaged[(quantized > 0) & np.isfinite(averaged)]
+        if shown.size == 0:
+            shown = averaged[np.isfinite(averaged)]
+        if shown.size == 0:
+            shown = np.zeros(1, dtype=np.float32)
+        if np.min(shown) < 0 < np.max(shown):
+            m = float(np.percentile(np.abs(shown), 99))
+            rng = (-m, m)
+        else:
+            rng = tuple(float(v) for v in np.percentile(shown, [1, 99]))
+    lo, hi = float(rng[0]), float(rng[1])
+    if not hi > lo:
+        hi = lo + 1.0
+    unit = np.clip((np.where(np.isfinite(averaged), averaged, 0.5 * (lo + hi)) - lo) / (hi - lo), 0.0, 1.0)
+    return np.rint(unit * 255.0).astype(np.uint8), lo, hi
 
 
 def _build_threejs_volume_layer_spec(volume_cfg, center_offset=None, index=0, include_sky_overlay=False):
