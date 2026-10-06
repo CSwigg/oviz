@@ -136,7 +136,37 @@ appear in 3D, by design. A `ValueError` asking for "a readable
 cluster_members_file" means the file could not be read, lacks the name or
 coordinate columns, or no row matched a trace's object names.
 
-## 5. Saved views and presentation
+## 5. Annotations
+
+Labels, curves, arrows, bubbles and shells go in with `make_plot(annotations=[...])`.
+Positions are pc in the figure's frame (heliocentric x, y, z at the present day):
+
+```python
+annotations = [
+    {"kind": "shell", "center": [0, 0, 0], "radius": 150, "label": "Local Bubble", "present": True},
+    {"kind": "arrow", "points": [[100, -300, 0], [50, -150, 20]], "color": "#ffd27a"},
+    {"kind": "curve", "points": [[0, 0, 0], [200, 100, 50], [400, 0, 0]], "dash": "dash"},
+    {"kind": "bubble", "center": [10, 0, 0], "radii": [30, 20, 10], "rot": [0, 0, 45]},
+    {"kind": "text", "at": [300, 200, 0], "text": "Sco-Cen", "size": 16, "group": "Regions"},
+    {"kind": "box", "center": [-200, 50, 0], "size": [300, 150, 80], "rot": [0, 0, 25], "select": "isolate"},
+    {"kind": "curve", "points": [[0, -400, 0], [0, 400, 0]], "select": "highlight", "reach": 60},
+]
+```
+
+- Kinds: `text`, `curve`, `arrow`, the ellipsoids `bubble`, `shell` and
+  `wire` (`radius` or `radii` in pc), and `box` (`size`: edge lengths in pc).
+  Shapes take `rot` in degrees about x, y, z.
+- `select="highlight"` colours the objects a shape holds (a curve: within
+  `reach` pc of it) like the annotation; `select="isolate"` shows only them.
+  Both follow the objects through time.
+- A shape's `label` adds a label at its centre, in the same key entry.
+- Items with the same `group` share one key entry.
+- `present: True` shows an item only around t = 0.
+- Readers draw and edit annotations in the figure too: **K**, or the pen
+  button. A label clicked onto a cluster follows that cluster's orbit, which
+  Python input cannot do yet.
+
+## 6. Saved views and presentation
 
 Saved views ("States") capture the whole viewer: camera, time, layers,
 styles, volumes, selection and Sky layers.
@@ -152,7 +182,7 @@ styles, volumes, selection and Sky layers.
 - **To share:** `Oviz.viewer.viewLink()` gives a link to one view;
   `presentationLink()` gives one that opens presenting all saved views.
 
-## 6. Large builds: science once, viewer many times
+## 7. Large builds: science once, viewer many times
 
 When data processing dominates (catalogue joins, orbit integration, volume
 resampling), run it once and keep the result as a classic-format source
@@ -182,7 +212,7 @@ set it to `"legendonly"` in every `group_visibility` entry so it starts
 hidden. The figure embeds the spec's `provenance` verbatim, so record input
 files by name and hash, not by local path.
 
-## 7. Verify before you share
+## 8. Verify before you share
 
 1. If you changed Oviz itself, run its tests: `pytest -q tests` and
    `node --test tests/viewer_js/*.test.mjs`.

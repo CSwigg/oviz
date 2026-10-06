@@ -20,7 +20,7 @@ import { captureState } from "../app/states.js";
 import { StoryPlugin, figureId } from "./story.js";
 import { RecorderPlugin } from "./recorder.js";
 import { FilterPlugin } from "./filter.js";
-import { NotesPlugin } from "./notes.js";
+import { AnnotatePlugin } from "./annotate.js";
 import { LassoPlugin } from "./lasso.js";
 import { SelectionReticle } from "./reticle.js";
 import { MODES, modeById, initialMode, applyMode } from "./modes.js";
@@ -39,7 +39,7 @@ export function mountUI(root, viewer) {
   const ui = new AppUI(root, viewer);
   if (viewer.manifest.sky?.enabled) ui.use(new SkyPlugin());
   ui.use(new FilterPlugin());
-  ui.use(new NotesPlugin());
+  ui.use(new AnnotatePlugin());
   ui.use(new LassoPlugin());
   ui.use(new StoryPlugin());
   ui.use(new RecorderPlugin());
@@ -1599,6 +1599,8 @@ class AppUI {
       if (isEditable(e.target)) return;
       // Let focused sliders, buttons and switches handle their own keys.
       if (controlConsumesKey(e)) return;
+      // Annotating, its keys (Esc, ⌫, ⌘Z…) come first.
+      if (this.annotate?.handleKey(e)) { e.preventDefault(); return; }
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key;
       const lower = k.length === 1 ? k.toLowerCase() : k;

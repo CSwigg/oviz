@@ -30,10 +30,6 @@
   .ov-widget-head { cursor: default; }
   .ov-widget-grip { display: none; }
 }
-/* Notes: placing one, and the X/Y/Z fields of a fixed note. */
-.ov-root[data-placing="true"] .ov-canvas { cursor: copy; }
-.ov-field-row.ov-note-xyz { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.ov-widget[data-widget="notes"] .ov-widget-body { padding: 6px 0; }
 /* Birth tree (classic dendrogram). */
 .ov-tree { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; height: 100%; padding: 8px 10px 8px; box-sizing: border-box; }
 .ov-tree-controls { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr)) minmax(0, 0.8fr); gap: 8px; }

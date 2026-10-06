@@ -10,6 +10,7 @@ import { h, icon } from "./dom.js";
 import { lutGradient } from "../core/color.js";
 
 const MAX_ITEMS = 8;
+const MAX_NOTES = 5;
 const LONG_PRESS_MS = 480;
 
 export class CompactLegend {
@@ -49,8 +50,10 @@ export class CompactLegend {
     if (this.ui.root.dataset.presenting === "true") all = all.filter((it) => this.ui.layers.itemVisible(it));
     const volumes = all.filter((it) => it.kind === "volume").slice(0, MAX_ITEMS - 1);
     const traces = all.filter((it) => it.kind === "trace");
+    // Annotations follow the data, a few at most (the layers panel lists them all).
+    const notes = all.filter((it) => it.kind === "annotation");
     const room = Math.max(1, MAX_ITEMS - volumes.length);
-    return { shown: [...traces.slice(0, room), ...volumes], extra: Math.max(0, traces.length - room) };
+    return { shown: [...traces.slice(0, room), ...volumes, ...notes.slice(0, MAX_NOTES)], extra: Math.max(0, traces.length - room) + Math.max(0, notes.length - MAX_NOTES) };
   }
 
   render() {
@@ -65,7 +68,7 @@ export class CompactLegend {
         "data-tip": `${it.name}\nClick to show or hide · double-click to show only this`,
       }, dot, h("span", { class: "ov-legend-name" }, it.name));
       const flip = () => layers.setItemVisible(it, !layers.itemVisible(it));
-      const solo = () => layers.solo(it.kind === "volume" ? { volume: it.key } : it.key);
+      const solo = () => layers.solo(it.kind === "volume" ? { volume: it.key } : it.kind === "annotation" ? { annotation: it.key } : it.key);
       let timer = 0;
       const touched = bindTouch(b, {
         tap: flip,
@@ -114,6 +117,10 @@ export class CompactLegend {
       const visible = this.ui.layers.itemVisible(r.it);
       r.b.dataset.visible = String(visible);
       r.b.setAttribute("aria-pressed", String(visible));
+      if (r.it.kind === "annotation") {
+        this.ui.annotate?.legendDot(r.dot, r.it.key);
+        continue;
+      }
       if (r.it.kind === "volume") {
         const vs = v.state.volumes[r.it.key] || {};
         const lut = this.ui.luts.get(vs.colormap);

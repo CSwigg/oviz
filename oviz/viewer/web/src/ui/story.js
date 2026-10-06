@@ -769,6 +769,8 @@ export class StoryPlugin {
     const m = cloneJson(this.viewer.manifest);
     // Saved files reopen the way they were being viewed (theme and mode).
     m.viewer = { ...(m.viewer || {}), mode: this.ui.mode };
+    // Plugins keep what belongs to the figure itself (what was drawn on it).
+    for (const p of this.ui.plugins) p.exportManifest?.(m, { presentOnly, currentOnly });
     if (currentOnly) {
       const cur = captureState(this.viewer, this.sky);
       m.states = exportStatesBlock({ ...this.project, projectId: uid(), items: [{ id: uid(), name: "View", caption: "", thumb: "", camera: "follow", transition: null, state: cur }] }, { defaultMode: "edit" });

@@ -160,7 +160,7 @@ export class LassoPlugin {
       const ages = v.data.get(trace.key)?.ageNow;
       const hits = [];
       for (let i = 0; i < trace.points.count; i++) {
-        if (batch.state[i] & 18) continue; // hidden by the filter or an isolated lasso
+        if (batch.state[i] & 82) continue; // hidden by the filter, an isolated lasso or an annotation
         // Not yet born (or long faded) at this time: invisible, so not selectable.
         if (ages && birthFadeAt(t, ages[i], g.fadeTime, g.fadeInOut) <= 0) continue;
         const p = v.objectPosition(trace.key, i);

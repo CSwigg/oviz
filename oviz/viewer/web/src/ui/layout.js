@@ -65,6 +65,7 @@ const LAYOUTS = {
     if (!ui.dock.el.hidden) lm.add(sep(), bar);
     lm.move(ui.layersBtn, bar);
     if (!ui.statesBtn.hidden) lm.move(ui.statesBtn, bar);
+    if (ui.annotate?.button) lm.move(ui.annotate.button, bar);
     if (ui.hasSky) lm.move(ui.viewToggle, bar);
     lm.move(ui.modeBtn, bar);
     lm.move(ui.moreBtn, bar);
