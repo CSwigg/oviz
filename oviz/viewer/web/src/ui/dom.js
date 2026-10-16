@@ -84,6 +84,16 @@ const ICONS = {
   widgets: '<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/>',
   sidebar: '<rect x="3.5" y="4.5" width="13" height="11" rx="2"/><path d="M8 4.5v11"/>',
   chart: '<path d="M3.5 16.5h13"/><path d="m3.8 13.6 3.4-4.1 3 2.6 3.4-5.6 2.9 3.6"/>',
+  pen: '<path d="M4.2 15.8 5 12.4l8.2-8.2a1.9 1.9 0 0 1 2.7 2.7L7.7 15.1l-3.5.7Z"/><path d="m12 5.4 2.7 2.7"/>',
+  pointer: '<path d="M5.2 3.6 14.6 9l-4.1 1.2 2.4 4.3-1.8 1-2.4-4.3-3 3.1-.5-10.4Z"/>',
+  text: '<path d="M4.5 5.2h11"/><path d="M10 5.2v10.6"/><path d="M7.8 15.8h4.4"/>',
+  curve: '<path d="M3.6 15.6C6 4.2 12.6 16.8 16.4 4.6"/><circle cx="3.6" cy="15.6" r="1.1" fill="currentColor"/><circle cx="16.4" cy="4.6" r="1.1" fill="currentColor"/>',
+  arrow: '<path d="M4.2 15.8 15.2 4.8"/><path d="M8.6 4.6h6.8v6.8"/>',
+  bubble: '<circle cx="10" cy="10" r="6.4" fill="currentColor" fill-opacity="0.22"/><path d="M6.9 8.1a3.5 3.5 0 0 1 2.3-2.3"/>',
+  shell: '<circle cx="10" cy="10" r="6.6"/><circle cx="10" cy="10" r="4.4" stroke-opacity="0.4"/>',
+  undo: '<path d="M7.4 7.2h4.8a3.9 3.9 0 0 1 0 7.8H8.4"/><path d="M9.6 4.6 7 7.2l2.6 2.6"/>',
+  redo: '<path d="M12.6 7.2H7.8a3.9 3.9 0 0 0 0 7.8h3.8"/><path d="m10.4 4.6 2.6 2.6-2.6 2.6"/>',
+  box: '<path d="M4 7 10 4l6 3v6.2l-6 3-6-3Z" fill="currentColor" fill-opacity="0.16"/><path d="m4 7 6 3 6-3M10 10v6.2"/>',
 };
 
 export function icon(name, cls = "") {

@@ -81,6 +81,8 @@ export class LayersPanel {
       volumes.forEach((spec, j) => sec.append(...this.volumeRow(spec, traces.length + j)));
       this.body.append(sec);
     }
+    const annotations = this.ui.annotate?.layersSection();
+    if (annotations) this.body.append(annotations);
     const filterSection = this.ui.filter?.section();
     if (filterSection) this.body.append(filterSection);
     if (v.state.view.mode === "sky" && this.ui.sky) {
@@ -137,22 +139,26 @@ export class LayersPanel {
    */
   toggleItems(scope = "all") {
     const items = [];
-    if (scope !== "volumes") for (const t of this.groupTraces()) items.push({ id: `trace:${t.key}`, kind: "trace", key: t.key, name: t.name });
-    if (scope !== "traces") {
+    if (scope !== "volumes" && scope !== "annotations") for (const t of this.groupTraces()) items.push({ id: `trace:${t.key}`, kind: "trace", key: t.key, name: t.name });
+    if (scope !== "traces" && scope !== "annotations") {
       for (const s of this.groupVolumes()) items.push({ id: `volume:${s.stateKey}`, kind: "volume", key: s.stateKey, name: s.name });
     }
+    // What was drawn on the figure: one entry per annotation group.
+    if (scope === "all" || scope === "annotations") items.push(...(this.ui.annotate?.toggleItems() || []));
     return items;
   }
 
   itemVisible(it) {
     const v = this.viewer;
+    if (it.kind === "annotation") return !!this.ui.annotate?.groupVisible(it.key);
     return it.kind === "volume" ? !!v.state.volumes[it.key]?.visible : !!v.state.traces[it.key]?.visible;
   }
 
   setItemVisible(it, on) {
     const v = this.viewer;
     if (this.itemVisible(it) === on) return;
-    if (it.kind === "volume") v.setVolumeState(it.key, { visible: on });
+    if (it.kind === "annotation") this.ui.annotate?.setGroupVisible(it.key, on);
+    else if (it.kind === "volume") v.setVolumeState(it.key, { visible: on });
     else v.setTraceStyle(it.key, { visible: on });
   }
 
@@ -205,7 +211,7 @@ export class LayersPanel {
    * soloing it again restores the mix that was on before.
    */
   solo(key) {
-    const id = typeof key === "object" && key ? `volume:${key.volume}` : `trace:${key}`;
+    const id = typeof key === "object" && key ? (key.annotation != null ? `annotation:${key.annotation}` : `volume:${key.volume}`) : `trace:${key}`;
     const items = this.toggleItems("all");
     const group = this.viewer.state.group;
     const snapKey = `${group}::solo`;
@@ -225,7 +231,7 @@ export class LayersPanel {
     const items = this.toggleItems("all");
     const target = items[index];
     if (!target) return false;
-    if (solo) this.solo(target.kind === "volume" ? { volume: target.key } : target.key);
+    if (solo) this.solo(target.kind === "volume" ? { volume: target.key } : target.kind === "annotation" ? { annotation: target.key } : target.key);
     else this.setItemVisible(target, !this.itemVisible(target));
     return true;
   }

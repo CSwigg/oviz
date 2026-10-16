@@ -769,6 +769,9 @@ def build_threejs_scene_spec(
         "initial_state": initial_state,
         "note": "" if minimal_mode else plot._threejs_note_text(),
     }
+    # Drawn annotations (oviz.annotations); figures without any keep their spec as it was.
+    if getattr(plot, "annotations", None):
+        scene_spec["annotations"] = plot.annotations
     float_precision = initial_state.get("scene_float_precision")
     if float_precision is not None:
         precision = int(np.clip(coerce_float(float_precision, 4), 0, 10))

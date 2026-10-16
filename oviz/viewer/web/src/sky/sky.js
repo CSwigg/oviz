@@ -449,7 +449,7 @@ export class SkyPlugin {
     let bitsVersion = 0;
     for (const { key } of this.links) {
       const b = v.points.byKey.get(key);
-      bitsVersion += (b?.stateVersion || 0) + (b?.lassoVersion || 0);
+      bitsVersion += (b?.stateVersion || 0) + (b?.lassoVersion || 0) + (b?.markVersion || 0);
     }
     const mix = v.points.lassoMix;
     const sig = `${frame.toFixed(4)}|${v._pickVersion}|${bitsVersion}|${mix[0].toFixed(3)},${mix[1].toFixed(3)}|${reveal > 0}`;
@@ -480,12 +480,12 @@ export class SkyPlugin {
         for (let i = 0; i < link.length; i++) {
           const c = link[i];
           if (c < 0 || state[c * 4 + 3] > 0) continue;
-          // Members share their cluster's filter, lasso and birth-tree
-          // state as the marker draws it: hidden or dimmed by the filter
-          // (2, 1) or birth tree (32), and the lasso's level, which blends
-          // while a State change plays.
+          // Members share their cluster's filter, lasso, birth-tree and
+          // annotation state as the marker draws it: hidden or dimmed by
+          // the filter (2, 1), birth tree (32) or an isolating annotation
+          // (64), and the lasso's level, which blends while a State change plays.
           const b = bits ? bits[i] : 0;
-          const w = Math.min(b & 2 ? 0 : b & 33 ? dim : 1, batch ? batch.lassoWeight(i, mix, dim) : 1);
+          const w = Math.min(b & 66 ? 0 : b & 33 ? dim : 1, batch ? batch.lassoWeight(i, mix, dim) : 1);
           if (w <= 0.001) continue;
           if (!cpuFramePosition(d.position, F, N, i, frame, p) || !cpuFramePosition(d.position, F, N, i, zero, p0)) continue;
           let alpha = opacityScale * w;
@@ -498,6 +498,12 @@ export class SkyPlugin {
           color[c * 4] = (rgb ? rgb[i * 3] / 255 : base[0]) * 255;
           color[c * 4 + 1] = (rgb ? rgb[i * 3 + 1] / 255 : base[1]) * 255;
           color[c * 4 + 2] = (rgb ? rgb[i * 3 + 2] / 255 : base[2]) * 255;
+          // An annotation's highlight colours the members too.
+          const mk = batch?.mark;
+          if (mk && mk[i * 4 + 3]) {
+            const k = mk[i * 4 + 3] / 255;
+            for (let j = 0; j < 3; j++) color[c * 4 + j] = color[c * 4 + j] * (1 - k) + mk[i * 4 + j] * k;
+          }
           const sf = d.starsFactor ? d.starsFactor[i] : 1;
           color[c * 4 + 3] = clamp(sf / 2.75, 0, 1) * 255;
         }

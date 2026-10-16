@@ -121,13 +121,24 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
   - States and view links carry the anchor. Older ones infer it from the pose.
 - Per-object GPU state is a bitfield: 1 = dimmed, 2 = hidden (the filter),
   4 = replaced by member stars, 8 / 16 = dimmed / hidden by a lasso, 32 =
-  dimmed by the Birth tree. The point shader dims on 1 and 32.
+  dimmed by the Birth tree, 64 = hidden outside an isolating annotation. The
+  point shader dims on 1 and 32 and hides on 2 and 64. Annotation highlights
+  are a per-object RGBA attribute (`PointBatch.setMarks`); Sky member stars
+  and the lasso honour both.
 - The shaders draw the lasso from a per-object pair (`aLasso`): the weight a
   fade starts from and the level in the selection. Bits 8 / 16 serve the
   CPU's readers. A State extension may return `transition(from, to)` with
   `step(t, raw)`; the lasso uses it to crossfade selections, and volumes
   blend their lasso clips (`blendMask`). A fade starts from what is drawn, so
   an interrupted State change carries on without a jump.
+- Annotations (labels, curves, arrows, bubbles, shells) live in
+  `src/ui/annotate.js` (tools, handles, style panel, key entries),
+  `src/ui/annotate-model.js` (DOM-free model, geometry and grouping, tested
+  in `tests/viewer_js/annotate.test.mjs`) and `src/layers/annotations.js`
+  (WebGL, so captures include them). The document is the "annotations" State
+  extension and is also written into saved files (`exportManifest`); figures
+  get it from `manifest.annotations`, which `make_plot(annotations=...)` fills
+  through `oviz/annotations.py`. Legacy notes and manual labels become labels.
 - A lost WebGL context must be recoverable. New GPU resources must be
   recreated in `Viewer._restoreGPU` or on the `gpu-restored` event.
 

@@ -18,6 +18,7 @@ import yaml
 from astropy.coordinates import SkyCoord
 
 from . import orbit_maker
+from .annotations import normalize_annotations
 from .spiral_models import CASTRO_GINARD2021_ARM_TABLE, spiral_arm_coordinates
 from .threejs_figure import ThreeJSFigure
 from .threejs_profiles import build_threejs_profile, merge_threejs_profile
@@ -313,6 +314,7 @@ class Animate3D:
         viewer_mode=None,
         camera_anchor=None,
         show_sun=True,
+        annotations=None,
     ):
         """Integrate the data, build timeline frames, and return a figure.
 
@@ -367,6 +369,9 @@ class Animate3D:
             one line trace holding all of its arms, turning at its pattern
             speeds through the timeline. The traces start hidden (listed in
             every layer group, switched off) and are left out in Sky view.
+        annotations : sequence of mappings, optional
+            Labels, curves, arrows, bubbles and shells drawn into the figure
+            (see :mod:`oviz.annotations`); readers can edit them (key K).
         show : bool
             Display the figure after construction.
         save_name : path-like, optional
@@ -451,6 +456,7 @@ class Animate3D:
         caller_initial_state = copy.deepcopy(threejs_initial_state) if threejs_initial_state else {}
         self.threejs_initial_state = merge_threejs_profile(profile_initial_state, caller_initial_state)
         self.threejs_actions = copy.deepcopy(actions) if actions else []
+        self.annotations = normalize_annotations(annotations)
         self.threejs_compress_scene_spec = compress_scene_spec
         self.threejs_scene_spec_compression_threshold_bytes = scene_spec_compression_threshold_bytes
         lite_mode_enabled = bool(

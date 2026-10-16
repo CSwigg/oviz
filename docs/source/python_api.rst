@@ -82,6 +82,9 @@ Orbit and appearance helpers
 .. automodule:: oviz.spiral_arms
    :members:
 
+.. automodule:: oviz.annotations
+   :members: normalize_annotations
+
 .. automodule:: oviz.spiral_models
    :members: khalil2025_potential, khalil2025_spiral_potentials, spiral_arm_coordinates,
              SpiralArmModel, KhalilSpiralArms, CastroGinardSpiralArms
