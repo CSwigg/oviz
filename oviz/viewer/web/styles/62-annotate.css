@@ -5,7 +5,7 @@
 .ov-annot-bar {
   position: absolute; z-index: 6;
   top: calc(var(--ov-gutter) + var(--ov-safe-top));
-  left: 50%; transform: translateX(-50%);
+  left: var(--ov-mid-x); transform: translateX(-50%);
   display: flex; align-items: center; gap: 2px;
   padding: 4px;
   border-radius: 14px;
@@ -37,7 +37,7 @@
 .ov-annot-hint-row {
   position: absolute; z-index: 5;
   top: calc(var(--ov-gutter) + var(--ov-safe-top) + 50px);
-  left: 50%; transform: translateX(-50%);
+  left: var(--ov-mid-x); transform: translateX(-50%);
   max-width: min(90%, 520px);
   pointer-events: none;
   text-align: center;
