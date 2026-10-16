@@ -254,8 +254,11 @@ async function dustSlices(v, ui, draws, toAr) {
     const spec = v.volumeSpecs.find((x) => x.key === d.key);
     if (!spec) continue;
     const data = await v.store.get(spec.data.blob);
-    const lut = ui.luts.get(d.state.colormap) || ui.luts.get(spec.colormaps?.[0]);
+    const lut = ui.luts.get(d.colormap || d.state.colormap) || ui.luts.get(spec.colormaps?.[0]);
     if (!data || !lut) continue;
+    // A colour field (a KT map's velocity) colours the slices when chosen.
+    const fieldSpec = d.fieldIndex >= 0 ? spec.colorFields?.[d.fieldIndex] : null;
+    const field = fieldSpec ? await v.store.get(fieldSpec.data.blob) : null;
     const [nx, ny, nz] = spec.dims;
     const [lo, hi] = spec.bounds;
     // Per raw byte: optical depth per unit texture length, and colour value.
@@ -296,7 +299,7 @@ async function dustSlices(v, ui, draws, toAr) {
         for (let x = 0; x < nx; x++) {
           const t = tauLut[data[row + x]];
           if (!t) continue;
-          const val = valLut[data[row + x]] * t;
+          const val = (field ? field[row + x] / 255 : valLut[data[row + x]]) * t;
           let k = (sz.sMap[z] * sz.H + sz.vMap[y]) * sz.W + sz.uMap[x];
           sz.tau[k] += t; sz.val[k] += val;
           k = (sx.sMap[x] * sx.H + sx.vMap[z]) * sx.W + sx.uMap[y];

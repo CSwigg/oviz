@@ -191,6 +191,12 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
       cur.color = discrete.color;
       cur.inGroup = visA || visB ? true : discrete.inGroup;
       cur.sizeScale = lerp(a.sizeScale ?? 1, b.sizeScale ?? 1, t);
+      // Colour ranges and flow settings glide when both States set them.
+      for (const f of GLIDING_TRACE_FIELDS) {
+        if (a[f] == null && b[f] == null) continue;
+        const fa = Number(a[f]), fb = Number(b[f]);
+        cur[f] = Number.isFinite(fa) && Number.isFinite(fb) ? lerp(fa, fb, t) : discrete[f];
+      }
       if (visA && visB) { cur.visible = true; cur.opacity = lerp(opA, opB, t); }
       else if (visA) { cur.visible = t < 1; cur.opacity = opA * (1 - t); }
       else if (visB) { cur.visible = t > 0; cur.opacity = opB * t; }
@@ -205,6 +211,7 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
       const d = t < 0.5 ? a : b;
       Object.assign(cur, { stretch: d.stretch, colormap: d.colormap, showAllTimes: d.showAllTimes, lightingMode: d.lightingMode });
       if (d.kdeTimeWindowMyr != null) cur.kdeTimeWindowMyr = d.kdeTimeWindowMyr;
+      if (d.colorBy != null) Object.assign(cur, { colorBy: d.colorBy, fieldColormaps: { ...(d.fieldColormaps || {}) } });
       for (const f of ["vmin", "vmax", "alphaCoef", "steps"]) cur[f] = lerp(Number(a[f]), Number(b[f]), t);
       if (a.visible && b.visible) { cur.visible = true; cur.opacity = lerp(a.opacity, b.opacity, t); }
       else if (a.visible) { cur.visible = t < 1; cur.opacity = a.opacity * (1 - t); }
@@ -289,6 +296,8 @@ export function makeTransition(viewer, sky, target, { keepCamera = false } = {})
 
   return { step, finish, modeChange, keepCamera, from, to };
 }
+
+const GLIDING_TRACE_FIELDS = ["cmin", "cmax", "flowRate", "flowPeriod", "flowTail", "flowRail"];
 
 function smoothstepT(e0, e1, x) {
   const t = clamp((x - e0) / (e1 - e0), 0, 1);

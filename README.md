@@ -38,7 +38,8 @@ figure.write_html("clusters.html")
 
 Positions are heliocentric Galactic Cartesian (x towards the Galactic centre)
 and the time grid must include 0; negative times are the past. From there you
-can add 3D volumes (`volumes=`), member stars for the sky view
+can add 3D volumes (`volumes=`), kinetic tomography maps with animated flow
+lines (`oviz.kt`), member stars for the sky view
 (`cluster_members_file=`), a spiral-arm potential and published arms
 (`oviz.spiral_models`), or upgrade an older figure with
 `python -m oviz.viewer.upgrade old.html new.html`.
@@ -49,6 +50,7 @@ can add 3D volumes (`volumes=`), member stars for the sky view
 - Orbit the scene in 3D, or switch to the sky with member stars and HiPS surveys.
 - Click to inspect, lasso to select, ⌘K to search, and share links that reopen a view.
 - Draw labels, curves, arrows, bubbles, shells and boxes in 3D (press K); shapes can highlight or isolate what they hold.
+- Colour a KT map by its velocity, its residual from Galactic rotation, or density, and tune its animated flow lines.
 - Save views and present them; export PNG, video or AR; works on phones.
 
 ## Develop

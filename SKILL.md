@@ -120,6 +120,41 @@ The cube is ordered (z, y, x) and the bounds are heliocentric pc.
   desktop and expect phones to stride further. Hidden or present-day-only
   volumes still ship in the file, so mind the size.
 
+### KT maps and flow lines
+
+A kinetic tomography (KT) map, gas density plus its line-of-sight velocity on
+a heliocentric grid, has its own helper:
+
+```python
+from oviz.kt import read_kt_map
+
+kt = read_kt_map("cubes_full_mean_std.h5")   # DIB density, v_los and the rotation residual
+figure = scene.make_plot(
+    time=time_myr,
+    volumes=[kt.volume()],                   # opens coloured by v_los (RdBu_r)
+    flows=[kt.flows(), kt.flows(field="residual", visible=False)],
+)
+```
+
+- `read_kt_map` reads `(x, y, z)`-ordered HDF5 cubes on a Sun-centred grid
+  with voxel sizes in `distances` (the DIB KT maps' layout). Other layouts go
+  straight into `KTMap(density=..., velocity=..., residual=..., axes=(x, y, z))`
+  with `(z, y, x)` arrays.
+- `kt.volume()` is a volume dict whose opacity follows density and whose
+  colour readers switch between the velocity, the residual and density
+  (`color_by=` picks the opening one). It is block-averaged to
+  `max_resolution` (velocities density-weighted).
+- `kt.flows(field=...)` traces animated flow lines. A KT map measures only
+  line-of-sight motion, so the lines run along sight lines: pulses leave the
+  Sun where gas recedes and approach it where it approaches. Use
+  `field="residual"` for motion relative to Galactic rotation. Both fade
+  away from t = 0 and stay out of Sky view.
+- Readers set each flow's colour, range, width, pulse speed, spacing and
+  trail in the layers panel; States capture them.
+- For a full 3D velocity field (for example a NIFTy reconstruction), use
+  `oviz.viewer.flow.trace_streamlines` and `flow_layer` and pass the result
+  in `flows=`.
+
 ## 4. Sky view members
 
 `cluster_members_file` is a CSV (read with `pandas.read_csv`) with one row per

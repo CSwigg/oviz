@@ -8,6 +8,8 @@
 
 import { h, icon } from "./dom.js";
 import { lutGradient } from "../core/color.js";
+import { volumeColormap } from "../app/state.js";
+import { flowRamp } from "./layers.js";
 
 const MAX_ITEMS = 8;
 const MAX_NOTES = 5;
@@ -49,11 +51,19 @@ export class CompactLegend {
     // Presenting, the key lists only what is in view.
     if (this.ui.root.dataset.presenting === "true") all = all.filter((it) => this.ui.layers.itemVisible(it));
     const volumes = all.filter((it) => it.kind === "volume").slice(0, MAX_ITEMS - 1);
-    const traces = all.filter((it) => it.kind === "trace");
+    let traces = all.filter((it) => it.kind === "trace");
     // Annotations follow the data, a few at most (the layers panel lists them all).
     const notes = all.filter((it) => it.kind === "annotation");
     const room = Math.max(1, MAX_ITEMS - volumes.length);
-    return { shown: [...traces.slice(0, room), ...volumes, ...notes.slice(0, MAX_NOTES)], extra: Math.max(0, traces.length - room) + Math.max(0, notes.length - MAX_NOTES) };
+    const extra = Math.max(0, traces.length - room) + Math.max(0, notes.length - MAX_NOTES);
+    if (traces.length > room) {
+      // Too many for the key: the layers shown now keep their rows before
+      // hidden ones (the layers panel lists them all), in the panel's order.
+      const visible = (it) => this.ui.layers.itemVisible(it);
+      const keep = new Set([...traces.filter(visible), ...traces.filter((it) => !visible(it))].slice(0, room));
+      traces = traces.filter((it) => keep.has(it));
+    }
+    return { shown: [...traces, ...volumes, ...notes.slice(0, MAX_NOTES)], extra };
   }
 
   render() {
@@ -123,7 +133,7 @@ export class CompactLegend {
       }
       if (r.it.kind === "volume") {
         const vs = v.state.volumes[r.it.key] || {};
-        const lut = this.ui.luts.get(vs.colormap);
+        const lut = this.ui.luts.get(volumeColormap(v.volumeSpecs.find((s) => s.stateKey === r.it.key), vs));
         r.dot.style.background = lut ? lutGradient(lut, "135deg", 4) : "";
         continue;
       }
@@ -131,7 +141,7 @@ export class CompactLegend {
       const st = v.state.traces[r.it.key] || {};
       const cb = t?.colorBy;
       const mode = st.colorMode || cb?.defaultMode || "fixed";
-      const lut = mode === "by_value" && cb ? this.ui.luts.get(st.colormap || cb.colormap) : null;
+      const lut = flowRamp(t, st, this.ui.luts) || (mode === "by_value" && cb ? this.ui.luts.get(st.colormap || cb.colormap) : null);
       if (lut) {
         r.dot.style.background = lutGradient(lut, "to right", 5);
         r.dot.dataset.ramp = "true";

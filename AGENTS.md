@@ -139,6 +139,19 @@ Required time-varying columns are `x`, `y`, `z` (pc), `U`, `V`, `W` (km/s),
   extension and is also written into saved files (`exportManifest`); figures
   get it from `manifest.annotations`, which `make_plot(annotations=...)` fills
   through `oviz/annotations.py`. Legacy notes and manual labels become labels.
+- Flow layers (`make_plot(flows=...)`, built by `oviz/viewer/flow.py` and
+  `oviz/kt.py`) are traces with a `flow` block drawn by `src/layers/flow.js`.
+  Readers' settings live in the trace state (`flowRate`, `flowPeriod`,
+  `flowTail`, `flowRail`, `colorMode`, `colormap`, `cmin`, `cmax`; resolved
+  by `flowStyle`), so States carry them. While only flow pulses move, the
+  renderer redraws them over a cached frame of everything else (the
+  `animatedHolds` in `src/engine/renderer.js`); no layer may rely on the
+  depth buffer across that cache.
+- A volume can carry colour fields (`colorFields`, e.g. a KT map's
+  velocities): each a uint8 texture of the scaled value, with opacity still
+  from the density. The volume state's `colorBy` is a field key or
+  `"value"` (density), and `fieldColormaps` remembers each field's colormap.
+  Legacy colour × density fields (`colorData`) are unchanged.
 - A lost WebGL context must be recoverable. New GPU resources must be
   recreated in `Viewer._restoreGPU` or on the `gpu-restored` event.
 
@@ -176,6 +189,10 @@ python -m http.server 8812 --bind 127.0.0.1 --directory /tmp
   viewer in seconds; `--rebuild-source` re-runs the science from the July 25
   inputs. The pulsar traces come from a local ATNF table (`--pulsars PATH`)
   and are skipped when it is missing.
+- The KT map figure (`oviz_figures/oviz_kt_map.html`) is
+  `tests/kt_map_figure.py`: the October 1 figure, through
+  `build_figure(extend_spec=...)`, plus the DIB KT map
+  (`~/Downloads/cubes_full_mean_std.h5`) as a volume and two flow layers.
 - Preserve unrelated dirty and untracked files. Stage only the source, focused
   tests, and canonical artifact required by the task.
 

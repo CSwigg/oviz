@@ -115,6 +115,22 @@ transitions), links carry them, and saving writes them into the file.
 Authors can add them from Python with ``make_plot(annotations=...)`` (see
 :mod:`oviz.annotations`).
 
+**KT maps and flow lines.** A kinetic tomography map (gas density with its
+line-of-sight velocity) is a volume whose opacity follows the density and
+whose colour shows a velocity or the density: *Colour by* in its row of the
+layers panel switches between the fields it carries (the measured velocity,
+the residual after subtracting Galactic rotation) and density, each with its
+own colormap and colour bar. Flow layers are animated streamlines, light
+pulses running along each line at the gas's own speed. A flow's row sets its
+colour (solid, or by its value through a colormap and range), opacity, width,
+pulse speed, spacing and trail, and how much of each line shows between
+pulses; *Pause flow* in More stops them all (Space does too when the figure
+has no timeline). A KT map only measures motion along the line of sight, so
+its flow lines run along sight lines: pulses leave the Sun where the gas
+recedes and come towards it where it approaches. Views capture all of this.
+Authors build them with :mod:`oviz.kt` (or :mod:`oviz.viewer.flow` for any
+3D velocity field).
+
 **Trace options for authors.** Set them with the trace's ``meta``:
 
 - ``{"oviz_role": "guide"}``: an annotation (labels, a length bar, a model
@@ -211,7 +227,9 @@ classic) and draws its first frame in about 70 ms.
 from a float texture and spline-interpolated in the vertex shader; the star
 PSF as one premultiplied halo + core pass; ray-marched volumes at half
 resolution while moving and cached when still; GPU picking on each point's
-core; demand-driven rendering; full recovery after a lost WebGL context.
+core; demand-driven rendering (while only flow pulses move, the rest of the
+scene is reused from a cached frame); full recovery after a lost WebGL
+context.
 
 **Source layout.** ``oviz/viewer/web/src`` holds ES modules that also run in
 Node for tests (``node --test tests/viewer_js/*.test.mjs``).
@@ -223,13 +241,13 @@ mirrored by ``src/app/export.js``.
 - ``core/``: maths, colour, bundle loader, events.
 - ``engine/``: GL helpers, camera, anchors, controls, renderer, frame textures.
 - ``layers/``: points, lines, labels, image planes, volumes, KDE volumes,
-  annotations.
+  annotations, flow lines.
 - ``sky/``: Aladin, survey catalogue, layer stack, picker, lens, SIMBAD,
   member stars.
 - ``app/``: viewer, timeline, state model, States, links, drafts, export, API.
 - ``ui/``: shell, layers panel, dock, inspector, palette, story, filter,
   lasso, recorder, widget host and widgets, actions, axes, annotate
-  (``annotate-model.js`` holds its DOM-free model).
+  (``annotate-model.js`` holds its DOM-free model), flow.
 
 Per-object GPU state is a bitfield: 1 dimmed and 2 hidden by the filter, 4
 replaced by member stars in Sky view, 8 dimmed and 16 hidden by a lasso (for
