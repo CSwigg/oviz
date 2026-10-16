@@ -39,6 +39,8 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-sky-host .aladin-toolbar, .ov-sky-host .aladin-cooGrid, .ov-sky-host .aladin-location-text { display: none !important; }
 
 .ov-labels { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; contain: strict; }
+/* Labels stay out of the part a page covers (padding): they would sit on its text. */
+.ov-labels { clip-path: inset(var(--ov-pad-top) var(--ov-pad-right) var(--ov-pad-bottom) var(--ov-pad-left)); }
 .ov-label {
   position: absolute; left: 0; top: 0;
   opacity: 0;
@@ -84,6 +86,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-boot {
   position: absolute; inset: 0; z-index: 50;
   display: grid; place-content: center; justify-items: center; gap: 18px;
+  padding: var(--ov-pad-top) var(--ov-pad-right) var(--ov-pad-bottom) var(--ov-pad-left);
   color: var(--ov-text-2); font: 500 13px/1.4 var(--ov-font);
   background: var(--ov-bg-glow);
   transition: opacity 400ms var(--ov-ease);

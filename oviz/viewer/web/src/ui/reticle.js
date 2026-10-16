@@ -95,12 +95,15 @@ export class SelectionReticle {
   placeCallout(x, y) {
     const c = this.callout;
     if (c.hidden) return;
-    const W = this.ui.root.clientWidth, H = this.ui.root.clientHeight;
+    // Keep the card in the uncovered view (padding: a host page's sidebar).
+    const pad = this.ui.viewer.renderer.camera.usedPadding();
+    const x0 = pad.left + 12, x1 = this.ui.root.clientWidth - pad.right - 12;
+    const y0 = pad.top + 64, y1 = this.ui.root.clientHeight - pad.bottom - 100;
     const cw = c.offsetWidth, ch = c.offsetHeight;
     let cx = x + 26;
-    if (cx + cw > W - 12) cx = x - 26 - cw;
-    cx = clamp(cx, 12, Math.max(12, W - cw - 12));
-    const cy = clamp(y - ch / 2, 64, Math.max(64, H - ch - 100));
+    if (cx + cw > x1) cx = x - 26 - cw;
+    cx = clamp(cx, x0, Math.max(x0, x1 - cw));
+    const cy = clamp(y - ch / 2, y0, Math.max(y0, y1 - ch));
     c.style.transform = `translate(${cx.toFixed(0)}px, ${cy.toFixed(0)}px)`;
     c.dataset.side = cx < x ? "left" : "right";
   }

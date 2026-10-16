@@ -742,6 +742,24 @@ class IntegrationTests(unittest.TestCase):
         for anchor in CAMERA_ANCHORS:
             self.assertIn(f'"{anchor}"', runtime)
 
+    def test_embed_option_and_padding_for_a_page_background(self):
+        viz = Animate3D(_FakeCollection(), figure_theme="dark")
+        fig = viz.make_plot(time=np.array([0.0, -1.0, -2.0]), show=False)
+        manifest_of = lambda html: json.loads(re.search(r'id="oviz-manifest">(.*?)</script>', html, re.S).group(1))
+        self.assertNotIn("embed", manifest_of(fig.to_html())["viewer"])
+        self.assertIs(manifest_of(OvizFigure(bundle=fig.bundle, embed=True).to_html())["viewer"]["embed"], True)
+        self.assertIs(manifest_of(fig.to_html(embed=True))["viewer"]["embed"], True)
+        runtime, css = build.bundle_js(), build.bundle_css()
+        # The page drives it: ?padding= at load, then setPadding through the bridge.
+        for needle in ('get("padding")', "setPadding: (p, opts) => api.setPadding(p, opts)", '"oviz:ready"', '"oviz:state"',
+                       'urlFlag("embed")', "ovizEmbed"):
+            self.assertIn(needle, runtime)
+        # The bars lay out in the uncovered frame, whose width their breakpoints follow.
+        self.assertIn("container: ov-frame / inline-size", css)
+        self.assertIn("@container ov-frame (min-width: 721px) and (max-width: 1180px)", css)
+        self.assertNotIn("@media (min-width: 721px) and (max-width: 1180px)", css)
+        self.assertIn('[data-oviz-embed="true"] .ov-top :is(.ov-brand, .ov-search-trigger) { display: none; }', css)
+
     def test_ar_model_option_points_view_in_ar_at_a_hosted_usdz(self):
         viz = Animate3D(_FakeCollection(), figure_theme="dark")
         fig = viz.make_plot(time=np.array([0.0, -1.0, -2.0]), show=False)

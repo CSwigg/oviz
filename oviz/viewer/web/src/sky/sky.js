@@ -399,13 +399,32 @@ export class SkyPlugin {
       // A narrower window lowers the widest field Aladin can match.
       const cap = v.controls.maxFovFor("sky");
       if (pose.fov > cap) pose.fov = cap;
+      // Padding moves the optical centre, so Aladin's view is centred there
+      // too, in a frame that still covers the window.
+      const frame = cam.skyFrame();
+      this.placeHost(frame);
       // Push the pose every frame the camera is in Sky view; with the
       // Aladin loop hook this lands in the same frame as the WebGL render.
       cam.update(r.sceneRadius);
-      this.sky.setView(pose.yaw * DEG, pose.pitch * DEG, cam.hfov);
-      this.lens?.tick(pose.yaw * DEG, pose.pitch * DEG, cam.hfov);
+      this.sky.setView(pose.yaw * DEG, pose.pitch * DEG, frame.hfov);
+      this.lens?.tick(pose.yaw * DEG, pose.pitch * DEG, frame.hfov);
     }
     if (this.members) this.updateMembers();
+  }
+
+  /** Size the survey's host to the camera's sky frame (the window, unless padded). */
+  placeHost(f) {
+    this.hostFrame = f;
+    const cam = this.viewer.renderer.camera;
+    this.sky.frame = { ...f, windowWidth: cam.width, windowHeight: cam.height };
+    const sig = [f.left, f.top, f.width, f.height].map((x) => x.toFixed(1)).join(",");
+    if (sig === this._hostSig) return;
+    this._hostSig = sig;
+    Object.assign(this.host.style, {
+      left: `${f.left.toFixed(1)}px`, top: `${f.top.toFixed(1)}px`,
+      width: `${f.width.toFixed(1)}px`, height: `${f.height.toFixed(1)}px`,
+      right: "auto", bottom: "auto",
+    });
   }
 
   updateMembers() {

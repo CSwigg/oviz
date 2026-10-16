@@ -106,7 +106,8 @@ def _json_for_script(obj: Any) -> str:
 
 def render_bundle_html(bundle: Bundle, *, title: str | None = None, theme: str = "dark",
                        mode: str = "focus", ar_model: str | None = None,
-                       camera_anchor: str | None = None, lsr_origin: bool = True) -> str:
+                       camera_anchor: str | None = None, lsr_origin: bool = True,
+                       embed: bool = False) -> str:
     """Render ``bundle`` as one standalone HTML page (runtime, styles, manifest and blobs inline)."""
 
     mode = _check_mode(mode)
@@ -124,6 +125,10 @@ def render_bundle_html(bundle: Bundle, *, title: str | None = None, theme: str =
         # The scene is centred on something other than the LSR (a focus
         # group's orbit), so the viewer offers no LSR anchor.
         manifest["viewer"]["lsrOrigin"] = False
+    if embed:
+        # A page's background (an iframe under the page's own text): no
+        # title or search button, and the key lists only the layers in view.
+        manifest["viewer"]["embed"] = True
     if ar_model:
         # A prebuilt USDZ (URL relative to the page) that "View in AR" opens
         # on iPhone and iPad instead of building one from the live view.
@@ -162,7 +167,7 @@ class OvizFigure:
     def __init__(self, scene_spec: dict[str, Any] | None = None, *, bundle: Bundle | None = None,
                  theme: str = "dark", title: str | None = None, mode: str = "focus",
                  ar_model: str | None = None, camera_anchor: str | None = None,
-                 lsr_origin: bool = True, **_legacy_options: Any):
+                 lsr_origin: bool = True, embed: bool = False, **_legacy_options: Any):
         if bundle is None and scene_spec is None:
             raise ValueError("OvizFigure needs a scene_spec or a bundle")
         #: Mode the figure opens in: one of :data:`VIEWER_MODES`.
@@ -177,6 +182,13 @@ class OvizFigure:
         #: Optional URL (relative to the page) of a prebuilt USDZ for AR Quick
         #: Look; without it "View in AR" builds one from the live view.
         self.ar_model = ar_model
+        #: Whether the figure is made to sit under a page's own text (an
+        #: iframe background): it then shows no title or search button and
+        #: its key lists only the layers in view. ``?embed=1`` in the URL
+        #: does the same for any figure. A page covering part of the figure
+        #: passes ``?padding=top,right,bottom,left`` (CSS px) or calls
+        #: ``setPadding`` so the view centres in the uncovered part.
+        self.embed = bool(embed)
         self.scene_spec = scene_spec
         self._bundle = bundle
         self._bundle_key: str | None = None
@@ -201,12 +213,13 @@ class OvizFigure:
         return self.scene_spec if self.scene_spec is not None else self.bundle.manifest
 
     def to_html(self, *, mode: str | None = None, ar_model: str | None = None,
-                camera_anchor: str | None = None, **_: Any) -> str:
+                camera_anchor: str | None = None, embed: bool | None = None, **_: Any) -> str:
         """The figure as standalone HTML; the arguments override the figure's own options."""
         return render_bundle_html(self.bundle, title=self.title, theme=self.theme, mode=mode or self.mode,
                                   ar_model=ar_model or self.ar_model,
                                   camera_anchor=camera_anchor or self.camera_anchor,
-                                  lsr_origin=self.lsr_origin)
+                                  lsr_origin=self.lsr_origin,
+                                  embed=self.embed if embed is None else bool(embed))
 
     def write_html(self, file: str | Path, **kwargs: Any) -> Path:
         """Write :meth:`to_html` (with ``kwargs``) to ``file`` and return its path."""

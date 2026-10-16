@@ -68,10 +68,20 @@
   --ov-dur: 140ms;
 
   --ov-gutter: 16px;
-  --ov-safe-top: env(safe-area-inset-top, 0px);
-  --ov-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --ov-safe-left: env(safe-area-inset-left, 0px);
-  --ov-safe-right: env(safe-area-inset-right, 0px);
+  /* Padding: the part of the window a host page covers (set by the viewer,
+     see Viewer.setPadding). Every control lays out inside what is left. */
+  --ov-pad-top: 0px;
+  --ov-pad-right: 0px;
+  --ov-pad-bottom: 0px;
+  --ov-pad-left: 0px;
+  --ov-safe-top: calc(env(safe-area-inset-top, 0px) + var(--ov-pad-top));
+  --ov-safe-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ov-pad-bottom));
+  --ov-safe-left: calc(env(safe-area-inset-left, 0px) + var(--ov-pad-left));
+  --ov-safe-right: calc(env(safe-area-inset-right, 0px) + var(--ov-pad-right));
+  /* The middle of the uncovered view, for things centred on it. */
+  --ov-mid-x: calc(50% + (var(--ov-pad-left) - var(--ov-pad-right)) / 2);
+  --ov-mid-y: calc(50% + (var(--ov-pad-top) - var(--ov-pad-bottom)) / 2);
+  --ov-open-w: calc(100vw - var(--ov-pad-left) - var(--ov-pad-right));
   --ov-panel-w: 300px;
   --ov-inspector-w: 320px;
   --ov-dock-h: 52px;
@@ -150,6 +160,8 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-sky-host .aladin-toolbar, .ov-sky-host .aladin-cooGrid, .ov-sky-host .aladin-location-text { display: none !important; }
 
 .ov-labels { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; contain: strict; }
+/* Labels stay out of the part a page covers (padding): they would sit on its text. */
+.ov-labels { clip-path: inset(var(--ov-pad-top) var(--ov-pad-right) var(--ov-pad-bottom) var(--ov-pad-left)); }
 .ov-label {
   position: absolute; left: 0; top: 0;
   opacity: 0;
@@ -195,6 +207,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-boot {
   position: absolute; inset: 0; z-index: 50;
   display: grid; place-content: center; justify-items: center; gap: 18px;
+  padding: var(--ov-pad-top) var(--ov-pad-right) var(--ov-pad-bottom) var(--ov-pad-left);
   color: var(--ov-text-2); font: 500 13px/1.4 var(--ov-font);
   background: var(--ov-bg-glow);
   transition: opacity 400ms var(--ov-ease);
@@ -233,6 +246,22 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 .ov-ui { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
 .ov-ui > * { pointer-events: auto; }
+
+/* The uncovered part of the window: all of it, unless a page covers some
+   (padding). The top and bottom bars lay out in it, and their width
+   breakpoints are container queries on it, so a padded figure lays out as
+   a window of that size would. */
+.ov-ui > .ov-frame {
+  position: absolute;
+  top: var(--ov-pad-top); right: var(--ov-pad-right); bottom: var(--ov-pad-bottom); left: var(--ov-pad-left);
+  pointer-events: none;
+  container: ov-frame / inline-size;
+  /* Its edges are the padding's: only the device's own insets remain. */
+  --ov-safe-top: env(safe-area-inset-top, 0px);
+  --ov-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ov-safe-left: env(safe-area-inset-left, 0px);
+  --ov-safe-right: env(safe-area-inset-right, 0px);
+}
 .ov-ui, .ov-ui * { transition-timing-function: var(--ov-ease); }
 
 /* Chrome fades away in zen / presentation mode. */
@@ -286,6 +315,14 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-search-trigger:hover { color: var(--ov-text); border-color: var(--ov-line-strong); }
 .ov-search-trigger span.ov-grow { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-search-trigger .ov-kbd { margin-left: 2px; }
+/* Embedded as a page's background, the page carries the title: the figure
+   drops its own and the search button (the palette is a key press away). */
+[data-oviz-embed="true"] .ov-top :is(.ov-brand, .ov-search-trigger) { display: none; }
+/* On a phone the page around it says what it shows: the figure keeps just
+   its time bar (the layers button still opens the key). */
+@media (max-width: 720px) {
+  [data-oviz-embed="true"] :is(.ov-bottom-left, .ov-top .ov-zen-btn) { display: none !important; }
+}
 
 .ov-toolbar {
   display: flex; align-items: center; gap: 2px;
@@ -491,7 +528,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 /* ---- Toasts --------------------------------------------------------- */
 .ov-toasts {
-  position: absolute; left: 50%; top: calc(64px + var(--ov-safe-top)); transform: translateX(-50%);
+  position: absolute; left: var(--ov-mid-x); top: calc(64px + var(--ov-safe-top)); transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 60; pointer-events: none;
 }
 .ov-toast {
@@ -539,9 +576,9 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 /* Actions (classic action bar): a row of buttons under the top bar. */
 .ov-actions {
-  position: absolute; left: 50%; top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
+  position: absolute; left: var(--ov-mid-x); top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
   display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px; border-radius: 999px; z-index: 9;
-  max-width: calc(100vw - 2 * var(--ov-gutter));
+  max-width: calc(var(--ov-open-w) - 2 * var(--ov-gutter));
 }
 .ov-action {
   height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--ov-text-2);
@@ -886,8 +923,8 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 /* ---- Command palette ---------------------------------------------- */
 .ov-palette {
-  position: absolute; left: 50%; top: calc(12vh + var(--ov-safe-top)); z-index: 71;
-  width: min(620px, calc(100vw - 32px));
+  position: absolute; left: var(--ov-mid-x); top: calc(12vh + var(--ov-safe-top)); z-index: 71;
+  width: min(620px, calc(var(--ov-open-w) - 32px));
   transform: translateX(-50%);
   border-radius: 16px;
   overflow: hidden;
@@ -924,8 +961,8 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 /* ---- Help sheet ------------------------------------------------------ */
 .ov-sheet {
-  position: absolute; left: 50%; top: 50%; z-index: 71;
-  width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 64px);
+  position: absolute; left: var(--ov-mid-x); top: var(--ov-mid-y); z-index: 71;
+  width: min(760px, calc(var(--ov-open-w) - 32px)); max-height: calc(100vh - 64px - var(--ov-pad-top) - var(--ov-pad-bottom));
   transform: translate(-50%, -50%);
   border-radius: 20px; overflow: auto;
   background: var(--ov-surface-strong);
@@ -974,7 +1011,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 /* ---- Recording pill ------------------------------------------------ */
 .ov-rec-pill {
-  position: absolute; left: 50%; top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
+  position: absolute; left: var(--ov-mid-x); top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 999px; z-index: 40;
   font: 650 12.5px/1 var(--ov-font);
 }
@@ -985,7 +1022,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-lasso path { fill: rgba(124, 196, 255, 0.10); stroke: var(--ov-sky); stroke-width: 1.5; stroke-dasharray: 5 4; stroke-linejoin: round; }
 .ov-root[data-lasso="true"] .ov-canvas { cursor: crosshair; }
 .ov-selbar {
-  position: absolute; left: 50%; transform: translateX(-50%);
+  position: absolute; left: var(--ov-mid-x); transform: translateX(-50%);
   bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom));
   display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 14px; border-radius: 999px; z-index: 11;
   animation: ov-toast-in 240ms var(--ov-ease);
@@ -1040,21 +1077,36 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 /* ---- Narrow desktop: keep the bar clear of the corner controls ------ */
 /* Sky extras (member display, background) sit on their own row above the
    view switch, so Sky view never pushes the corner into the timeline. */
-@media (min-width: 721px) {
+@container ov-frame (min-width: 721px) {
   .ov-bottom-right { display: grid; grid-template-columns: auto auto; justify-items: end; align-items: end; gap: 8px; }
   .ov-bottom-right > :first-child { grid-column: 1 / -1; }
   .ov-bottom-right > :first-child:empty { display: none; }
   /* The Sky background chip over the member switch: one narrow column. */
   .ov-sky-extras { flex-direction: column-reverse; align-items: flex-end; }
 }
-@media (min-width: 721px) and (max-width: 1180px) {
+@container ov-frame (min-width: 721px) and (max-width: 1180px) {
   .ov-bottom { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ov-dock { width: auto; min-width: 0; }
   /* Without a timeline the bar holds a few buttons: it hugs them, centred. */
   .ov-dock.ov-bar-only { justify-self: center; }
   .ov-colorbar { min-width: 0; max-width: 220px; }
 }
-@media (min-width: 721px) and (max-width: 980px) {
+/* A desktop figure padded down to a phone's width (a page's sidebar over
+   it): the key and corner controls step above a bar that spans the frame,
+   as on phones, at desktop sizes. */
+@media (min-width: 721px) {
+  @container ov-frame (max-width: 720px) {
+    .ov-bottom { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .ov-bottom-left { position: absolute; left: 0; bottom: calc(var(--ov-dock-h) + 10px); }
+    .ov-bottom-right { position: absolute; right: 0; bottom: calc(var(--ov-dock-h) + 10px); }
+    .ov-dock { width: 100%; min-width: 0; }
+    .ov-dock [aria-label="Previous frame"], .ov-dock [aria-label="Next frame"], .ov-dock [aria-label="Loop playback"] { display: none; }
+    .ov-scrub { flex: 1; width: auto; min-width: 72px; }
+    .ov-time-read { min-width: 76px; }
+    .ov-scale-sub { display: none; }
+  }
+}
+@container ov-frame (min-width: 721px) and (max-width: 980px) {
   .ov-bottom-right { grid-template-columns: auto; }
   .ov-dock [aria-label="Previous frame"], .ov-dock [aria-label="Next frame"], .ov-dock [aria-label="Loop playback"] { display: none; }
   .ov-time-read { min-width: 84px; }
@@ -1065,9 +1117,9 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 /* --------------------------------------------------------------- story */
 .ov-story {
   position: absolute;
-  left: 50%;
+  left: var(--ov-mid-x);
   bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom));
-  width: min(960px, calc(100vw - 2 * var(--ov-gutter)));
+  width: min(960px, calc(var(--ov-open-w) - 2 * var(--ov-gutter)));
   transform: translateX(-50%);
   border-radius: 18px;
   overflow: hidden;
@@ -1139,7 +1191,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 /* --------------------------------------------------------- presentation */
 .ov-present {
-  position: absolute; left: 50%;
+  position: absolute; left: var(--ov-mid-x);
   bottom: calc(var(--ov-gutter) * 1.5 + var(--ov-safe-bottom));
   transform: translateX(-50%);
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
@@ -1197,7 +1249,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 /* Story progress: one segment per view; the current one fills during the
    flight. The stage is always a night sky, so the bars are plain white. */
 .ov-present-progress {
-  position: absolute; left: 50%; top: calc(var(--ov-gutter) + var(--ov-safe-top));
+  position: absolute; left: var(--ov-mid-x); top: calc(var(--ov-gutter) + var(--ov-safe-top));
   transform: translateX(-50%);
   display: flex; gap: 5px;
   width: min(560px, calc(100vw - 2 * var(--ov-gutter) - 40px));
@@ -1220,7 +1272,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 /* 3D reel of views. */
 .ov-present-reel {
-  position: absolute; left: 50%; width: 0;
+  position: absolute; left: var(--ov-mid-x); width: 0;
   bottom: calc(var(--ov-gutter) * 1.5 + var(--ov-safe-bottom) + var(--ov-present-h, 96px) + 16px);
   height: 96px;
   perspective: 900px; perspective-origin: 50% 40%;
@@ -1254,7 +1306,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-annot-bar {
   position: absolute; z-index: 6;
   top: calc(var(--ov-gutter) + var(--ov-safe-top));
-  left: 50%; transform: translateX(-50%);
+  left: var(--ov-mid-x); transform: translateX(-50%);
   display: flex; align-items: center; gap: 2px;
   padding: 4px;
   border-radius: 14px;
@@ -1286,7 +1338,7 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .ov-annot-hint-row {
   position: absolute; z-index: 5;
   top: calc(var(--ov-gutter) + var(--ov-safe-top) + 50px);
-  left: 50%; transform: translateX(-50%);
+  left: var(--ov-mid-x); transform: translateX(-50%);
   max-width: min(90%, 520px);
   pointer-events: none;
   text-align: center;
@@ -1829,8 +1881,8 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 [data-oviz-mode="focus"] .ov-bottom-right > :not(:first-child) { display: none; }
 [data-oviz-mode="focus"] .ov-dock :is([aria-label="Previous frame"], [aria-label="Next frame"], [aria-label="Loop playback"]) { display: none; }
 [data-oviz-mode="focus"] .ov-scale-sub { display: none; }
-@media (min-width: 1181px) {
-  [data-oviz-mode="focus"] .ov-scrub { flex: none; width: clamp(240px, 26vw, 420px); }
+@container ov-frame (min-width: 1181px) {
+  [data-oviz-mode="focus"] .ov-scrub { flex: none; width: clamp(240px, 26cqw, 420px); }
 }
 
 /* ---- Fade while looking --------------------------------------------- */
@@ -1861,11 +1913,11 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 [data-oviz-mode="detailed"] .ov-scrub { --ov-track-y: 42%; height: 46px; }
 [data-oviz-mode="detailed"] .ov-scrub-tick-label { display: block; }
 
-@media (min-width: 721px) {
-  [data-oviz-mode="detailed"] .ov-search-trigger { width: min(260px, 24vw); }
+@container ov-frame (min-width: 721px) {
+  [data-oviz-mode="detailed"] .ov-search-trigger { width: min(260px, 24cqw); }
 }
-@media (min-width: 1181px) {
-  [data-oviz-mode="detailed"] .ov-dock:not(.ov-bar-only) { width: min(880px, calc(100vw - 2 * var(--ov-gutter) - 600px)); min-width: 560px; }
+@container ov-frame (min-width: 1181px) {
+  [data-oviz-mode="detailed"] .ov-dock:not(.ov-bar-only) { width: min(880px, calc(100cqw - 2 * var(--ov-gutter) - 600px)); min-width: 560px; }
 }
 
 /* -------------------------------------------------------- modes · phones
@@ -3410,6 +3462,11 @@ class Camera {
     this.camUp = [0, 0, 1];
     this.width = 1;
     this.height = 1;
+    // CSS px along each edge that a host page covers (a sidebar over an
+    // embedded figure). Like a map's padding, the view centres in what is
+    // left: the projection shifts off-axis while the pose stays put, so
+    // States and links mean the same view at any padding.
+    this.padding = { top: 0, right: 0, bottom: 0, left: 0 };
     this.version = 0;
   }
 
@@ -3425,11 +3482,52 @@ class Camera {
     this.aspect = this.width / this.height;
   }
 
+  /** Set the padding in CSS px (edges left out keep their value). */
+  setPadding(p = {}) {
+    for (const k of ["top", "right", "bottom", "left"]) {
+      const v = Number(p[k]);
+      if (Number.isFinite(v)) this.padding[k] = Math.max(0, v);
+    }
+  }
+
+  /** The padding in use: a fifth of each axis always stays uncovered. */
+  usedPadding() {
+    const p = this.padding;
+    const fit = (a, b, size) => {
+      const k = Math.min(1, (size * 0.8) / Math.max(a + b, 1e-9));
+      return [a * k, b * k];
+    };
+    const [left, right] = fit(p.left, p.right, this.width);
+    const [top, bottom] = fit(p.top, p.bottom, this.height);
+    return { top, right, bottom, left };
+  }
+
+  /** The optical centre in CSS px: the middle of the uncovered view. */
+  get center() {
+    const p = this.usedPadding();
+    return [(this.width + p.left - p.right) / 2, (this.height + p.top - p.bottom) / 2];
+  }
+
+  /**
+   * Where a TAN background (Aladin in Sky view) must sit to register with
+   * this view: centred on the optical centre, large enough to cover the
+   * window, with the horizontal field its width spans (CSS px, degrees).
+   * Without padding it is the window and `hfov`.
+   */
+  skyFrame() {
+    const [cx, cy] = this.center;
+    const width = 2 * Math.max(cx, this.width - cx);
+    const height = 2 * Math.max(cy, this.height - cy);
+    const f = this.height / 2 / Math.tan((this.pose.fov * DEG) / 2);
+    return { left: cx - width / 2, top: cy - height / 2, width, height, hfov: (2 * Math.atan(width / 2 / f)) / DEG };
+  }
+
   update(sceneRadius = 1e4) {
     const p = this.pose;
     // Only rebuild (and bump `version`, which downstream caches key on) when
     // the pose or viewport actually changed.
-    const sig = `${p.target[0]},${p.target[1]},${p.target[2]},${p.distance},${p.yaw},${p.pitch},${p.fov},${this.aspect},${this.height},${sceneRadius}`;
+    const [cx, cy] = this.center;
+    const sig = `${p.target[0]},${p.target[1]},${p.target[2]},${p.distance},${p.yaw},${p.pitch},${p.fov},${this.aspect},${this.height},${sceneRadius},${cx},${cy}`;
     if (sig === this._sig) return false;
     this._sig = sig;
     poseEye(p, this.eye);
@@ -3447,6 +3545,9 @@ class Camera {
     this.near = p.distance > 1e-6 ? clamp(p.distance * 0.002, 0.01, 50) : 0.05;
     this.far = Math.max(reach * 2.5, 1e5);
     m4perspective(p.fov * DEG, this.aspect, this.near, this.far, this.proj);
+    // Padding: shift the image so the view axis lands on the optical centre.
+    this.proj[8] = 1 - (2 * cx) / this.width;
+    this.proj[9] = (2 * cy) / this.height - 1;
     m4mul(this.proj, this.view, this.viewProj);
     m4invert(this.viewProj, this.invViewProj);
     m4invert(this.view, this.invView);
@@ -4072,7 +4173,9 @@ class Controls {
    */
   maxFovFor(mode = this.mode) {
     if (mode !== "sky") return this.maxFov;
-    const aspect = this.camera.aspect || 1;
+    // Aladin spans the sky frame, which padding makes wider than the window.
+    const cam = this.camera;
+    const aspect = 2 * Math.max(cam.center[0], cam.width - cam.center[0]) / cam.height || 1;
     return Math.min(this.maxFov, (2 * Math.atan(Math.tan(75 * DEG) / aspect)) / DEG);
   }
 
@@ -4090,8 +4193,9 @@ class Controls {
       if (x != null && cam.width > 0) {
         const k = 1 - p.fov / before;
         const perPx = (before * DEG) / cam.height;
-        p.yaw += (x - cam.width / 2) * perPx * k * -1;
-        p.pitch = clamp(p.pitch - (y - cam.height / 2) * perPx * k, -PITCH_LIMIT, PITCH_LIMIT);
+        const [cx, cy] = cam.center;
+        p.yaw += (x - cx) * perPx * k * -1;
+        p.pitch = clamp(p.pitch - (y - cy) * perPx * k, -PITCH_LIMIT, PITCH_LIMIT);
       }
       this._changed();
       return;
@@ -7830,7 +7934,7 @@ return { STATE_VERSION, volumeColorField, volumeColormap, clampVolumeState, grou
 })();
 
 // ---- app/viewer.js ----
-const { Viewer } = (() => {
+const { Viewer, readPadding, setPaddingVars } = (() => {
 // The Viewer: owns the renderer, layers, time and view state, and exposes
 // the imperative API that the UI, States and the public JS API drive.
 
@@ -8468,6 +8572,53 @@ class Viewer extends Emitter {
     this.renderer.invalidate();
   }
 
+  /**
+   * Padding (CSS px per edge) for a page that covers part of the figure,
+   * such as a sidebar over an embedded background: the scene centres in
+   * the uncovered part and the controls lay out inside it, while the pose
+   * (and so every State and link) stays the same. Edges left out keep
+   * their value. Resolves when the change, eased over `duration` ms, lands.
+   */
+  setPadding(padding, { duration = 0 } = {}) {
+    const cam = this.renderer.camera;
+    const from = { ...cam.padding };
+    const to = { ...from, ...readPadding(padding) };
+    this._paddingStop?.();
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const ms = reduce ? 0 : Math.max(0, Number(duration) || 0);
+    const apply = (t) => {
+      cam.setPadding(Object.fromEntries(Object.keys(to).map((k) => [k, from[k] + (to[k] - from[k]) * t])));
+      const used = cam.usedPadding();
+      setPaddingVars(used);
+      this.renderer.invalidate();
+      this.emit("padding", used);
+    };
+    if (ms === 0) {
+      apply(1);
+      return Promise.resolve();
+    }
+    const start = performance.now();
+    return new Promise((resolve) => {
+      const end = () => {
+        remove();
+        this._paddingStop = null;
+        this.renderer.release("padding");
+        resolve();
+      };
+      const remove = this.addAnimator((now) => {
+        const t = Math.min(1, (now - start) / ms);
+        apply(easeInOutCubic(t));
+        if (t >= 1) end();
+      });
+      this._paddingStop = end;
+      this.renderer.hold("padding");
+    });
+  }
+
+  get padding() {
+    return { ...this.renderer.camera.padding };
+  }
+
   /** Fly home: the opening view, anchored the way the figure opens. */
   resetView() {
     // Resetting is the reader taking the camera (it stops auto-orbit).
@@ -8978,11 +9129,35 @@ class Viewer extends Emitter {
   }
 }
 
+/**
+ * Padding as {top, right, bottom, left} (CSS px, only the valid edges)
+ * from an object, or from "top,right,bottom,left" as in `?padding=`.
+ */
+function readPadding(value) {
+  const edges = ["top", "right", "bottom", "left"];
+  const src = typeof value === "string" ? Object.fromEntries(value.split(",").map((v, i) => [edges[i], v.trim()])) : value || {};
+  const out = {};
+  for (const k of edges) {
+    const raw = src[k];
+    const v = raw === "" || raw == null ? NaN : Number(raw);
+    if (Number.isFinite(v)) out[k] = Math.max(0, v);
+  }
+  return out;
+}
+
+/** Publish padding to the styles (`--ov-pad-*`), where the controls lay out around it. */
+function setPaddingVars(p) {
+  const style = document.documentElement.style;
+  for (const k of ["top", "right", "bottom", "left"]) {
+    if (Number.isFinite(p[k])) style.setProperty(`--ov-pad-${k}`, `${p[k].toFixed(1)}px`);
+  }
+}
+
 function isMobile() {
   const ua = navigator.userAgent || "";
   return /iPhone|iPad|iPod|Android/i.test(ua) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
 }
-return { Viewer };
+return { Viewer, readPadding, setPaddingVars };
 })();
 
 // ---- ui/dom.js ----
@@ -11533,12 +11708,17 @@ class AladinSky {
     const a = this.aladin;
     if (!a) return;
     try {
-      const url = await a.getViewDataURL?.({ format: "image/png", width: w, height: h });
+      // A padded view's survey spans a frame larger than the window
+      // (`frame`, CSS px, set by the Sky plugin): draw the window's part.
+      const f = this.frame;
+      const kx = f ? w / f.windowWidth : 1, ky = f ? h / f.windowHeight : 1;
+      const box = f ? [f.left * kx, f.top * ky, f.width * kx, f.height * ky] : [0, 0, w, h];
+      const url = await a.getViewDataURL?.({ format: "image/png", width: Math.round(box[2]), height: Math.round(box[3]) });
       if (!url) return;
       const img = new Image();
       img.src = url;
       await img.decode();
-      ctx.drawImage(img, 0, 0, w, h);
+      ctx.drawImage(img, ...box);
     } catch (err) {
       console.warn("Oviz sky: background capture failed", err);
     }
@@ -13034,7 +13214,9 @@ class SkyLens {
     const r = Math.max(8, Math.hypot(s2[0] - s[0], s2[1] - s[1]));
     this.el.style.visibility = "";
     this.div.style.visibility = "visible";
-    this.div.style.clipPath = `circle(${r.toFixed(1)}px at ${s[0].toFixed(1)}px ${s[1].toFixed(1)}px)`;
+    // The lens's Aladin fills the survey host, which padding offsets.
+    const host = this.plugin.hostFrame || { left: 0, top: 0 };
+    this.div.style.clipPath = `circle(${r.toFixed(1)}px at ${(s[0] - host.left).toFixed(1)}px ${(s[1] - host.top).toFixed(1)}px)`;
     this.div.style.opacity = String(clamp(lens.opacity ?? 1, 0, 1));
     const d = 2 * r + 16;
     Object.assign(this.el.style, { left: `${(s[0] - r - 8).toFixed(1)}px`, top: `${(s[1] - r - 8).toFixed(1)}px`, width: `${d.toFixed(1)}px`, height: `${d.toFixed(1)}px` });
@@ -13452,13 +13634,32 @@ class SkyPlugin {
       // A narrower window lowers the widest field Aladin can match.
       const cap = v.controls.maxFovFor("sky");
       if (pose.fov > cap) pose.fov = cap;
+      // Padding moves the optical centre, so Aladin's view is centred there
+      // too, in a frame that still covers the window.
+      const frame = cam.skyFrame();
+      this.placeHost(frame);
       // Push the pose every frame the camera is in Sky view; with the
       // Aladin loop hook this lands in the same frame as the WebGL render.
       cam.update(r.sceneRadius);
-      this.sky.setView(pose.yaw * DEG, pose.pitch * DEG, cam.hfov);
-      this.lens?.tick(pose.yaw * DEG, pose.pitch * DEG, cam.hfov);
+      this.sky.setView(pose.yaw * DEG, pose.pitch * DEG, frame.hfov);
+      this.lens?.tick(pose.yaw * DEG, pose.pitch * DEG, frame.hfov);
     }
     if (this.members) this.updateMembers();
+  }
+
+  /** Size the survey's host to the camera's sky frame (the window, unless padded). */
+  placeHost(f) {
+    this.hostFrame = f;
+    const cam = this.viewer.renderer.camera;
+    this.sky.frame = { ...f, windowWidth: cam.width, windowHeight: cam.height };
+    const sig = [f.left, f.top, f.width, f.height].map((x) => x.toFixed(1)).join(",");
+    if (sig === this._hostSig) return;
+    this._hostSig = sig;
+    Object.assign(this.host.style, {
+      left: `${f.left.toFixed(1)}px`, top: `${f.top.toFixed(1)}px`,
+      width: `${f.width.toFixed(1)}px`, height: `${f.height.toFixed(1)}px`,
+      right: "auto", bottom: "auto",
+    });
   }
 
   updateMembers() {
@@ -19614,12 +19815,15 @@ class SelectionReticle {
   placeCallout(x, y) {
     const c = this.callout;
     if (c.hidden) return;
-    const W = this.ui.root.clientWidth, H = this.ui.root.clientHeight;
+    // Keep the card in the uncovered view (padding: a host page's sidebar).
+    const pad = this.ui.viewer.renderer.camera.usedPadding();
+    const x0 = pad.left + 12, x1 = this.ui.root.clientWidth - pad.right - 12;
+    const y0 = pad.top + 64, y1 = this.ui.root.clientHeight - pad.bottom - 100;
     const cw = c.offsetWidth, ch = c.offsetHeight;
     let cx = x + 26;
-    if (cx + cw > W - 12) cx = x - 26 - cw;
-    cx = clamp(cx, 12, Math.max(12, W - cw - 12));
-    const cy = clamp(y - ch / 2, 64, Math.max(64, H - ch - 100));
+    if (cx + cw > x1) cx = x - 26 - cw;
+    cx = clamp(cx, x0, Math.max(x0, x1 - cw));
+    const cy = clamp(y - ch / 2, y0, Math.max(y0, y1 - ch));
     c.style.transform = `translate(${cx.toFixed(0)}px, ${cy.toFixed(0)}px)`;
     c.dataset.side = cx < x ? "left" : "right";
   }
@@ -19859,8 +20063,8 @@ class CompactLegend {
   /** Data traces, then volumes (the layers panel's order), at most MAX_ITEMS. */
   items() {
     let all = this.ui.layers.toggleItems("all");
-    // Presenting, the key lists only what is in view.
-    if (this.ui.root.dataset.presenting === "true") all = all.filter((it) => this.ui.layers.itemVisible(it));
+    // Presenting or embedded, the key lists only what is in view.
+    if (this.ui.root.dataset.presenting === "true" || this.ui.embed) all = all.filter((it) => this.ui.layers.itemVisible(it));
     const volumes = all.filter((it) => it.kind === "volume").slice(0, MAX_ITEMS - 1);
     let traces = all.filter((it) => it.kind === "trace");
     // Annotations follow the data, a few at most (the layers panel lists them all).
@@ -22434,6 +22638,11 @@ class AppUI {
     }
     root.dataset.view = viewer.state.view.mode;
     this.mode = applyMode(initialMode());
+    // Embedded as a page's background (the figure's `embed` option, or
+    // `?embed=1`): no title or search button, and the key lists only the
+    // layers in view, as when presenting.
+    this.embed = !!this.manifest.viewer?.embed || urlFlag("embed");
+    if (this.embed) document.documentElement.dataset.ovizEmbed = "true";
     this.ui = h("div", { class: "ov-ui" });
     root.append(this.ui);
     this.toasts = createToasts(this.ui);
@@ -22530,7 +22739,10 @@ class AppUI {
     // "Show interface" pill brings it back).
     this.zenBtn = iconButton("eyeOff", "Hide interface", () => this.setZen(true), { cls: "ov-glass ov-zen-btn" });
     this.top = h("header", { class: "ov-top ov-chrome" }, this.brand, this.zenBtn, this.search, this.toolbar);
-    this.ui.append(this.top);
+    // The bars sit in the uncovered part of the window (all of it unless a
+    // page pads the figure), which their width breakpoints follow.
+    this.frame = h("div", { class: "ov-frame" }, this.top);
+    this.ui.append(this.frame);
   }
 
   buildBottom() {
@@ -22562,7 +22774,7 @@ class AppUI {
     const right = h("div", { class: "ov-bottom-right" }, this.skyExtras, this.viewSeg, this.cornerBtns);
     this.bottomRight = right;
     this.bottom = h("footer", { class: "ov-bottom ov-chrome" }, left, this.dock.el, right);
-    this.ui.append(this.bottom);
+    this.frame.append(this.bottom);
     this.syncViewSeg();
     this.renderColorbars();
   }
@@ -24124,6 +24336,16 @@ class AppUI {
 
 // ---------------------------------------------------------------- helpers
 
+/** A yes/no switch in the page URL (`?name`, `?name=1`, `?name=true`). */
+function urlFlag(name) {
+  try {
+    const q = new URLSearchParams(location.search);
+    return q.has(name) && !["0", "false", "no"].includes(String(q.get(name)).toLowerCase());
+  } catch (_) {
+    return false; // file:// quirks
+  }
+}
+
 function norm(v) {
   const l = Math.hypot(v[0], v[1], v[2]) || 1;
   return [v[0] / l, v[1] / l, v[2] / l];
@@ -24161,6 +24383,10 @@ function installApi(root, viewer, ui) {
     play: () => viewer.timeline.play(),
     pause: () => viewer.timeline.pause(),
     setViewMode: (m) => ui.setViewMode(m === "sky" ? "sky" : "3d"),
+    // The part of the window a host page covers ({top, right, bottom,
+    // left} in CSS px): the scene centres in the rest. {duration} eases it.
+    get padding() { return viewer.padding; },
+    setPadding: (p, opts) => viewer.setPadding(p, opts),
     // What the camera orbits, zooms toward and moves with through time:
     // {kind: "lsr" | "sun" | "free"} or {kind: "object", trace, index}.
     get cameraAnchor() { return { ...viewer.anchor }; },
@@ -24207,7 +24433,9 @@ function installApi(root, viewer, ui) {
  * Oviz postMessage bridge). The parent posts `{ type: "oviz", command,
  * args, id }` to the frame and gets `{ type: "oviz:done", command, id }`
  * back when it has run. Only the parent window is heard, and only these
- * named commands exist (nothing is evaluated).
+ * named commands exist (nothing is evaluated). Once listening, the frame
+ * posts `{ type: "oviz:ready" }`, so the page knows when to start, and
+ * `{ type: "oviz:state", index, id }` whenever a saved view starts to apply.
  */
 function installMessageBridge(api) {
   if (window.parent === window) return;
@@ -24221,6 +24449,7 @@ function installMessageBridge(api) {
     play: () => api.play(),
     pause: () => api.pause(),
     setViewMode: (m) => api.setViewMode(m),
+    setPadding: (p, opts) => api.setPadding(p, opts),
   };
   window.addEventListener("message", (e) => {
     if (e.source !== window.parent) return;
@@ -24232,6 +24461,13 @@ function installMessageBridge(api) {
       .then(() => window.parent.postMessage({ type: "oviz:done", command: d.command, id: d.id ?? null }, "*"))
       .catch(() => {});
   });
+  // Tell the page which saved view the figure is heading to (the reader can
+  // pick one inside the figure too): its id, and its 1-based index (0 for
+  // the original view).
+  api.viewer.on("state-transition-start", ({ index, id }) => {
+    window.parent.postMessage({ type: "oviz:state", index: index + 1, id }, "*");
+  });
+  window.parent.postMessage({ type: "oviz:ready" }, "*");
 }
 return { installApi };
 })();
@@ -24256,6 +24492,12 @@ async function boot() {
     if (bootText && text) bootText.textContent = text;
     if (bootBar && frac != null) bootBar.style.transform = `scaleX(${Math.max(0.02, Math.min(frac, 1))})`;
   };
+  // A page that embeds the figure under a sidebar can ask for padding up
+  // front (`?padding=top,right,bottom,left`, CSS px), so the loading
+  // screen and the first frame already centre in the uncovered part.
+  let padding = {};
+  try { padding = readPadding(new URLSearchParams(location.search).get("padding") || ""); } catch (_) { /* file:// quirks */ }
+  setPaddingVars(padding);
   try {
     const manifest = readManifest();
     const store = new BundleStore(manifest);
@@ -24276,6 +24518,7 @@ async function boot() {
     root.prepend(stage);
     const tv = performance.now();
     const viewer = new Viewer(stage, manifest, store);
+    if (Object.keys(padding).length) viewer.setPadding(padding);
     timing.viewer = performance.now() - tv;
     const ta = performance.now();
     await viewer.attachTraces();

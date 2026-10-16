@@ -59,10 +59,20 @@
   --ov-dur: 140ms;
 
   --ov-gutter: 16px;
-  --ov-safe-top: env(safe-area-inset-top, 0px);
-  --ov-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --ov-safe-left: env(safe-area-inset-left, 0px);
-  --ov-safe-right: env(safe-area-inset-right, 0px);
+  /* Padding: the part of the window a host page covers (set by the viewer,
+     see Viewer.setPadding). Every control lays out inside what is left. */
+  --ov-pad-top: 0px;
+  --ov-pad-right: 0px;
+  --ov-pad-bottom: 0px;
+  --ov-pad-left: 0px;
+  --ov-safe-top: calc(env(safe-area-inset-top, 0px) + var(--ov-pad-top));
+  --ov-safe-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ov-pad-bottom));
+  --ov-safe-left: calc(env(safe-area-inset-left, 0px) + var(--ov-pad-left));
+  --ov-safe-right: calc(env(safe-area-inset-right, 0px) + var(--ov-pad-right));
+  /* The middle of the uncovered view, for things centred on it. */
+  --ov-mid-x: calc(50% + (var(--ov-pad-left) - var(--ov-pad-right)) / 2);
+  --ov-mid-y: calc(50% + (var(--ov-pad-top) - var(--ov-pad-bottom)) / 2);
+  --ov-open-w: calc(100vw - var(--ov-pad-left) - var(--ov-pad-right));
   --ov-panel-w: 300px;
   --ov-inspector-w: 320px;
   --ov-dock-h: 52px;

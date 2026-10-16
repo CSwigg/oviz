@@ -10,6 +10,10 @@ export function installApi(root, viewer, ui) {
     play: () => viewer.timeline.play(),
     pause: () => viewer.timeline.pause(),
     setViewMode: (m) => ui.setViewMode(m === "sky" ? "sky" : "3d"),
+    // The part of the window a host page covers ({top, right, bottom,
+    // left} in CSS px): the scene centres in the rest. {duration} eases it.
+    get padding() { return viewer.padding; },
+    setPadding: (p, opts) => viewer.setPadding(p, opts),
     // What the camera orbits, zooms toward and moves with through time:
     // {kind: "lsr" | "sun" | "free"} or {kind: "object", trace, index}.
     get cameraAnchor() { return { ...viewer.anchor }; },
@@ -56,7 +60,9 @@ export function installApi(root, viewer, ui) {
  * Oviz postMessage bridge). The parent posts `{ type: "oviz", command,
  * args, id }` to the frame and gets `{ type: "oviz:done", command, id }`
  * back when it has run. Only the parent window is heard, and only these
- * named commands exist (nothing is evaluated).
+ * named commands exist (nothing is evaluated). Once listening, the frame
+ * posts `{ type: "oviz:ready" }`, so the page knows when to start, and
+ * `{ type: "oviz:state", index, id }` whenever a saved view starts to apply.
  */
 function installMessageBridge(api) {
   if (window.parent === window) return;
@@ -70,6 +76,7 @@ function installMessageBridge(api) {
     play: () => api.play(),
     pause: () => api.pause(),
     setViewMode: (m) => api.setViewMode(m),
+    setPadding: (p, opts) => api.setPadding(p, opts),
   };
   window.addEventListener("message", (e) => {
     if (e.source !== window.parent) return;
@@ -81,4 +88,11 @@ function installMessageBridge(api) {
       .then(() => window.parent.postMessage({ type: "oviz:done", command: d.command, id: d.id ?? null }, "*"))
       .catch(() => {});
   });
+  // Tell the page which saved view the figure is heading to (the reader can
+  // pick one inside the figure too): its id, and its 1-based index (0 for
+  // the original view).
+  api.viewer.on("state-transition-start", ({ index, id }) => {
+    window.parent.postMessage({ type: "oviz:state", index: index + 1, id }, "*");
+  });
+  window.parent.postMessage({ type: "oviz:ready" }, "*");
 }

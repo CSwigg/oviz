@@ -48,8 +48,8 @@ export class CompactLegend {
   /** Data traces, then volumes (the layers panel's order), at most MAX_ITEMS. */
   items() {
     let all = this.ui.layers.toggleItems("all");
-    // Presenting, the key lists only what is in view.
-    if (this.ui.root.dataset.presenting === "true") all = all.filter((it) => this.ui.layers.itemVisible(it));
+    // Presenting or embedded, the key lists only what is in view.
+    if (this.ui.root.dataset.presenting === "true" || this.ui.embed) all = all.filter((it) => this.ui.layers.itemVisible(it));
     const volumes = all.filter((it) => it.kind === "volume").slice(0, MAX_ITEMS - 1);
     let traces = all.filter((it) => it.kind === "trace");
     // Annotations follow the data, a few at most (the layers panel lists them all).

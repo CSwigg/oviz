@@ -15,6 +15,7 @@ notebooks/
 
 # Local figure outputs; rebuild them with the matching tests/main_figure_*.py
 tests/main_figure_oct1.html
+tests/website_figure.html
 tests/main_figure_oct1_source.html
 tests/main_figure_july25_rewrite.html
 tests/kt_map_figure.html

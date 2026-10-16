@@ -15,8 +15,8 @@
 [data-oviz-mode="focus"] .ov-bottom-right > :not(:first-child) { display: none; }
 [data-oviz-mode="focus"] .ov-dock :is([aria-label="Previous frame"], [aria-label="Next frame"], [aria-label="Loop playback"]) { display: none; }
 [data-oviz-mode="focus"] .ov-scale-sub { display: none; }
-@media (min-width: 1181px) {
-  [data-oviz-mode="focus"] .ov-scrub { flex: none; width: clamp(240px, 26vw, 420px); }
+@container ov-frame (min-width: 1181px) {
+  [data-oviz-mode="focus"] .ov-scrub { flex: none; width: clamp(240px, 26cqw, 420px); }
 }
 
 /* ---- Fade while looking --------------------------------------------- */

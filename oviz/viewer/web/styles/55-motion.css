@@ -42,21 +42,36 @@
 /* ---- Narrow desktop: keep the bar clear of the corner controls ------ */
 /* Sky extras (member display, background) sit on their own row above the
    view switch, so Sky view never pushes the corner into the timeline. */
-@media (min-width: 721px) {
+@container ov-frame (min-width: 721px) {
   .ov-bottom-right { display: grid; grid-template-columns: auto auto; justify-items: end; align-items: end; gap: 8px; }
   .ov-bottom-right > :first-child { grid-column: 1 / -1; }
   .ov-bottom-right > :first-child:empty { display: none; }
   /* The Sky background chip over the member switch: one narrow column. */
   .ov-sky-extras { flex-direction: column-reverse; align-items: flex-end; }
 }
-@media (min-width: 721px) and (max-width: 1180px) {
+@container ov-frame (min-width: 721px) and (max-width: 1180px) {
   .ov-bottom { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ov-dock { width: auto; min-width: 0; }
   /* Without a timeline the bar holds a few buttons: it hugs them, centred. */
   .ov-dock.ov-bar-only { justify-self: center; }
   .ov-colorbar { min-width: 0; max-width: 220px; }
 }
-@media (min-width: 721px) and (max-width: 980px) {
+/* A desktop figure padded down to a phone's width (a page's sidebar over
+   it): the key and corner controls step above a bar that spans the frame,
+   as on phones, at desktop sizes. */
+@media (min-width: 721px) {
+  @container ov-frame (max-width: 720px) {
+    .ov-bottom { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .ov-bottom-left { position: absolute; left: 0; bottom: calc(var(--ov-dock-h) + 10px); }
+    .ov-bottom-right { position: absolute; right: 0; bottom: calc(var(--ov-dock-h) + 10px); }
+    .ov-dock { width: 100%; min-width: 0; }
+    .ov-dock [aria-label="Previous frame"], .ov-dock [aria-label="Next frame"], .ov-dock [aria-label="Loop playback"] { display: none; }
+    .ov-scrub { flex: 1; width: auto; min-width: 72px; }
+    .ov-time-read { min-width: 76px; }
+    .ov-scale-sub { display: none; }
+  }
+}
+@container ov-frame (min-width: 721px) and (max-width: 980px) {
   .ov-bottom-right { grid-template-columns: auto; }
   .ov-dock [aria-label="Previous frame"], .ov-dock [aria-label="Next frame"], .ov-dock [aria-label="Loop playback"] { display: none; }
   .ov-time-read { min-width: 84px; }

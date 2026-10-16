@@ -367,12 +367,17 @@ export class AladinSky {
     const a = this.aladin;
     if (!a) return;
     try {
-      const url = await a.getViewDataURL?.({ format: "image/png", width: w, height: h });
+      // A padded view's survey spans a frame larger than the window
+      // (`frame`, CSS px, set by the Sky plugin): draw the window's part.
+      const f = this.frame;
+      const kx = f ? w / f.windowWidth : 1, ky = f ? h / f.windowHeight : 1;
+      const box = f ? [f.left * kx, f.top * ky, f.width * kx, f.height * ky] : [0, 0, w, h];
+      const url = await a.getViewDataURL?.({ format: "image/png", width: Math.round(box[2]), height: Math.round(box[3]) });
       if (!url) return;
       const img = new Image();
       img.src = url;
       await img.decode();
-      ctx.drawImage(img, 0, 0, w, h);
+      ctx.drawImage(img, ...box);
     } catch (err) {
       console.warn("Oviz sky: background capture failed", err);
     }
