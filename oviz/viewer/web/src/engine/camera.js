@@ -115,6 +115,11 @@ export class Camera {
     this.camUp = [0, 0, 1];
     this.width = 1;
     this.height = 1;
+    // CSS px along each edge that a host page covers (a sidebar over an
+    // embedded figure). Like a map's padding, the view centres in what is
+    // left: the projection shifts off-axis while the pose stays put, so
+    // States and links mean the same view at any padding.
+    this.padding = { top: 0, right: 0, bottom: 0, left: 0 };
     this.version = 0;
   }
 
@@ -130,11 +135,52 @@ export class Camera {
     this.aspect = this.width / this.height;
   }
 
+  /** Set the padding in CSS px (edges left out keep their value). */
+  setPadding(p = {}) {
+    for (const k of ["top", "right", "bottom", "left"]) {
+      const v = Number(p[k]);
+      if (Number.isFinite(v)) this.padding[k] = Math.max(0, v);
+    }
+  }
+
+  /** The padding in use: a fifth of each axis always stays uncovered. */
+  usedPadding() {
+    const p = this.padding;
+    const fit = (a, b, size) => {
+      const k = Math.min(1, (size * 0.8) / Math.max(a + b, 1e-9));
+      return [a * k, b * k];
+    };
+    const [left, right] = fit(p.left, p.right, this.width);
+    const [top, bottom] = fit(p.top, p.bottom, this.height);
+    return { top, right, bottom, left };
+  }
+
+  /** The optical centre in CSS px: the middle of the uncovered view. */
+  get center() {
+    const p = this.usedPadding();
+    return [(this.width + p.left - p.right) / 2, (this.height + p.top - p.bottom) / 2];
+  }
+
+  /**
+   * Where a TAN background (Aladin in Sky view) must sit to register with
+   * this view: centred on the optical centre, large enough to cover the
+   * window, with the horizontal field its width spans (CSS px, degrees).
+   * Without padding it is the window and `hfov`.
+   */
+  skyFrame() {
+    const [cx, cy] = this.center;
+    const width = 2 * Math.max(cx, this.width - cx);
+    const height = 2 * Math.max(cy, this.height - cy);
+    const f = this.height / 2 / Math.tan((this.pose.fov * DEG) / 2);
+    return { left: cx - width / 2, top: cy - height / 2, width, height, hfov: (2 * Math.atan(width / 2 / f)) / DEG };
+  }
+
   update(sceneRadius = 1e4) {
     const p = this.pose;
     // Only rebuild (and bump `version`, which downstream caches key on) when
     // the pose or viewport actually changed.
-    const sig = `${p.target[0]},${p.target[1]},${p.target[2]},${p.distance},${p.yaw},${p.pitch},${p.fov},${this.aspect},${this.height},${sceneRadius}`;
+    const [cx, cy] = this.center;
+    const sig = `${p.target[0]},${p.target[1]},${p.target[2]},${p.distance},${p.yaw},${p.pitch},${p.fov},${this.aspect},${this.height},${sceneRadius},${cx},${cy}`;
     if (sig === this._sig) return false;
     this._sig = sig;
     poseEye(p, this.eye);
@@ -152,6 +198,9 @@ export class Camera {
     this.near = p.distance > 1e-6 ? clamp(p.distance * 0.002, 0.01, 50) : 0.05;
     this.far = Math.max(reach * 2.5, 1e5);
     m4perspective(p.fov * DEG, this.aspect, this.near, this.far, this.proj);
+    // Padding: shift the image so the view axis lands on the optical centre.
+    this.proj[8] = 1 - (2 * cx) / this.width;
+    this.proj[9] = (2 * cy) / this.height - 1;
     m4mul(this.proj, this.view, this.viewProj);
     m4invert(this.viewProj, this.invViewProj);
     m4invert(this.view, this.invView);

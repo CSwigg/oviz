@@ -9,6 +9,22 @@
 
 .ov-ui { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
 .ov-ui > * { pointer-events: auto; }
+
+/* The uncovered part of the window: all of it, unless a page covers some
+   (padding). The top and bottom bars lay out in it, and their width
+   breakpoints are container queries on it, so a padded figure lays out as
+   a window of that size would. */
+.ov-ui > .ov-frame {
+  position: absolute;
+  top: var(--ov-pad-top); right: var(--ov-pad-right); bottom: var(--ov-pad-bottom); left: var(--ov-pad-left);
+  pointer-events: none;
+  container: ov-frame / inline-size;
+  /* Its edges are the padding's: only the device's own insets remain. */
+  --ov-safe-top: env(safe-area-inset-top, 0px);
+  --ov-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ov-safe-left: env(safe-area-inset-left, 0px);
+  --ov-safe-right: env(safe-area-inset-right, 0px);
+}
 .ov-ui, .ov-ui * { transition-timing-function: var(--ov-ease); }
 
 /* Chrome fades away in zen / presentation mode. */
@@ -62,6 +78,14 @@
 .ov-search-trigger:hover { color: var(--ov-text); border-color: var(--ov-line-strong); }
 .ov-search-trigger span.ov-grow { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-search-trigger .ov-kbd { margin-left: 2px; }
+/* Embedded as a page's background, the page carries the title: the figure
+   drops its own and the search button (the palette is a key press away). */
+[data-oviz-embed="true"] .ov-top :is(.ov-brand, .ov-search-trigger) { display: none; }
+/* On a phone the page around it says what it shows: the figure keeps just
+   its time bar (the layers button still opens the key). */
+@media (max-width: 720px) {
+  [data-oviz-embed="true"] :is(.ov-bottom-left, .ov-top .ov-zen-btn) { display: none !important; }
+}
 
 .ov-toolbar {
   display: flex; align-items: center; gap: 2px;
@@ -267,7 +291,7 @@
 
 /* ---- Toasts --------------------------------------------------------- */
 .ov-toasts {
-  position: absolute; left: 50%; top: calc(64px + var(--ov-safe-top)); transform: translateX(-50%);
+  position: absolute; left: var(--ov-mid-x); top: calc(64px + var(--ov-safe-top)); transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 60; pointer-events: none;
 }
 .ov-toast {
@@ -315,9 +339,9 @@
 
 /* Actions (classic action bar): a row of buttons under the top bar. */
 .ov-actions {
-  position: absolute; left: 50%; top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
+  position: absolute; left: var(--ov-mid-x); top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
   display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px; border-radius: 999px; z-index: 9;
-  max-width: calc(100vw - 2 * var(--ov-gutter));
+  max-width: calc(var(--ov-open-w) - 2 * var(--ov-gutter));
 }
 .ov-action {
   height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--ov-text-2);

@@ -1,9 +1,9 @@
 /* --------------------------------------------------------------- story */
 .ov-story {
   position: absolute;
-  left: 50%;
+  left: var(--ov-mid-x);
   bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom));
-  width: min(960px, calc(100vw - 2 * var(--ov-gutter)));
+  width: min(960px, calc(var(--ov-open-w) - 2 * var(--ov-gutter)));
   transform: translateX(-50%);
   border-radius: 18px;
   overflow: hidden;
@@ -75,7 +75,7 @@
 
 /* --------------------------------------------------------- presentation */
 .ov-present {
-  position: absolute; left: 50%;
+  position: absolute; left: var(--ov-mid-x);
   bottom: calc(var(--ov-gutter) * 1.5 + var(--ov-safe-bottom));
   transform: translateX(-50%);
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
@@ -133,7 +133,7 @@
 /* Story progress: one segment per view; the current one fills during the
    flight. The stage is always a night sky, so the bars are plain white. */
 .ov-present-progress {
-  position: absolute; left: 50%; top: calc(var(--ov-gutter) + var(--ov-safe-top));
+  position: absolute; left: var(--ov-mid-x); top: calc(var(--ov-gutter) + var(--ov-safe-top));
   transform: translateX(-50%);
   display: flex; gap: 5px;
   width: min(560px, calc(100vw - 2 * var(--ov-gutter) - 40px));
@@ -156,7 +156,7 @@
 
 /* 3D reel of views. */
 .ov-present-reel {
-  position: absolute; left: 50%; width: 0;
+  position: absolute; left: var(--ov-mid-x); width: 0;
   bottom: calc(var(--ov-gutter) * 1.5 + var(--ov-safe-bottom) + var(--ov-present-h, 96px) + 16px);
   height: 96px;
   perspective: 900px; perspective-origin: 50% 40%;

@@ -9,8 +9,8 @@
 
 /* ---- Command palette ---------------------------------------------- */
 .ov-palette {
-  position: absolute; left: 50%; top: calc(12vh + var(--ov-safe-top)); z-index: 71;
-  width: min(620px, calc(100vw - 32px));
+  position: absolute; left: var(--ov-mid-x); top: calc(12vh + var(--ov-safe-top)); z-index: 71;
+  width: min(620px, calc(var(--ov-open-w) - 32px));
   transform: translateX(-50%);
   border-radius: 16px;
   overflow: hidden;
@@ -47,8 +47,8 @@
 
 /* ---- Help sheet ------------------------------------------------------ */
 .ov-sheet {
-  position: absolute; left: 50%; top: 50%; z-index: 71;
-  width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 64px);
+  position: absolute; left: var(--ov-mid-x); top: var(--ov-mid-y); z-index: 71;
+  width: min(760px, calc(var(--ov-open-w) - 32px)); max-height: calc(100vh - 64px - var(--ov-pad-top) - var(--ov-pad-bottom));
   transform: translate(-50%, -50%);
   border-radius: 20px; overflow: auto;
   background: var(--ov-surface-strong);
@@ -97,7 +97,7 @@
 
 /* ---- Recording pill ------------------------------------------------ */
 .ov-rec-pill {
-  position: absolute; left: 50%; top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
+  position: absolute; left: var(--ov-mid-x); top: calc(var(--ov-gutter) + 52px + var(--ov-safe-top)); transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 999px; z-index: 40;
   font: 650 12.5px/1 var(--ov-font);
 }
@@ -108,7 +108,7 @@
 .ov-lasso path { fill: rgba(124, 196, 255, 0.10); stroke: var(--ov-sky); stroke-width: 1.5; stroke-dasharray: 5 4; stroke-linejoin: round; }
 .ov-root[data-lasso="true"] .ov-canvas { cursor: crosshair; }
 .ov-selbar {
-  position: absolute; left: 50%; transform: translateX(-50%);
+  position: absolute; left: var(--ov-mid-x); transform: translateX(-50%);
   bottom: calc(var(--ov-gutter) * 2 + var(--ov-dock-h) + var(--ov-safe-bottom));
   display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 14px; border-radius: 999px; z-index: 11;
   animation: ov-toast-in 240ms var(--ov-ease);

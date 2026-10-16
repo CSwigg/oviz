@@ -2,7 +2,7 @@
 // the imperative API that the UI, States and the public JS API drive.
 
 import { Emitter } from "../core/emitter.js";
-import { clamp, v3dist, niceFloor } from "../core/math.js";
+import { clamp, v3dist, niceFloor, easeInOutCubic } from "../core/math.js";
 import { Renderer } from "../engine/renderer.js";
 import { Controls } from "../engine/controls.js";
 import { RenderTarget } from "../engine/gl.js";
@@ -635,6 +635,53 @@ export class Viewer extends Emitter {
     this.renderer.invalidate();
   }
 
+  /**
+   * Padding (CSS px per edge) for a page that covers part of the figure,
+   * such as a sidebar over an embedded background: the scene centres in
+   * the uncovered part and the controls lay out inside it, while the pose
+   * (and so every State and link) stays the same. Edges left out keep
+   * their value. Resolves when the change, eased over `duration` ms, lands.
+   */
+  setPadding(padding, { duration = 0 } = {}) {
+    const cam = this.renderer.camera;
+    const from = { ...cam.padding };
+    const to = { ...from, ...readPadding(padding) };
+    this._paddingStop?.();
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const ms = reduce ? 0 : Math.max(0, Number(duration) || 0);
+    const apply = (t) => {
+      cam.setPadding(Object.fromEntries(Object.keys(to).map((k) => [k, from[k] + (to[k] - from[k]) * t])));
+      const used = cam.usedPadding();
+      setPaddingVars(used);
+      this.renderer.invalidate();
+      this.emit("padding", used);
+    };
+    if (ms === 0) {
+      apply(1);
+      return Promise.resolve();
+    }
+    const start = performance.now();
+    return new Promise((resolve) => {
+      const end = () => {
+        remove();
+        this._paddingStop = null;
+        this.renderer.release("padding");
+        resolve();
+      };
+      const remove = this.addAnimator((now) => {
+        const t = Math.min(1, (now - start) / ms);
+        apply(easeInOutCubic(t));
+        if (t >= 1) end();
+      });
+      this._paddingStop = end;
+      this.renderer.hold("padding");
+    });
+  }
+
+  get padding() {
+    return { ...this.renderer.camera.padding };
+  }
+
   /** Fly home: the opening view, anchored the way the figure opens. */
   resetView() {
     // Resetting is the reader taking the camera (it stops auto-orbit).
@@ -1142,6 +1189,30 @@ export class Viewer extends Emitter {
 
   dispose() {
     this.renderer.dispose();
+  }
+}
+
+/**
+ * Padding as {top, right, bottom, left} (CSS px, only the valid edges)
+ * from an object, or from "top,right,bottom,left" as in `?padding=`.
+ */
+export function readPadding(value) {
+  const edges = ["top", "right", "bottom", "left"];
+  const src = typeof value === "string" ? Object.fromEntries(value.split(",").map((v, i) => [edges[i], v.trim()])) : value || {};
+  const out = {};
+  for (const k of edges) {
+    const raw = src[k];
+    const v = raw === "" || raw == null ? NaN : Number(raw);
+    if (Number.isFinite(v)) out[k] = Math.max(0, v);
+  }
+  return out;
+}
+
+/** Publish padding to the styles (`--ov-pad-*`), where the controls lay out around it. */
+export function setPaddingVars(p) {
+  const style = document.documentElement.style;
+  for (const k of ["top", "right", "bottom", "left"]) {
+    if (Number.isFinite(p[k])) style.setProperty(`--ov-pad-${k}`, `${p[k].toFixed(1)}px`);
   }
 }
 

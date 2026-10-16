@@ -217,6 +217,15 @@ styles, volumes, selection and Sky layers.
 - **To share:** `Oviz.viewer.viewLink()` gives a link to one view;
   `presentationLink()` gives one that opens presenting all saved views.
 
+**As a page's background:** write the figure with `OvizFigure(..., embed=True)`
+(no title or search; the key lists only the layers in view) and load it in an
+iframe with `?padding=top,right,bottom,left`: the CSS px the page's text
+covers. The scene centres in the rest and the controls lay out there. Keep it
+current from the page with `postMessage({type: "oviz", command: "setPadding",
+args: [padding, {duration}]})`, and drive saved views with `goTo` and
+`original`. The figure posts `oviz:ready` and `oviz:state`.
+`tests/website_figure.py` builds the website's background this way.
+
 ## 7. Large builds: science once, viewer many times
 
 When data processing dominates (catalogue joins, orbit integration, volume

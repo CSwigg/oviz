@@ -70,6 +70,11 @@ class AppUI {
     }
     root.dataset.view = viewer.state.view.mode;
     this.mode = applyMode(initialMode());
+    // Embedded as a page's background (the figure's `embed` option, or
+    // `?embed=1`): no title or search button, and the key lists only the
+    // layers in view, as when presenting.
+    this.embed = !!this.manifest.viewer?.embed || urlFlag("embed");
+    if (this.embed) document.documentElement.dataset.ovizEmbed = "true";
     this.ui = h("div", { class: "ov-ui" });
     root.append(this.ui);
     this.toasts = createToasts(this.ui);
@@ -166,7 +171,10 @@ class AppUI {
     // "Show interface" pill brings it back).
     this.zenBtn = iconButton("eyeOff", "Hide interface", () => this.setZen(true), { cls: "ov-glass ov-zen-btn" });
     this.top = h("header", { class: "ov-top ov-chrome" }, this.brand, this.zenBtn, this.search, this.toolbar);
-    this.ui.append(this.top);
+    // The bars sit in the uncovered part of the window (all of it unless a
+    // page pads the figure), which their width breakpoints follow.
+    this.frame = h("div", { class: "ov-frame" }, this.top);
+    this.ui.append(this.frame);
   }
 
   buildBottom() {
@@ -198,7 +206,7 @@ class AppUI {
     const right = h("div", { class: "ov-bottom-right" }, this.skyExtras, this.viewSeg, this.cornerBtns);
     this.bottomRight = right;
     this.bottom = h("footer", { class: "ov-bottom ov-chrome" }, left, this.dock.el, right);
-    this.ui.append(this.bottom);
+    this.frame.append(this.bottom);
     this.syncViewSeg();
     this.renderColorbars();
   }
@@ -1759,6 +1767,16 @@ class AppUI {
 }
 
 // ---------------------------------------------------------------- helpers
+
+/** A yes/no switch in the page URL (`?name`, `?name=1`, `?name=true`). */
+function urlFlag(name) {
+  try {
+    const q = new URLSearchParams(location.search);
+    return q.has(name) && !["0", "false", "no"].includes(String(q.get(name)).toLowerCase());
+  } catch (_) {
+    return false; // file:// quirks
+  }
+}
 
 function norm(v) {
   const l = Math.hypot(v[0], v[1], v[2]) || 1;

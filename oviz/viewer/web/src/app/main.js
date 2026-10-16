@@ -1,7 +1,7 @@
 // Boot sequence: manifest → critical blobs → first frame → stream the rest.
 
 import { readManifest, BundleStore } from "../core/loader.js";
-import { Viewer } from "./viewer.js";
+import { Viewer, readPadding, setPaddingVars } from "./viewer.js";
 import { mountUI } from "../ui/app-ui.js";
 import { installApi } from "./api.js";
 
@@ -16,6 +16,12 @@ async function boot() {
     if (bootText && text) bootText.textContent = text;
     if (bootBar && frac != null) bootBar.style.transform = `scaleX(${Math.max(0.02, Math.min(frac, 1))})`;
   };
+  // A page that embeds the figure under a sidebar can ask for padding up
+  // front (`?padding=top,right,bottom,left`, CSS px), so the loading
+  // screen and the first frame already centre in the uncovered part.
+  let padding = {};
+  try { padding = readPadding(new URLSearchParams(location.search).get("padding") || ""); } catch (_) { /* file:// quirks */ }
+  setPaddingVars(padding);
   try {
     const manifest = readManifest();
     const store = new BundleStore(manifest);
@@ -36,6 +42,7 @@ async function boot() {
     root.prepend(stage);
     const tv = performance.now();
     const viewer = new Viewer(stage, manifest, store);
+    if (Object.keys(padding).length) viewer.setPadding(padding);
     timing.viewer = performance.now() - tv;
     const ta = performance.now();
     await viewer.attachTraces();

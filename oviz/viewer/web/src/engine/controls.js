@@ -202,7 +202,9 @@ export class Controls {
    */
   maxFovFor(mode = this.mode) {
     if (mode !== "sky") return this.maxFov;
-    const aspect = this.camera.aspect || 1;
+    // Aladin spans the sky frame, which padding makes wider than the window.
+    const cam = this.camera;
+    const aspect = 2 * Math.max(cam.center[0], cam.width - cam.center[0]) / cam.height || 1;
     return Math.min(this.maxFov, (2 * Math.atan(Math.tan(75 * DEG) / aspect)) / DEG);
   }
 
@@ -220,8 +222,9 @@ export class Controls {
       if (x != null && cam.width > 0) {
         const k = 1 - p.fov / before;
         const perPx = (before * DEG) / cam.height;
-        p.yaw += (x - cam.width / 2) * perPx * k * -1;
-        p.pitch = clamp(p.pitch - (y - cam.height / 2) * perPx * k, -PITCH_LIMIT, PITCH_LIMIT);
+        const [cx, cy] = cam.center;
+        p.yaw += (x - cx) * perPx * k * -1;
+        p.pitch = clamp(p.pitch - (y - cy) * perPx * k, -PITCH_LIMIT, PITCH_LIMIT);
       }
       this._changed();
       return;

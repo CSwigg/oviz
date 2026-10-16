@@ -201,7 +201,9 @@ export class SkyLens {
     const r = Math.max(8, Math.hypot(s2[0] - s[0], s2[1] - s[1]));
     this.el.style.visibility = "";
     this.div.style.visibility = "visible";
-    this.div.style.clipPath = `circle(${r.toFixed(1)}px at ${s[0].toFixed(1)}px ${s[1].toFixed(1)}px)`;
+    // The lens's Aladin fills the survey host, which padding offsets.
+    const host = this.plugin.hostFrame || { left: 0, top: 0 };
+    this.div.style.clipPath = `circle(${r.toFixed(1)}px at ${(s[0] - host.left).toFixed(1)}px ${(s[1] - host.top).toFixed(1)}px)`;
     this.div.style.opacity = String(clamp(lens.opacity ?? 1, 0, 1));
     const d = 2 * r + 16;
     Object.assign(this.el.style, { left: `${(s[0] - r - 8).toFixed(1)}px`, top: `${(s[1] - r - 8).toFixed(1)}px`, width: `${d.toFixed(1)}px`, height: `${d.toFixed(1)}px` });

@@ -187,6 +187,10 @@ Browser API
     Fly between Galactic 3D and Sky.
 ``cameraAnchor``, ``setCameraAnchor(anchor)``
     ``"lsr"``, ``"sun"``, ``"free"``, or ``{trace, index}`` for an object.
+``padding``, ``setPadding({top, right, bottom, left}, {duration})``
+    The part of the window a host page covers, in CSS px: the scene centres
+    in the rest (an off-axis projection; the pose, States and Sky
+    registration are unchanged) and the controls lay out inside it.
 ``screenshot({scale})``
     A PNG ``Blob`` of the WebGL layer.
 ``arModel({moment})``, ``viewInAr({moment})``
@@ -204,10 +208,20 @@ Browser API
     Frame and volume timings.
 
 Embedding pages can drive a figure in an iframe with ``postMessage``
-(``{type: "oviz", command, args}``; commands ``goTo``, ``next``,
-``previous``, ``present``, ``setTime``, ``play``, ``pause``,
-``setViewMode``) and listen for ``oviz:transition-start`` and
-``oviz:transition-end`` events.
+(``{type: "oviz", command, args}``; commands ``goTo``, ``original``,
+``next``, ``previous``, ``present``, ``setTime``, ``play``, ``pause``,
+``setViewMode``, ``setPadding``) and listen for ``oviz:transition-start``
+and ``oviz:transition-end`` events. The frame posts ``{type: "oviz:ready"}``
+to its parent once it listens, and ``{type: "oviz:state", index, id}``
+whenever a saved view starts to apply (``id`` is ``"original"`` for the
+opening view).
+
+A figure made to sit under a page's text (a background) is written with
+``OvizFigure(..., embed=True)`` or loaded with ``?embed=1``: it shows no
+title or search button, and its key lists only the layers in view. A page
+whose text covers part of the figure passes the covered CSS px as
+``?padding=top,right,bottom,left`` (so the first frame is already centred)
+and keeps it current with ``setPadding`` as its layout changes.
 
 
 How it works (for maintainers)
