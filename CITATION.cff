@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use Oviz, please cite it using the metadata below."
+type: software
+title: "Oviz: interactive visualization of the Milky Way in 3D, on the sky, and through time"
+abstract: >-
+  Oviz is a Python package that turns Gaia-derived phase-space data, stationary
+  layers, sky imagery, and 3D volumes into a single interactive HTML figure.
+  It integrates trajectories with galpy, renders scenes in Three.js, projects
+  them onto survey imagery with Aladin Lite, and saves guided sequences of
+  viewer States for papers, talks, and websites.
+authors:
+  - family-names: Swiggum
+    given-names: Cameren
+    orcid: "https://orcid.org/0000-0001-9201-5995"
+    affiliation: "Center for Astrophysics | Harvard & Smithsonian"
+repository-code: "https://github.com/CSwigg/oviz"
+license: MIT
+version: 0.1.0
+keywords:
+  - astronomy
+  - Gaia
+  - Milky Way
+  - Galactic dynamics
+  - interstellar medium
+  - scientific visualization
+  - Three.js
