@@ -13,6 +13,7 @@ authors:
     given-names: Cameren
     orcid: "https://orcid.org/0000-0001-9201-5995"
     affiliation: "Center for Astrophysics | Harvard & Smithsonian"
+doi: "10.5281/zenodo.23887333"
 repository-code: "https://github.com/CSwigg/oviz"
 license: MIT
 version: 0.1.0

@@ -2,6 +2,8 @@
 
 **Interactive 3D figures of the Milky Way's young stars, from Python to one HTML file.**
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23887333.svg)](https://doi.org/10.5281/zenodo.23887333)
+
 ![Oviz: young clusters and the local dust in 3D, a 25 Myr traceback with motion trails, the flight to the sky view with member stars, and the survey picker switching the sky background](docs/assets/oviz-tour.gif)
 
 Oviz turns tables of clusters or stars (positions, velocities, ages) into a
