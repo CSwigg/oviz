@@ -1,5 +1,7 @@
 # Oviz
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23887333.svg)](https://doi.org/10.5281/zenodo.23887333)
+
 **Interactive 3D figures of the Milky Way's young stars, from Python to one HTML file.**
 
 ![Oviz: young clusters and the local dust in 3D, a 25 Myr traceback with motion trails, the flight to the sky view with member stars, and the survey picker switching the sky background](docs/assets/oviz-tour.gif)
@@ -63,6 +65,13 @@ node --test tests/viewer_js/*.test.mjs
 
 [AGENTS.md](AGENTS.md) describes the architecture and the rules the viewer
 keeps.
+
+## Citing Oviz
+
+If you use Oviz in your work, please cite it with its Zenodo DOI,
+[10.5281/zenodo.23887333](https://doi.org/10.5281/zenodo.23887333).
+GitHub's "Cite this repository" button gives the full reference from
+[CITATION.cff](CITATION.cff).
 
 <details>
 <summary>Data in the example figure</summary>
